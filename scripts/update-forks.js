@@ -1,6 +1,7 @@
 const fs = require('fs');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 
 // Configuration
 const CONFIG = {
@@ -8,13 +9,12 @@ const CONFIG = {
   reposToShow: 999, // All repos - no limit
   batchSize: 10, // Reduced batch size to allow richer data extraction per repo
   kgBatchSize: 50, // Batch size for knowledgeGraph backfill (existing repos)
-  apiDelay: 3000, // 3 seconds between AI requests (rotating models)
+  apiDelay: 1000, // 1 second between AI requests
   kgApiDelay: 200, // 200ms between GitHub API requests for file trees
   maxFiles: 200, // Max files to include from repo tree for AI context
   models: {
-    endpoint: 'https://models.inference.ai.azure.com/chat/completions',
-    // Rotate between models to maximize rate limits (50/day each)
-    available: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'],
+    endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
+    available: ['moonshotai/kimi-k2.5'],
     maxTokens: 2000,
     temperature: 0.7
   }
@@ -435,7 +435,7 @@ function formatKnowledgeGraph(graph) {
 }
 
 async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
-  if (!GITHUB_TOKEN) {
+  if (!NVIDIA_API_KEY) {
     return generateFallbackSummary(repo);
   }
 
@@ -501,7 +501,7 @@ Keep it under 400 words. Quality over quantity.`;
     const response = await fetch(CONFIG.models.endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -816,7 +816,7 @@ async function main() {
 
   const output = {
     lastUpdated: new Date().toISOString(),
-    generatedWith: 'GitHub Models API (GPT-4o, GPT-4o-mini, GPT-4.1)',
+    generatedWith: 'NVIDIA API (Kimi K2.5)',
     totalRepos: forks.length,
     progress: {
       aiGenerated: aiArticleCount,
