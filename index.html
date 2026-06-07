@@ -2253,6 +2253,8 @@
             }
         }
     </style>
+    <script src="https://sql.js.org/dist/sql-wasm.js"></script>
+    <script src="assets/js/forks-db.js"></script>
 </head>
 <body>
     <!-- Skip to Content - Accessibility -->
@@ -3262,7 +3264,25 @@
             featuredSection.style.display = 'block';
         }
 
-        // Load projects
+        // Normalize DB row to match the shape renderProject expects
+        function normalizeRepo(r) {
+            return {
+                id: r.id, name: r.name,
+                displayName: r.display_name || r.name,
+                description: r.description,
+                summary: r.summary,
+                url: r.url, language: r.language,
+                stars: r.stars, forks: r.forks,
+                type: r.type || 'fork',
+                image: r.image,
+                forkedAt: r.forked_at, updatedAt: r.updated_at,
+                readTime: r.read_time || 2,
+                topics: r.topics || [],
+                parent: r.parent || null
+            };
+        }
+
+        // Load projects from SQLite database, with JSON fallback
         async function loadProjects() {
             const container = document.getElementById('projects-container');
             const controls = document.getElementById('projects-controls');
@@ -3270,42 +3290,54 @@
             const updatedEl = document.getElementById('last-updated');
 
             try {
-                const res = await fetch('forks.json');
-                if (!res.ok) throw new Error('No data');
+                // Try SQLite first
+                let loadedFromDb = false;
+                try {
+                    await ForksDB.init();
+                    const result = ForksDB.getRepos({ page: 1, limit: 9999, sort: 'updated_at' });
+                    if (result.repos.length > 0) {
+                        allProjects = result.repos.map(normalizeRepo);
+                        loadedFromDb = true;
 
-                const data = await res.json();
-                if (!data.forks?.length) {
-                    container.innerHTML = '<div class="projects-loading"><p>No projects yet.</p></div>';
-                    return;
+                        const meta = ForksDB.getMeta();
+                        if (meta.last_updated) {
+                            updatedEl.textContent = `Last updated: ${new Date(meta.last_updated).toLocaleDateString('en-US', {
+                                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}`;
+                        }
+                    }
+                } catch (dbErr) {
+                    console.log('SQLite unavailable, falling back to JSON:', dbErr.message);
                 }
 
-                allProjects = data.forks;
+                // Fallback to forks.json
+                if (!loadedFromDb) {
+                    const res = await fetch('forks.json');
+                    if (!res.ok) throw new Error('No data');
+                    const data = await res.json();
+                    if (!data.forks?.length) {
+                        container.innerHTML = '<div class="projects-loading"><p>No projects yet.</p></div>';
+                        return;
+                    }
+                    allProjects = data.forks;
+
+                    if (data.lastUpdated) {
+                        updatedEl.textContent = `Last updated: ${new Date(data.lastUpdated).toLocaleDateString('en-US', {
+                            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}`;
+                    }
+                }
+
                 filteredProjects = [...allProjects];
-
-                // Render featured projects first
                 renderFeaturedProjects(allProjects);
-
                 renderCurrentPage();
-
-                // Show controls
                 controls.style.display = 'flex';
-
-                // Show pagination if more than one page
                 if (allProjects.length > itemsPerPage) {
                     pagination.style.display = 'flex';
                 }
-
-                // Animate stats
-                const stats = calculateStats(allProjects);
-                animateStats(stats);
-
-                if (data.lastUpdated) {
-                    updatedEl.textContent = `Last updated: ${new Date(data.lastUpdated).toLocaleDateString('en-US', {
-                        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                    })}`;
-                }
+                animateStats(calculateStats(allProjects));
             } catch (e) {
-                // Fallback to GitHub API
+                // Last resort: GitHub API
                 try {
                     const res = await fetch('https://api.github.com/users/moses-y/repos?sort=updated&per_page=30');
                     const repos = await res.json();

@@ -32,23 +32,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Check if backfill needed
-        id: check-backfill
-        run: |
-          # Count repos missing knowledgeGraph
-          MISSING=$(node -e "
-            const data = require('./forks.json');
-            const missing = (data.forks || []).filter(f => !f.knowledgeGraph).length;
-            console.log(missing);
-          ")
-          echo "missing=$MISSING" >> $GITHUB_OUTPUT
-          echo "Repos missing knowledgeGraph: $MISSING"
+      - name: Install dependencies
+        run: npm install sql.js
 
       - name: Fetch forks and generate feed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: node scripts/update-forks.js
+
+      - name: Build SQLite database
+        run: node scripts/build-db.js
 
       - name: Generate blog pages and RSS feeds
         run: |
@@ -59,10 +53,10 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add forks.json blog/ feed.xml atom.xml
+          git add forks.json forks.db blog/ feed.xml atom.xml
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update forks feed [skip ci]" && git pull --rebase && git push)
 
-      - name: Backfill status
+      - name: Build status
         run: |
           MISSING=$(node -e "
             const data = require('./forks.json');
@@ -70,10 +64,6 @@ jobs:
             console.log(missing);
           ")
           TOTAL=$(node -e "const data = require('./forks.json'); console.log(data.forks?.length || 0);")
-          WITH_KG=$((TOTAL - MISSING))
-          echo "📊 KnowledgeGraph Status: $WITH_KG / $TOTAL repos"
-          if [ "$MISSING" -eq "0" ]; then
-            echo "✅ All repos have knowledgeGraph data"
-          else
-            echo "⏳ $MISSING repos remaining. Next run in 6 hours."
-          fi
+          DB_SIZE=$(stat -c%s forks.db 2>/dev/null || echo 0)
+          DB_KB=$((DB_SIZE / 1024))
+          echo "Repos: $TOTAL | Missing KG: $MISSING | DB: ${DB_KB}KB"
