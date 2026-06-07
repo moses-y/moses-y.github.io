@@ -875,9 +875,17 @@
 
     document.getElementById('theme-toggle').addEventListener('click', () => {
         const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        document.documentElement.setAttribute('data-theme', isLight ? '' : 'light');
+        document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light');
         localStorage.setItem('theme', isLight ? 'dark' : 'light');
     });
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
     // Color palette for languages
     const langColors = {
@@ -968,7 +976,9 @@
         // Simple greedy modularity optimization (2 passes)
         for (let pass = 0; pass < 2; pass++) {
             let improved = true;
-            while (improved) {
+            let iterations = 0;
+            while (improved && iterations < 100) {
+                iterations++;
                 improved = false;
                 for (const node of nodes) {
                     const neighbors = adj.get(node.id) || [];
@@ -1476,21 +1486,21 @@
 
             if (d.type === 'language') {
                 const repoCount = links.filter(l => (typeof l.target === 'string' ? l.target : l.target.id) === d.id).length;
-                html = `<h4>${d.name}</h4>${commInfo}<div class="detail">${d.count} files across ${repoCount} repos</div>`;
+                html = `<h4>${escapeHtml(d.name)}</h4>${commInfo}<div class="detail">${d.count} files across ${repoCount} repos</div>`;
                 html += `<div class="click-hint">Click to filter · Shift+click to select</div>`;
             } else {
-                html = `<h4>${d.name}</h4>${commInfo}`;
+                html = `<h4>${escapeHtml(d.name)}</h4>${commInfo}`;
                 if (d.kg?.languages) {
                     const langs = Object.entries(d.kg.languages).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                    html += '<div style="margin-top:4px">' + langs.map(([l, c]) => `<span class="tag">${l}: ${c}</span>`).join('') + '</div>';
+                    html += '<div style="margin-top:4px">' + langs.map(([l, c]) => `<span class="tag">${escapeHtml(l)}: ${c}</span>`).join('') + '</div>';
                 }
                 html += `<div class="detail" style="margin-top:4px">${d.totalFiles} files · ★ ${d.stars}</div>`;
                 // Show blog summary if available
                 if (d.summary) {
                     const truncated = d.summary.length > 200 ? d.summary.slice(0, 200) + '...' : d.summary;
-                    html += `<div class="summary">${truncated}</div>`;
+                    html += `<div class="summary">${escapeHtml(truncated)}</div>`;
                 } else if (d.description) {
-                    html += `<div class="summary">${d.description}</div>`;
+                    html += `<div class="summary">${escapeHtml(d.description)}</div>`;
                 }
                 html += `<div class="click-hint">Click to explore · Shift+click to select</div>`;
             }
@@ -1740,14 +1750,14 @@
 
             // Type-specific info
             if (d.type === 'language' && d.reposWithLang) {
-                html += `<div class="detail" style="margin-top:4px">${d.reposWithLang} repos use ${d.name}</div>`;
+                html += `<div class="detail" style="margin-top:4px">${d.reposWithLang} repos use ${escapeHtml(d.name)}</div>`;
             }
 
             // Show summary for repo center node
             if (d.type === 'repo' && (d.summary || d.description)) {
                 const text = d.summary || d.description;
                 const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;
-                html += `<div class="summary">${truncated}</div>`;
+                html += `<div class="summary">${escapeHtml(truncated)}</div>`;
             }
 
             // Click hints based on type
@@ -1845,8 +1855,8 @@
             sorted.slice(0, 8).forEach(([dir, count]) => {
                 const pct = Math.round(count / max * 100);
                 const ghUrl = repoUrl || `https://github.com/moses-y/${d.repoName}`;
-                const dirLink = dir === '(root)' ? ghUrl : `${ghUrl}/tree/main/${dir}`;
-                html += `<div class="bar" style="cursor:pointer" onclick="window.open('${dirLink}','_blank')"><span class="bar-label">${dir}/</span><div class="bar-fill" style="width:${pct}px;background:#22c55e"></div><span class="bar-count">${count}</span></div>`;
+                const dirLink = dir === '(root)' ? ghUrl : `${ghUrl}/tree/main/${encodeURIComponent(dir)}`;
+                html += `<div class="bar" style="cursor:pointer" onclick="window.open('${escapeHtml(dirLink)}','_blank')"><span class="bar-label">${escapeHtml(dir)}/</span><div class="bar-fill" style="width:${pct}px;background:#22c55e"></div><span class="bar-count">${count}</span></div>`;
             });
             html += '</div>';
         }
@@ -1856,7 +1866,7 @@
             html += '<div class="panel-section"><h4>Entry Points</h4><ul class="file-list">';
             kg.entryPoints.slice(0, 6).forEach(f => {
                 const ghUrl = repoUrl || `https://github.com/moses-y/${d.repoName}`;
-                html += `<li style="cursor:pointer" onclick="window.open('${ghUrl}/blob/main/${f}','_blank')">🚀 ${f}</li>`;
+                html += `<li style="cursor:pointer" onclick="window.open('${escapeHtml(ghUrl)}/blob/main/${encodeURIComponent(f)}','_blank')">🚀 ${escapeHtml(f)}</li>`;
             });
             html += '</ul></div>';
         }
@@ -1866,7 +1876,7 @@
             html += '<div class="panel-section"><h4>Config & Build</h4><ul class="file-list">';
             kg.configFiles.slice(0, 8).forEach(f => {
                 const ghUrl = repoUrl || `https://github.com/moses-y/${d.repoName}`;
-                html += `<li style="cursor:pointer" onclick="window.open('${ghUrl}/blob/main/${f}','_blank')">⚙️ ${f}</li>`;
+                html += `<li style="cursor:pointer" onclick="window.open('${escapeHtml(ghUrl)}/blob/main/${encodeURIComponent(f)}','_blank')">⚙️ ${escapeHtml(f)}</li>`;
             });
             html += '</ul></div>';
         }
@@ -1876,7 +1886,7 @@
             html += '<div class="panel-section"><h4>Dependency Files</h4><ul class="file-list">';
             kg.dependencies.forEach(f => {
                 const ghUrl = repoUrl || `https://github.com/moses-y/${d.repoName}`;
-                html += `<li style="cursor:pointer" onclick="window.open('${ghUrl}/blob/main/${f}','_blank')">📦 ${f}</li>`;
+                html += `<li style="cursor:pointer" onclick="window.open('${escapeHtml(ghUrl)}/blob/main/${encodeURIComponent(f)}','_blank')">📦 ${escapeHtml(f)}</li>`;
             });
             html += '</ul></div>';
         }

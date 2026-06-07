@@ -4,11 +4,21 @@ const path = require('path');
 // Directory for blog posts
 const BLOG_DIR = 'blog';
 
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Blog post HTML template
 function generateBlogPostHTML(post) {
     const formattedDate = post.updatedAt || post.forkedAt || 'Unknown date';
     const parentInfo = post.parent
-        ? `<p class="post-parent">Forked from <a href="${post.parent.url}" target="_blank" rel="noopener">${post.parent.name}</a></p>`
+        ? `<p class="post-parent">Forked from <a href="${escapeHtml(post.parent.url)}" target="_blank" rel="noopener">${escapeHtml(post.parent.name)}</a></p>`
         : '';
 
     return `<!DOCTYPE html>
@@ -16,21 +26,21 @@ function generateBlogPostHTML(post) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${post.displayName} - Moses Yebei</title>
-    <meta name="description" content="${(post.description || '').replace(/"/g, '&quot;').slice(0, 160)}">
+    <title>${escapeHtml(post.displayName)} - Moses Yebei</title>
+    <meta name="description" content="${escapeHtml((post.description || '').slice(0, 160))}">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="${post.displayName} - Moses Yebei">
-    <meta property="og:description" content="${(post.description || '').replace(/"/g, '&quot;').slice(0, 160)}">
-    <meta property="og:image" content="${post.image}">
+    <meta property="og:title" content="${escapeHtml(post.displayName)} - Moses Yebei">
+    <meta property="og:description" content="${escapeHtml((post.description || '').slice(0, 160))}">
+    <meta property="og:image" content="${escapeHtml(post.image)}">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/${post.name}.html">
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="${post.displayName}">
-    <meta name="twitter:description" content="${(post.description || '').replace(/"/g, '&quot;').slice(0, 160)}">
-    <meta name="twitter:image" content="${post.image}">
+    <meta name="twitter:title" content="${escapeHtml(post.displayName)}">
+    <meta name="twitter:description" content="${escapeHtml((post.description || '').slice(0, 160))}">
+    <meta name="twitter:image" content="${escapeHtml(post.image)}">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/${post.name}.html">
 
@@ -389,25 +399,25 @@ function generateBlogPostHTML(post) {
                     ${post.language ? `<span class="post-language">${post.language}</span>` : ''}
                     <span class="post-type">${post.type || 'fork'}</span>
                 </div>
-                <h1>${post.displayName}</h1>
-                <p class="post-description">${post.description || ''}</p>
+                <h1>${escapeHtml(post.displayName)}</h1>
+                <p class="post-description">${escapeHtml(post.description || '')}</p>
                 ${parentInfo}
             </div>
 
-            <img class="post-image" src="${post.image}" alt="${post.displayName}" loading="lazy">
+            <img class="post-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.displayName)}" loading="lazy">
 
             <div class="post-content">
-                ${(post.summary || '').split('\n\n').map(p => `<p>${p}</p>`).join('')}
+                ${(post.summary || '').split('\n\n').map(p => `<p>${escapeHtml(p)}</p>`).join('')}
             </div>
 
             ${post.topics && post.topics.length > 0 ? `
             <div class="post-topics">
-                ${post.topics.map(t => `<span class="topic-tag">${t}</span>`).join('')}
+                ${post.topics.map(t => `<span class="topic-tag">${escapeHtml(t)}</span>`).join('')}
             </div>
             ` : ''}
 
             <div class="post-actions">
-                <a href="${post.url}" target="_blank" rel="noopener" class="primary-btn">
+                <a href="${escapeHtml(post.url)}" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>
@@ -527,15 +537,15 @@ async function main() {
 
 function generateBlogIndexHTML(posts, lastUpdated) {
     const postCards = posts.map(post => `
-        <a href="${post.name}.html" class="post-card">
-            <img src="${post.image}" alt="${post.displayName}" loading="lazy">
+        <a href="${escapeHtml(post.name)}.html" class="post-card">
+            <img src="${escapeHtml(post.image)}" alt="${escapeHtml(post.displayName)}" loading="lazy">
             <div class="post-card-content">
                 <div class="post-card-meta">
-                    <span>${post.updatedAt || ''}</span>
-                    ${post.language ? `<span class="lang">${post.language}</span>` : ''}
+                    <span>${escapeHtml(post.updatedAt || '')}</span>
+                    ${post.language ? `<span class="lang">${escapeHtml(post.language)}</span>` : ''}
                 </div>
-                <h3>${post.displayName}</h3>
-                <p>${(post.description || '').slice(0, 120)}${(post.description || '').length > 120 ? '...' : ''}</p>
+                <h3>${escapeHtml(post.displayName)}</h3>
+                <p>${escapeHtml((post.description || '').slice(0, 120))}${(post.description || '').length > 120 ? '...' : ''}</p>
             </div>
         </a>
     `).join('');

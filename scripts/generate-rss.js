@@ -14,9 +14,15 @@ function escapeXml(text) {
         .replace(/'/g, '&apos;');
 }
 
+function parseDate(dateStr) {
+    if (!dateStr) return new Date();
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? new Date() : d;
+}
+
 function generateRSSFeed(posts, lastUpdated) {
     const items = posts.map(post => {
-        const pubDate = new Date(post.updatedAt || post.forkedAt || Date.now()).toUTCString();
+        const pubDate = parseDate(post.updatedAt || post.forkedAt).toUTCString();
         const description = post.summary
             ? post.summary.slice(0, 500) + (post.summary.length > 500 ? '...' : '')
             : post.description || '';
@@ -53,7 +59,7 @@ ${items}
 
 function generateAtomFeed(posts, lastUpdated) {
     const entries = posts.map(post => {
-        const updated = new Date(post.updatedAt || post.forkedAt || Date.now()).toISOString();
+        const updated = parseDate(post.updatedAt || post.forkedAt).toISOString();
         const summary = post.summary
             ? post.summary.slice(0, 500) + (post.summary.length > 500 ? '...' : '')
             : post.description || '';
@@ -104,8 +110,8 @@ async function main() {
 
     // Sort by date (most recent first)
     posts.sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.forkedAt || 0);
-        const dateB = new Date(b.updatedAt || b.forkedAt || 0);
+        const dateA = parseDate(a.updatedAt || a.forkedAt);
+        const dateB = parseDate(b.updatedAt || b.forkedAt);
         return dateB - dateA;
     });
 

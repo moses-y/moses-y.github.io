@@ -1,22 +1,24 @@
 const fs = require('fs');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
+const LLM_API_KEY = process.env.NVIDIA_API_KEY || process.env.LLM_API_KEY;
+const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1/chat/completions';
+const LLM_MODELS = (process.env.LLM_MODELS || 'moonshotai/kimi-k2.6,deepseek-ai/deepseek-v4-flash,meta/llama-3.3-70b-instruct').split(',').map(m => m.trim());
 
 // Configuration
 const CONFIG = {
-  username: 'moses-y',
-  reposToShow: 999, // All repos - no limit
-  batchSize: 10, // Reduced batch size to allow richer data extraction per repo
-  kgBatchSize: 50, // Batch size for knowledgeGraph backfill (existing repos)
-  apiDelay: 1000, // 1 second between AI requests
-  kgApiDelay: 200, // 200ms between GitHub API requests for file trees
-  maxFiles: 200, // Max files to include from repo tree for AI context
+  username: process.env.GITHUB_USERNAME || 'moses-y',
+  reposToShow: parseInt(process.env.REPOS_LIMIT || '999', 10),
+  batchSize: parseInt(process.env.BATCH_SIZE || '10', 10),
+  kgBatchSize: parseInt(process.env.KG_BATCH_SIZE || '50', 10),
+  apiDelay: parseInt(process.env.API_DELAY || '1000', 10),
+  kgApiDelay: 200,
+  maxFiles: 200,
   models: {
-    endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    available: ['moonshotai/kimi-k2.5'],
-    maxTokens: 2000,
-    temperature: 0.7
+    endpoint: LLM_ENDPOINT,
+    available: LLM_MODELS,
+    maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '2000', 10),
+    temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.7')
   }
 };
 
@@ -146,7 +148,9 @@ async function fetchReadme(repo) {
       const readme = await response.text();
       return readme.slice(0, 4000);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log(`  Failed to fetch README for ${repo.name}: ${e.message}`);
+  }
   return null;
 }
 
@@ -167,7 +171,9 @@ async function fetchRepoTree(repo) {
       const data = await response.json();
       return (data.tree || []).filter(f => f.type === 'blob').map(f => f.path).slice(0, CONFIG.maxFiles);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log(`  Failed to fetch tree for ${repo.name}: ${e.message}`);
+  }
   return [];
 }
 
@@ -435,7 +441,7 @@ function formatKnowledgeGraph(graph) {
 }
 
 async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
-  if (!NVIDIA_API_KEY) {
+  if (!LLM_API_KEY) {
     return generateFallbackSummary(repo);
   }
 
@@ -501,7 +507,7 @@ Keep it under 400 words. Quality over quantity.`;
     const response = await fetch(CONFIG.models.endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+        'Authorization': `Bearer ${LLM_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -524,7 +530,7 @@ Keep it under 400 words. Quality over quantity.`;
         modelRateLimits[model] = true;
         console.log(`  Model ${model} rate limited, trying next...`);
         // Retry with next model
-        return generateBlogArticle(repo, readme, fileTree);
+        return generateBlogArticle(repo, readme, fileTree, knowledgeGraph);
       }
       return null;
     }
@@ -611,7 +617,9 @@ async function fetchRepoDetails(repo) {
         } : null
       };
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log(`  Failed to fetch details for ${repo.name}: ${e.message}`);
+  }
   return repo;
 }
 
@@ -816,7 +824,7 @@ async function main() {
 
   const output = {
     lastUpdated: new Date().toISOString(),
-    generatedWith: 'NVIDIA API (Kimi K2.5)',
+    generatedWith: `NVIDIA API (${CONFIG.models.available.join(', ')})`,
     totalRepos: forks.length,
     progress: {
       aiGenerated: aiArticleCount,
