@@ -44,6 +44,55 @@
       });
     }
 
+    // 1b) Subtle scroll parallax — restrained depth, not a fairground ride.
+    if (window.ScrollTrigger) {
+      // Aurora background drifts slower than the page for a sense of depth.
+      var bg = document.querySelector('.gradient-bg');
+      if (bg) {
+        gsap.to(bg, {
+          yPercent: 18,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: document.body,
+            start: 'top top',
+            end: 'bottom top',
+            scrub: 0.6
+          }
+        });
+      }
+
+      // Hero content lifts gently and fades as you scroll past it.
+      var heroContent = document.querySelector('.hero-content');
+      if (heroContent) {
+        gsap.to(heroContent, {
+          yPercent: -12,
+          opacity: 0.65,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: '.hero',
+            start: 'top top',
+            end: 'bottom top',
+            scrub: 0.5
+          }
+        });
+      }
+
+      // Any element tagged data-parallax gets a light scrub-linked drift.
+      gsap.utils.toArray('[data-parallax]').forEach(function (el) {
+        var depth = parseFloat(el.getAttribute('data-parallax')) || 8;
+        gsap.fromTo(el, { yPercent: depth }, {
+          yPercent: -depth,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top bottom',
+            end: 'bottom top',
+            scrub: 0.5
+          }
+        });
+      });
+    }
+
     // 2) Scroll-triggered staggered reveals for card groups.
     if (window.ScrollTrigger) {
       var groups = [
