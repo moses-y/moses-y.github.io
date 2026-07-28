@@ -11,7 +11,7 @@
         const navToggle = document.getElementById('nav-toggle');
         const mobileMenu = document.getElementById('mobile-menu');
 
-        navToggle.addEventListener('click', () => {
+        navToggle && navToggle.addEventListener('click', () => {
             navToggle.classList.toggle('active');
             mobileMenu.classList.toggle('active');
             document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
@@ -39,6 +39,7 @@
 
         function typeText() {
             const typingEl = document.getElementById('typing-text');
+            if (!typingEl) return; // no hero on this page
             const currentPhrase = typingPhrases[phraseIndex];
 
             if (isDeleting) {
@@ -95,13 +96,13 @@
         const sortLabel = document.getElementById('sort-label');
         let currentSort = 'recent';
 
-        sortBtn.addEventListener('click', (e) => {
+        sortBtn && sortBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             sortMenu.classList.toggle('open');
         });
 
         document.addEventListener('click', () => {
-            sortMenu.classList.remove('open');
+            sortMenu && sortMenu.classList.remove('open');
         });
 
         document.querySelectorAll('.sort-option').forEach(option => {
@@ -135,17 +136,23 @@
         const backToTop = document.getElementById('back-to-top');
 
         window.addEventListener('scroll', () => {
-            navbar.classList.toggle('scrolled', window.scrollY > 50);
-            backToTop.classList.toggle('visible', window.scrollY > 500);
+            navbar && navbar.classList.toggle('scrolled', window.scrollY > 50);
+            backToTop && backToTop.classList.toggle('visible', window.scrollY > 500);
             highlightNav();
         });
 
-        backToTop.addEventListener('click', () => {
+        backToTop && backToTop.addEventListener('click', () => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
         // Animate Stats
         function animateStats(stats) {
+            const elRepos = document.getElementById('stat-repos');
+            const elLangs = document.getElementById('stat-languages');
+            const elStars = document.getElementById('stat-stars');
+            const elContrib = document.getElementById('stat-contributions');
+            // Hero stats only exist on the home page.
+            if (!elRepos && !elLangs && !elStars && !elContrib) return;
             const duration = 2000;
             const start = performance.now();
 
@@ -154,10 +161,10 @@
                 const progress = Math.min(elapsed / duration, 1);
                 const eased = 1 - Math.pow(1 - progress, 3);
 
-                document.getElementById('stat-repos').textContent = Math.floor(stats.repos * eased) + '+';
-                document.getElementById('stat-languages').textContent = Math.floor(stats.languages * eased) + '+';
-                document.getElementById('stat-stars').textContent = Math.floor(stats.stars * eased);
-                document.getElementById('stat-contributions').textContent = Math.floor(stats.contributions * eased) + '+';
+                if (elRepos) elRepos.textContent = Math.floor(stats.repos * eased) + '+';
+                if (elLangs) elLangs.textContent = Math.floor(stats.languages * eased) + '+';
+                if (elStars) elStars.textContent = Math.floor(stats.stars * eased);
+                if (elContrib) elContrib.textContent = Math.floor(stats.contributions * eased) + '+';
 
                 if (progress < 1) requestAnimationFrame(update);
             }
@@ -326,7 +333,8 @@
         }
 
         // Search & Filter event listeners
-        document.getElementById('search-input').addEventListener('input', (e) => {
+        const searchInput = document.getElementById('search-input');
+        searchInput && searchInput.addEventListener('input', (e) => {
             searchQuery = e.target.value.toLowerCase().trim();
             filterProjects();
         });
@@ -345,13 +353,13 @@
         const listViewBtn = document.getElementById('list-view');
         const projectsContainer = document.getElementById('projects-container');
 
-        gridViewBtn.addEventListener('click', () => {
+        gridViewBtn && gridViewBtn.addEventListener('click', () => {
             gridViewBtn.classList.add('active');
             listViewBtn.classList.remove('active');
             projectsContainer.classList.remove('list-view');
         });
 
-        listViewBtn.addEventListener('click', () => {
+        listViewBtn && listViewBtn.addEventListener('click', () => {
             listViewBtn.classList.add('active');
             gridViewBtn.classList.remove('active');
             projectsContainer.classList.add('list-view');
@@ -427,8 +435,8 @@
         // Load projects from SQLite database, with JSON fallback
         async function loadProjects() {
             const container = document.getElementById('projects-container');
-            // Feed lives on projects.html — skip (and don't load the DB) if absent.
-            if (!container) return;
+            // The full feed renders only where #projects-container exists (projects.html).
+            // On the home page we still load data to animate the hero stats, but skip rendering.
             const controls = document.getElementById('projects-controls');
             const pagination = document.getElementById('pagination');
             const updatedEl = document.getElementById('last-updated');
@@ -444,7 +452,7 @@
                         loadedFromDb = true;
 
                         const meta = ForksDB.getMeta();
-                        if (meta.last_updated) {
+                        if (meta.last_updated && updatedEl) {
                             updatedEl.textContent = `Last updated: ${new Date(meta.last_updated).toLocaleDateString('en-US', {
                                 year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
                             })}`;
@@ -460,12 +468,12 @@
                     if (!res.ok) throw new Error('No data');
                     const data = await res.json();
                     if (!data.forks?.length) {
-                        container.innerHTML = '<div class="projects-loading"><p>No projects yet.</p></div>';
+                        if (container) container.innerHTML = '<div class="projects-loading"><p>No projects yet.</p></div>';
                         return;
                     }
                     allProjects = data.forks;
 
-                    if (data.lastUpdated) {
+                    if (data.lastUpdated && updatedEl) {
                         updatedEl.textContent = `Last updated: ${new Date(data.lastUpdated).toLocaleDateString('en-US', {
                             year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
                         })}`;
@@ -473,11 +481,13 @@
                 }
 
                 filteredProjects = [...allProjects];
-                renderFeaturedProjects(allProjects);
-                renderCurrentPage();
-                controls.style.display = 'flex';
-                if (allProjects.length > itemsPerPage) {
-                    pagination.style.display = 'flex';
+                if (container) {
+                    renderFeaturedProjects(allProjects);
+                    renderCurrentPage();
+                    if (controls) controls.style.display = 'flex';
+                    if (pagination && allProjects.length > itemsPerPage) {
+                        pagination.style.display = 'flex';
+                    }
                 }
                 animateStats(calculateStats(allProjects));
             } catch (e) {
@@ -496,14 +506,16 @@
                         readTime: 2
                     }));
                     filteredProjects = [...allProjects];
-                    renderCurrentPage();
-                    controls.style.display = 'flex';
-                    if (allProjects.length > itemsPerPage) {
-                        pagination.style.display = 'flex';
+                    if (container) {
+                        renderCurrentPage();
+                        if (controls) controls.style.display = 'flex';
+                        if (pagination && allProjects.length > itemsPerPage) {
+                            pagination.style.display = 'flex';
+                        }
                     }
                     animateStats(calculateStats(allProjects));
                 } catch {
-                    container.innerHTML = '<div class="projects-loading"><p>Unable to load projects.</p></div>';
+                    if (container) container.innerHTML = '<div class="projects-loading"><p>Unable to load projects.</p></div>';
                 }
             }
         }
@@ -527,14 +539,16 @@
             localStorage.setItem('theme', newTheme);
         }
 
-        themeToggle.addEventListener('click', toggleTheme);
-        mobileThemeToggle.addEventListener('click', toggleTheme);
+        themeToggle && themeToggle.addEventListener('click', toggleTheme);
+        mobileThemeToggle && mobileThemeToggle.addEventListener('click', toggleTheme);
 
         // GitHub Contribution Heatmap
         async function loadGitHubHeatmap() {
             const grid = document.getElementById('heatmap-grid');
             const monthsContainer = document.getElementById('heatmap-months');
             const countEl = document.getElementById('heatmap-count');
+            // Heatmap only exists on the home page — skip elsewhere.
+            if (!grid) return;
 
             try {
                 // Fetch contribution data from GitHub events API
@@ -682,7 +696,7 @@
         const contactForm = document.getElementById('contact-form');
         const formStatus = document.getElementById('form-status');
 
-        contactForm.addEventListener('submit', async (e) => {
+        contactForm && contactForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = contactForm.querySelector('.form-submit');
             const originalText = submitBtn.textContent;
