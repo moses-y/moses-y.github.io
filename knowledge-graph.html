@@ -74,11 +74,15 @@
         .info {
             position: fixed; z-index: 20; right: 22px; top: 78px; width: 320px;
             max-width: calc(100vw - 44px);
+            max-height: calc(100vh - 100px); overflow-y: auto; overscroll-behavior: contain;
             background: rgba(10,12,24,0.82); backdrop-filter: blur(22px);
             border: 1px solid var(--border,rgba(255,255,255,0.08));
             border-radius: 18px; padding: 20px; color: var(--text-primary,#fff);
             transform: translateX(120%); transition: transform .35s cubic-bezier(.2,.8,.2,1); opacity: 0;
         }
+        .info::-webkit-scrollbar { width: 8px; }
+        .info::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
+        .info::-webkit-scrollbar-track { background: transparent; }
         .info.open { transform: translateX(0); opacity: 1; }
         .info .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-tertiary,#34e0c4); }
         .info h2 { font-size: 1.15rem; margin: 6px 0 10px; word-break: break-word; }
@@ -277,7 +281,7 @@
             var highlightLinks = new Set();
             var focusId = null;
 
-            var Graph = ForceGraph3D()(document.getElementById('graph'))
+            var Graph = ForceGraph3D({ controlType: 'orbit' })(document.getElementById('graph'))
                 .backgroundColor('#06070f')
                 .graphData({ nodes: nodes, links: links })
                 .nodeLabel(function (n) { return n.kind === 'repo' ? (n.name + ' · ' + n.language) : n.name; })
@@ -299,16 +303,20 @@
                 .onNodeClick(focusNode)
                 .onBackgroundClick(clearFocus);
 
-            // gentle auto-spin until first interaction
+            // Orbit controls: left-drag = 360° rotate (azimuth + polar), scroll = zoom, right-drag = pan.
+            var controls = Graph.controls();
+            controls.enableRotate = true;
+            controls.enableZoom = true;
+            controls.enablePan = true;
+            controls.rotateSpeed = 0.9;
+            controls.zoomSpeed = 1.1;
+            // Gentle auto-rotate until the user takes over — never fights manual input.
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.55;
             var spinning = true;
-            Graph.controls().addEventListener('start', function () { spinning = false; });
-            (function spin() {
-                if (spinning) {
-                    var t = Date.now() * 0.00006;
-                    Graph.cameraPosition({ x: 900 * Math.sin(t), z: 900 * Math.cos(t) });
-                }
-                requestAnimationFrame(spin);
-            })();
+            controls.addEventListener('start', function () {
+                if (spinning) { controls.autoRotate = false; spinning = false; }
+            });
 
             function linkId(l) {
                 var s = typeof l.source === 'object' ? l.source.id : l.source;
@@ -432,7 +440,7 @@
                 el.search.value = '';
                 clearFocus();
                 Graph.cameraPosition({ x: 0, y: 0, z: 900 }, { x: 0, y: 0, z: 0 }, 1400);
-                spinning = true;
+                controls.autoRotate = true; spinning = true;
             });
 
             // Fit once physics settles.
