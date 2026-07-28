@@ -372,6 +372,46 @@ function buildKnowledgeGraph(fileTree) {
   // Dedupe frameworks
   graph.frameworks = [...new Set(graph.frameworks)];
 
+  // --- Lightweight SDLC / code-health signals (heuristic, structure-based) ---
+  // Concrete evidence the analysis prompt can cite. Not a substitute for a full
+  // AST/tree-sitter pass, but a cheap first line of "issues before the graph".
+  const lower = fileTree.map(f => f.toLowerCase());
+  const hasCodeFiles = Object.keys(graph.languages).length > 0;
+  const hasLicense = lower.some(f => f.includes('license') || f.includes('licence') || f.includes('copying'));
+  const hasReadme = lower.some(f => f.split('/').pop().startsWith('readme'));
+  const hasLockfile = lower.some(f => /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|cargo\.lock|go\.sum|gemfile\.lock|composer\.lock)$/.test(f));
+  // Committed secrets: a real .env (not an example/sample) or key/credential material
+  const committedSecrets = fileTree.filter(f => {
+    const n = f.toLowerCase().split('/').pop();
+    if (n === '.env' || /^\.env\.(local|prod|production|dev|development)$/.test(n)) return true;
+    if (/\.(pem|pfx|p12)$/.test(n) || n === 'id_rsa' || n.includes('credentials.json') || n.includes('secrets.')) return true;
+    return false;
+  });
+
+  const issues = [];
+  if (hasCodeFiles && graph.testFiles.length === 0)
+    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No test files detected — untested code paths', where: 'repository-wide' });
+  if (hasCodeFiles && !graph.hasCI)
+    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No CI/CD pipeline detected — no automated build/test gate', where: '.github/ or CI config' });
+  if (!hasLicense)
+    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No LICENSE file — unclear usage/redistribution rights', where: 'root' });
+  if (!hasReadme)
+    issues.push({ severity: 'Low', kind: 'SDLC', issue: 'No README — onboarding and intent are undocumented', where: 'root' });
+  if (graph.dependencies.length > 0 && !hasLockfile)
+    issues.push({ severity: 'Low', kind: 'Risk', issue: 'Dependencies declared without a lockfile — non-reproducible builds', where: graph.dependencies[0] });
+  if (committedSecrets.length > 0)
+    issues.push({ severity: 'High', kind: 'Security', issue: 'Possible secrets/credentials committed to the repo', where: committedSecrets.slice(0, 3).join(', ') });
+
+  graph.issues = issues;
+  graph.codeHealth = {
+    hasTests: graph.testFiles.length > 0,
+    hasCI: graph.hasCI,
+    hasLicense,
+    hasReadme,
+    hasLockfile,
+    committedSecrets: committedSecrets.length
+  };
+
   return graph;
 }
 
@@ -437,6 +477,14 @@ function formatKnowledgeGraph(graph) {
     sections.push(`DOCUMENTATION: ${graph.docs.length} doc files found`);
   }
 
+  // Detected code-health / SDLC issues (heuristic signals for the reviewer)
+  if (graph.issues && graph.issues.length > 0) {
+    sections.push('DETECTED ISSUES (heuristic — verify against the code):\n' +
+      graph.issues.map(i => `  [${i.severity}/${i.kind}] ${i.issue} — ${i.where}`).join('\n'));
+  } else if (graph.codeHealth) {
+    sections.push('CODE HEALTH: no structural red flags detected (tests/CI/license/lockfile present where expected).');
+  }
+
   return sections.join('\n\n');
 }
 
@@ -469,7 +517,7 @@ README EXCERPT:
 ${readme || 'No README available'}
 `.trim();
 
-    const prompt = `You're a developer writing a Medium-style technical blog post about this repo.
+    const prompt = `You're a senior AI engineer writing a concise, professional technical briefing about this repo — the kind a consultant would share with a technical client.
 
 ${context}
 
@@ -483,6 +531,12 @@ One paragraph about the specific pain point this solves. Be concrete.
 ## Real-World Use
 A practical scenario. Maybe a code snippet or example workflow.
 
+## Code Health & Issues
+Before the verdict, assess the codebase like a reviewer. Call out concrete, likely issues you can infer from the structure, README, and analysis — be specific and reference files. Cover:
+- **Bugs / risks**: probable defects, unsafe patterns, missing error handling, race conditions, untested paths.
+- **SDLC & code violations**: missing tests/CI, no license, secrets or config in the repo, no input validation, weak separation of concerns, missing docs, dependency/security hygiene.
+Format each as a short bullet: \`Severity (High/Med/Low) — the issue — where\`. If the repo looks genuinely clean, say so briefly and note what evidence supports that (tests present, CI configured, etc.). Do not invent issues.
+
 ## The Bottom Line
 Your honest take in 2-3 sentences. What's good, what's not, who should use it.
 
@@ -491,17 +545,18 @@ Your honest take in 2-3 sentences. What's good, what's not, who should use it.
 STYLE RULES:
 - Short paragraphs (2-4 sentences max)
 - Use \`code formatting\` for technical terms
-- Be specific: "the config.yaml handles..." not "it provides configuration..."
-- Write like you're explaining to a coworker over coffee
-- Have opinions. "This is overkill for small projects" is fine.
+- Be specific and evidence-based: "the config.yaml handles..." not "it provides configuration..."
+- Professional and clear — write for a technical decision-maker, not a casual reader
+- Give a measured, honest assessment. A clear trade-off ("better suited to large teams than solo projects") is welcome; sarcasm and snark are not.
 
 NEVER USE:
-- "rapidly evolving", "paramount", "leverage", "streamline", "robust"
-- "In the realm of...", "It's worth noting...", "This project aims to..."
-- "comprehensive", "cutting-edge", "game-changer", "seamlessly", "foster"
+- Buzzword filler: "rapidly evolving", "paramount", "leverage", "streamline", "robust"
+- Empty openers: "In the realm of...", "It's worth noting...", "This project aims to..."
+- Hype: "comprehensive", "cutting-edge", "game-changer", "seamlessly", "foster"
+- Jokes, snark, or a sarcastic tone — keep it credible and consultant-grade
 - Starting multiple sentences with "This" or "The"
 
-Keep it under 400 words. Quality over quantity.`;
+Keep it under 400 words. Precision over volume.`;
 
     console.log(`  Using model: ${model}`);
     const response = await fetch(CONFIG.models.endpoint, {
@@ -513,7 +568,7 @@ Keep it under 400 words. Quality over quantity.`;
       body: JSON.stringify({
         model: model,
         messages: [
-          { role: 'system', content: 'You write like a real developer - direct, practical, occasionally sarcastic. You hate corporate jargon and AI-sounding fluff. You reference specific code and have strong opinions.' },
+          { role: 'system', content: 'You are a senior AI engineer writing professional, credible technical briefings. You are direct and practical, cite specific code and files, and give measured, honest assessments. You avoid corporate jargon, AI-sounding fluff, hype, and sarcasm.' },
           { role: 'user', content: prompt }
         ],
         max_tokens: CONFIG.models.maxTokens,
