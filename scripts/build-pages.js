@@ -59,7 +59,7 @@ const NAV = `    <a href="#main-content" class="skip-link">Skip to main content<
                 <li><a href="/services.html">Services</a></li>
                 <li><a href="/case-studies.html">Case Studies</a></li>
                 <li><a href="/projects.html">Projects</a></li>
-                <li><a href="/blog/">Blog</a></li>
+                <li><a href="/insights/">Insights</a></li>
                 <li><a href="/knowledge-graph.html">Code Graph</a></li>
             </ul>
             <a href="${CAL}" target="_blank" rel="noopener" class="nav-cta">Book a call</a>
@@ -197,7 +197,7 @@ ${FOOTER}`;
 
 /* Blog post -------------------------------------------------------------- */
 function blogPost(p) {
-  const canonical = `${SITE}/blog/${p.slug}.html`;
+  const canonical = `${SITE}/insights/${p.slug}.html`;
   const jsonld = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -243,7 +243,7 @@ ${p.body}
                 <a href="${p.ctaHref}" class="btn btn-primary" style="display:inline-flex;">${esc(p.ctaLabel)}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
             </div>
-            <p style="margin-top:32px;"><a href="/blog/">← Back to all articles</a></p>
+            <p style="margin-top:32px;"><a href="/insights/">← Back to all articles</a></p>
         </div>
     </section>
     </main>
@@ -637,12 +637,12 @@ ${FOOTER}`;
 
 /* Blog index ------------------------------------------------------------- */
 function blogIndex() {
-  const canonical = `${SITE}/blog/`;
+  const canonical = `${SITE}/insights/`;
   const cards = posts.map((p) => `                <div class="service-card">
                     <div class="hero-badge" style="margin-bottom:14px;"><span class="dot"></span> ${p.tag}</div>
                     <h3>${esc(p.h1)}</h3>
                     <p class="description">${esc(p.description)}</p>
-                    <a href="/blog/${p.slug}.html" class="cta">Read article →</a>
+                    <a href="/insights/${p.slug}.html" class="cta">Read article →</a>
                 </div>`).join('\n');
   return `${head({
     title: 'Blog — AI Governance, RAG & LLM Engineering | Moses Yebei',
@@ -654,7 +654,7 @@ function blogIndex() {
       '@type': 'Blog',
       url: canonical,
       name: 'Moses Yebei — Blog',
-      blogPost: posts.map((p) => ({ '@type': 'BlogPosting', headline: p.h1, url: `${SITE}/blog/${p.slug}.html`, datePublished: p.date }))
+      blogPost: posts.map((p) => ({ '@type': 'BlogPosting', headline: p.h1, url: `${SITE}/insights/${p.slug}.html`, datePublished: p.date }))
     }
   })}
 <body>
@@ -663,7 +663,7 @@ ${NAV}
     <section class="hero" style="min-height:auto;padding-top:160px;">
         <div class="container">
             <div class="hero-content">
-                <div class="hero-badge"><span class="dot"></span> Blog</div>
+                <div class="hero-badge"><span class="dot"></span> Insights</div>
                 <h1><span class="gradient-text">Field notes</span></h1>
                 <p class="bio" style="max-width:680px;">Practical writing on AI governance, the EU AI Act, RAG, GraphRAG, and shipping LLM systems that hold up in production.</p>
             </div>
@@ -736,11 +736,11 @@ function write(rel, content) {
 }
 
 services.forEach((s) => write(`${s.slug}.html`, servicePage(s)));
-posts.forEach((p) => write(`blog/${p.slug}.html`, blogPost(p)));
+posts.forEach((p) => write(`insights/${p.slug}.html`, blogPost(p)));
 caseStudies.forEach((c) => write(`case-studies/${c.slug}.html`, caseStudyPage(c)));
 write('services.html', servicesHub());
 write('case-studies.html', caseStudiesHub());
-write('blog/index.html', blogIndex());
+write('insights/index.html', blogIndex());
 
 /* Sitemap ---------------------------------------------------------------- */
 const urls = [
@@ -749,8 +749,8 @@ const urls = [
   ...services.map((s) => ({ loc: `${SITE}/${s.slug}.html`, pri: '0.8', freq: 'monthly' })),
   { loc: `${SITE}/case-studies.html`, pri: '0.9', freq: 'monthly' },
   ...caseStudies.map((c) => ({ loc: `${SITE}/case-studies/${c.slug}.html`, pri: '0.8', freq: 'monthly' })),
-  { loc: `${SITE}/blog/`, pri: '0.7', freq: 'weekly' },
-  ...posts.map((p) => ({ loc: `${SITE}/blog/${p.slug}.html`, pri: '0.7', freq: 'monthly' })),
+  { loc: `${SITE}/insights/`, pri: '0.7', freq: 'weekly' },
+  ...posts.map((p) => ({ loc: `${SITE}/insights/${p.slug}.html`, pri: '0.7', freq: 'monthly' })),
   { loc: `${SITE}/projects.html`, pri: '0.8', freq: 'daily' },
   { loc: `${SITE}/knowledge-graph.html`, pri: '0.6', freq: 'weekly' }
 ];
