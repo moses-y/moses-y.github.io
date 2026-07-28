@@ -12,6 +12,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const SITE = 'https://moses-y.github.io';
+const CAL = 'https://cal.com/moses-yebei';
 const YEAR = 2025;
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -56,11 +57,12 @@ const NAV = `    <a href="#main-content" class="skip-link">Skip to main content<
                 <li><a href="/#skills">Skills</a></li>
                 <li><a href="/#experience">Experience</a></li>
                 <li><a href="/services.html">Services</a></li>
+                <li><a href="/case-studies.html">Case Studies</a></li>
                 <li><a href="/projects.html">Projects</a></li>
                 <li><a href="/blog/">Blog</a></li>
                 <li><a href="/knowledge-graph.html">Code Graph</a></li>
             </ul>
-            <a href="/#contact" class="nav-cta">Let's Talk</a>
+            <a href="${CAL}" target="_blank" rel="noopener" class="nav-cta">Book a call</a>
         </div>
     </nav>`;
 
@@ -139,9 +141,9 @@ ${NAV}
                 <h1><span class="gradient-text">${esc(s.h1)}</span></h1>
                 <p class="bio" style="max-width:680px;">${esc(s.intro)}</p>
                 <div class="hero-buttons">
-                    <a href="mailto:mosesyebei@gmail.com?subject=${encodeURIComponent(s.h1)}" class="btn btn-primary">Book a call
+                    <a href="${CAL}" target="_blank" rel="noopener" class="btn btn-primary">Book a call
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
-                    <a href="/services.html" class="btn btn-secondary">All services</a>
+                    <a href="/case-studies.html" class="btn btn-secondary">See case studies</a>
                 </div>
             </div>
         </div>
@@ -166,7 +168,7 @@ ${NAV}
                     <ul>
                         ${s.process.map(checkItem).join('\n                        ')}
                     </ul>
-                    <a href="mailto:mosesyebei@gmail.com?subject=${encodeURIComponent(s.h1)}" class="cta">Start the conversation</a>
+                    <a href="${CAL}" target="_blank" rel="noopener" class="cta">Book a call</a>
                 </div>
                 <div class="service-card">
                     <h3>Proof</h3>
@@ -249,6 +251,64 @@ ${FOOTER}`;
 }
 
 /* Data ------------------------------------------------------------------- */
+/* Case study page -------------------------------------------------------- */
+function caseStudyPage(c) {
+  const canonical = `${SITE}/case-studies/${c.slug}.html`;
+  const jsonld = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: c.h1,
+    description: c.description,
+    author: { '@type': 'Person', name: 'Moses Yebei', url: SITE + '/' },
+    image: `${SITE}/og-image.png`,
+    mainEntityOfPage: canonical
+  };
+  const block = (label, title, body) => `
+    <section class="reveal">
+        <div class="container" style="max-width:820px;">
+            <span class="section-label">${label}</span>
+            <h2 class="section-title" style="text-align:left;margin:6px 0 14px;">${esc(title)}</h2>
+            <p style="color:var(--text-secondary);line-height:1.8;font-size:1.05rem;">${body}</p>
+        </div>
+    </section>`;
+  const metrics = c.metrics.map((m) => `<div class="stat-item">
+                    <div class="stat-number">${esc(m.value)}</div>
+                    <div class="stat-label">${esc(m.label)}</div>
+                </div>`).join('\n                ');
+  const tags = c.stack.map((t) => `<span class="timeline-tag">${esc(t)}</span>`).join(' ');
+  return `${head({ title: c.title, description: c.description, canonical, keywords: c.keywords, jsonld })}
+<body>
+${NAV}
+    <main id="main-content">
+    <article class="hero" style="min-height:auto;padding-top:160px;">
+        <div class="container" style="max-width:820px;">
+            <div class="hero-badge"><span class="dot"></span> ${c.sector}</div>
+            <h1 style="font-size:clamp(2rem,5vw,3rem);margin:18px 0;"><span class="gradient-text">${esc(c.h1)}</span></h1>
+            <p class="bio" data-parallax="6">${esc(c.summary)}</p>
+            <div class="stats-bar" style="margin-top:28px;">
+                ${metrics}
+            </div>
+        </div>
+    </article>
+${block('Challenge', 'The problem', c.challenge)}
+${block('Approach', 'What I did', c.approach)}
+${block('Outcome', 'The result', c.outcome)}
+    <section class="reveal">
+        <div class="container" style="max-width:820px;">
+            <div class="timeline-tags">${tags}</div>
+            <div style="margin-top:36px;padding:28px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);">
+                <h3 style="color:var(--text-primary);margin-bottom:10px;">Have a similar challenge?</h3>
+                <p style="color:var(--text-secondary);margin-bottom:18px;">I take on a small number of engagements like this. Let's talk about yours.</p>
+                <a href="${CAL}" target="_blank" rel="noopener" class="btn btn-primary" style="display:inline-flex;">Book a call
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+            </div>
+            <p style="margin-top:32px;"><a href="/case-studies.html">← All case studies</a></p>
+        </div>
+    </section>
+    </main>
+${FOOTER}`;
+}
+
 const services = [
   {
     slug: 'ai-governance-consulting',
@@ -428,6 +488,63 @@ const services = [
   }
 ];
 
+const caseStudies = [
+  {
+    slug: 'autar-knowledge-graph-agents',
+    sector: 'Developer tooling / AI platform',
+    title: 'Case Study: Knowledge-Graph Multi-Agent Platform | Moses Yebei',
+    h1: 'A knowledge graph that made 7 AI agents cheaper and sharper',
+    keywords: 'knowledge graph case study, GraphRAG, multi-agent system, FalkorDB, LangGraph',
+    description: 'How a three-layer knowledge-graph pipeline feeding 7 specialist agents cut token usage and lifted output quality on a production code-analysis platform.',
+    summary: 'As founding engineer at Autar.ai, I designed the knowledge-graph backbone for an automated software-analysis platform — turning raw context into structured graph slices that made a fleet of AI agents both cheaper to run and more accurate.',
+    metrics: [
+      { value: '149', label: 'Entity types modeled' },
+      { value: '7', label: 'Specialist agents served' },
+      { value: '20+', label: 'Languages analyzed' }
+    ],
+    challenge: 'The platform had to analyze codebases across 20+ languages and answer deep, cross-file questions. Feeding raw context to LLM agents was expensive and noisy — token budgets ballooned and answers drifted whenever the relevant facts were scattered across files.',
+    approach: 'I designed a three-layer knowledge-graph pipeline in FalkorDB (Cypher, 149 entity types) and had each of 7 specialist agents query a tailored graph slice instead of raw context. I built 20+ Temporal workflows and 120+ activities for durable orchestration, with Kafka streaming, ClickHouse analytics, and full observability running on production GKE.',
+    outcome: 'Graph-scoped retrieval cut the tokens each agent consumed and measurably lifted output quality — the model saw only the connected facts it needed. The platform runs in production with durable, observable workflows the team can reason about and extend.',
+    stack: ['FalkorDB / Cypher', 'LangGraph', 'Temporal', 'Kafka', 'ClickHouse', 'GKE']
+  },
+  {
+    slug: 'salix-ediscovery-nlp',
+    sector: 'Legal / e-discovery',
+    title: 'Case Study: NLP Over 1M+ Legal Documents at 99% | Moses Yebei',
+    h1: 'Reviewing 1M+ litigation documents at 99% accuracy',
+    keywords: 'e-discovery NLP case study, document classification, legal AI, NLP pipeline',
+    description: 'How an NLP/ML pipeline processed over a million litigation documents at 99% accuracy, cutting retrieval time and lifting process efficiency.',
+    summary: 'As technical lead at SALIX Data, I built the NLP/ML pipeline behind high-stakes litigation delivery — turning a manual review bottleneck into an accurate, auditable, automated process.',
+    metrics: [
+      { value: '1M+', label: 'Documents processed' },
+      { value: '99%', label: 'Classification accuracy' },
+      { value: '-25%', label: 'Retrieval time' }
+    ],
+    challenge: 'High-stakes litigation meant millions of documents had to be classified and retrieved accurately and defensibly. Manual review did not scale, and errors carried real legal and financial risk under strict compliance regimes.',
+    approach: 'I architected an NLP/ML pipeline spanning Relativity, CloudNine Law, and Microsoft Purview, plus a speech-to-text pipeline for audio evidence. The design prioritized accuracy, auditability, and repeatability — aligning the AI roadmap with client needs alongside the CEO.',
+    outcome: 'The pipeline processed 1M+ documents at 99% accuracy and speech-to-text at 99% accuracy, improved process efficiency ~30%, and cut retrieval time ~25% — while staying defensible under compliance review.',
+    stack: ['Python / NLP', 'Relativity', 'CloudNine Law', 'MS Purview', 'Speech-to-Text']
+  },
+  {
+    slug: 'fintech-fraud-detection',
+    sector: 'Fintech / banking',
+    title: 'Case Study: Cutting Bank Fraud 75% with ML | Moses Yebei',
+    h1: 'Cutting fraudulent transactions by 75% for a bank',
+    keywords: 'fraud detection case study, machine learning fintech, predictive modeling',
+    description: 'How a machine-learning fraud-detection model reduced fraudulent transactions by 75% and lifted operational efficiency across client engagements.',
+    summary: 'Consulting independently across fintech and banking, I built a fraud-detection model that sharply cut losses — one of a series of predictive systems delivered for measurable business outcomes.',
+    metrics: [
+      { value: '-75%', label: 'Fraudulent transactions' },
+      { value: '+60%', label: 'Lead engagement (chatbots)' },
+      { value: '+40%', label: 'Operational efficiency' }
+    ],
+    challenge: 'A banking client was losing money to fraudulent transactions that rule-based checks kept missing, while non-technical teams needed insight they could actually act on.',
+    approach: 'I built a machine-learning fraud-detection model tuned to the client\'s transaction patterns, paired it with real-time analytics dashboards, and ran hands-on training so non-technical staff could use and trust the outputs.',
+    outcome: 'Fraudulent transactions dropped 75%. Across the wider engagement, AI chatbots lifted lead engagement 60% and predictive solutions improved operational efficiency up to 40%.',
+    stack: ['Python', 'scikit-learn', 'XGBoost', 'Dashboards', 'A/B Testing']
+  }
+];
+
 const posts = [
   {
     slug: 'eu-ai-act-sme-compliance-checklist',
@@ -563,6 +680,52 @@ ${cards}
 ${FOOTER}`;
 }
 
+/* Case studies hub ------------------------------------------------------- */
+function caseStudiesHub() {
+  const canonical = `${SITE}/case-studies.html`;
+  const cards = caseStudies.map((c) => `                <div class="service-card">
+                    <div class="hero-badge" style="margin-bottom:14px;"><span class="dot"></span> ${c.sector}</div>
+                    <h3>${esc(c.h1)}</h3>
+                    <div class="timeline-tags" style="margin:12px 0;">${c.metrics.map((m) => `<span class="timeline-tag">${esc(m.value)} ${esc(m.label)}</span>`).join(' ')}</div>
+                    <p class="description">${esc(c.summary)}</p>
+                    <a href="/case-studies/${c.slug}.html" class="cta">Read case study →</a>
+                </div>`).join('\n');
+  return `${head({
+    title: 'Case Studies — Shipped AI Systems & Outcomes | Moses Yebei',
+    description: 'Real AI engagements with quantified outcomes — knowledge-graph agents, e-discovery NLP at 99%, and a fraud model that cut losses 75%.',
+    canonical,
+    keywords: 'AI case studies, machine learning results, knowledge graph, fraud detection, NLP e-discovery',
+    jsonld: {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      itemListElement: caseStudies.map((c, i) => ({
+        '@type': 'ListItem', position: i + 1, name: c.h1, url: `${SITE}/case-studies/${c.slug}.html`
+      }))
+    }
+  })}
+<body>
+${NAV}
+    <main id="main-content">
+    <section class="hero" style="min-height:auto;padding-top:160px;">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-badge"><span class="dot"></span> Case Studies</div>
+                <h1><span class="gradient-text">Outcomes, not adjectives</span></h1>
+                <p class="bio" style="max-width:680px;">A few engagements where the numbers did the talking — from knowledge-graph agents in production to fraud losses cut by three quarters.</p>
+            </div>
+        </div>
+    </section>
+    <section class="reveal">
+        <div class="container">
+            <div class="services-grid">
+${cards}
+            </div>
+        </div>
+    </section>
+    </main>
+${FOOTER}`;
+}
+
 /* Write ------------------------------------------------------------------ */
 const written = [];
 function write(rel, content) {
@@ -574,7 +737,9 @@ function write(rel, content) {
 
 services.forEach((s) => write(`${s.slug}.html`, servicePage(s)));
 posts.forEach((p) => write(`blog/${p.slug}.html`, blogPost(p)));
+caseStudies.forEach((c) => write(`case-studies/${c.slug}.html`, caseStudyPage(c)));
 write('services.html', servicesHub());
+write('case-studies.html', caseStudiesHub());
 write('blog/index.html', blogIndex());
 
 /* Sitemap ---------------------------------------------------------------- */
@@ -582,6 +747,8 @@ const urls = [
   { loc: `${SITE}/`, pri: '1.0', freq: 'weekly' },
   { loc: `${SITE}/services.html`, pri: '0.9', freq: 'monthly' },
   ...services.map((s) => ({ loc: `${SITE}/${s.slug}.html`, pri: '0.8', freq: 'monthly' })),
+  { loc: `${SITE}/case-studies.html`, pri: '0.9', freq: 'monthly' },
+  ...caseStudies.map((c) => ({ loc: `${SITE}/case-studies/${c.slug}.html`, pri: '0.8', freq: 'monthly' })),
   { loc: `${SITE}/blog/`, pri: '0.7', freq: 'weekly' },
   ...posts.map((p) => ({ loc: `${SITE}/blog/${p.slug}.html`, pri: '0.7', freq: 'monthly' })),
   { loc: `${SITE}/projects.html`, pri: '0.8', freq: 'daily' },
