@@ -588,6 +588,76 @@ const posts = [
     ctaText: 'I help SMEs build the inventory, risk classification, and oversight the Act expects — without enterprise overhead.',
     ctaHref: '/ai-governance-consulting.html',
     ctaLabel: 'See AI governance consulting'
+  },
+  {
+    slug: 'rag-vs-fine-tuning',
+    title: 'RAG vs Fine-Tuning: Which Does Your LLM Actually Need? | Moses Yebei',
+    h1: 'RAG vs fine-tuning: which does your LLM actually need?',
+    tag: 'LLM Engineering',
+    date: '2026-07-28',
+    dateHuman: 'July 28, 2026',
+    keywords: 'RAG vs fine-tuning, when to fine-tune LLM, retrieval augmented generation, LoRA QLoRA, enterprise LLM',
+    description: 'A practical decision guide to RAG vs fine-tuning for enterprise LLMs — what each fixes, what they cost, and why most production systems end up using both.',
+    body: `            <p>"Should we fine-tune?" is the question I get most often, and it is usually the wrong first question. RAG and fine-tuning solve different problems. Confusing them burns budget and ships worse systems. Here is the decision framework I actually use.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">They fix different things</h2>
+            <p><strong>RAG (retrieval-augmented generation)</strong> changes <em>what the model knows</em> at answer time — it looks up relevant facts and puts them in the prompt. <strong>Fine-tuning</strong> changes <em>how the model behaves</em> — its style, format, and its handling of a narrow task. If your problem is "the model doesn't know our data," that's RAG. If it's "the model knows enough but answers in the wrong shape," that's fine-tuning.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">Start with RAG almost every time</h2>
+            <p>RAG keeps knowledge fresh (update the index, not the weights), gives you citations, and is far cheaper to iterate. At AICE Africa I built a FAISS-backed RAG pipeline serving live users precisely because the underlying data — jobs, CVs, requirements — changed constantly. Fine-tuning that knowledge in would have gone stale the same day.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">When fine-tuning earns its keep</h2>
+            <p>Reach for fine-tuning (LoRA/QLoRA on an open model) when you need: consistent tone or a strict output format; lower per-call cost at high volume; on-prem or private deployment; or a narrow task a general model does inconsistently even with good prompts. The tell is that you're fighting the same behavior with ever-longer prompts — that's a training problem, not a retrieval one.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">In production, it's usually both</h2>
+            <p>The 2026 consensus for serious stacks is a combination: fine-tune for behavior and format, RAG for current facts, and — when questions are multi-hop or relationship-heavy — a knowledge graph feeding retrieval (<a href="/insights/graphrag-and-graph-engineering.html">GraphRAG</a>). Vector DB plus a reranker is the cheapest high-leverage first move; add structure only when the questions demand it.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">The honest cost check</h2>
+            <p>Fine-tuning has a long tail: dataset curation, evaluation harnesses, retraining as data drifts, and serving/quantization. If a well-built RAG system already hits your quality bar, fine-tuning is often cost without meaningful gain. I'll tell a client when that's the case rather than sell the more expensive project.</p>`,
+    faqs: [
+      { q: 'Is RAG or fine-tuning cheaper?', a: 'RAG is usually cheaper to build and maintain because you update an index instead of retraining a model, and you avoid the dataset-curation and evaluation overhead fine-tuning requires. Fine-tuning can lower per-call cost at very high volume, which is where its economics start to win.' },
+      { q: 'Can you use RAG and fine-tuning together?', a: 'Yes, and most production systems do. A common pattern is fine-tuning for consistent tone/format and RAG for current, citable facts — plus a knowledge graph (GraphRAG) when questions require multi-hop reasoning.' },
+      { q: 'When should I NOT fine-tune?', a: 'When your problem is missing or fast-changing knowledge (use RAG), when prompting plus retrieval already meets your quality bar, or when you lack a clean labeled dataset and an evaluation harness to prove the fine-tune actually helped.' }
+    ],
+    ctaTitle: 'Not sure whether to retrieve or retrain?',
+    ctaText: 'I help teams make the RAG-vs-fine-tune call honestly — and then build whichever one (or both) actually moves the metric.',
+    ctaHref: '/llm-fine-tuning-consulting.html',
+    ctaLabel: 'See LLM fine-tuning consulting'
+  },
+  {
+    slug: 'graphrag-and-graph-engineering',
+    title: 'GraphRAG & Graph Engineering: When Knowledge Graphs Beat Vector RAG | Moses Yebei',
+    h1: 'GraphRAG & graph engineering: when knowledge graphs beat vector RAG',
+    tag: 'Knowledge Graphs',
+    date: '2026-07-28',
+    dateHuman: 'July 28, 2026',
+    keywords: 'GraphRAG, graph engineering, knowledge graph LLM, multi-hop reasoning, FalkorDB, Neo4j, vector RAG',
+    description: 'What graph engineering brings to LLM systems — how GraphRAG uses knowledge graphs for multi-hop reasoning that plain vector RAG cannot do, with real production lessons.',
+    body: `            <p>Vector RAG retrieves passages that <em>look</em> similar to your question. It has no idea how those passages relate to each other. For a lot of real questions — "which of our vendors are affected if this supplier fails?", "trace how this function's output reaches the API layer" — the answer lives in the <em>relationships</em>, not any single chunk. That's where graph engineering earns its place.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">What graph engineering actually is</h2>
+            <p>Graph engineering is modeling your domain as entities and the relationships between them, then building the pipelines to extract, store, and query that structure reliably. In an LLM context it means entity/relation extraction, a graph store (Neo4j, FalkorDB, NetworkX), and graph-aware retrieval. I keep a running set of experiments on this in my <a href="/blog/graph-engineering.html">graph engineering</a> and <a href="/blog/code-to-knowledge-graph.html">code-to-knowledge-graph</a> work.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">Why GraphRAG wins on multi-hop</h2>
+            <p>Plain vector RAG struggles when an answer requires chaining several facts together, because each chunk is retrieved in isolation. GraphRAG traverses explicit edges, so the model sees the connected sub-graph — the entities <em>and</em> how they link. The 2026 consensus is clear: GraphRAG outperforms on multi-hop, relationship-heavy, and thematic questions, while vector search stays faster and cheaper for direct factual lookups.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">A production lesson: feed agents graph slices, not raw context</h2>
+            <p>At Autar.ai I designed a three-layer knowledge-graph pipeline in FalkorDB (Cypher, 149 entity types) feeding 7 specialist agents. The key move was giving each agent a <em>tailored graph slice</em> instead of raw context. That cut token usage and lifted output quality at the same time — the model saw only the connected facts it needed, not a haystack. This is graph engineering as a cost lever, not just an accuracy one.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">Don't over-build it</h2>
+            <p>Two failure modes to avoid. First: if your queries are mostly single-fact lookups, a knowledge graph adds cost without meaningful accuracy gains — start with a vector DB and a reranker. Second, and more common: treating graph construction as one-and-done. Entity graphs go stale exactly like any index; without a refresh pipeline, retrieval quality quietly degrades. Graph engineering is a living system, not a migration.</p>
+
+            <h2 style="color:var(--text-primary);margin:32px 0 12px;">The pragmatic path</h2>
+            <p>Start with vector RAG plus a reranker. Add a knowledge graph / GraphRAG layer when you hit multi-hop questions, entity-disambiguation pain, or compliance requirements that demand traceable reasoning. That progression — the same one I walked from <a href="/insights/rag-vs-fine-tuning.html">FAISS RAG at AICE to graph-backed agents at Autar</a> — gets you value early without over-engineering day one.</p>`,
+    faqs: [
+      { q: 'What is the difference between GraphRAG and vector RAG?', a: 'Vector RAG retrieves text chunks by semantic similarity and has no model of how they relate. GraphRAG builds an explicit knowledge graph of entities and relationships and retrieves connected sub-graphs, which enables multi-hop reasoning and more faithful answers on relationship-heavy questions.' },
+      { q: 'When is a knowledge graph worth the effort?', a: 'When questions require chaining multiple facts (multi-hop), when entity disambiguation is causing errors, or when compliance requires traceable reasoning. For mostly single-fact lookups, a vector database with a reranker is cheaper and sufficient.' },
+      { q: 'Which graph databases do you use?', a: 'FalkorDB and Neo4j for property graphs and Cypher queries, and NetworkX for in-memory analysis. The choice depends on scale, query patterns, and whether the graph feeds live agents or offline analysis.' }
+    ],
+    ctaTitle: 'Have questions vector RAG can\'t answer?',
+    ctaText: 'GraphRAG and knowledge-graph agents are my sharpest specialty. If plain retrieval has plateaued, let\'s look at your data as a graph.',
+    ctaHref: '/graphrag-knowledge-graph-agents.html',
+    ctaLabel: 'See GraphRAG consulting'
   }
 ];
 
