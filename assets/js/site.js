@@ -25,10 +25,10 @@
 
         // Typing Animation
         const typingPhrases = [
-            'AI Policy & Governance Advisor',
-            'Data Governance & AI Readiness',
-            'Forward-Deployed AI Engineer',
-            'ML Training & Fine-Tuning'
+            'AI policy & governance',
+            'data governance & AI readiness',
+            'forward-deployed engineering',
+            'model training & fine-tuning'
         ];
         let phraseIndex = 0;
         let charIndex = 0;

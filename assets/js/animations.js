@@ -29,6 +29,7 @@
     // 1) Hero entrance — staggered rise on load.
     var heroBits = [
       '.hero-content .hero-badge',
+      '.hero-content .hero-kicker',
       '.hero-content h1',
       '.hero-content .tagline',
       '.hero-content .bio',
