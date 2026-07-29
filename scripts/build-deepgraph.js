@@ -122,8 +122,29 @@ async function chat(model, system, user, jsonMode) {
 const STRUCT_SYS = 'You are a static-analysis engine. Given a repository\'s source, infer its internal module dependency graph. ' +
   'Return ONLY JSON: {"nodes":[{"id","name","full","lang","ca","ce"}],"links":[{"s","t"}]} where a link s->t means module s imports/depends on module t, ' +
   'ca = number of modules importing this one (fan-in), ce = number it imports (fan-out). Use dotted module paths for ids. Keep to the most significant <=300 modules.';
-const NARR_SYS = 'You are a principal engineer writing a short architecture briefing. Given a repository\'s source, describe its structure in 3-4 sentences, ' +
-  'then list up to 3 notable strengths and up to 3 risks (coupling, cycles, god-modules). Return ONLY JSON: {"summary","strengths":[],"risks":[]}.';
+// Narrative + findings. Borrows CUPID's discipline so extraction stays smooth (low-noise):
+//  - fixed taxonomy + severity tiers
+//  - a 3-gate escalation rule that kills false positives and downgrades intentional idioms
+//  - inspectable evidence (file/function/excerpt) on every finding
+//  - explicit scope so nothing is silently dropped
+const NARR_SYS = [
+  'You are a principal engineer producing an architecture briefing AND a disciplined code-issue review.',
+  'First: describe the repo\'s structure in 3-4 sentences and list up to 3 strengths.',
+  'Then find code issues. Each finding MUST have:',
+  '  category ∈ [maintainability, performance, complexity, error_handling, correctness, resource_leak];',
+  '  severity ∈ [error, warning, info];',
+  '  file and (if applicable) function; a short evidence excerpt; a concrete recommendation;',
+  '  rank = your estimate of severity × leverage (how much it matters) × removability (how easily fixed), 0-10.',
+  'Apply THREE gates before escalating a finding above info — this keeps noise out:',
+  '  1) Resolution: could naive parsing get this fact wrong (stdlib vs local name, guarded/conditional imports,',
+  '     typing.overload stubs, re-export cycles)? If yes, do NOT report it as real.',
+  '  2) Code role: does the code\'s role change the correct fix? If yes, rewrite the recommendation to fit the role.',
+  '  3) Deliberate idiom: is the shape intentional? If yes, keep it but grade it down to info.',
+  'Report scope honestly: how many files you actually reviewed vs. the sample you were given.',
+  'Return ONLY JSON: {"summary": str, "strengths": [str], ',
+  '"findings": [{"title","category","severity","file","function","evidence","recommendation","rank"}], ',
+  '"scope": {"reviewed": int, "note": str}}. Cap findings at the 15 highest-rank.'
+].join(' ');
 
 // Build a framing preamble from the repo's existing knowledge-graph metadata.
 // Gives the models priors (purpose, languages) so labels + narrative stay grounded
