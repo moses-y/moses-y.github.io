@@ -99,7 +99,13 @@
         .info .links a:hover { text-decoration: underline; }
         .info .dive { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border,rgba(255,255,255,0.08)); }
         .info .dive .label { font-size: 0.72rem; color: var(--text-secondary,#9aa4bf); margin-bottom: 8px; }
-        .info .close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text-secondary,#9aa4bf); font-size: 1.1rem; cursor: pointer; }
+        .info .close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text-secondary,#9aa4bf); font-size: 1.1rem; cursor: pointer; line-height: 1; }
+        .info .min { position: absolute; top: 14px; right: 40px; background: none; border: none; color: var(--text-secondary,#9aa4bf); font-size: 1.1rem; cursor: pointer; line-height: 1; }
+        .info .close:hover, .info .min:hover { color: #fff; }
+        /* Collapsed: shrink to just the header so it stops covering the canvas. */
+        .info.collapsed { padding-bottom: 16px; }
+        .info.collapsed #i-desc, .info.collapsed #i-meta, .info.collapsed #i-links, .info.collapsed #i-dive { display: none !important; }
+        .info.collapsed h2 { margin-bottom: 0; }
         .badge { display:inline-block; font-size:0.66rem; padding:2px 8px; border-radius:999px; background:rgba(52,224,196,0.15); color:var(--accent-tertiary,#34e0c4); border:1px solid rgba(52,224,196,0.3); margin-left:6px; vertical-align:middle; }
 
         .hint {
@@ -161,7 +167,8 @@
     </div>
 
     <div class="info" id="info">
-        <button class="close" id="info-close" aria-label="Close">✕</button>
+        <button class="close" id="info-close" aria-label="Close panel">✕</button>
+        <button class="min" id="info-min" aria-label="Collapse panel" aria-expanded="true">–</button>
         <div class="kind" id="i-kind">Repository</div>
         <h2 id="i-name">Node</h2>
         <p id="i-desc"></p>
@@ -276,14 +283,6 @@
         function build(data) {
             var forks = (data.forks || []).slice();
 
-            // Flagship: inject autar (deep import graph) as a featured AI/ML repo.
-            forks.unshift({
-                id: 'autar', name: 'autar', displayName: 'autar',
-                summary: 'Autonomous maintenance-task factory — scans repos, opens fix PRs. Flagship: dive in for the real 470-module import graph.',
-                language: 'Python', stars: 0, type: 'flagship', topics: ['ai', 'agents', 'devops'],
-                knowledgeGraph: { totalFiles: 1012 }, deepStructure: 'autar', url: null
-            });
-
             var nodes = [], links = [];
             var adjacency = {}, nodeById = {};
             function addNode(n) { if (nodeById[n.id]) return; nodes.push(n); nodeById[n.id] = n; adjacency[n.id] = []; }
@@ -316,11 +315,11 @@
                 var rid = 'repo:' + f.id;
                 addNode({
                     id: rid, kind: 'repo', name: f.displayName || f.name, language: lang, domain: domain,
-                    color: f.deepStructure ? ACCENT3 : langColor(lang),
+                    color: langColor(lang),
                     files: files,
-                    val: f.deepStructure ? 14 : Math.max(3, Math.min(18, 3 + (f.stars || 0) / 4 + files / 120)),
-                    repo: f, structFile: f.deepStructure ? ('structure/' + f.deepStructure + '.json') : ('structure/' + f.id + '.json'),
-                    deep: !!f.deepStructure, dived: false
+                    val: Math.max(3, Math.min(18, 3 + (f.stars || 0) / 4 + files / 120)),
+                    repo: f, structFile: 'structure/' + f.id + '.json',
+                    dived: false
                 });
                 addLink(langIds[lkey], rid);
             });
@@ -353,7 +352,7 @@
                 .backgroundColor('#06070f')
                 .graphData({ nodes: nodes, links: links })
                 .nodeLabel(function (n) {
-                    if (n.kind === 'repo') return n.name + ' · ' + n.language + (n.deep ? ' · deep dive' : '');
+                    if (n.kind === 'repo') return n.name + ' · ' + n.language;
                     if (n.kind === 'file') return n.name;
                     if (n.kind === 'dir') return n.name + '/';
                     if (n.kind === 'module') return n.full + '  (Ca ' + n.ca + ' / Ce ' + n.ce + ')';
@@ -522,7 +521,7 @@
                 el.iDive.style.display = 'none'; el.collapseBtn.style.display = 'none';
                 var kindLabel = { root: 'Owner', domain: 'Domain', lang: 'Language', repo: 'Repository', dir: 'Folder', file: 'File', module: 'Module' }[node.kind] || 'Node';
                 el.iKind.textContent = kindLabel;
-                el.iName.innerHTML = node.name + (node.deep ? '<span class="badge">deep dive</span>' : '');
+                el.iName.textContent = node.name;
 
                 if (node.kind === 'repo') {
                     var f = node.repo || {};
@@ -533,10 +532,10 @@
                     el.iMeta.innerHTML = meta.join('');
                     var lnk = '';
                     if (f.url) lnk += '<a href="' + f.url + '" target="_blank" rel="noopener">GitHub ↗</a>';
-                    if (f.name && !node.deep) lnk += '<a href="blog/' + encodeURIComponent(f.name) + '.html">Briefing →</a>';
+                    if (f.name) lnk += '<a href="blog/' + encodeURIComponent(f.name) + '.html">Briefing →</a>';
                     el.iLinks.innerHTML = lnk;
                     el.iDive.style.display = '';
-                    el.iDiveLabel.textContent = node.deep ? 'Dive into the real 470-module import graph' : 'Grow this repo\'s file & folder structure';
+                    el.iDiveLabel.textContent = 'Grow this repo\'s file & folder structure';
                     el.diveBtn.textContent = node.dived ? '↴ Grown' : '↴ Grow structure';
                     el.collapseBtn.style.display = node.dived ? '' : 'none';
                 } else if (node.kind === 'domain') {
@@ -557,6 +556,12 @@
             }
 
             el.infoClose.addEventListener('click', clearFocus);
+            var infoMin = document.getElementById('info-min');
+            infoMin.addEventListener('click', function () {
+                var collapsed = el.info.classList.toggle('collapsed');
+                infoMin.textContent = collapsed ? '+' : '–';
+                infoMin.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            });
             document.addEventListener('keydown', function (e) {
                 if (document.activeElement === el.search) return;
                 if (e.key === 'Escape') { clearFocus(); doReset(); }

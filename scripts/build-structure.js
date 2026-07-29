@@ -7,7 +7,7 @@
  * can lazily load and "sprout" as tendrils from a repo node.
  *
  * Progressive fidelity: this gives EVERY repo a real internal file/dir structure.
- * Flagship repos (autar) get a deeper import graph from a separate generator.
+ * A deeper per-repo dependency graph (LLM-analyzed) is layered in by a separate pipeline.
  *
  * Resumable: skips repos whose structure/<id>.json already exists (pass --force to rebuild).
  * Auth: uses `gh api` (gh must be logged in). ~1 API call per repo.
@@ -21,7 +21,11 @@ const OUT = path.join(ROOT, 'structure');
 const FORCE = process.argv.includes('--force');
 const LIMIT = (function () { var i = process.argv.indexOf('--limit'); return i > -1 ? parseInt(process.argv[i + 1], 10) : Infinity; })();
 
-const MAX_NODES = 340;            // cap per repo so the tendril subgraph stays legible
+// Cap per repo. A ceiling still exists for two reasons: (1) browser render perf
+// when a repo's tendrils sprout into the live 3D scene, (2) total payload across
+// all repos on a static host. 1200 keeps even large repos essentially whole while
+// only trimming the handful of giant monorepos.
+const MAX_NODES = 1200;
 const SKIP_DIR = /(^|\/)(node_modules|\.git|dist|build|out|vendor|\.venv|venv|__pycache__|\.next|target|\.cache|coverage|\.idea|\.vscode)(\/|$)/;
 
 // Extension → language (mirrors the palette on the page; keeps colors consistent).
