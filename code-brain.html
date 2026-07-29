@@ -79,9 +79,10 @@
         @media (max-width: 820px) { .dock .sub { display: none; } .dock input { width: 130px; } }
 
         .info {
+            /* top is set in JS to sit just below the (wrapping) dock — never overlap it. */
             position: fixed; z-index: 20; right: 22px; top: 128px; width: 330px;
             max-width: calc(100vw - 44px);
-            max-height: calc(100vh - 150px); overflow-y: auto; overscroll-behavior: contain;
+            max-height: calc(100vh - var(--info-top, 128px) - 26px); overflow-y: auto; overscroll-behavior: contain;
             background: rgba(10,12,24,0.82); backdrop-filter: blur(22px);
             border: 1px solid var(--border,rgba(255,255,255,0.08));
             border-radius: 18px; padding: 20px; color: var(--text-primary,#fff);
@@ -106,9 +107,12 @@
         .info.collapsed { padding-bottom: 16px; }
         .info.collapsed #i-desc, .info.collapsed #i-meta, .info.collapsed #i-links, .info.collapsed #i-dive { display: none !important; }
         .info.collapsed h2 { margin-bottom: 0; }
-        .badge { display:inline-block; font-size:0.66rem; padding:2px 8px; border-radius:999px; background:rgba(52,224,196,0.15); color:var(--accent-tertiary,#34e0c4); border:1px solid rgba(52,224,196,0.3); margin-left:6px; vertical-align:middle; }
         /* Findings (from the static analyzer) rendered under the dive controls. */
         .findings { margin-top: 14px; }
+        .findings .report-link { display:inline-block; margin-bottom:12px; font-size:0.8rem; font-weight:600; color:#0b0d18;
+            text-decoration:none; padding:7px 14px; border-radius:999px;
+            background:linear-gradient(120deg,var(--accent,#4f7cff),var(--accent-tertiary,#34e0c4)); }
+        .findings .report-link:hover { opacity:0.9; }
         .findings .sev-summary { display:flex; gap:8px; font-size:0.72rem; margin-bottom:10px; flex-wrap:wrap; }
         .findings .pill { padding:2px 9px; border-radius:999px; font-weight:600; }
         .findings .pill.h { background:rgba(255,125,115,0.16); color:#ff9d95; border:1px solid rgba(255,125,115,0.35); }
@@ -293,6 +297,18 @@
             clearTimeout(el.toast._t); el.toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, 2200);
         }
 
+        // Keep the info panel docked just below the (wrapping) control bar, so a
+        // multi-row dock at medium widths never overlaps it.
+        var dockEl = document.querySelector('.dock');
+        function positionInfo() {
+            var top = Math.round(dockEl.getBoundingClientRect().bottom) + 12;
+            el.info.style.top = top + 'px';
+            document.documentElement.style.setProperty('--info-top', top + 'px');
+        }
+        positionInfo();
+        if (window.ResizeObserver) new ResizeObserver(positionInfo).observe(dockEl);
+        window.addEventListener('resize', positionInfo);
+
         fetch('forks.json').then(function (r) { return r.json(); }).then(build)
             .catch(function (e) { el.loading.innerHTML = '<div>Could not load graph data.</div>'; console.error(e); });
 
@@ -465,6 +481,41 @@
                 currentFocus = null; computeHighlight(null); el.info.classList.remove('open');
             }
 
+            // Graphify-style community detection: label propagation over the module
+            // subgraph groups tightly-coupled modules, then colors each community.
+            var COMMUNITY_PALETTE = ['#4f7cff', '#a06bff', '#34e0c4', '#f0b355', '#ff7d73', '#41b883',
+                '#63b3ff', '#f178c6', '#89e051', '#e38c00', '#00b4ab', '#c9a7ff'];
+            function colorByCommunity(subNodes, allLinks) {
+                var ids = {}; subNodes.forEach(function (n) { ids[n.id] = true; });
+                var adj = {}; subNodes.forEach(function (n) { adj[n.id] = []; });
+                allLinks.forEach(function (l) {
+                    var s = idOf(l.source), t = idOf(l.target);
+                    if (ids[s] && ids[t]) { adj[s].push(t); adj[t].push(s); }
+                });
+                var label = {}; subNodes.forEach(function (n) { label[n.id] = n.id; });
+                // Deterministic label propagation (few passes converge on ~300 nodes).
+                for (var pass = 0; pass < 6; pass++) {
+                    var changed = false;
+                    subNodes.forEach(function (n) {
+                        var nb = adj[n.id]; if (!nb.length) return;
+                        var count = {};
+                        nb.forEach(function (m) { count[label[m]] = (count[label[m]] || 0) + 1; });
+                        var best = label[n.id], bestN = -1;
+                        Object.keys(count).forEach(function (lb) { if (count[lb] > bestN || (count[lb] === bestN && lb < best)) { bestN = count[lb]; best = lb; } });
+                        if (best !== label[n.id]) { label[n.id] = best; changed = true; }
+                    });
+                    if (!changed) break;
+                }
+                var order = {}, next = 0;
+                subNodes.forEach(function (n) {
+                    var lb = label[n.id];
+                    if (order[lb] === undefined) order[lb] = next++;
+                    n.community = order[lb];
+                    n.color = COMMUNITY_PALETTE[n.community % COMMUNITY_PALETTE.length];
+                });
+                return next;
+            }
+
             function structColor(n) {
                 if (n.kind === 'dir') return 'rgba(150,160,190,0.55)';
                 if (n.kind === 'module') {
@@ -519,11 +570,19 @@
                         newLinks.forEach(function (l) { if (idOf(l.target) !== repoNode.id) hasParent[idOf(l.target)] = 1; });
                         newNodes.forEach(function (n) { if (!hasParent[n.id]) { newLinks.push({ source: repoNode.id, target: n.id, _dive: true }); adjacency[repoNode.id].push(n.id); adjacency[n.id].push(repoNode.id); } });
 
+                        // Colour module graphs by detected community (Graphify-style);
+                        // file/dir trees keep their language/kind colours.
+                        var nComm = 0;
+                        if (isModule) nComm = colorByCommunity(newNodes, newLinks);
+                        // Clear the repo-focus dimming so the grown structure shows in full colour.
+                        highlightNodes.clear(); highlightLinks.clear();
                         Graph.graphData({ nodes: nodes, links: links });
+                        refresh();
                         repoNode.dived = true;
-                        if (s.findings) { repoNode.findings = s.findings; repoNode.totals = s.totals; repoNode.scope = s.scope; renderFindings(repoNode); }
+                        repoNode.communities = nComm;
+                        if (s.findings) { repoNode.findings = s.findings; repoNode.totals = s.totals; repoNode.scope = s.scope; repoNode.hasDeep = !!(s.deep && s.nodes && s.nodes.length); renderFindings(repoNode); }
                         el.collapseBtn.style.display = ''; el.diveBtn.textContent = '↴ Grown';
-                        var kind = isModule ? (s.shown + ' modules · ' + s.edges + ' imports') : (newNodes.length + ' files/dirs');
+                        var kind = isModule ? (s.shown + ' modules · ' + s.edges + ' imports · ' + nComm + ' communities') : (newNodes.length + ' files/dirs');
                         toast('Grew ' + kind + (s.truncated ? ' (partial)' : ''));
                         setTimeout(function () { flyTo(repoNode, 120); }, 400);
                     })
@@ -551,7 +610,11 @@
                 elFindings.innerHTML = '';
                 if (!node.findings || !node.findings.length) return;
                 var sv = (node.totals && node.totals.severity) || { high: 0, medium: 0, low: 0 };
-                var html = '<div class="sev-summary">';
+                var html = '';
+                if (node.hasDeep && node.repo && node.repo.id) {
+                    html += '<a class="report-link" href="report.html?repo=' + encodeURIComponent(node.repo.id) + '" target="_blank" rel="noopener">Open full report →</a>';
+                }
+                html += '<div class="sev-summary">';
                 if (sv.high) html += '<span class="pill h">' + sv.high + ' high</span>';
                 if (sv.medium) html += '<span class="pill m">' + sv.medium + ' medium</span>';
                 if (sv.low) html += '<span class="pill l">' + sv.low + ' low</span>';
@@ -600,8 +663,10 @@
                 } else if (node.kind === 'lang') {
                     el.iDesc.textContent = node.name + ' repositories within ' + node.domain + '.';
                 } else if (node.kind === 'module') {
-                    el.iDesc.textContent = 'Python module. Fan-in (Ca) = who imports it; fan-out (Ce) = what it imports. High Ca + high instability = a change-risk hotspot.';
-                    el.iMeta.innerHTML = '<span><strong>' + node.ca + '</strong> imported by</span><span><strong>' + node.ce + '</strong> imports</span><span>instability <strong>' + node.inst + '</strong></span>';
+                    el.iDesc.textContent = (node.lang || 'Code') + ' module. Fan-in (Ca) = who imports it; fan-out (Ce) = what it imports. High Ca + high instability = a change-risk hotspot.';
+                    el.iMeta.innerHTML = '<span><strong>' + node.ca + '</strong> imported by</span><span><strong>' + node.ce + '</strong> imports</span><span>instability <strong>' + node.inst + '</strong></span>' +
+                        (node.community != null ? '<span>community <strong>' + (node.community + 1) + '</strong></span>' : '') +
+                        (node.cycle ? '<span style="color:#ff9d95">in cycle</span>' : '');
                 } else if (node.kind === 'file') {
                     el.iDesc.textContent = node.lang ? (node.lang + ' source file.') : 'Project file.';
                 } else if (node.kind === 'dir') {
