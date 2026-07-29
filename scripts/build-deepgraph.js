@@ -125,6 +125,23 @@ const STRUCT_SYS = 'You are a static-analysis engine. Given a repository\'s sour
 const NARR_SYS = 'You are a principal engineer writing a short architecture briefing. Given a repository\'s source, describe its structure in 3-4 sentences, ' +
   'then list up to 3 notable strengths and up to 3 risks (coupling, cycles, god-modules). Return ONLY JSON: {"summary","strengths":[],"risks":[]}.';
 
+// Build a framing preamble from the repo's existing knowledge-graph metadata.
+// Gives the models priors (purpose, languages) so labels + narrative stay grounded
+// and consistent with the macro graph's domain framing — instead of guessing from code alone.
+function framing(f) {
+  const kg = f.knowledgeGraph || {};
+  const langs = kg.languages ? Object.keys(kg.languages).sort((a, b) => kg.languages[b] - kg.languages[a]).slice(0, 6).join(', ') : (f.language || 'unknown');
+  const lines = [
+    `Repository: ${f.displayName || f.name}`,
+    f.summary || f.description ? `Purpose: ${f.summary || f.description}` : null,
+    (f.topics && f.topics.length) ? `Topics: ${f.topics.join(', ')}` : null,
+    `Primary languages: ${langs}`,
+    kg.totalFiles ? `Total files: ${kg.totalFiles}` : null,
+    `Type: ${f.type || 'fork'}`
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
 async function analyze(f) {
   const m = /github\.com\/([^/]+)\/([^/]+)/.exec(f.url || '');
   if (!m) throw new Error('no url');
@@ -132,9 +149,10 @@ async function analyze(f) {
   if (!src.text) throw new Error('no source bundled');
   if (DRY) return { dry: true, src };
 
+  const context = framing(f) + '\n\nSource (a budget-limited sample of the repo):\n' + src.text;
   const [structRaw, narrRaw] = await Promise.all([
-    chat(STRUCT_MODEL, STRUCT_SYS, `Repository: ${f.name}\n${src.text}`, true),
-    chat(NARR_MODEL, NARR_SYS, `Repository: ${f.name}\n${src.text}`, true)
+    chat(STRUCT_MODEL, STRUCT_SYS, context, true),
+    chat(NARR_MODEL, NARR_SYS, context, true)
   ]);
   const struct = JSON.parse(structRaw);
   const narrative = JSON.parse(narrRaw);
