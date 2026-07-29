@@ -72,21 +72,24 @@
         const navLinks = document.querySelectorAll('.nav-links a');
 
         function highlightNav() {
-            const scrollY = window.scrollY + 100;
+            const scrollY = window.scrollY + 120;
 
+            // Which section is currently in view?
+            let current = null;
             sections.forEach(section => {
-                const sectionTop = section.offsetTop;
-                const sectionHeight = section.offsetHeight;
-                const sectionId = section.getAttribute('id');
+                const top = section.offsetTop;
+                const h = section.offsetHeight;
+                if (scrollY >= top && scrollY < top + h) current = section.getAttribute('id');
+            });
 
-                if (scrollY >= sectionTop && scrollY < sectionTop + sectionHeight) {
-                    navLinks.forEach(link => {
-                        link.classList.remove('active');
-                        if (link.getAttribute('href') === `#${sectionId}`) {
-                            link.classList.add('active');
-                        }
-                    });
-                }
+            // Highlight the matching nav link. Links are root-absolute now, so match
+            // both in-page anchors (/#skills) and page links whose target maps to a
+            // homepage section (/services.html <-> #services, /projects.html <-> #projects).
+            navLinks.forEach(link => {
+                const href = link.getAttribute('href') || '';
+                const match = !!current &&
+                    (href.endsWith('#' + current) || href.endsWith('/' + current + '.html'));
+                link.classList.toggle('active', match);
             });
         }
 
