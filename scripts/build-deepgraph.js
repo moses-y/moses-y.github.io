@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build-deepgraph.js — deep per-repo dependency graphs via NVIDIA-hosted LLMs.
+ * build-deepgraph.js - deep per-repo dependency graphs via NVIDIA-hosted LLMs.
  *
  * Layers a real module/coupling graph (+ architecture narrative) on top of the
  * file-tree structures from build-structure.js. Emits structure/<id>.json with a
@@ -31,7 +31,7 @@ const OUT = path.join(ROOT, 'structure');
 // ---- Config (override via env) ----------------------------------------------
 const BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
 const API_KEY = process.env.NVIDIA_API_KEY || '';
-// NVIDIA NIM model slugs — confirm exact IDs in build.nvidia.com and override via env.
+// NVIDIA NIM model slugs - confirm exact IDs in build.nvidia.com and override via env.
 const STRUCT_MODEL = process.env.DEEP_STRUCT_MODEL || 'deepseek-ai/deepseek-v4-pro';
 const NARR_MODEL = process.env.DEEP_NARR_MODEL || 'zai/glm-5.2';
 
@@ -135,7 +135,7 @@ const NARR_SYS = [
   '  severity ∈ [error, warning, info];',
   '  file and (if applicable) function; a short evidence excerpt; a concrete recommendation;',
   '  rank = your estimate of severity × leverage (how much it matters) × removability (how easily fixed), 0-10.',
-  'Apply THREE gates before escalating a finding above info — this keeps noise out:',
+  'Apply THREE gates before escalating a finding above info - this keeps noise out:',
   '  1) Resolution: could naive parsing get this fact wrong (stdlib vs local name, guarded/conditional imports,',
   '     typing.overload stubs, re-export cycles)? If yes, do NOT report it as real.',
   '  2) Code role: does the code\'s role change the correct fix? If yes, rewrite the recommendation to fit the role.',
@@ -148,7 +148,7 @@ const NARR_SYS = [
 
 // Build a framing preamble from the repo's existing knowledge-graph metadata.
 // Gives the models priors (purpose, languages) so labels + narrative stay grounded
-// and consistent with the macro graph's domain framing — instead of guessing from code alone.
+// and consistent with the macro graph's domain framing - instead of guessing from code alone.
 function framing(f) {
   const kg = f.knowledgeGraph || {};
   const langs = kg.languages ? Object.keys(kg.languages).sort((a, b) => kg.languages[b] - kg.languages[a]).slice(0, 6).join(', ') : (f.language || 'unknown');

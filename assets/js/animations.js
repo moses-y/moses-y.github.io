@@ -1,5 +1,5 @@
 /*
- * animations.js — GSAP motion layer (separation of concerns).
+ * animations.js - GSAP motion layer (separation of concerns).
  *
  * Purely additive polish. The site is fully functional without it:
  *   - if GSAP fails to load (offline/CDN blocked), nothing here runs;
@@ -26,7 +26,7 @@
     var gsap = window.gsap;
     if (window.ScrollTrigger) gsap.registerPlugin(window.ScrollTrigger);
 
-    // 1) Hero entrance — staggered rise on load.
+    // 1) Hero entrance - staggered rise on load.
     var heroBits = [
       '.hero-content .hero-badge',
       '.hero-content .hero-kicker',
@@ -45,7 +45,7 @@
       });
     }
 
-    // 1b) Subtle scroll parallax — restrained depth, not a fairground ride.
+    // 1b) Subtle scroll parallax - restrained depth, not a fairground ride.
     if (window.ScrollTrigger) {
       // Aurora background drifts slower than the page for a sense of depth.
       var bg = document.querySelector('.gradient-bg');

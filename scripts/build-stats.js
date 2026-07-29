@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build-stats.js — precompute the honest hero stats for the home page.
+ * build-stats.js - precompute the honest hero stats for the home page.
  *
  * Writes stats.json aggregating real numbers from forks.json + the Code Brain
  * deep graphs (structure/*.deep.json). No fabricated multipliers.
@@ -63,7 +63,7 @@ if (fs.existsSync(dir)) {
     } catch (e) {}
   });
 }
-// Rank by findings, then by high-severity — the most interesting reports first.
+// Rank by findings, then by high-severity - the most interesting reports first.
 reports.sort((a, b) => (b.findings - a.findings) || (b.high - a.high));
 fs.writeFileSync(path.join(ROOT, 'structure', 'reports.json'), JSON.stringify(reports, null, 2));
 console.log('reports.json:', reports.length, 'reports');

@@ -145,7 +145,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
-        // Animate Stats — real Code Brain metrics, K-formatted.
+        // Animate Stats - real Code Brain metrics, K-formatted.
         let statsAnimated = false;
         function fmtStat(n) {
             n = Math.floor(n);
@@ -177,13 +177,19 @@
         // 55+ per-repo deep graphs, so those two come from the CI-precomputed stats.json
         // (refreshed every run). renderStats() merges whichever sources are ready and
         // re-animates when better data arrives.
-        let deepStats = { modulesMapped: null, findings: null };
+        // stats.json (CI-computed from forks.json + deep graphs) is the source of
+        // truth: the sql.js-backed allProjects doesn't carry knowledgeGraph.totalFiles
+        // or full language maps, so the in-browser calc understates files/languages.
+        // Prefer stats.json for every field; fall back to the live calc only if the
+        // file is unavailable, so the bar still fills offline.
+        let deepStats = { repos: null, languages: null, filesAnalyzed: null, modulesMapped: null, findings: null };
         function renderStats() {
             const live = (typeof allProjects !== 'undefined' && allProjects.length) ? calculateStats(allProjects) : {};
+            const pick = (a, b) => (a != null ? a : b);
             animateStats({
-                repos: live.repos,
-                languages: live.languages,
-                filesAnalyzed: live.filesAnalyzed,
+                repos: pick(deepStats.repos, live.repos),
+                languages: pick(deepStats.languages, live.languages),
+                filesAnalyzed: pick(deepStats.filesAnalyzed, live.filesAnalyzed),
                 modulesMapped: deepStats.modulesMapped,
                 findings: deepStats.findings
             });
@@ -193,14 +199,12 @@
                 const r = await fetch('/stats.json', { cache: 'no-cache' });
                 if (!r.ok) return;
                 const s = await r.json();
+                deepStats.repos = s.repos;
+                deepStats.languages = s.languages;
+                deepStats.filesAnalyzed = s.filesAnalyzed;
                 deepStats.modulesMapped = s.modulesMapped;
                 deepStats.findings = s.findings;
-                // Seed repos/languages/files too, so the bar fills even before projects load.
-                if (typeof allProjects === 'undefined' || !allProjects.length) {
-                    animateStats({ repos: s.repos, languages: s.languages, filesAnalyzed: s.filesAnalyzed, modulesMapped: s.modulesMapped, findings: s.findings });
-                } else {
-                    renderStats();
-                }
+                renderStats();
             } catch (e) { /* live projects-derived stats still render */ }
         }
 
@@ -583,7 +587,7 @@
             const grid = document.getElementById('heatmap-grid');
             const monthsContainer = document.getElementById('heatmap-months');
             const countEl = document.getElementById('heatmap-count');
-            // Heatmap only exists on the home page — skip elsewhere.
+            // Heatmap only exists on the home page - skip elsewhere.
             if (!grid) return;
 
             try {

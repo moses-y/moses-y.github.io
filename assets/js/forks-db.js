@@ -1,5 +1,5 @@
 /**
- * ForksDB — sql.js wrapper for querying the forks SQLite database.
+ * ForksDB - sql.js wrapper for querying the forks SQLite database.
  * Loads forks.db via fetch, provides typed query methods.
  */
 const ForksDB = (() => {

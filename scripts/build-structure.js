@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build-structure.js — per-repo intra-structure graphs for the Code Brain page.
+ * build-structure.js - per-repo intra-structure graphs for the Code Brain page.
  *
  * For every repo in forks.json, fetch its git tree via the GitHub API (one call,
  * no cloning) and emit structure/<id>.json: a directory/file graph the front-end
@@ -54,7 +54,7 @@ function buildGraph(tree) {
   // Keep blobs (files); dirs are derived from paths so we only keep dirs that matter.
   var files = tree.filter(function (t) { return t.type === 'blob' && !SKIP_DIR.test('/' + t.path); });
 
-  // Rank files: source code first, then by size — so trimming keeps the architecture.
+  // Rank files: source code first, then by size - so trimming keeps the architecture.
   files.sort(function (a, b) {
     var ac = CODE_EXT.has(ext(a.path)) ? 1 : 0, bc = CODE_EXT.has(ext(b.path)) ? 1 : 0;
     if (ac !== bc) return bc - ac;

@@ -390,15 +390,15 @@ function buildKnowledgeGraph(fileTree) {
 
   const issues = [];
   if (hasCodeFiles && graph.testFiles.length === 0)
-    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No test files detected — untested code paths', where: 'repository-wide' });
+    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No test files detected - untested code paths', where: 'repository-wide' });
   if (hasCodeFiles && !graph.hasCI)
-    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No CI/CD pipeline detected — no automated build/test gate', where: '.github/ or CI config' });
+    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No CI/CD pipeline detected - no automated build/test gate', where: '.github/ or CI config' });
   if (!hasLicense)
-    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No LICENSE file — unclear usage/redistribution rights', where: 'root' });
+    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No LICENSE file - unclear usage/redistribution rights', where: 'root' });
   if (!hasReadme)
-    issues.push({ severity: 'Low', kind: 'SDLC', issue: 'No README — onboarding and intent are undocumented', where: 'root' });
+    issues.push({ severity: 'Low', kind: 'SDLC', issue: 'No README - onboarding and intent are undocumented', where: 'root' });
   if (graph.dependencies.length > 0 && !hasLockfile)
-    issues.push({ severity: 'Low', kind: 'Risk', issue: 'Dependencies declared without a lockfile — non-reproducible builds', where: graph.dependencies[0] });
+    issues.push({ severity: 'Low', kind: 'Risk', issue: 'Dependencies declared without a lockfile - non-reproducible builds', where: graph.dependencies[0] });
   if (committedSecrets.length > 0)
     issues.push({ severity: 'High', kind: 'Security', issue: 'Possible secrets/credentials committed to the repo', where: committedSecrets.slice(0, 3).join(', ') });
 
@@ -479,8 +479,8 @@ function formatKnowledgeGraph(graph) {
 
   // Detected code-health / SDLC issues (heuristic signals for the reviewer)
   if (graph.issues && graph.issues.length > 0) {
-    sections.push('DETECTED ISSUES (heuristic — verify against the code):\n' +
-      graph.issues.map(i => `  [${i.severity}/${i.kind}] ${i.issue} — ${i.where}`).join('\n'));
+    sections.push('DETECTED ISSUES (heuristic - verify against the code):\n' +
+      graph.issues.map(i => `  [${i.severity}/${i.kind}] ${i.issue} - ${i.where}`).join('\n'));
   } else if (graph.codeHealth) {
     sections.push('CODE HEALTH: no structural red flags detected (tests/CI/license/lockfile present where expected).');
   }
@@ -517,7 +517,7 @@ README EXCERPT:
 ${readme || 'No README available'}
 `.trim();
 
-    const prompt = `You're a senior AI engineer writing a concise, professional technical briefing about this repo — the kind a consultant would share with a technical client.
+    const prompt = `You're a senior AI engineer writing a concise, professional technical briefing about this repo - the kind a consultant would share with a technical client.
 
 ${context}
 
@@ -532,10 +532,10 @@ One paragraph about the specific pain point this solves. Be concrete.
 A practical scenario. Maybe a code snippet or example workflow.
 
 ## Code Health & Issues
-Before the verdict, assess the codebase like a reviewer. Call out concrete, likely issues you can infer from the structure, README, and analysis — be specific and reference files. Cover:
+Before the verdict, assess the codebase like a reviewer. Call out concrete, likely issues you can infer from the structure, README, and analysis - be specific and reference files. Cover:
 - **Bugs / risks**: probable defects, unsafe patterns, missing error handling, race conditions, untested paths.
 - **SDLC & code violations**: missing tests/CI, no license, secrets or config in the repo, no input validation, weak separation of concerns, missing docs, dependency/security hygiene.
-Format each as a short bullet: \`Severity (High/Med/Low) — the issue — where\`. If the repo looks genuinely clean, say so briefly and note what evidence supports that (tests present, CI configured, etc.). Do not invent issues.
+Format each as a short bullet: \`Severity (High/Med/Low) - the issue - where\`. If the repo looks genuinely clean, say so briefly and note what evidence supports that (tests present, CI configured, etc.). Do not invent issues.
 
 ## The Bottom Line
 Your honest take in 2-3 sentences. What's good, what's not, who should use it.
@@ -546,14 +546,14 @@ STYLE RULES:
 - Short paragraphs (2-4 sentences max)
 - Use \`code formatting\` for technical terms
 - Be specific and evidence-based: "the config.yaml handles..." not "it provides configuration..."
-- Professional and clear — write for a technical decision-maker, not a casual reader
+- Professional and clear - write for a technical decision-maker, not a casual reader
 - Give a measured, honest assessment. A clear trade-off ("better suited to large teams than solo projects") is welcome; sarcasm and snark are not.
 
 NEVER USE:
 - Buzzword filler: "rapidly evolving", "paramount", "leverage", "streamline", "robust"
 - Empty openers: "In the realm of...", "It's worth noting...", "This project aims to..."
 - Hype: "comprehensive", "cutting-edge", "game-changer", "seamlessly", "foster"
-- Jokes, snark, or a sarcastic tone — keep it credible and consultant-grade
+- Jokes, snark, or a sarcastic tone - keep it credible and consultant-grade
 - Starting multiple sentences with "This" or "The"
 
 Keep it under 400 words. Precision over volume.`;

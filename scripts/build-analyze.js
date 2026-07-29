@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /*
- * build-analyze.js — deterministic static analysis (no LLM, no tokens).
+ * build-analyze.js - deterministic static analysis (no LLM, no tokens).
  *
  * Downloads one tarball per repo, builds the real intra-repo dependency graph
  * (Python + JS/TS import resolution, with cycle detection), and derives code
- * findings from measurable facts — never guesses. Emits structure/<id>.deep.json:
+ * findings from measurable facts - never guesses. Emits structure/<id>.deep.json:
  * a module/file graph the Code Brain page renders, plus a ranked findings list.
  *
  * The LLM layer (build-enrich.js) is optional and only *explains/fixes* the top
- * findings this pass produces — the finding itself is deterministic and cheap.
+ * findings this pass produces - the finding itself is deterministic and cheap.
  *
  * Taxonomy (our own vocabulary): clarity, efficiency, cognitive_load, resilience,
  * soundness, resource_safety. Severity: high | medium | low.
@@ -52,7 +52,7 @@ function rank(sev, leverage, removability) { return +(SEV_W[sev] * leverage * re
 
 function ext(p) { const m = /\.([a-z0-9]+)$/i.exec(p); return m ? m[1].toLowerCase() : ''; }
 // Minified/generated files (huge single lines) cause pathological regex scans and
-// carry no architectural signal — skip them everywhere.
+// carry no architectural signal - skip them everywhere.
 function looksMinified(src) { return /[^\n]{2500,}/.test(src.slice(0, 200000)); }
 function readSrc(full) { try { const s = fs.readFileSync(full, 'utf8'); return looksMinified(s) ? null : s; } catch (e) { return null; } }
 function gh(pathname) { return execFileSync('gh', ['api', pathname, '--cache', '24h'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); }
@@ -83,7 +83,7 @@ function walkFiles(dir, base, acc) {
   return acc;
 }
 
-// Cheap pre-check via the (cached) trees API — avoids downloading a giant tarball.
+// Cheap pre-check via the (cached) trees API - avoids downloading a giant tarball.
 function codeFileCount(owner, repo) {
   try {
     const tree = JSON.parse(gh(`repos/${owner}/${repo}/git/trees/HEAD?recursive=1`)).tree || [];
@@ -208,12 +208,12 @@ function findingsFor(f, lang, node, fileStats) {
   // God file
   if (fs_.loc > 600) out.push({ category: 'cognitive_load', severity: fs_.loc > 1200 ? 'high' : 'medium',
     title: 'Oversized file (' + fs_.loc + ' lines)', file: rel,
-    evidence: fs_.loc + ' code lines — hard to hold in one head; a change here ripples widely.',
+    evidence: fs_.loc + ' code lines - hard to hold in one head; a change here ripples widely.',
     recommendation: 'Split into cohesive units by responsibility.', rank: rank(fs_.loc > 1200 ? 'high' : 'medium', lev, 0.6) });
   // Deep nesting
   if (fs_.maxIndent >= 6) out.push({ category: 'cognitive_load', severity: fs_.maxIndent >= 8 ? 'high' : 'medium',
     title: 'Deep nesting (depth ' + fs_.maxIndent + ')', file: rel,
-    evidence: 'Max indentation depth ' + fs_.maxIndent + ' — control flow is hard to follow.',
+    evidence: 'Max indentation depth ' + fs_.maxIndent + ' - control flow is hard to follow.',
     recommendation: 'Flatten with early returns / guard clauses; extract inner blocks.', rank: rank(fs_.maxIndent >= 8 ? 'high' : 'medium', lev, 0.7) });
   // Branch density (cyclomatic proxy)
   if (fs_.loc > 40 && fs_.branches / fs_.loc > 0.28) out.push({ category: 'cognitive_load', severity: 'medium',
@@ -238,7 +238,7 @@ function findingsFor(f, lang, node, fileStats) {
       title: 'Broad exception handling', file: rel, evidence: 'Bare or Exception-wide `except` swallows errors indiscriminately.',
       recommendation: 'Catch specific exceptions; re-raise or log the rest.', rank: rank('medium', lev, 0.8) });
     if (/(?<!with\s)\bopen\s*\([^)]*\)(?!\s*as)/.test(src) && !/\bwith\s+open/.test(src)) out.push({ category: 'resource_safety', severity: 'medium',
-      title: 'File opened without context manager', file: rel, evidence: '`open(...)` not wrapped in `with` — handle may leak on error.',
+      title: 'File opened without context manager', file: rel, evidence: '`open(...)` not wrapped in `with` - handle may leak on error.',
       recommendation: 'Use `with open(...) as f:` for deterministic close.', rank: rank('medium', lev, 0.85) });
   }
   if (lang === 'JavaScript' || lang === 'TypeScript') {
@@ -284,7 +284,7 @@ function analyzeRepo(f) {
   if (!m) throw new Error('no url');
   const bigSkip = MAXFILES_ARG || BIG_SKIP;
   const nCode = codeFileCount(m[1], m[2]);
-  if (nCode > bigSkip) throw new Error('too large (' + nCode + ' code files) — file-tree retained');
+  if (nCode > bigSkip) throw new Error('too large (' + nCode + ' code files) - file-tree retained');
   const { tmp, srcRoot } = fetchSource(m[1], m[2]);
   try {
     let files = walkFiles(srcRoot, srcRoot, []);
@@ -379,7 +379,7 @@ function runWorker(f) {
       process.stdout.write(out); done++;
     } catch (e) {
       failed++;
-      console.log('  ✗ ' + f.name + ': ' + (e.killed ? 'timed out (90s) — skipped' : 'worker error'));
+      console.log('  ✗ ' + f.name + ': ' + (e.killed ? 'timed out (90s) - skipped' : 'worker error'));
     }
   }
   console.log('analyze: ok=' + done + ' failed=' + failed + ' skipped(existing)=' + skipped + ' -> ' + OUT + '/<id>.deep.json');
