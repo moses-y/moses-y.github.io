@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Brain — Domains, Repos & Inside the Code | Moses Yebei</title>
+    <meta name="description" content="An interactive 3D knowledge graph that zooms from engineering domains down into the module structure of individual repositories — the ecosystem as a living brain.">
+    <link rel="canonical" href="https://moses-y.github.io/code-brain.html">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://moses-y.github.io/code-brain.html">
+    <meta property="og:title" content="Code Brain — Domains, Repos & Inside the Code | Moses Yebei">
+    <meta property="og:description" content="Zoom from domains to languages to repos, then dive inside a repo's real module structure.">
+    <meta property="og:image" content="https://moses-y.github.io/og-image.png">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/site.css">
+    <style>
+        html, body { height: 100%; margin: 0; overflow: hidden; }
+        body { background: var(--bg-primary, #06070f); }
+
+        nav.cg-nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 22px; gap: 16px;
+            background: rgba(6,7,15,0.55); backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+        }
+        nav.cg-nav .cg-left { display: flex; align-items: center; gap: 18px; }
+        nav.cg-nav .nav-logo { font-weight: 800; font-size: 1.1rem; text-decoration: none;
+            background: linear-gradient(120deg,var(--accent,#4f7cff),var(--accent-tertiary,#34e0c4));
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        nav.cg-nav .cg-links { display: flex; gap: 14px; }
+        nav.cg-nav .cg-links a { color: var(--text-secondary,#9aa4bf); text-decoration: none; font-size: 0.9rem; padding: 6px 10px; border-radius: 8px; transition: .2s; }
+        nav.cg-nav .cg-links a:hover { color: var(--text-primary,#fff); background: var(--bg-card,rgba(255,255,255,0.05)); }
+        nav.cg-nav .nav-cta { color: #0b0d18; font-weight: 600; font-size: 0.9rem; text-decoration: none; padding: 8px 16px; border-radius: 999px;
+            background: linear-gradient(120deg,var(--accent,#4f7cff),var(--accent-tertiary,#34e0c4)); }
+        @media (max-width: 820px) { nav.cg-nav .cg-links { display: none; } }
+
+        #graph { position: fixed; inset: 0; z-index: 1; }
+
+        .dock {
+            position: fixed; z-index: 20; left: 22px; right: 22px; top: 74px;
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            background: rgba(10,12,24,0.72); backdrop-filter: blur(22px);
+            border: 1px solid var(--border,rgba(255,255,255,0.08));
+            border-radius: 14px; padding: 10px 16px; color: var(--text-primary,#fff);
+        }
+        .dock .title { display: flex; flex-direction: column; gap: 1px; flex: none; }
+        .dock h1 { font-size: 0.98rem; margin: 0; }
+        .dock .sub { font-size: 0.72rem; color: var(--text-secondary,#9aa4bf); margin: 0; max-width: 340px; }
+        .dock .search { display: flex; gap: 8px; flex: none; }
+        .dock input {
+            width: 190px; background: rgba(255,255,255,0.05); border: 1px solid var(--border,rgba(255,255,255,0.1));
+            border-radius: 10px; padding: 8px 12px; color: #fff; font-size: 0.85rem; outline: none;
+        }
+        .dock input:focus { border-color: var(--accent,#4f7cff); }
+        .dock select {
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border,rgba(255,255,255,0.1));
+            border-radius: 10px; padding: 8px 10px; color: #fff; font-size: 0.8rem; outline: none; font-family: inherit; cursor: pointer;
+        }
+        .dock select:focus { border-color: var(--accent,#4f7cff); }
+        .dock .stats { display: flex; gap: 14px; font-size: 0.78rem; color: var(--text-secondary,#9aa4bf); flex-wrap: wrap; flex: none; }
+        .dock .stats strong { color: var(--text-primary,#fff); font-variant-numeric: tabular-nums; }
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .cg-btn {
+            background: rgba(255,255,255,0.06); border: 1px solid var(--border,rgba(255,255,255,0.1));
+            color: var(--text-primary,#fff); border-radius: 10px; padding: 8px 12px; font-size: 0.8rem;
+            cursor: pointer; transition: .2s; font-family: inherit;
+        }
+        .cg-btn:hover { background: var(--accent,#4f7cff); border-color: var(--accent,#4f7cff); }
+        .cg-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .legend { display: flex; flex-direction: row; gap: 12px; font-size: 0.74rem; color: var(--text-secondary,#9aa4bf);
+            flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
+        .legend .row { display: flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
+        .legend .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+        .legend::-webkit-scrollbar { height: 6px; }
+        .legend::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
+        @media (max-width: 820px) { .dock .sub { display: none; } .dock input { width: 130px; } }
+
+        .info {
+            position: fixed; z-index: 20; right: 22px; top: 128px; width: 330px;
+            max-width: calc(100vw - 44px);
+            max-height: calc(100vh - 150px); overflow-y: auto; overscroll-behavior: contain;
+            background: rgba(10,12,24,0.82); backdrop-filter: blur(22px);
+            border: 1px solid var(--border,rgba(255,255,255,0.08));
+            border-radius: 18px; padding: 20px; color: var(--text-primary,#fff);
+            transform: translateX(120%); transition: transform .35s cubic-bezier(.2,.8,.2,1); opacity: 0;
+        }
+        .info::-webkit-scrollbar { width: 8px; }
+        .info::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
+        .info.open { transform: translateX(0); opacity: 1; }
+        .info .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-tertiary,#34e0c4); }
+        .info h2 { font-size: 1.15rem; margin: 6px 0 10px; word-break: break-word; }
+        .info p { font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary,#9aa4bf); margin: 0 0 14px; }
+        .info .meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-secondary,#9aa4bf); margin-bottom: 14px; }
+        .info .meta strong { color: #fff; }
+        .info .links a { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 0.82rem; color: var(--accent,#4f7cff); text-decoration: none; }
+        .info .links a:hover { text-decoration: underline; }
+        .info .dive { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border,rgba(255,255,255,0.08)); }
+        .info .dive .label { font-size: 0.72rem; color: var(--text-secondary,#9aa4bf); margin-bottom: 8px; }
+        .info .close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text-secondary,#9aa4bf); font-size: 1.1rem; cursor: pointer; }
+        .badge { display:inline-block; font-size:0.66rem; padding:2px 8px; border-radius:999px; background:rgba(52,224,196,0.15); color:var(--accent-tertiary,#34e0c4); border:1px solid rgba(52,224,196,0.3); margin-left:6px; vertical-align:middle; }
+
+        .hint {
+            position: fixed; z-index: 20; bottom: 18px; left: 50%; transform: translateX(-50%);
+            background: rgba(10,12,24,0.72); backdrop-filter: blur(18px);
+            border: 1px solid var(--border,rgba(255,255,255,0.08)); border-radius: 999px;
+            padding: 8px 18px; font-size: 0.78rem; color: var(--text-secondary,#9aa4bf); text-align:center;
+        }
+        .hint strong { color: var(--text-primary,#fff); font-weight: 600; }
+        .loading-cg { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--text-secondary,#9aa4bf); background: var(--bg-primary,#06070f); }
+        .spinner { width: 42px; height: 42px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent,#4f7cff); border-radius: 50%; animation: spin 0.9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toast { position: fixed; z-index: 26; bottom: 64px; left: 50%; transform: translateX(-50%); background: rgba(10,12,24,0.9); border:1px solid var(--border,rgba(255,255,255,0.12)); border-radius:10px; padding:8px 16px; font-size:0.8rem; color:#fff; opacity:0; transition:opacity .25s; pointer-events:none; }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <nav class="cg-nav">
+        <div class="cg-left">
+            <a href="index.html" class="nav-logo">MY</a>
+            <div class="cg-links">
+                <a href="index.html">← Portfolio</a>
+                <a href="services.html">Services</a>
+                <a href="case-studies.html">Case Studies</a>
+                <a href="projects.html">Projects</a>
+                <a href="knowledge-graph.html">Code Graph</a>
+                <a href="insights/">Insights</a>
+            </div>
+        </div>
+        <a href="https://cal.com/moses-yebei" target="_blank" rel="noopener" class="nav-cta">Book a call</a>
+    </nav>
+
+    <div id="graph"></div>
+
+    <div class="dock">
+        <div class="title">
+            <h1>Code Brain</h1>
+            <p class="sub">Domains → languages → repos. Click a repo to grow its inner structure.</p>
+        </div>
+        <div class="search">
+            <input type="text" id="search" placeholder="Search a repo, then Enter…" autocomplete="off">
+        </div>
+        <select id="f-domain" aria-label="Filter by domain"><option value="">All domains</option></select>
+        <select id="f-size" aria-label="Filter by size">
+            <option value="">Any size</option>
+            <option value="s">Small (≤ 20 files)</option>
+            <option value="m">Medium (21–100)</option>
+            <option value="l">Large (100+)</option>
+        </select>
+        <div class="stats">
+            <span>Repos <strong id="s-repos">0</strong></span>
+            <span>Files <strong id="s-files">0</strong></span>
+            <span>Languages <strong id="s-langs">0</strong></span>
+            <span>Domains <strong id="s-domains">0</strong></span>
+        </div>
+        <button class="cg-btn" id="reset">Reset view</button>
+        <button class="cg-btn" id="legend-toggle" aria-expanded="true">Hide key</button>
+        <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="info" id="info">
+        <button class="close" id="info-close" aria-label="Close">✕</button>
+        <div class="kind" id="i-kind">Repository</div>
+        <h2 id="i-name">Node</h2>
+        <p id="i-desc"></p>
+        <div class="meta" id="i-meta"></div>
+        <div class="links" id="i-links"></div>
+        <div class="dive" id="i-dive" style="display:none">
+            <div class="label" id="i-dive-label">Dive inside</div>
+            <div class="btn-row">
+                <button class="cg-btn" id="dive-btn">↴ Grow structure</button>
+                <button class="cg-btn" id="collapse-btn" style="display:none">↥ Collapse</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="hint">
+        <strong>Click a repo</strong> to grow its files/modules · <strong>drag</strong> to orbit · <strong>scroll</strong> to zoom · <strong>Esc</strong> to reset
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="loading-cg" id="loading">
+        <div class="spinner"></div>
+        <div>Wiring the brain…</div>
+    </div>
+
+    <script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+    <script>
+    (function () {
+        'use strict';
+
+        var LANG_COLORS = {
+            'JavaScript': '#f1e05a', 'TypeScript': '#3178c6', 'Python': '#3776ab',
+            'Rust': '#dea584', 'Go': '#00add8', 'Java': '#b07219', 'C++': '#f34b7d',
+            'C': '#a8b9cc', 'C#': '#178600', 'Ruby': '#701516', 'PHP': '#4f5d95',
+            'Shell': '#89e051', 'HTML': '#e34c26', 'CSS': '#563d7c', 'Jupyter Notebook': '#da5b0b',
+            'Swift': '#f05138', 'Kotlin': '#a97bff', 'Dart': '#00b4ab', 'Vue': '#41b883',
+            'Solidity': '#aa6746', 'Lua': '#000080', 'Zig': '#ec915c', 'Elixir': '#6e4a7e',
+            'Svelte': '#ff3e00', 'Astro': '#ff5d01', 'SQL': '#e38c00', 'Markdown': '#6a737d',
+            'JSON': '#8a93ad', 'YAML': '#cb171e', 'TOML': '#9c4221'
+        };
+        var ACCENT = '#4f7cff', ACCENT3 = '#34e0c4';
+        function langColor(l) { return LANG_COLORS[l] || '#8a93ad'; }
+
+        // Domains — the "capability" framing: what the code does, not just its language.
+        var DOMAIN_COLORS = {
+            'AI / ML & Data': '#a06bff', 'Web & UI': '#4f7cff', 'Systems': '#f34b7d',
+            'Mobile': '#34e0c4', 'Backend & Services': '#00add8', 'DevOps & Tooling': '#89e051',
+            'Other': '#8a93ad'
+        };
+        var LANG_DOMAIN = {
+            'Python': 'AI / ML & Data', 'Jupyter Notebook': 'AI / ML & Data', 'R': 'AI / ML & Data',
+            'JavaScript': 'Web & UI', 'TypeScript': 'Web & UI', 'HTML': 'Web & UI', 'CSS': 'Web & UI',
+            'Vue': 'Web & UI', 'Svelte': 'Web & UI', 'Astro': 'Web & UI',
+            'Rust': 'Systems', 'C': 'Systems', 'C++': 'Systems', 'Zig': 'Systems', 'Go': 'Systems',
+            'Swift': 'Mobile', 'Kotlin': 'Mobile', 'Dart': 'Mobile',
+            'Java': 'Backend & Services', 'C#': 'Backend & Services', 'Ruby': 'Backend & Services',
+            'PHP': 'Backend & Services', 'Elixir': 'Backend & Services', 'SQL': 'Backend & Services',
+            'Shell': 'DevOps & Tooling', 'Lua': 'DevOps & Tooling', 'Dockerfile': 'DevOps & Tooling',
+            'Makefile': 'DevOps & Tooling'
+        };
+        var AI_TOPICS = /(^|[-_ ])(ai|ml|llm|nlp|rag|agent|agents|genai|machine-learning|deep-learning|transformer|embedding|chatbot|vision)([-_ ]|$)/i;
+        function domainOf(lang, topics) {
+            if (topics && topics.some(function (t) { return AI_TOPICS.test(t); })) return 'AI / ML & Data';
+            return LANG_DOMAIN[lang] || 'Other';
+        }
+        function domainColor(d) { return DOMAIN_COLORS[d] || '#8a93ad'; }
+
+        var NON_CODE = { 'Markdown': 1, 'JSON': 1, 'YAML': 1, 'TOML': 1, 'INI': 1, 'XML': 1,
+            'CSV': 1, 'Text': 1, 'SVG': 1, 'Dockerfile': 1, 'Makefile': 1, 'HTML': 1 };
+        function primaryLanguage(f) {
+            if (f.language) return f.language;
+            var langs = (f.knowledgeGraph && f.knowledgeGraph.languages) || {};
+            var best = null, bestN = 0;
+            Object.keys(langs).forEach(function (k) { if (NON_CODE[k]) return; if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
+            if (!best) Object.keys(langs).forEach(function (k) { if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
+            return best || 'Other';
+        }
+
+        var el = {
+            loading: document.getElementById('loading'),
+            sRepos: document.getElementById('s-repos'),
+            sFiles: document.getElementById('s-files'),
+            sLangs: document.getElementById('s-langs'),
+            sDomains: document.getElementById('s-domains'),
+            legend: document.getElementById('legend'),
+            search: document.getElementById('search'),
+            fDomain: document.getElementById('f-domain'),
+            fSize: document.getElementById('f-size'),
+            reset: document.getElementById('reset'),
+            info: document.getElementById('info'),
+            iKind: document.getElementById('i-kind'),
+            iName: document.getElementById('i-name'),
+            iDesc: document.getElementById('i-desc'),
+            iMeta: document.getElementById('i-meta'),
+            iLinks: document.getElementById('i-links'),
+            iDive: document.getElementById('i-dive'),
+            iDiveLabel: document.getElementById('i-dive-label'),
+            diveBtn: document.getElementById('dive-btn'),
+            collapseBtn: document.getElementById('collapse-btn'),
+            infoClose: document.getElementById('info-close'),
+            toast: document.getElementById('toast')
+        };
+
+        function toast(msg) {
+            el.toast.textContent = msg; el.toast.classList.add('show');
+            clearTimeout(el.toast._t); el.toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, 2200);
+        }
+
+        fetch('forks.json').then(function (r) { return r.json(); }).then(build)
+            .catch(function (e) { el.loading.innerHTML = '<div>Could not load graph data.</div>'; console.error(e); });
+
+        function build(data) {
+            var forks = (data.forks || []).slice();
+
+            // Flagship: inject autar (deep import graph) as a featured AI/ML repo.
+            forks.unshift({
+                id: 'autar', name: 'autar', displayName: 'autar',
+                summary: 'Autonomous maintenance-task factory — scans repos, opens fix PRs. Flagship: dive in for the real 470-module import graph.',
+                language: 'Python', stars: 0, type: 'flagship', topics: ['ai', 'agents', 'devops'],
+                knowledgeGraph: { totalFiles: 1012 }, deepStructure: 'autar', url: null
+            });
+
+            var nodes = [], links = [];
+            var adjacency = {}, nodeById = {};
+            function addNode(n) { if (nodeById[n.id]) return; nodes.push(n); nodeById[n.id] = n; adjacency[n.id] = []; }
+            function addLink(a, b) { links.push({ source: a, target: b }); (adjacency[a] = adjacency[a] || []).push(b); (adjacency[b] = adjacency[b] || []).push(a); }
+
+            addNode({ id: '__root__', kind: 'root', name: 'Moses Yebei', val: 50, color: '#ffffff' });
+
+            var domainIds = {}, langIds = {}, langCounts = {}, domainCounts = {}, totalFiles = 0;
+            forks.forEach(function (f) {
+                var lang = primaryLanguage(f);
+                var domain = domainOf(lang, f.topics);
+                var files = (f.knowledgeGraph && f.knowledgeGraph.totalFiles) || 0;
+                totalFiles += files;
+                langCounts[lang] = (langCounts[lang] || 0) + 1;
+                domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+
+                if (!domainIds[domain]) {
+                    var did = 'domain:' + domain;
+                    domainIds[domain] = did;
+                    addNode({ id: did, kind: 'domain', name: domain, val: 26, color: domainColor(domain) });
+                    addLink('__root__', did);
+                }
+                var lkey = domain + '|' + lang;
+                if (!langIds[lkey]) {
+                    var lid = 'lang:' + lkey;
+                    langIds[lkey] = lid;
+                    addNode({ id: lid, kind: 'lang', name: lang, domain: domain, val: 13, color: langColor(lang) });
+                    addLink(domainIds[domain], lid);
+                }
+                var rid = 'repo:' + f.id;
+                addNode({
+                    id: rid, kind: 'repo', name: f.displayName || f.name, language: lang, domain: domain,
+                    color: f.deepStructure ? ACCENT3 : langColor(lang),
+                    files: files,
+                    val: f.deepStructure ? 14 : Math.max(3, Math.min(18, 3 + (f.stars || 0) / 4 + files / 120)),
+                    repo: f, structFile: f.deepStructure ? ('structure/' + f.deepStructure + '.json') : ('structure/' + f.id + '.json'),
+                    deep: !!f.deepStructure, dived: false
+                });
+                addLink(langIds[lkey], rid);
+            });
+
+            el.sRepos.textContent = forks.length;
+            el.sFiles.textContent = totalFiles.toLocaleString();
+            el.sLangs.textContent = Object.keys(langCounts).length;
+            el.sDomains.textContent = Object.keys(domainCounts).length;
+
+            // Domain filter options
+            Object.keys(domainCounts).sort(function (a, b) { return domainCounts[b] - domainCounts[a]; }).forEach(function (d) {
+                var o = document.createElement('option'); o.value = d; o.textContent = d + ' (' + domainCounts[d] + ')'; el.fDomain.appendChild(o);
+            });
+
+            // Legend = domains (the primary framing)
+            function buildLegend() {
+                el.legend.innerHTML = '';
+                Object.keys(domainCounts).sort(function (a, b) { return domainCounts[b] - domainCounts[a]; }).forEach(function (d) {
+                    var row = document.createElement('div'); row.className = 'row';
+                    row.innerHTML = '<span class="dot" style="background:' + domainColor(d) + '"></span>' + d + ' (' + domainCounts[d] + ')';
+                    el.legend.appendChild(row);
+                });
+            }
+            buildLegend();
+
+            // ---- 3D graph ----
+            var highlightNodes = new Set(), highlightLinks = new Set();
+
+            var Graph = ForceGraph3D({ controlType: 'orbit' })(document.getElementById('graph'))
+                .backgroundColor('#06070f')
+                .graphData({ nodes: nodes, links: links })
+                .nodeLabel(function (n) {
+                    if (n.kind === 'repo') return n.name + ' · ' + n.language + (n.deep ? ' · deep dive' : '');
+                    if (n.kind === 'file') return n.name;
+                    if (n.kind === 'dir') return n.name + '/';
+                    if (n.kind === 'module') return n.full + '  (Ca ' + n.ca + ' / Ce ' + n.ce + ')';
+                    return n.name;
+                })
+                .nodeVal('val')
+                .nodeColor(function (n) {
+                    if (highlightNodes.size && !highlightNodes.has(n.id)) return 'rgba(120,130,160,0.10)';
+                    return n.color;
+                })
+                .nodeVisibility(function (n) { return n._vis !== false; })
+                .nodeOpacity(0.95)
+                .nodeResolution(10)
+                .linkVisibility(function (l) { var s = idOf(l.source), t = idOf(l.target); return nodeVis(s) && nodeVis(t); })
+                .linkColor(function (l) {
+                    if (!highlightLinks.size) return l._dive ? 'rgba(52,224,196,0.25)' : 'rgba(160,170,200,0.16)';
+                    return highlightLinks.has(linkId(l)) ? ACCENT3 : 'rgba(120,130,160,0.05)';
+                })
+                .linkWidth(function (l) { return highlightLinks.has(linkId(l)) ? 1.6 : (l._dive ? 0.6 : 0.4); })
+                .linkDirectionalParticles(function (l) { return highlightLinks.has(linkId(l)) ? 2 : 0; })
+                .linkDirectionalParticleSpeed(0.006)
+                .onNodeClick(onNodeClick)
+                .onBackgroundClick(clearFocus);
+
+            var controls = Graph.controls();
+            controls.enableRotate = controls.enableZoom = controls.enablePan = true;
+            controls.rotateSpeed = 0.9; controls.zoomSpeed = 1.1;
+            controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+            var spinning = true;
+            controls.addEventListener('start', function () { if (spinning) { controls.autoRotate = false; spinning = false; } });
+
+            function idOf(x) { return typeof x === 'object' ? x.id : x; }
+            function nodeVis(id) { var n = nodeById[id]; return !n || n._vis !== false; }
+            function linkId(l) { return idOf(l.source) + '>' + idOf(l.target); }
+
+            // ---------- Filters ----------
+            function applyFilters() {
+                var dom = el.fDomain.value, size = el.fSize.value;
+                function sizeOk(f) {
+                    if (!size) return true;
+                    if (size === 's') return f <= 20; if (size === 'm') return f > 20 && f <= 100; return f > 100;
+                }
+                // repos first
+                var anyLang = {}, anyDom = {};
+                nodes.forEach(function (n) {
+                    if (n.kind !== 'repo') return;
+                    var ok = (!dom || n.domain === dom) && sizeOk(n.files || 0);
+                    n._vis = ok;
+                    if (ok) { anyLang['lang:' + n.domain + '|' + n.language] = 1; anyDom['domain:' + n.domain] = 1; }
+                });
+                nodes.forEach(function (n) {
+                    if (n.kind === 'lang') n._vis = !!anyLang[n.id];
+                    else if (n.kind === 'domain') n._vis = !!anyDom[n.id];
+                    else if (n.kind === 'root') n._vis = true;
+                    else if (n.kind === 'dir' || n.kind === 'file' || n.kind === 'module') {
+                        var pr = nodeById[n.parentRepo]; n._vis = pr ? pr._vis !== false : true;
+                    }
+                });
+                Graph.nodeVisibility(Graph.nodeVisibility()).linkVisibility(Graph.linkVisibility());
+            }
+            el.fDomain.addEventListener('change', applyFilters);
+            el.fSize.addEventListener('change', applyFilters);
+
+            // ---------- Highlight ----------
+            function computeHighlight(id) {
+                highlightNodes.clear(); highlightLinks.clear();
+                if (id) {
+                    highlightNodes.add(id);
+                    (adjacency[id] || []).forEach(function (nb) { highlightNodes.add(nb); });
+                    links.forEach(function (l) { var s = idOf(l.source), t = idOf(l.target); if (s === id || t === id) highlightLinks.add(linkId(l)); });
+                }
+                refresh();
+            }
+            function refresh() {
+                Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth()).linkDirectionalParticles(Graph.linkDirectionalParticles());
+            }
+
+            function flyTo(node, pad) {
+                var d = Math.hypot(node.x || 1, node.y || 1, node.z || 1) || 1;
+                var r = 1 + (pad || 130) / d;
+                Graph.cameraPosition({ x: (node.x || 0) * r, y: (node.y || 0) * r, z: (node.z || 0) * r }, node, 1300);
+            }
+
+            // ---------- Dive: grow a repo's inner structure as tendrils ----------
+            var currentFocus = null;
+            function onNodeClick(node) {
+                spinning = false; controls.autoRotate = false;
+                currentFocus = node;
+                computeHighlight(node.id);
+                flyTo(node, node.kind === 'repo' ? 150 : node.kind === 'domain' ? 260 : 120);
+                showInfo(node);
+            }
+            function clearFocus() {
+                currentFocus = null; computeHighlight(null); el.info.classList.remove('open');
+            }
+
+            function structColor(n) {
+                if (n.kind === 'dir') return 'rgba(150,160,190,0.55)';
+                if (n.kind === 'module') {
+                    // instability: green (stable core) -> red (unstable leaf)
+                    var i = n.inst == null ? 0.5 : n.inst;
+                    var r = Math.round(80 + i * 175), g = Math.round(200 - i * 130), b = Math.round(150 - i * 60);
+                    return 'rgb(' + r + ',' + g + ',' + b + ')';
+                }
+                return n.lang ? langColor(n.lang) : '#7f8aa8';
+            }
+
+            function diveInto(repoNode) {
+                if (repoNode.dived) { flyTo(repoNode, 90); return; }
+                el.diveBtn.disabled = true; el.diveBtn.textContent = 'Loading…';
+                fetch(repoNode.structFile).then(function (r) { if (!r.ok) throw new Error('no structure'); return r.json(); })
+                    .then(function (s) {
+                        if (s.empty || !s.nodes || !s.nodes.length) { toast('No structure available for this repo yet.'); return; }
+                        var pfx = repoNode.id + '::';
+                        var newNodes = [], newLinks = [];
+                        var isModule = s.nodes[0].kind === 'module';
+                        s.nodes.forEach(function (n) {
+                            var gid = pfx + n.id;
+                            var val = n.kind === 'dir' ? 1.6 : n.kind === 'module' ? Math.max(1.5, Math.min(9, 1.5 + (n.ca + n.ce) / 4)) : 2.2;
+                            var node = { id: gid, kind: n.kind, name: n.name, full: n.full || n.name, lang: n.lang,
+                                ca: n.ca, ce: n.ce, inst: n.inst, parentRepo: repoNode.id, val: val };
+                            node.color = structColor(node);
+                            newNodes.push(node); addNode(node);
+                        });
+                        // internal edges
+                        s.links.forEach(function (l) {
+                            var s2 = (l.s === '__repo__') ? repoNode.id : pfx + l.s;
+                            var t2 = (l.t === '__repo__') ? repoNode.id : pfx + l.t;
+                            if (!nodeById[s2] || !nodeById[t2]) return;
+                            newLinks.push({ source: s2, target: t2, _dive: true }); addLink(s2, t2);
+                        });
+                        // roots (no incoming from within) connect to the repo node -> tendrils sprout
+                        var hasParent = {};
+                        newLinks.forEach(function (l) { if (idOf(l.target) !== repoNode.id) hasParent[idOf(l.target)] = 1; });
+                        newNodes.forEach(function (n) { if (!hasParent[n.id]) { newLinks.push({ source: repoNode.id, target: n.id, _dive: true }); adjacency[repoNode.id].push(n.id); adjacency[n.id].push(repoNode.id); } });
+
+                        Graph.graphData({ nodes: nodes, links: links });
+                        repoNode.dived = true;
+                        el.collapseBtn.style.display = ''; el.diveBtn.textContent = '↴ Grown';
+                        var kind = isModule ? (s.shown + ' modules · ' + s.edges + ' imports') : (newNodes.length + ' files/dirs');
+                        toast('Grew ' + kind + (s.truncated ? ' (partial)' : ''));
+                        setTimeout(function () { flyTo(repoNode, 120); }, 400);
+                    })
+                    .catch(function () { toast('Structure not generated for this repo yet.'); })
+                    .then(function () { el.diveBtn.disabled = false; if (!nodeById[currentFocus && currentFocus.id] || !currentFocus.dived) el.diveBtn.textContent = '↴ Grow structure'; });
+            }
+
+            function collapse(repoNode) {
+                if (!repoNode.dived) return;
+                var drop = {};
+                nodes = nodes.filter(function (n) { if (n.parentRepo === repoNode.id) { drop[n.id] = 1; delete nodeById[n.id]; delete adjacency[n.id]; return false; } return true; });
+                links = links.filter(function (l) { return !drop[idOf(l.source)] && !drop[idOf(l.target)]; });
+                Object.keys(adjacency).forEach(function (k) { adjacency[k] = adjacency[k].filter(function (x) { return !drop[x]; }); });
+                repoNode.dived = false;
+                Graph.graphData({ nodes: nodes, links: links });
+                el.collapseBtn.style.display = 'none'; el.diveBtn.textContent = '↴ Grow structure';
+                computeHighlight(repoNode.id);
+            }
+
+            el.diveBtn.addEventListener('click', function () { if (currentFocus && currentFocus.kind === 'repo') diveInto(currentFocus); });
+            el.collapseBtn.addEventListener('click', function () { if (currentFocus && currentFocus.kind === 'repo') collapse(currentFocus); });
+
+            function showInfo(node) {
+                el.info.classList.add('open');
+                el.iMeta.innerHTML = ''; el.iLinks.innerHTML = ''; el.iDesc.textContent = '';
+                el.iDive.style.display = 'none'; el.collapseBtn.style.display = 'none';
+                var kindLabel = { root: 'Owner', domain: 'Domain', lang: 'Language', repo: 'Repository', dir: 'Folder', file: 'File', module: 'Module' }[node.kind] || 'Node';
+                el.iKind.textContent = kindLabel;
+                el.iName.innerHTML = node.name + (node.deep ? '<span class="badge">deep dive</span>' : '');
+
+                if (node.kind === 'repo') {
+                    var f = node.repo || {};
+                    el.iDesc.textContent = f.summary || f.description || 'No description available.';
+                    var meta = ['<span><strong>' + node.domain + '</strong></span>', '<span><strong>' + node.language + '</strong></span>'];
+                    if (f.stars) meta.push('<span><strong>' + f.stars + '</strong> stars</span>');
+                    if (node.files) meta.push('<span><strong>' + node.files + '</strong> files</span>');
+                    el.iMeta.innerHTML = meta.join('');
+                    var lnk = '';
+                    if (f.url) lnk += '<a href="' + f.url + '" target="_blank" rel="noopener">GitHub ↗</a>';
+                    if (f.name && !node.deep) lnk += '<a href="blog/' + encodeURIComponent(f.name) + '.html">Briefing →</a>';
+                    el.iLinks.innerHTML = lnk;
+                    el.iDive.style.display = '';
+                    el.iDiveLabel.textContent = node.deep ? 'Dive into the real 470-module import graph' : 'Grow this repo\'s file & folder structure';
+                    el.diveBtn.textContent = node.dived ? '↴ Grown' : '↴ Grow structure';
+                    el.collapseBtn.style.display = node.dived ? '' : 'none';
+                } else if (node.kind === 'domain') {
+                    el.iDesc.textContent = 'Repositories in the ' + node.name + ' domain. Grouped by what the code does — click through to a language, then a repo.';
+                    el.iMeta.innerHTML = '<span><strong>' + (domainCounts[node.name] || 0) + '</strong> repositories</span>';
+                } else if (node.kind === 'lang') {
+                    el.iDesc.textContent = node.name + ' repositories within ' + node.domain + '.';
+                } else if (node.kind === 'module') {
+                    el.iDesc.textContent = 'Python module. Fan-in (Ca) = who imports it; fan-out (Ce) = what it imports. High Ca + high instability = a change-risk hotspot.';
+                    el.iMeta.innerHTML = '<span><strong>' + node.ca + '</strong> imported by</span><span><strong>' + node.ce + '</strong> imports</span><span>instability <strong>' + node.inst + '</strong></span>';
+                } else if (node.kind === 'file') {
+                    el.iDesc.textContent = node.lang ? (node.lang + ' source file.') : 'Project file.';
+                } else if (node.kind === 'dir') {
+                    el.iDesc.textContent = 'Folder within the repository.';
+                } else {
+                    el.iDesc.textContent = 'The root of the ecosystem — every domain connects here.';
+                }
+            }
+
+            el.infoClose.addEventListener('click', clearFocus);
+            document.addEventListener('keydown', function (e) {
+                if (document.activeElement === el.search) return;
+                if (e.key === 'Escape') { clearFocus(); doReset(); }
+            });
+
+            function locate(term) {
+                term = (term || '').trim().toLowerCase(); if (!term) return;
+                var hit = nodes.find(function (n) { return n.kind === 'repo' && n.name.toLowerCase().indexOf(term) !== -1; });
+                if (hit) onNodeClick(hit); else toast('No repo matches “' + term + '”.');
+            }
+            el.search.addEventListener('keydown', function (e) { if (e.key === 'Enter') locate(el.search.value); });
+
+            var legendToggle = document.getElementById('legend-toggle');
+            legendToggle.addEventListener('click', function () {
+                var hidden = el.legend.style.display === 'none';
+                el.legend.style.display = hidden ? 'flex' : 'none';
+                legendToggle.textContent = hidden ? 'Hide key' : 'Show key';
+                legendToggle.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+            });
+
+            function doReset() {
+                el.search.value = ''; el.fDomain.value = ''; el.fSize.value = '';
+                nodes.filter(function (n) { return n.kind === 'repo' && n.dived; }).forEach(collapse);
+                applyFilters();
+                Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1300);
+                controls.autoRotate = true; spinning = true;
+            }
+            el.reset.addEventListener('click', doReset);
+
+            Graph.onEngineStop(function () { Graph.zoomToFit(800, 130); Graph.onEngineStop(function () {}); });
+            el.loading.style.display = 'none';
+        }
+    })();
+    </script>
+</body>
+</html>
