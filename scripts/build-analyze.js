@@ -36,6 +36,8 @@ const ONLY = (function () { const i = argv.indexOf('--only'); return i > -1 ? ar
 const MAX_NODES = 1200;
 const MAX_FILES = 1500;           // hard ceiling on files processed per repo (perf/memory guard)
 const MAX_DUP_FILES = 800;        // duplication pass is O(files×lines); cap its input
+const BIG_SKIP = 2500;            // repos with more code files than this skip deep analysis (keep file-tree)
+const WALK_CAP = 4000;            // stop walking once this many code files are collected
 const SKIP_DIR = /(^|\/)(node_modules|\.git|dist|build|out|vendor|\.venv|venv|__pycache__|\.next|target|\.cache|coverage|\.idea|\.vscode|migrations|generated|third_party|fixtures)(\/|$)/;
 const PY = new Set(['py']);
 const JS = new Set(['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx']);
@@ -47,6 +49,10 @@ const SEV_W = { high: 3, medium: 2, low: 1 };
 function rank(sev, leverage, removability) { return +(SEV_W[sev] * leverage * removability).toFixed(2); }
 
 function ext(p) { const m = /\.([a-z0-9]+)$/i.exec(p); return m ? m[1].toLowerCase() : ''; }
+// Minified/generated files (huge single lines) cause pathological regex scans and
+// carry no architectural signal — skip them everywhere.
+function looksMinified(src) { return /[^\n]{2500,}/.test(src.slice(0, 200000)); }
+function readSrc(full) { try { const s = fs.readFileSync(full, 'utf8'); return looksMinified(s) ? null : s; } catch (e) { return null; } }
 function gh(pathname) { return execFileSync('gh', ['api', pathname, '--cache', '24h'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); }
 
 // ---- Fetch source (one tarball) ---------------------------------------------
@@ -64,6 +70,7 @@ function fetchSource(owner, repo) {
 }
 function walkFiles(dir, base, acc) {
   for (const name of fs.readdirSync(dir)) {
+    if (acc.length >= WALK_CAP) break;                     // bail early on giant trees
     const full = path.join(dir, name);
     const rel = path.relative(base, full);
     if (SKIP_DIR.test('/' + rel)) continue;
@@ -72,6 +79,14 @@ function walkFiles(dir, base, acc) {
     else if (CODE_EXT.has(ext(name)) && st.size < 400 * 1024) acc.push({ full, rel: rel.split(path.sep).join('/'), size: st.size });
   }
   return acc;
+}
+
+// Cheap pre-check via the (cached) trees API — avoids downloading a giant tarball.
+function codeFileCount(owner, repo) {
+  try {
+    const tree = JSON.parse(gh(`repos/${owner}/${repo}/git/trees/HEAD?recursive=1`)).tree || [];
+    return tree.filter(t => t.type === 'blob' && CODE_EXT.has(ext(t.path)) && !SKIP_DIR.test('/' + t.path)).length;
+  } catch (e) { return 0; }
 }
 
 // ---- Dependency graph -------------------------------------------------------
@@ -122,7 +137,7 @@ function buildGraph(files, srcRoot) {
 
   for (const f of graphable) {
     const self = modId(f.rel);
-    let src; try { src = fs.readFileSync(f.full, 'utf8'); } catch (e) { continue; }
+    const src = readSrc(f.full); if (src === null) continue;
     const isPy = PY.has(ext(f.rel));
     const specs = new Set();
     if (isPy) {
@@ -174,7 +189,7 @@ function detectCycles(ids, links) {
 // ---- Findings (deterministic, measured facts only) --------------------------
 const BRANCH = /\b(if|elif|else if|for|while|case|catch|except)\b|&&|\|\||\?\s*[^:]/g;
 function analyzeFile(f, lang) {
-  let src; try { src = fs.readFileSync(f.full, 'utf8'); } catch (e) { return null; }
+  const src = readSrc(f.full); if (src === null) return null;
   const lines = src.split('\n');
   const loc = lines.filter(l => l.trim() && !/^\s*(#|\/\/|\*)/.test(l)).length;
   let maxIndent = 0;
@@ -265,6 +280,8 @@ function duplication(fileList) {
 function analyzeRepo(f) {
   const m = /github\.com\/([^/]+)\/([^/]+)/.exec(f.url || '');
   if (!m) throw new Error('no url');
+  const nCode = codeFileCount(m[1], m[2]);
+  if (nCode > BIG_SKIP) throw new Error('too large (' + nCode + ' code files) — file-tree retained');
   const { tmp, srcRoot } = fetchSource(m[1], m[2]);
   try {
     let files = walkFiles(srcRoot, srcRoot, []);
@@ -320,21 +337,39 @@ function select(forks) {
   return originals.concat(rest);
 }
 
+// Worker mode: analyze exactly one repo (invoked as a subprocess by the driver).
+function runWorker(f) {
+  const outFile = path.join(OUT, f.id + '.deep.json');
+  try {
+    const r = analyzeRepo(f);
+    fs.writeFileSync(outFile, JSON.stringify(r));
+    console.log('  ✓ ' + r.name + ': ' + r.totals.modules + ' modules, ' + r.totals.cycles + ' in-cycle, ' + r.totals.findings + ' findings (H' + r.totals.severity.high + '/M' + r.totals.severity.medium + '/L' + r.totals.severity.low + ')');
+  } catch (e) { console.log('  ✗ ' + f.name + ': ' + e.message); process.exit(3); }
+}
+
 (function main() {
   if (!fs.existsSync(OUT)) fs.mkdirSync(OUT, { recursive: true });
   const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'forks.json'), 'utf8'));
+
+  // Single-repo mode (also the unit the driver spawns).
+  if (ONLY) { const f = (data.forks || []).find(x => String(x.id) === ONLY); if (f) runWorker(f); return; }
+
+  // Driver mode: each repo runs in its own subprocess with a hard timeout, so no
+  // single pathological repo (giant tarball, weird source) can ever stall the batch.
   const repos = select(data.forks || []);
-  console.log('analyzing ' + repos.length + ' repos (deterministic, no LLM)…');
-  let done = 0, failed = 0;
+  console.log('analyzing ' + repos.length + ' repos (deterministic, no LLM; isolated workers)…');
+  let done = 0, failed = 0, skipped = 0;
   for (const f of repos) {
     const outFile = path.join(OUT, f.id + '.deep.json');
-    if (!FORCE && fs.existsSync(outFile)) continue;
+    if (!FORCE && fs.existsSync(outFile)) { skipped++; continue; }
     try {
-      const r = analyzeRepo(f);
-      fs.writeFileSync(outFile, JSON.stringify(r));
-      done++;
-      console.log('  ✓ ' + r.name + ': ' + r.totals.modules + ' modules, ' + r.totals.cycles + ' in-cycle, ' + r.totals.findings + ' findings (H' + r.totals.severity.high + '/M' + r.totals.severity.medium + '/L' + r.totals.severity.low + ')');
-    } catch (e) { failed++; console.log('  ✗ ' + (f.name) + ': ' + e.message); }
+      const out = execFileSync('node', [__filename, '--only', String(f.id), '--force'],
+        { encoding: 'utf8', timeout: 90 * 1000, stdio: ['ignore', 'pipe', 'ignore'] });
+      process.stdout.write(out); done++;
+    } catch (e) {
+      failed++;
+      console.log('  ✗ ' + f.name + ': ' + (e.killed ? 'timed out (90s) — skipped' : 'worker error'));
+    }
   }
-  console.log('analyze: built=' + done + ' failed=' + failed + ' -> ' + OUT + '/<id>.deep.json');
+  console.log('analyze: ok=' + done + ' failed=' + failed + ' skipped(existing)=' + skipped + ' -> ' + OUT + '/<id>.deep.json');
 })();
