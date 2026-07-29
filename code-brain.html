@@ -479,9 +479,14 @@
             function fetchStructure(repoNode) {
                 // Prefer the LLM-analyzed deep dependency graph; fall back to the file tree.
                 var deepFile = repoNode.structFile.replace(/\.json$/, '.deep.json');
+                function fileTree() { return fetch(repoNode.structFile).then(function (r2) { if (!r2.ok) throw new Error('no structure'); return r2.json(); }); }
                 return fetch(deepFile).then(function (r) {
-                    if (r.ok) return r.json();
-                    return fetch(repoNode.structFile).then(function (r2) { if (!r2.ok) throw new Error('no structure'); return r2.json(); });
+                    if (!r.ok) return fileTree();
+                    return r.json().then(function (d) {
+                        // Use the analyzed deep graph only if it actually has nodes; a
+                        // skipped/empty stub (giant repo, no source) falls back to the file tree.
+                        return (d && d.nodes && d.nodes.length) ? d : fileTree();
+                    });
                 });
             }
 

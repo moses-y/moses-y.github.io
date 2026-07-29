@@ -32,6 +32,8 @@ const ALL = argv.includes('--all');
 const FORCE = argv.includes('--force');
 const TOP = (function () { const i = argv.indexOf('--top'); return i > -1 ? parseInt(argv[i + 1], 10) : 30; })();
 const ONLY = (function () { const i = argv.indexOf('--only'); return i > -1 ? argv[i + 1] : null; })();
+const BUDGET = (function () { const i = argv.indexOf('--budget'); return i > -1 ? parseInt(argv[i + 1], 10) : Infinity; })();
+const MAXFILES_ARG = (function () { const i = argv.indexOf('--max-files'); return i > -1 ? parseInt(argv[i + 1], 10) : null; })();
 
 const MAX_NODES = 1200;
 const MAX_FILES = 1500;           // hard ceiling on files processed per repo (perf/memory guard)
@@ -280,8 +282,9 @@ function duplication(fileList) {
 function analyzeRepo(f) {
   const m = /github\.com\/([^/]+)\/([^/]+)/.exec(f.url || '');
   if (!m) throw new Error('no url');
+  const bigSkip = MAXFILES_ARG || BIG_SKIP;
   const nCode = codeFileCount(m[1], m[2]);
-  if (nCode > BIG_SKIP) throw new Error('too large (' + nCode + ' code files) — file-tree retained');
+  if (nCode > bigSkip) throw new Error('too large (' + nCode + ' code files) — file-tree retained');
   const { tmp, srcRoot } = fetchSource(m[1], m[2]);
   try {
     let files = walkFiles(srcRoot, srcRoot, []);
@@ -344,7 +347,14 @@ function runWorker(f) {
     const r = analyzeRepo(f);
     fs.writeFileSync(outFile, JSON.stringify(r));
     console.log('  ✓ ' + r.name + ': ' + r.totals.modules + ' modules, ' + r.totals.cycles + ' in-cycle, ' + r.totals.findings + ' findings (H' + r.totals.severity.high + '/M' + r.totals.severity.medium + '/L' + r.totals.severity.low + ')');
-  } catch (e) { console.log('  ✗ ' + f.name + ': ' + e.message); process.exit(3); }
+  } catch (e) {
+    // Terminal skips (giant / no source): write a stub so CI won't retry forever.
+    // The page treats a nodeless deep file as "fall back to the file tree".
+    if (/too large|no source|no url/.test(e.message)) {
+      fs.writeFileSync(outFile, JSON.stringify({ id: f.id, name: f.displayName || f.name, deep: false, skipped: e.message, nodes: [], links: [], findings: [] }));
+    }
+    console.log('  ✗ ' + f.name + ': ' + e.message); process.exit(3);
+  }
 }
 
 (function main() {
@@ -360,6 +370,7 @@ function runWorker(f) {
   console.log('analyzing ' + repos.length + ' repos (deterministic, no LLM; isolated workers)…');
   let done = 0, failed = 0, skipped = 0;
   for (const f of repos) {
+    if (done >= BUDGET) { console.log('  … budget reached (' + BUDGET + '); remaining repos will fill on the next run'); break; }
     const outFile = path.join(OUT, f.id + '.deep.json');
     if (!FORCE && fs.existsSync(outFile)) { skipped++; continue; }
     try {
