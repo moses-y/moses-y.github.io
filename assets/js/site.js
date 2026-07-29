@@ -172,15 +172,36 @@
             requestAnimationFrame(update);
         }
 
-        // Precomputed honest aggregates (repos, languages, files, modules, findings).
+        // Dynamic stats. repos / languages / files are computed LIVE from the loaded
+        // projects (forks.json) so they're always current. modules / findings need the
+        // 55+ per-repo deep graphs, so those two come from the CI-precomputed stats.json
+        // (refreshed every run). renderStats() merges whichever sources are ready and
+        // re-animates when better data arrives.
+        let deepStats = { modulesMapped: null, findings: null };
+        function renderStats() {
+            const live = (typeof allProjects !== 'undefined' && allProjects.length) ? calculateStats(allProjects) : {};
+            animateStats({
+                repos: live.repos,
+                languages: live.languages,
+                filesAnalyzed: live.filesAnalyzed,
+                modulesMapped: deepStats.modulesMapped,
+                findings: deepStats.findings
+            });
+        }
         async function loadStats() {
             try {
                 const r = await fetch('/stats.json', { cache: 'no-cache' });
                 if (!r.ok) return;
                 const s = await r.json();
-                statsAnimated = true;
-                animateStats(s);
-            } catch (e) { /* fall back to projects-derived stats */ }
+                deepStats.modulesMapped = s.modulesMapped;
+                deepStats.findings = s.findings;
+                // Seed repos/languages/files too, so the bar fills even before projects load.
+                if (typeof allProjects === 'undefined' || !allProjects.length) {
+                    animateStats({ repos: s.repos, languages: s.languages, filesAnalyzed: s.filesAnalyzed, modulesMapped: s.modulesMapped, findings: s.findings });
+                } else {
+                    renderStats();
+                }
+            } catch (e) { /* live projects-derived stats still render */ }
         }
 
         // Reveal animation
@@ -504,7 +525,7 @@
                         pagination.style.display = 'flex';
                     }
                 }
-                if (!statsAnimated) animateStats(calculateStats(allProjects));
+                renderStats();
             } catch (e) {
                 // Last resort: GitHub API
                 try {
@@ -528,7 +549,7 @@
                             pagination.style.display = 'flex';
                         }
                     }
-                    if (!statsAnimated) animateStats(calculateStats(allProjects));
+                    renderStats();
                 } catch {
                     if (container) container.innerHTML = '<div class="projects-loading"><p>Unable to load projects.</p></div>';
                 }
