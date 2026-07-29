@@ -145,30 +145,42 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
-        // Animate Stats
+        // Animate Stats — real Code Brain metrics, K-formatted.
+        let statsAnimated = false;
+        function fmtStat(n) {
+            n = Math.floor(n);
+            return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'K' : String(n);
+        }
         function animateStats(stats) {
-            const elRepos = document.getElementById('stat-repos');
-            const elLangs = document.getElementById('stat-languages');
-            const elStars = document.getElementById('stat-stars');
-            const elContrib = document.getElementById('stat-contributions');
-            // Hero stats only exist on the home page.
-            if (!elRepos && !elLangs && !elStars && !elContrib) return;
-            const duration = 2000;
-            const start = performance.now();
-
-            function update(currentTime) {
-                const elapsed = currentTime - start;
-                const progress = Math.min(elapsed / duration, 1);
+            const fields = [
+                ['stat-repos', stats.repos],
+                ['stat-languages', stats.languages],
+                ['stat-files', stats.filesAnalyzed],
+                ['stat-modules', stats.modulesMapped],
+                ['stat-findings', stats.findings]
+            ].filter(f => document.getElementById(f[0]) && f[1] != null);
+            if (!fields.length) return;               // hero stats only exist on the home page
+            const duration = 1800, start = performance.now();
+            function update(now) {
+                const progress = Math.min((now - start) / duration, 1);
                 const eased = 1 - Math.pow(1 - progress, 3);
-
-                if (elRepos) elRepos.textContent = Math.floor(stats.repos * eased) + '+';
-                if (elLangs) elLangs.textContent = Math.floor(stats.languages * eased) + '+';
-                if (elStars) elStars.textContent = Math.floor(stats.stars * eased);
-                if (elContrib) elContrib.textContent = Math.floor(stats.contributions * eased) + '+';
-
+                fields.forEach(([id, val]) => {
+                    document.getElementById(id).textContent = fmtStat(val * eased) + '+';
+                });
                 if (progress < 1) requestAnimationFrame(update);
             }
             requestAnimationFrame(update);
+        }
+
+        // Precomputed honest aggregates (repos, languages, files, modules, findings).
+        async function loadStats() {
+            try {
+                const r = await fetch('/stats.json', { cache: 'no-cache' });
+                if (!r.ok) return;
+                const s = await r.json();
+                statsAnimated = true;
+                animateStats(s);
+            } catch (e) { /* fall back to projects-derived stats */ }
         }
 
         // Reveal animation
@@ -376,22 +388,25 @@
             });
         }
 
-        // Calculate stats from projects
+        // Fallback stats from the projects feed (used only if stats.json is missing).
+        // Files come from the real knowledge-graph data; modules/findings need the
+        // deep graphs, so they stay 0 in the fallback rather than being faked.
+        const NON_CODE = { Markdown:1, JSON:1, YAML:1, TOML:1, INI:1, XML:1, CSV:1, Text:1, SVG:1, Dockerfile:1, Makefile:1, HTML:1 };
+        function primaryLang(p) {
+            if (p.language) return p.language;
+            const langs = (p.knowledgeGraph && p.knowledgeGraph.languages) || {};
+            let best = null, bestN = 0;
+            Object.keys(langs).forEach(k => { if (NON_CODE[k]) return; if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
+            return best;
+        }
         function calculateStats(projects) {
             const languages = new Set();
-            let totalStars = 0;
-
+            let files = 0;
             projects.forEach(p => {
-                if (p.language) languages.add(p.language);
-                totalStars += (p.parent?.stars || p.stars || 0);
+                const l = primaryLang(p); if (l) languages.add(l);
+                files += (p.knowledgeGraph?.totalFiles) || 0;
             });
-
-            return {
-                repos: projects.length,
-                languages: languages.size,
-                stars: totalStars,
-                contributions: Math.floor(projects.length * 15) // Approximate
-            };
+            return { repos: projects.length, languages: languages.size, filesAnalyzed: files, modulesMapped: null, findings: null };
         }
 
         // Render Featured Projects (top 3 by stars)
@@ -489,7 +504,7 @@
                         pagination.style.display = 'flex';
                     }
                 }
-                animateStats(calculateStats(allProjects));
+                if (!statsAnimated) animateStats(calculateStats(allProjects));
             } catch (e) {
                 // Last resort: GitHub API
                 try {
@@ -513,7 +528,7 @@
                             pagination.style.display = 'flex';
                         }
                     }
-                    animateStats(calculateStats(allProjects));
+                    if (!statsAnimated) animateStats(calculateStats(allProjects));
                 } catch {
                     if (container) container.innerHTML = '<div class="projects-loading"><p>Unable to load projects.</p></div>';
                 }
@@ -625,7 +640,7 @@
                     </div>
                 `).join('');
 
-                countEl.textContent = `${totalContributions} contributions in the last year`;
+                countEl.textContent = `${totalContributions} public events · last ~90 days`;
             } catch (e) {
                 // Fallback: generate mock data based on stats
                 generateMockHeatmap();
@@ -689,7 +704,7 @@
                 </div>
             `).join('');
 
-            countEl.textContent = `${totalContributions} contributions in the last year`;
+            countEl.textContent = `${totalContributions} public events · last ~90 days`;
         }
 
         // Contact Form Handler
@@ -728,5 +743,6 @@
             submitBtn.textContent = originalText;
         });
 
+        loadStats();
         loadGitHubHeatmap();
         loadProjects();
