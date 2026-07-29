@@ -74,6 +74,23 @@
         }
         .cg-btn:hover { background: var(--accent,#4f7cff); border-color: var(--accent,#4f7cff); }
         .cg-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        /* Compact icon-only controls — declutter the dock, add legible affordances. */
+        .icon-btn {
+            background: rgba(255,255,255,0.06); border: 1px solid var(--border,rgba(255,255,255,0.1));
+            color: var(--text-primary,#fff); border-radius: 9px; width: 32px; height: 32px; padding: 0;
+            display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; transition: .2s;
+        }
+        .icon-btn:hover { background: var(--accent,#4f7cff); border-color: var(--accent,#4f7cff); }
+        .icon-btn svg { width: 16px; height: 16px; }
+        .icon-btn[aria-expanded="false"] { opacity: 0.55; }
+        .dock .title-row { display: flex; align-items: center; gap: 10px; }
+        .dock .title-row h1 { flex: 1 1 auto; }
+        #dock-toggle svg { transition: transform .25s; }
+        /* Collapsed: everything but the title line is hidden → dock shrinks to one row. */
+        .dock.collapsed { padding-top: 8px; padding-bottom: 8px; }
+        .dock.collapsed > *:not(.title) { display: none !important; }
+        .dock.collapsed .sub { display: none; }
+        .dock.collapsed #dock-toggle svg { transform: rotate(180deg); }
         .legend { display: flex; flex-direction: row; gap: 12px; font-size: 0.74rem; color: var(--text-secondary,#9aa4bf);
             flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
         .legend .row { display: flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
@@ -182,7 +199,12 @@
 
     <div class="dock">
         <div class="title">
-            <h1>Code Brain</h1>
+            <div class="title-row">
+                <h1>Code Brain</h1>
+                <button class="icon-btn" id="dock-toggle" aria-expanded="true" title="Collapse controls" aria-label="Collapse controls">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="18 15 12 9 6 15"/></svg>
+                </button>
+            </div>
             <p class="sub">Domains → languages → repos. Click a repo to grow its inner structure.</p>
         </div>
         <div class="search">
@@ -201,9 +223,16 @@
             <span>Languages <strong id="s-langs">0</strong></span>
             <span>Domains <strong id="s-domains">0</strong></span>
         </div>
-        <button class="cg-btn" id="reset">Reset view</button>
-        <button class="cg-btn" id="legend-toggle" aria-expanded="true">Hide key</button>
-        <a class="cg-btn" id="all-reports" href="report.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;text-align:center">Browse all reports →</a>
+        <button class="icon-btn" id="reset" title="Reset view" aria-label="Reset view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button class="icon-btn" id="legend-toggle" aria-expanded="true" title="Hide key" aria-label="Toggle legend">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <a class="cg-btn" id="all-reports" href="report.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Browse all reports
+        </a>
         <div class="legend" id="legend"></div>
     </div>
 
@@ -218,6 +247,7 @@
             <div class="label" id="i-dive-label">Dive inside</div>
             <div class="btn-row">
                 <button class="cg-btn primary" id="dive-btn">↴ Grow structure</button>
+                <a class="cg-btn report" id="report-btn" href="#" target="_blank" rel="noopener" style="display:none">Full report →</a>
                 <button class="cg-btn" id="collapse-btn" style="display:none">↥ Collapse</button>
             </div>
         </div>
@@ -309,6 +339,7 @@
             iDive: document.getElementById('i-dive'),
             iDiveLabel: document.getElementById('i-dive-label'),
             diveBtn: document.getElementById('dive-btn'),
+            reportBtn: document.getElementById('report-btn'),
             collapseBtn: document.getElementById('collapse-btn'),
             infoClose: document.getElementById('info-close'),
             toast: document.getElementById('toast')
@@ -633,9 +664,6 @@
                 if (!node.findings || !node.findings.length) return;
                 var sv = (node.totals && node.totals.severity) || { high: 0, medium: 0, low: 0 };
                 var html = '';
-                if (node.hasDeep && node.repo && node.repo.id) {
-                    html += '<a class="report-link" href="report.html?repo=' + encodeURIComponent(node.repo.id) + '" target="_blank" rel="noopener">Open full report →</a>';
-                }
                 html += '<div class="sev-summary">';
                 if (sv.high) html += '<span class="pill h">' + sv.high + ' high</span>';
                 if (sv.medium) html += '<span class="pill m">' + sv.medium + ' medium</span>';
@@ -693,6 +721,7 @@
                 el.info.classList.add('open');
                 el.iMeta.innerHTML = ''; el.iLinks.innerHTML = ''; el.iDesc.textContent = '';
                 el.iDive.style.display = 'none'; el.collapseBtn.style.display = 'none';
+                el.reportBtn.style.display = 'none';
                 elFindings.innerHTML = '';
                 var kindLabel = { root: 'Owner', domain: 'Domain', lang: 'Language', repo: 'Repository', dir: 'Folder', file: 'File', module: 'Module' }[node.kind] || 'Node';
                 el.iKind.textContent = kindLabel;
@@ -706,10 +735,14 @@
                     if (node.files) meta.push('<span><strong>' + node.files + '</strong> files</span>');
                     el.iMeta.innerHTML = meta.join('');
                     var lnk = '';
-                    if (f.id != null && reportSet[String(f.id)]) lnk += '<a class="report" href="report.html?repo=' + encodeURIComponent(f.id) + '" target="_blank" rel="noopener">Full report →</a>';
                     if (f.url) lnk += '<a href="' + f.url + '" target="_blank" rel="noopener">GitHub ↗</a>';
                     if (f.name) lnk += '<a href="blog/' + encodeURIComponent(f.name) + '.html">Briefing →</a>';
                     el.iLinks.innerHTML = lnk;
+                    // Report sits beside "Grow structure" on the same button row (same eye level).
+                    if (f.id != null && reportSet[String(f.id)]) {
+                        el.reportBtn.href = 'report.html?repo=' + encodeURIComponent(f.id);
+                        el.reportBtn.style.display = '';
+                    }
                     el.iDive.style.display = '';
                     el.iDiveLabel.textContent = 'Grow this repo\'s file & folder structure';
                     el.diveBtn.textContent = node.dived ? '↴ Grown' : '↴ Grow structure';
@@ -757,8 +790,19 @@
             legendToggle.addEventListener('click', function () {
                 var hidden = el.legend.style.display === 'none';
                 el.legend.style.display = hidden ? 'flex' : 'none';
-                legendToggle.textContent = hidden ? 'Hide key' : 'Show key';
+                legendToggle.title = hidden ? 'Hide key' : 'Show key';
                 legendToggle.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+                positionInfo();
+            });
+
+            // Collapse the whole control dock to a single title line and back.
+            var dockEl = document.querySelector('.dock');
+            var dockToggle = document.getElementById('dock-toggle');
+            dockToggle.addEventListener('click', function () {
+                var collapsed = dockEl.classList.toggle('collapsed');
+                dockToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                dockToggle.title = collapsed ? 'Expand controls' : 'Collapse controls';
+                positionInfo();
             });
 
             function doReset() {
