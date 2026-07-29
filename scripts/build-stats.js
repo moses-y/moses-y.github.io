@@ -29,16 +29,44 @@ forks.forEach(f => {
   filesAnalyzed += (f.knowledgeGraph && f.knowledgeGraph.totalFiles) || 0;
 });
 
+// Map repo id -> display metadata so the report index reads nicely.
+const metaById = {};
+forks.forEach(f => { metaById[String(f.id)] = f; });
+
 let modulesMapped = 0, findings = 0, analyzedRepos = 0;
+const reports = [];
 const dir = path.join(ROOT, 'structure');
 if (fs.existsSync(dir)) {
   fs.readdirSync(dir).filter(n => n.endsWith('.deep.json')).forEach(n => {
     try {
       const j = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'));
-      if (j.totals) { modulesMapped += j.totals.modules || 0; findings += j.totals.findings || 0; if (j.nodes && j.nodes.length) analyzedRepos++; }
+      if (!j.totals) return;
+      modulesMapped += j.totals.modules || 0;
+      findings += j.totals.findings || 0;
+      if (j.nodes && j.nodes.length) {
+        analyzedRepos++;
+        const id = n.replace(/\.deep\.json$/, '');
+        const m = metaById[id] || {};
+        const sev = j.totals.severity || {};
+        reports.push({
+          id,
+          name: j.name || m.displayName || m.name || id,
+          language: m.language || null,
+          modules: j.totals.modules || 0,
+          cycles: j.totals.cycles || 0,
+          findings: j.totals.findings || 0,
+          high: sev.high || 0,
+          medium: sev.medium || 0,
+          low: sev.low || 0
+        });
+      }
     } catch (e) {}
   });
 }
+// Rank by findings, then by high-severity — the most interesting reports first.
+reports.sort((a, b) => (b.findings - a.findings) || (b.high - a.high));
+fs.writeFileSync(path.join(ROOT, 'structure', 'reports.json'), JSON.stringify(reports, null, 2));
+console.log('reports.json:', reports.length, 'reports');
 
 const stats = {
   repos: forks.length,

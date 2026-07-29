@@ -82,6 +82,17 @@
         .note { color:var(--muted); font-size:13px; }
         .method { color:var(--muted); font-size:12.5px; line-height:1.7; }
         .loading { color:var(--muted); padding:60px 0; text-align:center; }
+        .rgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:22px; }
+        .rcard { display:block; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 18px 16px;
+            text-decoration:none; color:inherit; transition:border-color .18s, transform .18s; }
+        .rcard:hover { border-color:var(--accent); transform:translateY(-2px); }
+        .rcard .rname { font-weight:700; font-size:15px; margin-bottom:6px; word-break:break-word; }
+        .rcard .rmeta { font-size:12px; color:var(--muted,#8b93b0); margin-bottom:12px; }
+        .rcard .rpills { display:flex; gap:6px; flex-wrap:wrap; }
+        .rp { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; }
+        .rp.high { background:rgba(255,125,115,.16); color:#ff9d95; }
+        .rp.medium { background:rgba(240,179,85,.16); color:#f0b355; }
+        .rp.low { background:rgba(99,179,255,.16); color:#63b3ff; }
     </style>
 </head>
 <body>
@@ -104,7 +115,7 @@
         function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
         function cap(s){ return String(s||'').replace(/_/g,' '); }
 
-        if (!repoId) { content.innerHTML = '<p class="note">No repository specified. Open a repo from the <a href="code-brain.html">Code Brain graph</a> and choose “Open full report”.</p>'; return; }
+        if (!repoId) { renderIndex(); return; }
 
         Promise.all([
             fetch('structure/' + repoId + '.deep.json').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
@@ -233,6 +244,35 @@
                 (x.evidence ? '<div class="ev">' + esc(x.evidence) + '</div>' : '') +
                 (x.recommendation ? '<div class="rec"><b>Fix:</b> ' + esc(x.recommendation) + '</div>' : '') +
                 '</div>';
+        }
+
+        function renderIndex() {
+            document.title = 'Architecture Reports | Code Brain';
+            document.getElementById('back').href = 'code-brain.html';
+            fetch('structure/reports.json').then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; })
+            .then(function (reports) {
+                if (!reports || !reports.length) {
+                    content.innerHTML = '<h1>Architecture Reports</h1><p class="note">No reports have been generated yet. Explore the <a href="code-brain.html">Code Brain graph</a>.</p>';
+                    return;
+                }
+                var totF = reports.reduce(function(s,r){return s+(r.findings||0);},0);
+                var totM = reports.reduce(function(s,r){return s+(r.modules||0);},0);
+                var cards = reports.map(function (r) {
+                    var pills = '';
+                    if (r.high) pills += '<span class="rp high">' + r.high + ' high</span>';
+                    if (r.medium) pills += '<span class="rp medium">' + r.medium + ' med</span>';
+                    if (r.low) pills += '<span class="rp low">' + r.low + ' low</span>';
+                    return '<a class="rcard" href="report.html?repo=' + encodeURIComponent(r.id) + '">' +
+                        '<div class="rname">' + esc(r.name) + '</div>' +
+                        '<div class="rmeta">' + (r.modules||0) + ' modules · ' + (r.cycles||0) + ' in cycles</div>' +
+                        '<div class="rpills">' + (pills || '<span class="rp low">clean</span>') + '</div>' +
+                        '</a>';
+                }).join('');
+                content.innerHTML =
+                    '<h1>Architecture <b>Reports</b></h1>' +
+                    '<p class="lede">Deterministic static analysis across ' + reports.length + ' analyzed repositories — ' + totM.toLocaleString() + ' modules mapped, ' + totF.toLocaleString() + ' findings surfaced. Ranked by findings.</p>' +
+                    '<hr class="rule"><div class="rgrid">' + cards + '</div>';
+            });
         }
     })();
     </script>
