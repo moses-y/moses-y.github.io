@@ -131,7 +131,7 @@ const NARR_SYS = [
   'You are a principal engineer producing an architecture briefing AND a disciplined code-issue review.',
   'First: describe the repo\'s structure in 3-4 sentences and list up to 3 strengths.',
   'Then find code issues. Each finding MUST have:',
-  '  category ∈ [maintainability, performance, complexity, error_handling, correctness, resource_leak];',
+  '  category ∈ [clarity, efficiency, cognitive_load, resilience, soundness, resource_safety];',
   '  severity ∈ [error, warning, info];',
   '  file and (if applicable) function; a short evidence excerpt; a concrete recommendation;',
   '  rank = your estimate of severity × leverage (how much it matters) × removability (how easily fixed), 0-10.',

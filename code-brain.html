@@ -107,6 +107,21 @@
         .info.collapsed #i-desc, .info.collapsed #i-meta, .info.collapsed #i-links, .info.collapsed #i-dive { display: none !important; }
         .info.collapsed h2 { margin-bottom: 0; }
         .badge { display:inline-block; font-size:0.66rem; padding:2px 8px; border-radius:999px; background:rgba(52,224,196,0.15); color:var(--accent-tertiary,#34e0c4); border:1px solid rgba(52,224,196,0.3); margin-left:6px; vertical-align:middle; }
+        /* Findings (from the static analyzer) rendered under the dive controls. */
+        .findings { margin-top: 14px; }
+        .findings .sev-summary { display:flex; gap:8px; font-size:0.72rem; margin-bottom:10px; flex-wrap:wrap; }
+        .findings .pill { padding:2px 9px; border-radius:999px; font-weight:600; }
+        .findings .pill.h { background:rgba(255,125,115,0.16); color:#ff9d95; border:1px solid rgba(255,125,115,0.35); }
+        .findings .pill.m { background:rgba(240,179,85,0.16); color:#f0b355; border:1px solid rgba(240,179,85,0.35); }
+        .findings .pill.l { background:rgba(99,179,255,0.16); color:#63b3ff; border:1px solid rgba(99,179,255,0.3); }
+        .findings .item { padding:9px 0; border-top:1px solid var(--border,rgba(255,255,255,0.07)); }
+        .findings .item .ttl { font-size:0.8rem; color:#fff; display:flex; align-items:baseline; gap:7px; }
+        .findings .item .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+        .findings .item .dot.h { background:#ff7d73; } .findings .item .dot.m { background:#f0b355; } .findings .item .dot.l { background:#63b3ff; }
+        .findings .item .cat { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-secondary,#9aa4bf); }
+        .findings .item .loc { font-size:0.7rem; color:var(--text-secondary,#8f89ba); font-family:ui-monospace,Menlo,monospace; margin-top:2px; }
+        .findings .item .rec { font-size:0.73rem; color:var(--text-secondary,#9aa4bf); margin-top:3px; }
+        .findings .scope { font-size:0.68rem; color:var(--text-secondary,#8f89ba); margin-top:10px; }
 
         .hint {
             position: fixed; z-index: 20; bottom: 18px; left: 50%; transform: translateX(-50%);
@@ -180,6 +195,7 @@
                 <button class="cg-btn" id="dive-btn">↴ Grow structure</button>
                 <button class="cg-btn" id="collapse-btn" style="display:none">↥ Collapse</button>
             </div>
+            <div class="findings" id="i-findings"></div>
         </div>
     </div>
 
@@ -500,6 +516,7 @@
 
                         Graph.graphData({ nodes: nodes, links: links });
                         repoNode.dived = true;
+                        if (s.findings) { repoNode.findings = s.findings; repoNode.totals = s.totals; repoNode.scope = s.scope; renderFindings(repoNode); }
                         el.collapseBtn.style.display = ''; el.diveBtn.textContent = '↴ Grown';
                         var kind = isModule ? (s.shown + ' modules · ' + s.edges + ' imports') : (newNodes.length + ' files/dirs');
                         toast('Grew ' + kind + (s.truncated ? ' (partial)' : ''));
@@ -524,10 +541,34 @@
             el.diveBtn.addEventListener('click', function () { if (currentFocus && currentFocus.kind === 'repo') diveInto(currentFocus); });
             el.collapseBtn.addEventListener('click', function () { if (currentFocus && currentFocus.kind === 'repo') collapse(currentFocus); });
 
+            var elFindings = document.getElementById('i-findings');
+            function renderFindings(node) {
+                elFindings.innerHTML = '';
+                if (!node.findings || !node.findings.length) return;
+                var sv = (node.totals && node.totals.severity) || { high: 0, medium: 0, low: 0 };
+                var html = '<div class="sev-summary">';
+                if (sv.high) html += '<span class="pill h">' + sv.high + ' high</span>';
+                if (sv.medium) html += '<span class="pill m">' + sv.medium + ' medium</span>';
+                if (sv.low) html += '<span class="pill l">' + sv.low + ' low</span>';
+                html += '</div>';
+                var sevClass = { high: 'h', medium: 'm', low: 'l' };
+                node.findings.slice(0, 12).forEach(function (f) {
+                    var c = sevClass[f.severity] || 'l';
+                    html += '<div class="item"><div class="ttl"><span class="dot ' + c + '"></span>' + esc(f.title) + '</div>' +
+                        '<div class="cat">' + esc(f.category) + '</div>' +
+                        (f.file ? '<div class="loc">' + esc(String(f.file).split('/').slice(-2).join('/')) + '</div>' : '') +
+                        (f.recommendation ? '<div class="rec">→ ' + esc(f.recommendation) + '</div>' : '') + '</div>';
+                });
+                if (node.scope) html += '<div class="scope">Analyzed ' + (node.scope.analyzed || node.scope.files || '?') + ' of ' + (node.scope.discovered || node.scope.analyzed || '?') + ' files · ' + (node.totals ? node.totals.cycles : 0) + ' modules in cycles</div>';
+                elFindings.innerHTML = html;
+            }
+            function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
             function showInfo(node) {
                 el.info.classList.add('open');
                 el.iMeta.innerHTML = ''; el.iLinks.innerHTML = ''; el.iDesc.textContent = '';
                 el.iDive.style.display = 'none'; el.collapseBtn.style.display = 'none';
+                elFindings.innerHTML = '';
                 var kindLabel = { root: 'Owner', domain: 'Domain', lang: 'Language', repo: 'Repository', dir: 'Folder', file: 'File', module: 'Module' }[node.kind] || 'Node';
                 el.iKind.textContent = kindLabel;
                 el.iName.textContent = node.name;
@@ -547,6 +588,7 @@
                     el.iDiveLabel.textContent = 'Grow this repo\'s file & folder structure';
                     el.diveBtn.textContent = node.dived ? '↴ Grown' : '↴ Grow structure';
                     el.collapseBtn.style.display = node.dived ? '' : 'none';
+                    if (node.dived && node.findings) renderFindings(node);
                 } else if (node.kind === 'domain') {
                     el.iDesc.textContent = 'Repositories in the ' + node.name + ' domain. Grouped by what the code does — click through to a language, then a repo.';
                     el.iMeta.innerHTML = '<span><strong>' + (domainCounts[node.name] || 0) + '</strong> repositories</span>';
