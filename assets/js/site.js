@@ -177,11 +177,14 @@
         // 55+ per-repo deep graphs, so those two come from the CI-precomputed stats.json
         // (refreshed every run). renderStats() merges whichever sources are ready and
         // re-animates when better data arrives.
-        // stats.json (CI-computed from forks.json + deep graphs) is the source of
-        // truth: the sql.js-backed allProjects doesn't carry knowledgeGraph.totalFiles
-        // or full language maps, so the in-browser calc understates files/languages.
-        // Prefer stats.json for every field; fall back to the live calc only if the
-        // file is unavailable, so the bar still fills offline.
+        // Data flow for the hero stats:
+        //   repos / languages / files  -> computed LIVE in the browser from forks.json
+        //     (the same source scripts/build-stats.js uses, with identical logic), so
+        //     they are always current and never depend on a precomputed snapshot.
+        //   modules / findings         -> from stats.json, because they require reading
+        //     the per-repo deep graphs (55+ files) which is too much to fetch client-side.
+        // forks.json gzips to ~750KB (smaller than the forks.db already loaded), so the
+        // extra fetch is cheap. stats.json values act as a fallback if forks.json fails.
         let deepStats = { repos: null, languages: null, filesAnalyzed: null, modulesMapped: null, findings: null };
         function renderStats() {
             const live = (typeof allProjects !== 'undefined' && allProjects.length) ? calculateStats(allProjects) : {};
@@ -195,17 +198,27 @@
             });
         }
         async function loadStats() {
-            try {
-                const r = await fetch('/stats.json', { cache: 'no-cache' });
-                if (!r.ok) return;
-                const s = await r.json();
-                deepStats.repos = s.repos;
-                deepStats.languages = s.languages;
-                deepStats.filesAnalyzed = s.filesAnalyzed;
-                deepStats.modulesMapped = s.modulesMapped;
-                deepStats.findings = s.findings;
-                renderStats();
-            } catch (e) { /* live projects-derived stats still render */ }
+            const [forks, stats] = await Promise.all([
+                fetch('/forks.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null),
+                fetch('/stats.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)
+            ]);
+            // Live, accurate counts straight from the feed.
+            if (forks && Array.isArray(forks.forks) && forks.forks.length) {
+                const live = calculateStats(forks.forks);
+                deepStats.repos = live.repos;
+                deepStats.languages = live.languages;
+                deepStats.filesAnalyzed = live.filesAnalyzed;
+            } else if (stats) {
+                deepStats.repos = stats.repos;
+                deepStats.languages = stats.languages;
+                deepStats.filesAnalyzed = stats.filesAnalyzed;
+            }
+            // Modules / findings only exist in the CI-computed aggregate.
+            if (stats) {
+                deepStats.modulesMapped = stats.modulesMapped;
+                deepStats.findings = stats.findings;
+            }
+            renderStats();
         }
 
         // Reveal animation
@@ -417,12 +430,16 @@
         // Files come from the real knowledge-graph data; modules/findings need the
         // deep graphs, so they stay 0 in the fallback rather than being faked.
         const NON_CODE = { Markdown:1, JSON:1, YAML:1, TOML:1, INI:1, XML:1, CSV:1, Text:1, SVG:1, Dockerfile:1, Makefile:1, HTML:1 };
+        // Mirrors scripts/build-stats.js primaryLanguage() exactly so the in-browser
+        // numbers match the CI computation: prefer the repo's own language, else the
+        // dominant non-boilerplate language from its knowledge graph, else any language.
         function primaryLang(p) {
             if (p.language) return p.language;
             const langs = (p.knowledgeGraph && p.knowledgeGraph.languages) || {};
             let best = null, bestN = 0;
             Object.keys(langs).forEach(k => { if (NON_CODE[k]) return; if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
-            return best;
+            if (!best) Object.keys(langs).forEach(k => { if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
+            return best || null;
         }
         function calculateStats(projects) {
             const languages = new Set();
