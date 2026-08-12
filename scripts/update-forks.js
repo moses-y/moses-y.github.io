@@ -1,17 +1,21 @@
 const fs = require('fs');
+const crypto = require('crypto');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const LLM_API_KEY = process.env.NVIDIA_API_KEY || process.env.LLM_API_KEY;
 const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const LLM_MODELS = (process.env.LLM_MODELS || 'moonshotai/kimi-k2.6,deepseek-ai/deepseek-v4-flash,meta/llama-3.3-70b-instruct').split(',').map(m => m.trim());
+const LLM_BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
+const EMBED_ENDPOINT = process.env.EMBED_ENDPOINT || `${LLM_BASE}/embeddings`;
+const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
+const LLM_MODELS = (process.env.LLM_MODELS || 'openai/gpt-oss-120b,nvidia/nemotron-3.5-lightning-30b-a3b,deepseek-ai/deepseek-v4-flash-0731').split(',').map(m => m.trim());
 
 // Configuration
 const CONFIG = {
   username: process.env.GITHUB_USERNAME || 'moses-y',
-  reposToShow: parseInt(process.env.REPOS_LIMIT || '999', 10),
+  reposToShow: parseInt(process.env.REPOS_LIMIT || '0', 10),
   batchSize: parseInt(process.env.BATCH_SIZE || '10', 10),
   kgBatchSize: parseInt(process.env.KG_BATCH_SIZE || '50', 10),
-  apiDelay: parseInt(process.env.API_DELAY || '1000', 10),
+  apiDelay: parseInt(process.env.API_DELAY || '1600', 10),   // 40 rpm account ceiling
   kgApiDelay: 200,
   maxFiles: 200,
   models: {
@@ -99,9 +103,8 @@ function isFallbackArticle(article) {
 function stripMarkdown(text) {
   if (!text) return '';
   return text
-    // Remove code blocks (triple backticks with optional language)
-    .replace(/```[\w]*\n[\s\S]*?```/g, '')
-    .replace(/```[\s\S]*?```/g, '')
+    .replace(/```[\w]*\n([\s\S]*?)```/g, (_, code) => code.trim() + '\n\n')
+    .replace(/```([\s\S]*?)```/g, (_, code) => code.trim() + '\n\n')
     // Remove malformed code blocks (double/single backticks at line start)
     .replace(/^`{1,3}\w*\s*$/gm, '')
     // Remove headers
@@ -129,6 +132,260 @@ function stripMarkdown(text) {
     // Clean up extra whitespace
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+// ========== EMBEDDING PIPELINE ==========
+//
+// Embeds each repo's metadata once, caches the vector, then derives two things
+// the Code Graph consumes: a 3D UMAP position per repo (semantic map layout) and
+// top-K cosine nearest neighbors (similarity links).
+//
+// The cache is keyed by a hash of (model + embed text), so a repo whose
+// description or summary changes is automatically re-embedded, while an unchanged
+// repo costs nothing on later runs.
+
+const EMBED_CACHE_FILE = process.env.EMBED_CACHE_FILE || 'embeddings.json';
+const EMBED_BATCH = parseInt(process.env.EMBED_BATCH || '32', 10);
+const EMBED_DIMS = 3;              // UMAP output dimensions (the graph is 3D)
+const KNN_K = parseInt(process.env.KNN_K || '3', 10);
+const KNN_MIN_SIM = parseFloat(process.env.KNN_MIN_SIM || '0.3');
+
+function buildEmbeddingText(fork) {
+  const parts = [];
+  if (fork.description) parts.push(fork.description);
+  if (fork.summary) parts.push(stripMarkdown(fork.summary).slice(0, 500));
+  if (fork.language) parts.push(`Primary language: ${fork.language}`);
+  const langs = fork.knowledgeGraph?.languages;
+  if (langs && Object.keys(langs).length) {
+    parts.push('Languages: ' + Object.keys(langs).join(', '));
+  }
+  if (fork.knowledgeGraph?.frameworks?.length) {
+    parts.push('Frameworks: ' + fork.knowledgeGraph.frameworks.join(', '));
+  }
+  if (fork.topics?.length) parts.push('Topics: ' + fork.topics.join(', '));
+  return parts.join('. ').slice(0, 2000);
+}
+
+function embedTextHash(text) {
+  return crypto.createHash('sha1').update(`${EMBED_MODEL}\n${text}`).digest('hex').slice(0, 16);
+}
+
+function loadEmbeddingsCache() {
+  try {
+    if (fs.existsSync(EMBED_CACHE_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(EMBED_CACHE_FILE, 'utf8'));
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {
+    console.log(`  Embeddings cache unreadable (${e.message}), starting fresh`);
+  }
+  return {};
+}
+
+function saveEmbeddingsCache(cache) {
+  fs.writeFileSync(EMBED_CACHE_FILE, JSON.stringify(cache));
+}
+
+// One embeddings call. Returns { vectors } or { error, status }.
+// The nv-embedqa-* models require input_type; symmetric models ignore or reject it,
+// so the caller probes rather than assuming when it is not pinned via env.
+async function embedBatch(texts, inputType) {
+  const body = {
+    model: EMBED_MODEL,
+    input: texts,
+    encoding_format: 'float',
+    truncate: 'END'
+  };
+  if (inputType) body.input_type = inputType;
+
+  const response = await fetch(EMBED_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LLM_API_KEY}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    return { error: text.slice(0, 300), status: response.status };
+  }
+
+  const data = await response.json();
+  if (!Array.isArray(data.data) || !data.data.length) {
+    return { error: 'response contained no embeddings', status: response.status };
+  }
+  // NIM returns items with an index; do not rely on array order.
+  const vectors = [];
+  data.data.forEach((item, i) => {
+    vectors[typeof item.index === 'number' ? item.index : i] = item.embedding;
+  });
+  return { vectors };
+}
+
+async function generateEmbeddings(forks, cache) {
+  if (!LLM_API_KEY) {
+    console.log('  No NVIDIA_API_KEY, skipping embeddings');
+    return { cache, embedded: 0 };
+  }
+
+  // Work out which repos need a vector: absent, or metadata changed since last run.
+  const pending = [];
+  for (const fork of forks) {
+    const text = buildEmbeddingText(fork);
+    if (!text) continue;
+    const hash = embedTextHash(text);
+    const cached = cache[fork.id];
+    if (cached && cached.hash === hash && Array.isArray(cached.vector)) continue;
+    pending.push({ fork, text, hash });
+  }
+
+  if (!pending.length) {
+    console.log(`  All ${forks.length} repos already embedded (cache hit)`);
+    return { cache, embedded: 0 };
+  }
+
+  console.log(`  Embedding ${pending.length} repos with ${EMBED_MODEL} (batch ${EMBED_BATCH})`);
+
+  // 'passage' suits the default embedqa model; the probe below still covers a
+  // symmetric model that rejects the field, if EMBED_MODEL is overridden.
+  let inputType = process.env.EMBED_INPUT_TYPE || 'passage';
+  let probed = false;
+  let embedded = 0;
+
+  for (let i = 0; i < pending.length; i += EMBED_BATCH) {
+    const batch = pending.slice(i, i + EMBED_BATCH);
+    const texts = batch.map(p => p.text);
+    const batchNo = Math.floor(i / EMBED_BATCH) + 1;
+
+    let result = await embedBatch(texts, inputType);
+
+    if (result.error && !probed && result.status === 400 && /input_type/i.test(result.error)) {
+      console.log(`  ${EMBED_MODEL} rejects input_type, retrying without it`);
+      inputType = null;
+      result = await embedBatch(texts, inputType);
+    }
+    probed = true;
+
+    if (result.error) {
+      // Give up on the rest of the run rather than burning quota on a systemic
+      // failure. Whatever landed in the cache is still saved and reused next run.
+      console.log(`  Embedding batch ${batchNo} failed (HTTP ${result.status}): ${result.error}`);
+      if (result.status === 429) console.log('  Rate limited; remaining repos roll over to the next run');
+      break;
+    }
+
+    batch.forEach((p, idx) => {
+      const vector = result.vectors[idx];
+      if (!Array.isArray(vector)) return;
+      cache[p.fork.id] = { hash: p.hash, vector };
+      embedded++;
+    });
+
+    console.log(`  Batch ${batchNo}: ${batch.length} repos (${embedded}/${pending.length} done)`);
+    saveEmbeddingsCache(cache);
+
+    if (i + EMBED_BATCH < pending.length) {
+      // Account rate limit is 40 rpm, so requests must be spaced past 1500ms.
+      await new Promise(r => setTimeout(r, parseInt(process.env.EMBED_DELAY || '1600', 10)));
+    }
+  }
+
+  saveEmbeddingsCache(cache);
+  return { cache, embedded };
+}
+
+function cosineSimilarity(a, b) {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom ? dot / denom : 0;
+}
+
+// UMAP down to 3 dimensions (the graph is 3D) plus top-K cosine neighbors.
+function computeUmapAndKnn(forks, cache) {
+  const embedded = forks.filter(f => Array.isArray(cache[f.id]?.vector));
+  if (embedded.length < 5) {
+    console.log(`  Only ${embedded.length} vectors available, skipping UMAP`);
+    return { positions: {}, links: [] };
+  }
+
+  let UMAP;
+  try {
+    UMAP = require('umap-js').UMAP;
+  } catch (e) {
+    console.log('  umap-js not installed, skipping semantic layout (npm install umap-js)');
+    return { positions: {}, links: [] };
+  }
+
+  const vectors = embedded.map(f => cache[f.id].vector);
+  const dim = vectors[0].length;
+  // A ragged matrix would corrupt UMAP silently; a model switch mid-cache can cause it.
+  const ragged = vectors.filter(v => v.length !== dim).length;
+  if (ragged) {
+    console.log(`  ${ragged} vectors have a mismatched dimension, skipping UMAP (clear ${EMBED_CACHE_FILE} to rebuild)`);
+    return { positions: {}, links: [] };
+  }
+
+  console.log(`  Computing ${EMBED_DIMS}D UMAP over ${embedded.length} vectors (dim ${dim})`);
+  const umap = new UMAP({
+    nComponents: EMBED_DIMS,
+    nNeighbors: Math.max(2, Math.min(15, embedded.length - 1)),
+    minDist: 0.1
+  });
+  const coords = umap.fit(vectors);
+
+  // Normalize each axis to [0,1] so the front end can scale to any box size.
+  const mins = new Array(EMBED_DIMS).fill(Infinity);
+  const maxs = new Array(EMBED_DIMS).fill(-Infinity);
+  coords.forEach(c => {
+    for (let d = 0; d < EMBED_DIMS; d++) {
+      if (c[d] < mins[d]) mins[d] = c[d];
+      if (c[d] > maxs[d]) maxs[d] = c[d];
+    }
+  });
+
+  const positions = {};
+  embedded.forEach((f, i) => {
+    const p = [];
+    for (let d = 0; d < EMBED_DIMS; d++) {
+      const range = maxs[d] - mins[d] || 1;
+      p.push(Math.round(((coords[i][d] - mins[d]) / range) * 10000) / 10000);
+    }
+    positions[f.id] = p;
+  });
+
+  // Top-K neighbors per repo, deduped so an edge appears once regardless of direction.
+  const links = [];
+  const seen = new Set();
+  for (let i = 0; i < embedded.length; i++) {
+    const sims = [];
+    for (let j = 0; j < embedded.length; j++) {
+      if (i === j) continue;
+      sims.push({ j, sim: cosineSimilarity(vectors[i], vectors[j]) });
+    }
+    sims.sort((a, b) => b.sim - a.sim);
+    for (const { j, sim } of sims.slice(0, KNN_K)) {
+      if (sim < KNN_MIN_SIM) break;
+      const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      links.push({
+        source: embedded[i].id,
+        target: embedded[j].id,
+        similarity: Math.round(sim * 1000) / 1000
+      });
+    }
+  }
+
+  console.log(`  UMAP done: ${Object.keys(positions).length} positions, ${links.length} similarity links`);
+  return { positions, links };
 }
 
 // Fetch README content from repo
@@ -528,8 +785,15 @@ One paragraph about the specific pain point this solves. Be concrete.
 ## What This Does
 2-3 short paragraphs. Reference actual files/folders from the structure. Use \`inline code\` for file names and functions.
 
+## How To Use It
+Concrete steps to get this running, grounded in files that actually exist in the structure above. Where the evidence supports it, cover:
+- **Setup**: the real install or build command, inferred from the dependency and config files present (\`package.json\` implies npm/pnpm, \`pyproject.toml\` implies pip or uv, \`Dockerfile\` implies a container build, \`Makefile\` implies make targets).
+- **Configuration**: required environment variables, keys, or config files, naming the actual file where they belong.
+- **Running it**: the entry point to invoke and how, referencing the real file (a CLI script, \`main.py\`, a server start command, an exported function).
+Use a fenced code block for commands. If the README documents the commands, use those verbatim rather than guessing. If the repo gives no evidence for a step, say what is missing instead of inventing a plausible command.
+
 ## Real-World Use
-A practical scenario. Maybe a code snippet or example workflow.
+A practical scenario showing where this fits in a working system. A short code snippet or example workflow.
 
 ## Code Health & Issues
 Before the verdict, assess the codebase like a reviewer. Call out concrete, likely issues you can infer from the structure, README, and analysis - be specific and reference files. Cover:
@@ -556,7 +820,9 @@ NEVER USE:
 - Jokes, snark, or a sarcastic tone - keep it credible and consultant-grade
 - Starting multiple sentences with "This" or "The"
 
-Keep it under 400 words. Precision over volume.`;
+- Inventing setup commands, flags, or env var names with no evidence in the repo
+
+Keep it under 550 words. Precision over volume.`;
 
     console.log(`  Using model: ${model}`);
     const response = await fetch(CONFIG.models.endpoint, {
@@ -580,11 +846,14 @@ Keep it under 400 words. Precision over volume.`;
       const errorText = await response.text();
       console.log(`  ${model} returned ${response.status}: ${errorText.slice(0, 80)}`);
 
-      // Mark model as rate limited if 429
-      if (response.status === 429) {
+      const transient = [429, 500, 502, 503, 504].includes(response.status);
+      const unavailable = [404, 410].includes(response.status);
+
+      if (transient || unavailable) {
         modelRateLimits[model] = true;
-        console.log(`  Model ${model} rate limited, trying next...`);
-        // Retry with next model
+        console.log(unavailable
+          ? `  Model ${model} is ${response.status === 410 ? 'retired' : 'not available on this account'} - update LLM_MODELS. Trying next...`
+          : `  Model ${model} unavailable (${response.status}), trying next...`);
         return generateBlogArticle(repo, readme, fileTree, knowledgeGraph);
       }
       return null;
@@ -701,7 +970,10 @@ async function main() {
   const ownedCount = repos.filter(r => r._type === 'original').length;
   console.log(`Found ${repos.length} repos (${forkCount} forks, ${ownedCount} original)\n`);
 
-  const recentRepos = repos.slice(0, CONFIG.reposToShow);
+  const recentRepos = CONFIG.reposToShow > 0 ? repos.slice(0, CONFIG.reposToShow) : repos;
+  if (recentRepos.length < repos.length) {
+    console.log(`REPOS_LIMIT=${CONFIG.reposToShow} is dropping ${repos.length - recentRepos.length} repos from this run.`);
+  }
 
   // Separate repos into: needs generation vs already has article
   const needsGeneration = [];
@@ -720,12 +992,37 @@ async function main() {
   console.log(`  - Already have good articles: ${hasArticle.length}`);
   console.log(`  - Need AI generation: ${needsGeneration.length}`);
 
-  // Batch processing: only process up to batchSize per run
-  const batchToProcess = needsGeneration.slice(0, CONFIG.batchSize);
+  // Batch processing: only process up to batchSize per run.
+  const wasAttempted = (repo) => {
+    const e = existingArticles.get(repo.id);
+    return Boolean(e && e.summary);
+  };
+
+  const fresh = [];
+  const retries = [];
+  for (const repo of needsGeneration) {
+    (wasAttempted(repo) ? retries : fresh).push(repo);
+  }
+
+  const retryQuota = Math.min(retries.length, Math.max(1, Math.floor(CONFIG.batchSize * 0.3)));
+  const batchToProcess = [
+    ...fresh.slice(0, CONFIG.batchSize - retryQuota),
+    ...retries.slice(0, retryQuota)
+  ].slice(0, CONFIG.batchSize);
+
+  if (batchToProcess.length < CONFIG.batchSize) {
+    for (const repo of [...fresh, ...retries]) {
+      if (batchToProcess.length >= CONFIG.batchSize) break;
+      if (!batchToProcess.includes(repo)) batchToProcess.push(repo);
+    }
+  }
+
   const remaining = needsGeneration.length - batchToProcess.length;
+  console.log(`  - Never attempted: ${fresh.length} | awaiting retry: ${retries.length}`);
 
   if (batchToProcess.length < needsGeneration.length) {
-    console.log(`  - This batch: ${batchToProcess.length} (${remaining} remaining for next run)`);
+    const freshInBatch = batchToProcess.filter(r => !wasAttempted(r)).length;
+    console.log(`  - This batch: ${batchToProcess.length} (${freshInBatch} new, ${batchToProcess.length - freshInBatch} retry), ${remaining} remaining for next run`);
   }
   console.log('');
 
@@ -824,10 +1121,13 @@ async function main() {
           aiSuccessCount++;
         } else {
           consecutiveRateLimits++;
-          // Stop trying AI after 3 consecutive failures (likely rate limited)
           if (consecutiveRateLimits >= 3) {
-            console.log(`\n⚠️  Rate limit detected. Skipping AI for remaining ${batchToProcess.length - i - 1} repos in batch.`);
-            console.log(`   Successfully generated ${aiSuccessCount} AI articles before limit.\n`);
+            const exhausted = CONFIG.models.available.every(m => modelRateLimits[m]);
+            console.log(`\n⚠️  3 consecutive AI failures - skipping AI for remaining ${batchToProcess.length - i - 1} repos in batch.`);
+            console.log(exhausted
+              ? `   All ${CONFIG.models.available.length} models in LLM_MODELS are unavailable. Check the key and the slugs above.`
+              : `   See the per-model status above for the cause (auth, quota, or a stale slug).`);
+            console.log(`   Successfully generated ${aiSuccessCount} AI articles before stopping.\n`);
             rateLimitHit = true;
           }
         }
@@ -869,12 +1169,66 @@ async function main() {
     console.log(`\nBatch summary: ${aiSuccessCount} AI generated, ${batchToProcess.length - aiSuccessCount} fallback`);
   }
 
+  const inBatch = new Set(batchToProcess.map(r => r.id));
+  const carried = needsGeneration.filter(r => !inBatch.has(r.id));
+  let carriedWithArticle = 0;
+
+  for (let i = 0; i < carried.length; i++) {
+    const repo = carried[i];
+    const existing = existingArticles.get(repo.id);
+    if (existing && existing.summary) carriedWithArticle++;
+
+    forks.push({
+      ...(existing || {}),
+      id: repo.id,
+      name: repo.name,
+      displayName: repo.name.replace(/-/g, ' ').replace(/_/g, ' '),
+      description: repo.description || (existing && existing.description) || 'No description available',
+      summary: (existing && existing.summary) || null,
+      url: repo.html_url,
+      language: repo.language,
+      stars: repo.stargazers_count,
+      forks: repo.forks_count,
+      topics: (existing && existing.topics) || [],
+      parent: (existing && existing.parent) || null,
+      type: repo._type || 'fork',
+      image: (existing && existing.image) || getRandomUnsplashUrl(forks.length + i),
+      forkedAt: formatDate(repo.created_at),
+      updatedAt: formatDate(repo.updated_at),
+      readTime: (existing && existing.summary) ? estimateReadTime(existing.summary) : 0,
+      knowledgeGraph: (existing && existing.knowledgeGraph) || null,
+      awaitingArticle: true
+    });
+  }
+
+  if (carried.length > 0) {
+    console.log(`\nCarried ${carried.length} repos into the output without a new article (${carriedWithArticle} kept a previous one).`);
+  }
+
   // Sort by updated date
   forks.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
+  console.log('\n=== Semantic Layer ===');
+  let similarityLinks = [];
+  let semanticCount = 0;
+  try {
+    const { cache } = await generateEmbeddings(forks, loadEmbeddingsCache());
+    const { positions, links } = computeUmapAndKnn(forks, cache);
+    for (const fork of forks) {
+      const p = positions[fork.id];
+      if (!p) continue;
+      fork.umap = p;   // [x, y, z], each normalized to [0,1]
+      semanticCount++;
+    }
+    similarityLinks = links;
+  } catch (e) {
+    console.log(`  Semantic layer failed, continuing without it: ${e.message}`);
+  }
+
   // Count how many have AI articles vs fallback
-  const aiArticleCount = forks.filter(f => !isFallbackArticle(f.summary)).length;
-  const fallbackCount = forks.length - aiArticleCount;
+  const aiArticleCount = forks.filter(f => f.summary && !isFallbackArticle(f.summary)).length;
+  const fallbackCount = forks.filter(f => f.summary && isFallbackArticle(f.summary)).length;
+  const noArticleCount = forks.filter(f => !f.summary).length;
   const pendingCount = needsGeneration.length - batchToProcess.length;
 
   const output = {
@@ -884,9 +1238,16 @@ async function main() {
     progress: {
       aiGenerated: aiArticleCount,
       fallback: fallbackCount,
+      noArticle: noArticleCount,
       pending: pendingCount,
       complete: pendingCount === 0
     },
+    semantic: {
+      model: EMBED_MODEL,
+      positioned: semanticCount,
+      links: similarityLinks.length
+    },
+    similarityLinks,
     forks
   };
 
@@ -895,7 +1256,9 @@ async function main() {
   console.log(`Total repos: ${forks.length}`);
   console.log(`AI articles: ${aiArticleCount}`);
   console.log(`Fallback articles: ${fallbackCount}`);
+  console.log(`Awaiting first article: ${noArticleCount}`);
   console.log(`Pending (next run): ${pendingCount}`);
+  console.log(`Semantic positions: ${semanticCount} | similarity links: ${similarityLinks.length}`);
   if (pendingCount > 0) {
     console.log(`\n→ Run workflow again to process next batch of ${Math.min(CONFIG.batchSize, pendingCount)} repos`);
   } else {
@@ -903,7 +1266,19 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('Error:', err);
-  process.exit(1);
-});
+// Only run when invoked directly, so the semantic helpers can be required in tests.
+if (require.main === module) {
+  main().catch(err => {
+    console.error('Error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildEmbeddingText,
+  cosineSimilarity,
+  computeUmapAndKnn,
+  generateEmbeddings,
+  loadEmbeddingsCache,
+  main
+};

@@ -101,7 +101,12 @@ async function main() {
     }
 
     const data = JSON.parse(fs.readFileSync('forks.json', 'utf8'));
-    const posts = data.forks || [];
+    const allForks = data.forks || [];
+    const posts = allForks.filter(f => f.summary);
+    const awaiting = allForks.length - posts.length;
+    if (awaiting > 0) {
+        console.log(`Excluding ${awaiting} repos with no article yet (no page exists to link to).`);
+    }
 
     if (posts.length === 0) {
         console.log('No posts to include in feed.');

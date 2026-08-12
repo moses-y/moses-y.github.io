@@ -31,9 +31,8 @@ const OUT = path.join(ROOT, 'structure');
 // ---- Config (override via env) ----------------------------------------------
 const BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
 const API_KEY = process.env.NVIDIA_API_KEY || '';
-// NVIDIA NIM model slugs - confirm exact IDs in build.nvidia.com and override via env.
-const STRUCT_MODEL = process.env.DEEP_STRUCT_MODEL || 'deepseek-ai/deepseek-v4-pro';
-const NARR_MODEL = process.env.DEEP_NARR_MODEL || 'zai/glm-5.2';
+const STRUCT_MODEL = process.env.DEEP_STRUCT_MODEL || 'openai/gpt-oss-120b';
+const NARR_MODEL = process.env.DEEP_NARR_MODEL || 'nvidia/nemotron-3-super-120b-a12b';
 
 const SRC_BUDGET = 120 * 1024;    // max source bytes bundled per repo (keeps prompt sane)
 const MAX_FILE = 24 * 1024;       // truncate any single file to this

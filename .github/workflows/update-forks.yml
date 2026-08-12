@@ -33,13 +33,25 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install sql.js
+        run: npm install sql.js umap-js
+
+      # Embedding vectors are too large to commit (~570 repos x 1024 dims) and are
+      # fully rebuildable, so they persist here rather than in git history. A cold
+      # cache just means one run pays to re-embed.
+      - name: Restore embeddings cache
+        uses: actions/cache@v4
+        with:
+          path: embeddings.json
+          key: embeddings-${{ github.run_id }}
+          restore-keys: |
+            embeddings-
 
       - name: Fetch forks and generate feed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           BATCH_SIZE: ${{ vars.BATCH_SIZE || '10' }}
+          EMBED_MODEL: ${{ vars.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5' }}
         run: node scripts/update-forks.js
 
       - name: Build SQLite database
@@ -55,7 +67,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Fill file/folder structures for any repos added since last run.
-          node scripts/build-structure.js || true
+          node scripts/build-structure.js --limit 150 || true
           # Deep static analysis, incremental: a budget per run so giants + new forks
           # get absorbed over successive cron passes. Bump --max-files over time to
           # let ever-larger repos qualify. Skips repos already analyzed.

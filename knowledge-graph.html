@@ -68,6 +68,8 @@
         }
         .cg-btn:hover { background: var(--accent,#4f7cff); border-color: var(--accent,#4f7cff); }
         .cg-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        /* Pressed state for the semantic-map switch, so the current layout is obvious. */
+        .cg-btn[aria-pressed="true"] { background: var(--accent-tertiary,#34e0c4); border-color: var(--accent-tertiary,#34e0c4); color: #0b0d18; font-weight: 600; }
         /* Legend flows horizontally along the bar; scrolls sideways if it overflows. */
         .legend { display: flex; flex-direction: row; gap: 12px; font-size: 0.74rem; color: var(--text-secondary,#9aa4bf);
             flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
@@ -98,6 +100,14 @@
         .info .meta strong { color: #fff; }
         .info .links a { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 0.82rem; color: var(--accent,#4f7cff); text-decoration: none; }
         .info .links a:hover { text-decoration: underline; }
+        /* Semantically closest repos - derived from embedding cosine similarity. */
+        .info .kin:not(:empty) { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border,rgba(255,255,255,0.08)); }
+        .info .kin .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-secondary,#a06bff); margin-bottom: 8px; }
+        .info .kin button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left;
+            background: none; border: none; padding: 5px 0; cursor: pointer; font-family: inherit;
+            font-size: 0.82rem; color: var(--text-secondary,#9aa4bf); }
+        .info .kin button:hover { color: var(--text-primary,#fff); }
+        .info .kin .score { color: var(--accent-secondary,#a06bff); font-variant-numeric: tabular-nums; flex: none; }
         .info .step { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border,rgba(255,255,255,0.08)); }
         .info .step .label { font-size: 0.72rem; color: var(--text-secondary,#9aa4bf); margin-bottom: 8px; }
         .info .close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text-secondary,#9aa4bf); font-size: 1.1rem; cursor: pointer; }
@@ -145,7 +155,9 @@
             <span>Repos: <strong id="s-repos">0</strong></span>
             <span>Languages: <strong id="s-langs">0</strong></span>
             <span id="s-pending-wrap" style="display:none">Pending: <strong id="s-pending">0</strong></span>
+            <span id="s-sim-wrap" style="display:none">Similar pairs: <strong id="s-sim">0</strong></span>
         </div>
+        <button class="cg-btn" id="semantic-toggle" aria-pressed="false" title="Lay repos out by meaning (UMAP over embeddings) and show similarity links">Semantic map</button>
         <button class="cg-btn" id="legend-toggle" aria-expanded="true">Hide languages</button>
         <div class="legend" id="legend"></div>
     </div>
@@ -157,6 +169,7 @@
         <p id="i-desc"></p>
         <div class="meta" id="i-meta"></div>
         <div class="links" id="i-links"></div>
+        <div class="kin" id="i-kin"></div>
         <div class="step">
             <div class="label">Walk to a neighbor</div>
             <div class="btn-row">
@@ -224,7 +237,9 @@
             iDesc: document.getElementById('i-desc'),
             iMeta: document.getElementById('i-meta'),
             iLinks: document.getElementById('i-links'),
+            iKin: document.getElementById('i-kin'),
             infoClose: document.getElementById('info-close'),
+            semantic: document.getElementById('semantic-toggle'),
             prev: document.getElementById('prev'),
             next: document.getElementById('next'),
             nCount: document.getElementById('n-count')
@@ -271,6 +286,32 @@
                 addLink(langIds[lang], rid);
             });
 
+            // ---- Semantic layer (optional, present once the embedding pipeline has run) ----
+            // simLinks are kept out of `links` so the force layout stays the default view;
+            // toggling semantic mode swaps them in and pins repos to their UMAP coordinates.
+            var simLinks = [];
+            (data.similarityLinks || []).forEach(function (sl) {
+                var a = 'repo:' + sl.source, b = 'repo:' + sl.target;
+                if (!nodeById[a] || !nodeById[b]) return;
+                simLinks.push({ source: a, target: b, sim: sl.similarity, kind: 'sim' });
+            });
+            // repo id -> nearest semantic kin, strongest first (both directions of each edge).
+            var simByRepo = {};
+            simLinks.forEach(function (l) {
+                (simByRepo[l.source] = simByRepo[l.source] || []).push({ id: l.target, sim: l.sim });
+                (simByRepo[l.target] = simByRepo[l.target] || []).push({ id: l.source, sim: l.sim });
+            });
+            Object.keys(simByRepo).forEach(function (k) {
+                simByRepo[k].sort(function (a, b) { return b.sim - a.sim; });
+            });
+
+            var hasUmap = forks.some(function (f) { return Array.isArray(f.umap) && f.umap.length === 3; });
+            var canSemantic = hasUmap && simLinks.length > 0;
+            if (simLinks.length) {
+                document.getElementById('s-sim-wrap').style.display = '';
+                document.getElementById('s-sim').textContent = simLinks.length;
+            }
+
             el.sRepos.textContent = forks.length;
             el.sLangs.textContent = Object.keys(langIds).length;
             if (data.progress && data.progress.pending) {
@@ -291,6 +332,8 @@
             var highlightNodes = new Set();
             var highlightLinks = new Set();
             var focusId = null;
+            var semanticOn = false;
+            var activeLinks = links;   // what is currently rendered: structural, or structural + similarity
 
             var Graph = ForceGraph3D({ controlType: 'orbit' })(document.getElementById('graph'))
                 .backgroundColor('#06070f')
@@ -306,10 +349,19 @@
                 .nodeResolution(12)
                 .linkColor(function (l) {
                     var lid = linkId(l);
-                    if (highlightLinks.size === 0) return 'rgba(160,170,200,0.18)';
-                    return highlightLinks.has(lid) ? ACCENT3 : 'rgba(120,130,160,0.05)';
+                    if (highlightLinks.has(lid)) return l.kind === 'sim' ? ACCENT2 : ACCENT3;
+                    if (highlightLinks.size > 0) return 'rgba(120,130,160,0.05)';
+                    // Similarity edges sit behind the structural ones, weighted by strength.
+                    if (l.kind === 'sim') {
+                        var a = 0.10 + Math.max(0, Math.min(1, (l.sim - 0.3) / 0.7)) * 0.30;
+                        return 'rgba(160,107,255,' + a.toFixed(2) + ')';
+                    }
+                    return 'rgba(160,170,200,0.18)';
                 })
-                .linkWidth(function (l) { return highlightLinks.has(linkId(l)) ? 1.6 : 0.4; })
+                .linkWidth(function (l) {
+                    if (highlightLinks.has(linkId(l))) return 1.6;
+                    return l.kind === 'sim' ? 0.25 : 0.4;
+                })
                 .linkDirectionalParticles(function (l) { return highlightLinks.has(linkId(l)) ? 2 : 0; })
                 .linkDirectionalParticleSpeed(0.006)
                 .onNodeClick(focusNode)
@@ -341,7 +393,7 @@
                 if (!id) { refresh(); return; }
                 highlightNodes.add(id);
                 (adjacency[id] || []).forEach(function (nb) { highlightNodes.add(nb); });
-                links.forEach(function (l) {
+                activeLinks.forEach(function (l) {
                     var s = typeof l.source === 'object' ? l.source.id : l.source;
                     var t = typeof l.target === 'object' ? l.target.id : l.target;
                     if (s === id || t === id) highlightLinks.add(linkId(l));
@@ -351,6 +403,74 @@
             function refresh() {
                 Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor())
                      .linkWidth(Graph.linkWidth()).linkDirectionalParticles(Graph.linkDirectionalParticles());
+            }
+
+            // ---- Semantic map ----
+            // Repos are pinned to their 3D UMAP coordinates, so distance on screen means
+            // distance in embedding space rather than whatever the force layout settled on.
+            // Language hubs move to the centroid of their repos so the color key still reads.
+            var SPREAD = 1100;
+            function applySemanticPositions(on) {
+                nodes.forEach(function (n) {
+                    if (!on) { delete n.fx; delete n.fy; delete n.fz; return; }
+                    if (n.kind === 'repo') {
+                        var u = n.repo && n.repo.umap;
+                        if (!Array.isArray(u) || u.length !== 3) return;   // unembedded repos keep floating
+                        n.fx = (u[0] - 0.5) * SPREAD;
+                        n.fy = (u[1] - 0.5) * SPREAD;
+                        n.fz = (u[2] - 0.5) * SPREAD;
+                    } else if (n.kind === 'root') {
+                        n.fx = 0; n.fy = 0; n.fz = 0;
+                    }
+                });
+                if (!on) return;
+
+                // Language hubs: centroid of their pinned repos.
+                Object.keys(langIds).forEach(function (lang) {
+                    var lid = langIds[lang];
+                    var sx = 0, sy = 0, sz = 0, k = 0;
+                    (adjacency[lid] || []).forEach(function (nb) {
+                        var r = nodeById[nb];
+                        if (!r || r.kind !== 'repo' || r.fx === undefined) return;
+                        sx += r.fx; sy += r.fy; sz += r.fz; k++;
+                    });
+                    var hub = nodeById[lid];
+                    if (!hub) return;
+                    if (k) { hub.fx = sx / k; hub.fy = sy / k; hub.fz = sz / k; }
+                    else { delete hub.fx; delete hub.fy; delete hub.fz; }
+                });
+            }
+
+            function rebuildAdjacency(activeSet) {
+                Object.keys(adjacency).forEach(function (k) { adjacency[k] = []; });
+                activeSet.forEach(function (l) {
+                    var s = typeof l.source === 'object' ? l.source.id : l.source;
+                    var t = typeof l.target === 'object' ? l.target.id : l.target;
+                    if (adjacency[s]) adjacency[s].push(t);
+                    if (adjacency[t]) adjacency[t].push(s);
+                });
+            }
+
+            function setSemantic(on) {
+                semanticOn = on;
+                el.semantic.setAttribute('aria-pressed', on ? 'true' : 'false');
+                el.semantic.textContent = on ? 'Force layout' : 'Semantic map';
+                activeLinks = on ? links.concat(simLinks) : links;
+                // Adjacency drives both highlighting and neighbor-walking, so in semantic
+                // mode "Next" walks semantic kin too, not just same-language siblings.
+                rebuildAdjacency(activeLinks);
+                applySemanticPositions(on);
+                Graph.graphData({ nodes: nodes, links: activeLinks });
+                if (!on && Graph.d3ReheatSimulation) Graph.d3ReheatSimulation();
+                computeHighlight(focusId);
+                Graph.zoomToFit(900, 140);
+            }
+
+            if (!canSemantic) {
+                el.semantic.disabled = true;
+                el.semantic.title = 'Semantic layout unavailable: run scripts/update-forks.js to generate embeddings';
+            } else {
+                el.semantic.addEventListener('click', function () { setSemantic(!semanticOn); });
             }
 
             function flyTo(node) {
@@ -378,13 +498,40 @@
                 el.info.classList.remove('open');
             }
 
+            // Nearest semantic kin for a repo, clickable so you can hop by meaning.
+            function renderKin(node) {
+                if (node.kind !== 'repo') return;
+                var kin = (simByRepo[node.id] || []).slice(0, 4);
+                if (!kin.length) return;
+                var label = document.createElement('div');
+                label.className = 'label';
+                label.textContent = 'Semantically closest';
+                el.iKin.appendChild(label);
+                kin.forEach(function (k) {
+                    var target = nodeById[k.id];
+                    if (!target) return;
+                    var b = document.createElement('button');
+                    var nameEl = document.createElement('span');
+                    nameEl.textContent = target.name;   // repo names are untrusted input
+                    var scoreEl = document.createElement('span');
+                    scoreEl.className = 'score';
+                    scoreEl.textContent = k.sim.toFixed(2);
+                    b.appendChild(nameEl);
+                    b.appendChild(scoreEl);
+                    b.addEventListener('click', function () { focusNode(target); });
+                    el.iKin.appendChild(b);
+                });
+            }
+
             function showInfo(node) {
                 el.info.classList.add('open');
                 el.iKind.textContent = node.kind === 'root' ? 'Owner' : node.kind === 'lang' ? 'Language' : 'Repository';
                 el.iName.textContent = node.name;
                 el.iMeta.innerHTML = '';
                 el.iLinks.innerHTML = '';
+                el.iKin.innerHTML = '';
                 el.iDesc.textContent = '';
+                renderKin(node);
                 var f = node.repo;
                 if (node.kind === 'repo' && f) {
                     el.iDesc.textContent = f.summary || f.description || 'No description available.';
