@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 7, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,23 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="diagram design" loading="lazy">
 
-            <div class="post-content">
-                <p>Thirteen editorial diagram types for Claude Code. Self-contained HTML + SVG. No shadows, no Mermaid-slop.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>Teams using AI coding assistants for documentation often get generic, identikit diagrams—rounded boxes with default styling that clash with their brand and look like every other AI-generated artifact. Fixing them in Figma or Illustrator costs 30+ minutes per diagram, so most teams either accept ugly visuals or skip diagrams entirely.</p><p>What This Does</p><p>diagram-design is a Claude Code skill that produces editorial-quality, self-contained HTML+SVG diagrams. The skill lives in skills/diagram-design/SKILL.md and ships 27 diagram types—architecture, flowcharts, sequence diagrams, ER models, swimlanes, quadrants, and more. Each type has three variants (minimal light, minimal dark, full-editorial) as standalone HTML files under skills/diagram-design/assets/, e.g. example-architecture.html, example-architecture-dark.html, example-architecture-full.html.</p><p>The key differentiator is brand matching: the skill reads a target website and maps its colors and fonts onto every diagram it produces. All output is dependency-free—no JavaScript, no build step, no external images. A vector icon library (scripts/vendor/icons/) provides tool logos (AWS, Docker, Postgres, Kubernetes, etc.) for architecture diagrams.</p><p>How To Use It</p><p>Setup: Install the skill into Claude Code by adding this repo as a plugin. The .claude-plugin/plugin.json and .codex-plugin/plugin.json files define the plugin manifests for each assistant. The commands/export-diagram.md file provides a custom slash command for exporting diagrams.</p><p>Configuration: No environment variables or API keys required. The skill reads a website URL to extract brand colors and fonts. The scripts/lint-skin.py script validates diagram styling against a baseline in scripts/lint-skin-baseline.txt.</p><p>Running it: Invoke the skill from within Claude Code by describing the diagram you need. For example: &quot;Create an architecture diagram of our data pipeline.&quot; The skill generates a standalone HTML file you open directly in a browser.</p><p>Install as a Claude Code plugin
+claude plugin install cathrynlavery/diagram-design</p><p>Export a diagram to PNG (via the provided command)
+claude diagram-design export --output diagram.png</p><p>Real-World Use</p><p>A data engineering team documenting their medallion architecture (bronze/silver/gold layers) can ask Claude to generate a diagram matching their internal docs site. The skill reads docs.example.com, extracts the brand palette and typography, and produces a medallion.html file with consistent styling. The team drops it into their wiki without manual styling. The dp-security-matrix example (example-dp-security-matrix.html) shows a security control mapping across data platform components—useful for compliance reviews.</p><p>Code Health &amp; Issues
+Med - No CI/CD pipeline - No .github/ directory or CI config detected. The scripts/lint-skin.py linter exists but has no automated gate.
+Med - Minimal test coverage - Only 1 test file for 200+ files. The 27 diagram types × 3 variants each are untested for visual regression or HTML validity.
+Low - Vendor dependency - scripts/vendor/icons/ bundles ~90 third-party SVG icons. THIRDPARTYLICENSES.md exists, but ongoing license compliance is manual.
+Low - No versioning strategy - The README references &quot;New in 2.0&quot; but there&#39;s no CHANGELOG or release tags visible in the structure.</p><p>The repo is otherwise clean: no secrets, no build artifacts, clear separation between skills/ (the product), scripts/ (tooling), and docs/ (screenshots).</p><p>The Bottom Line</p><p>A well-crafted, opinionated tool that solves a real pain point: AI-generated diagrams that actually look professional and match your brand. It&#39;s best suited for content teams, consultants, and technical writers who produce diagrams regularly and care about visual consistency. The lack of CI and test coverage is acceptable for a skill repository, but the project would benefit from automated HTML validation as the diagram catalog grows.</p>
             </div>
 
             
@@ -414,6 +444,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

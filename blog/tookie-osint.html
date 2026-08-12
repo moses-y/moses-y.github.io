@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,45 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="tookie osint" loading="lazy">
 
-            <div class="post-content">
-                <p>Tookie is a advanced OSINT information gathering tool that finds social media accounts based on inputs.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Security researchers and investigators often need to discover whether a given handle exists on dozens of social‑media or community sites. Doing this manually is time‑consuming and error‑prone, especially when the list of target sites changes frequently.</p><p>What This Does  
+Tookie‑OSINT is a Python‑based CLI that accepts a username (or any string) and checks it against the catalog of sites defined in sites/sites.json.  
+ The core logic lives in modules/webscraper.py, which builds HTTP requests using the headers from sites/headers.txt and parses the JSON field definitions from sites/fields.json.  
+ brib.py is the entry‑point script that loads the language packs (lang/.py), reads the version from config/version, prints the MOTD from config/motd, and drives the search loop.  
+ Translation files in lang/ and the multilingual README files under docs/readmelang/ allow a simple text UI in many languages, though the repo notes that translations are not yet complete.</p><p>How To Use It  </p><p>Setup  
+Install Python dependencies (the project targets Python 3.12)
+python3 -m pip install -r requirements.txt
+Optional: run the provided installer script for Linux
+sudo bash install.sh</p><p>The requirements.txt file is the only dependency manifest; there is no poetry.lock or requirements.lock.</p><p>Configuration  
+ config/version – plain‑text file containing the current release number; the script reads it at start‑up.  
+ config/motd – message‑of‑the‑day displayed on launch.  
+ sites/sites.json – list of target domains and URL patterns; edit to add or remove services. No environment variables are required.</p><p>Running  
+Basic invocation – prompts for a target string
+python3 brib.py</p><p>brib.py presents an interactive prompt (the README calls it a “simple‑to‑use UI”). Advanced usage (e.g., batch processing) is not documented, so the safe assumption is to run the script and follow the on‑screen instructions.</p><p>Real‑World Use  
+A penetration‑testing script can call Tookie‑OSINT as a subprocess to enrich a target profile:</p><p>import subprocess, json</p><p>def enumerateuser(handle):
+    result = subprocess.run(
+        [&quot;python3&quot;, &quot;brib.py&quot;], input=handle.encode(),
+        captureoutput=True, text=True
+    )
+    return json.loads(result.stdout)   # assuming JSON output when –json flag exists</p><p>The returned mapping of site → status can be merged into a larger reconnaissance report.</p><p>Code Health &amp; Issues  </p><p>| Severity | Issue | Location |
+|----------|-------|----------|
+| Medium | No CI/CD pipeline; the .github folder only contains issue templates and funding metadata. | .github/ |
+| Low | Dependencies are pinned only in requirements.txt; no lockfile means builds are not reproducible. | requirements.txt |
+| Low | Test coverage is minimal – a single test file (testsafefilename.py) that does not exercise the main search logic. | testsafefilename.py |
+| Low | No explicit entry‑point defined in packaging metadata (no setup.py / pyproject.toml). Installation relies on the ad‑hoc install.sh. | Root |
+| Low | Language modules (lang/.py) are imported but the UI falls back to English if a translation is missing; the README states translations are “still not ready”. | lang/ |
+| Low | Lack of type hints and limited docstrings reduces readability for new contributors. | Across modules/*.py, brib.py |</p><p>No obvious security‑critical secrets are stored in the repo, and a LICENSE file is present.</p><p>The Bottom Line  
+Tookie‑OSINT provides a straightforward, Python‑only way to enumerate usernames across a curated list of sites, useful for small‑scale OSINT or pen‑testing tasks. The codebase is functional but lacks automation (CI, lockfile) and comprehensive testing, so it is best suited for individual analysts or teams willing to audit and extend the tool rather than for production‑grade deployments.</p>
             </div>
 
             
@@ -414,6 +466,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');
