@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="openf1" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Formula 1 data is a mess to get your hands on. Sure, there are official apps and some paid APIs, but they’re often locked behind paywalls or APIs that feel like they were designed by someone who hates developers. You just want lap times, telemetry, or historical race data—preferably without selling your soul or dealing with a convoluted setup. Enter OpenF1, an open-source API that gives you real-time and historical F1 data, no strings attached.</p><p>What This Does</p><p>OpenF1 is a Python-based project that acts as a one-stop-shop for F1 data nerds. In the src/openf1/services/f1scraping/ directory, you’ve got tools to scrape race schedules, session results, and starting grids. For live race updates, dive into src/openf1/services/ingestorlivetiming/realtime/app.py, which pulls live timing data from F1 events. Need to dig into historical data? Check out src/openf1/services/ingestorlivetiming/historical/main.py.</p><p>The project is built with Flask for the API (src/openf1/services/queryapi/app.py), and it uses a Dockerfile and docker-compose.yml to containerize the setup. Configuration happens via a pyproject.toml and requirements.txt, so Python devs will feel right at home. There&#39;s also some MQTT love in src/openf1/util/mqtt.py if you’re into real-time messaging.</p><p>Real-World Use</p><p>Let’s say you want to analyze George Russell’s lap times from a specific session. You’d call the API like this:</p><p>Alternatively, if you want to self-host, clone the repo, set up MongoDB, and fire up the services. Start by scraping data with f1scraping, then run the ingestorlivetiming service to grab live race data, and finally, query it with the queryapi service. Boom—your own F1 data pipeline.</p><p>The Bottom Line</p><p>OpenF1 is a solid tool for anyone who wants F1 data without begging FIA for an API key. The project is well-structured, though the lack of tests (2 files?) and no stars on the forked repo is a bit of a red flag. Still, if you’re a developer or data nerd, this is a playground worth exploring. Just don’t expect polished perfection—it’s open-source, not magic.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

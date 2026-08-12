@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="nativ" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Running local LLMs on macOS currently means juggling multiple terminal sessions, manual Python environment setup, and cobbling together separate tools for chat, model management, and API serving. There’s no single, native macOS app that handles the full lifecycle—download, serve, chat, monitor—without requiring users to become infrastructure operators.</p><p>What This Does</p><p>Nativ is a SwiftUI macOS app that bundles an mlx-vlm inference server (see PythonDistribution/Overlay/nativserver.py) and exposes it through a polished native interface. The NativServerKit module (Sources/NativServerKit/NativServerKit.swift) owns the embedded Python distribution lifecycle and server process management. The app provides a chat UI (Sources/Nativ/Features/Chat/ChatView.swift), a model library that discovers local MLX models and browses Hugging Face (Sources/Nativ/Features/Models/HuggingFaceHub.swift), a performance dashboard (Sources/Nativ/Features/Dashboard/), and OpenAI‑/Anthropic‑compatible local API endpoints. Coding‑tool integrations (Sources/Nativ/Features/Integrations/IntegrationsView.swift) let you launch Claude Code, Codex, or other agents pointed at the local server.</p><p>The menu bar controller (Sources/Nativ/AppDelegate.swift) allows starting/stopping the server and switching models without opening the full app. Build and release scripts (scripts/) handle DMG packaging, signing, notarization, and Sparkle appcast generation.</p><p>Real-World Use</p><p>A developer working on a private codebase wants to use Claude Code without sending data to Anthropic. They open Nativ, download a compatible model via the Models view, start the server from the menu bar, and configure the integration in IntegrationsView.swift to point Claude Code at http://localhost:11434/v1/chat/completions. Nativ’s dashboard shows real‑time token usage and time‑to‑first‑token, and the developer can switch models or tune sampling parameters without restarting anything.</p><p>Code Health &amp; Issues
 Medium – No test files detected – The entire repository (113 files) contains zero test targets. Every code path in ChatSessionStore.swift, NativServerKit.swift, and the model discovery logic is untested. This is a significant reliability risk for any production or daily‑driver use.
 Low – No explicit input validation visible – The chat composer (ChatComposer.swift) and API client (NativChatClient.swift) appear to pass user input directly to the inference server. Without validation, malformed prompts or injection attempts could cause undefined server behavior.
@@ -418,6 +442,75 @@ Low – Python distribution build scripts are brittle – buildmlxvlmserver.py a
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

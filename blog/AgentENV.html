@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="AgentENV" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Running thousands of agent environments for reinforcement learning or code execution is expensive. Pre-warming every host with full images wastes memory and bandwidth. Idle environments hold CPU and RAM that could be reused. Existing solutions either start too slowly or require complex orchestration to maintain density over time.</p><p>What This Does</p><p>AgentENV (AENV) is a distributed platform that runs Firecracker microVMs at scale. It uses overlaybd to load OCI images on demand, keeping local disk as a bounded cache. Environments boot or resume in under 50 ms and pause in under 100 ms via incremental snapshots (crates/aenv/src/commands/snapshot.rs). Memory ballooning returns reclaimable guest memory to the host, sustaining high overcommit as environments diverge.</p><p>The system is split into a Rust-based server and CLI (crates/aenv/src/main.rs), a Go gateway (services/gateway/cmd/main.go), and a Go scheduler (services/scheduler/cmd/main.go). Kubernetes manifests are in deploy/k8s/. The CLI (aenv) handles authentication, template pulling, sandbox start/pause/resume, and snapshot management.</p><p>Real-World Use</p><p>AENV powers agentic RL training for Kimi K3. A typical workflow:</p><p>Multiple sandboxes can fork from one snapshot for parallel agent workflows. The E2B‑compatible HTTP API (docs/src/integration/e2b.md) lets existing E2B SDKs connect without changes.</p><p>Code Health &amp; Issues</p><p>The codebase is well-structured with 43 test files, CI workflows for benchmarks, integration, mutation, and e2e tests, and a license file. No secrets or config leaks are visible. However:
 Medium – Rust unsafe blocks in crates/ublk-overlaybd (inferred from benchmark files) need careful review for memory safety.
 Low – Shell scripts (scripts/install.sh, scripts/docker-setup.sh) lack robust error handling; a failed step may leave the system in an inconsistent state.
@@ -417,6 +441,75 @@ Low – crates/warm-pool has minimal tests; its interaction with snapshot evicti
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

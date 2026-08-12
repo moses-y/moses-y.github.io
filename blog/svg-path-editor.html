@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="svg path editor" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>Editing SVG Paths Sucks. Here&#39;s a Tool That Doesn&#39;t.</p><p>The Problem</p><p>Editing SVG paths manually is like trying to write a novel using only emoji. Sure, it’s possible, but it’s tedious, error-prone, and deeply unpleasant. Whether you’re hand-coding paths for a logo or tweaking a shape in a design, the process is a mess of cryptic commands, trial-and-error adjustments, and a lot of Googling &quot;what does M mean in SVG?&quot;</p><p>What This Does</p><p>svg-path-editor is an online tool that lets you create, edit, and manipulate SVG paths visually, like a normal human being. Under the hood, the app uses Angular for the UI (src/app is where all the components live) and a standalone library (src/lib) for handling the path logic. This separation means you can use the tool out of the box or import the library into your own projects if you’re building something custom.</p><p>The app does everything you’d want: drag-and-drop point manipulation, command conversion (relative to absolute, and vice versa), path optimization, and even subpath reordering. Want to scale, translate, or rotate your path? Buttons for all of that. Need to reverse a path or minimize its length? Covered. The actual logic lives in files like src/lib/optimize-path.ts and src/lib/reverse-path.ts, while the UI for these operations is built out in components like src/app/export/export.component.ts or src/app/path-preview/path-preview.component.ts.</p><p>There’s also a ViewBox editor (drag, zoom, fit to path) and keyboard shortcuts for power users. For example, pressing M, L, or C inserts new commands directly, while Ctrl + Z handles undo (because you will mess up). </p><p>Real-World Use</p><p>Say you’re designing a custom icon for a project. Instead of trying to fine-tune SVG commands in a text editor, you can load the path into this tool, drag points around, adjust commands inline, and optimize the output. For example, here’s how you might simplify a path:</p><p>You can run this directly in your app or just use the web editor and copy-paste the final path into your project. Either way, you’re saving time and sanity.</p><p>The Bottom Line</p><p>If you hate dealing with raw SVG path strings, this tool is your friend. The UI is intuitive, the features are practical, and the library is reusable if you want to build something custom. That said, it’s a bit overkill for quick tweaks—use it when you’re working with complex paths or need fine-grained control. It’s a fork of the popular yqnn/svg-path-editor (with 5k+ stars), so you’re in good company. Just don’t expect it to solve all your SVG headaches—it’s a path editor, not a miracle worker.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

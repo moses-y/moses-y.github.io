@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="FinRL" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Building and testing reinforcement learning (RL) models for financial markets is a pain. The data is messy, the environments are complex, and scaling from toy problems to real-world trading systems feels impossible without a full-time quant team. If you&#39;ve ever tried rolling your own RL trading framework, you know what I mean: a thousand moving parts and nowhere to start.</p><p>What This Does</p><p>FinRL is like training wheels for financial reinforcement learning. It’s not the shiny new bike (that would be FinRL-X), but it’s a great way to get started. The repo provides a complete end-to-end pipeline for financial RL: from data collection to training, testing, and backtesting. </p><p>The meat of the project lives in finrl/. This is where you’ll find the RL agents (finrl/agents/) and environments (finrl/meta/env). The examples are in examples/, with Jupyter notebooks and Python scripts to guide you through stock trading, portfolio optimization, and more. All the boring config stuff is handled with files like requirements.txt, pyproject.toml, and docker/Dockerfile, so you can spin up a containerized environment without pulling your hair out.</p><p>The repo also has a ton of documentation (docs/), which is great because you’ll need it. This isn’t a plug-and-play solution—it’s a research framework. Expect to spend time reading through the docs/source/developerguide/ and docs/source/tutorial/ folders to understand how the pieces fit together.</p><p>Real-World Use</p><p>Let’s say you want to train an RL model to trade stocks. You’d start by using one of the pre-built environments, like those in finrl/meta/envstocktrading/. Then, pick a DRL agent (e.g., finrl/agents/stablebaselines3/models.py for pre-wrapped SB3 agents). The examples/FinRLStockTrading2026_ scripts will show you how to hook it all up. Once trained, you can test and backtest your model using the utilities in finrl/.</p><p>Here’s an example workflow for single-stock trading:</p><p>The Bottom Line</p><p>FinRL is a solid intro to financial reinforcement learning but don’t expect it to do all the work for you. It’s more educational than production-ready, and the sheer volume of files can feel overwhelming. If you’re just getting started or want to prototype something quick, this repo is great. If you’re a pro building a hedge fund, skip this and go straight to FinRL-X.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

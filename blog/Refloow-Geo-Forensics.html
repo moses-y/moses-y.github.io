@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,24 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="Refloow Geo Forensics" loading="lazy">
 
-            <div class="post-content">
-                <p>❤️ Free batch image &amp; video geolocation digital forensics tool. Automatically extract EXIF data, visualize GPS coordinates on maps, and reconstruct event timelines for OSINT</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>Investigators and OSINT analysts routinely face batches of images and videos where manual EXIF extraction is slow and error-prone. Standard tools handle single files or require command-line expertise, and most web-based options upload sensitive evidence to third-party servers. This tool addresses both issues: batch metadata extraction with geospatial mapping, fully offline.</p><p>What This Does</p><p>Refloow Geo Forensics is an Electron desktop application that automates EXIF extraction, geolocation mapping, and timeline reconstruction. The core logic lives in src/src/routes/api.js (API endpoints) and src/src/utils/scanner.js (file scanning and metadata processing). The frontend is a React/Express stack served from src/public/index.html, with the Electron main process in src/main.js and preload script in src/preload.js.</p><p>The tool leverages exiftool-vendored (bundled ExifTool by Phil Harvey) for extraction, supporting virtually any image or video format. It renders interactive maps with multiple layers (satellite, topographic, forensic dark/light) and reconstructs chronological event timelines from embedded timestamps. All processing is local; no data leaves the machine.</p><p>How To Use It</p><p>The repo includes installers for Windows (src/install.bat), Linux (Snap), and macOS. For development, the src/package.json defines the npm dependencies and scripts.</p><p>Setup:
+cd src
+npm install</p><p>Running:
+npm start</p><p>The README indicates the primary distribution channels are the Microsoft Store, Snap Store, and GitHub Releases. Configuration is minimal—no environment variables or API keys are required. The src/package.json specifies Node.js &gt;= 20.10.0.</p><p>Real-World Use</p><p>A field investigator receives 500 photos from a crime scene. They load the folder into Refloow, which extracts GPS coordinates and timestamps in one pass. The map view immediately clusters locations, revealing that several &quot;scene&quot; photos were actually taken 3km away hours earlier. The timeline view cross-references timestamps against witness statements, flagging discrepancies. The investigator exports the mapped evidence for the case file without ever uploading the raw images to a cloud service.</p><p>Code Health &amp; Issues
+Medium – No test files detected – The repository shows zero test files across all 36 files. The scanner and API routes in src/src/ are untested code paths, which is a risk for a forensic tool where correctness is paramount.
+Medium – Single-maintainer risk – The project has 0 stars in this fork and appears to be a solo effort (original has 210 stars). Bus factor is a concern for long-term maintenance.
+Low – Documentation is minimal – Four markdown files exist (README, CONTRIBUTING, PRIVACY, copilot-instructions), but there&#39;s no API documentation or architecture overview beyond the README.
+Low – No CI for Windows/macOS – GitHub Actions workflows exist for Linux builds (linux-build.yml, linux-snap-build.yml) and macOS (macos-build.yml), but no Windows build pipeline despite the .bat installers and Microsoft Store listing.</p><p>No secrets, credentials, or hardcoded API keys were detected in the file structure. The AGPL v3 license is clearly stated.</p><p>The Bottom Line</p><p>This is a functional, privacy-focused forensics tool that solves a real batch-processing problem for OSINT practitioners. The lack of test coverage is a genuine concern for a tool used in evidentiary contexts, and the single-maintainer model carries sustainability risk. It&#39;s well-suited for individual investigators or small teams who need offline batch geolocation and are comfortable with the AGPL license and the project&#39;s current maturity level.</p>
             </div>
 
             
@@ -414,6 +445,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="xournalpp" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Annotating PDFs and taking handwritten notes shouldn’t feel like you’re fighting your software. Tools like Adobe Acrobat are bloated and clunky, while scribbling on a tablet app often lacks precision, features, and cross-platform support. If you’re a student, teacher, or anyone working with PDFs and handwritten notes, you’ve probably been frustrated by the lack of a solid, no-BS solution.</p><p>What This Does</p><p>Xournal++ is the &quot;Why isn’t this already a thing?&quot; solution. It’s a lightweight, open-source handwriting and PDF annotation tool built in C++ with GTK3. It works on Linux, Windows 10, and macOS, and even supports pressure-sensitive styluses like Wacom tablets. Think of it as the Swiss Army knife for anyone who needs to take notes, annotate PDFs, or just doodle with precision.</p><p>The project is well-organized. The src/ folder houses the C++ core, including modules for audio recording (src/core/audio/AudioRecorder.cpp) and playback (src/core/audio/AudioPlayer.cpp). The plugins/ folder adds Lua-based scripting to extend functionality (e.g., plugins/Export/main.lua for exporting workflows). For cross-platform builds, there’s a bunch of CMakeLists.txt files littered across the repo, which is nice if you like pain-free builds. CI/CD is handled via GitHub Actions, with workflows like make-installer-windows.yml and make-installer-macos.yml making it easier to ship builds across platforms.</p><p>And yes, it handles PDF annotation like a champ. You can highlight, underline, or strike through text in PDFs, export annotated versions, and even overlay them with handwriting or shapes. All this while offering LaTeX support, customizable toolbars, and a plugin system for nerds who want to extend it further.</p><p>Real-World Use</p><p>Say you’re a math teacher prepping lecture notes. You can load your PDF slides into Xournal++, scribble annotations using a Wacom tablet, and even add LaTeX formulas for extra clarity. Need to emphasize a section? Use the highlighter tool or draw shapes to circle key points. Want to share the annotated slides with your students? Export them as a new PDF or even as SVG for further editing. Bonus: if you’re explaining something complicated, the audio recording feature lets you attach voice notes to your annotations for asynchronous learning.</p><p>The Bottom Line</p><p>Xournal++ is a powerful, no-frills tool for anyone who needs robust handwriting and PDF annotation capabilities. It’s not flashy, but it works. You’ll love it if you’re on Linux, and it’s solid on macOS and Windows too. The plugin system is a nice touch for tinkerers, but the codebase could use more tests (seriously, one test file?). Overall, it’s a workhorse for anyone tired of bloated alternatives.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

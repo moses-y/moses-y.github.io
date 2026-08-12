@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="squad" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Coordinating multiple AI CLI agents (Claude Code, Gemini CLI, Codex CLI) during a task is ad-hoc. Each agent runs in its own terminal with no shared context. Developers manually copy outputs, paste instructions, and track progress across sessions. There is no structured way to assign roles, distribute subtasks, or review work across agents.</p><p>What This Does</p><p>squad is a Rust CLI tool that lets multiple AI agents collaborate through a shared SQLite store. It installs a /squad slash command into supported agents. After running squad init to create a workspace, agents join as manager, worker, or inspector via /squad manager etc. Each reads role instructions from src/roles/ (manager.md, worker.md, inspector.md) and enters a loop reading tasks from the store. The manager breaks down a goal into subtasks, workers execute them, the inspector reviews results — all without a daemon. Every command is a one-shot SQLite query.</p><p>The tool also ships an optional tmux launcher (scripts/squad-tmux-launch.sh) that reads .squad/launcher.yaml and .squad/run-task.md to auto-start a tiled tmux session with /squad commands injected into Claude panes. The core logic lives in src/session.rs, src/store.rs, src/teams.rs, and src/tasks.rs, with tests in tests/.</p><p>Real-World Use</p><p>A developer needs to refactor a large Python codebase. They run squad init in the project, then open three terminals. In the first, /squad manager – they describe the refactor goal. The manager writes subtasks (e.g., &quot;extract config module&quot;, &quot;update imports&quot;) to the SQLite store. Workers in the second terminal pick tasks, apply changes, and mark completion. The inspector in the third terminal reviews diffs and flags issues. All communication flows through the store; no manual forwarding required.</p><p>Code Health &amp; Issues</p><p>The codebase is structurally sound: 17 test files, CI workflows (.github/workflows/ci.yml), MIT license, and Cargo.lock committed. No obvious red flags. However, several issues are likely:
 Med – src/store.rs likely uses SQLite without explicit row-level locking or transactions for task updates. If two agents write concurrently (e.g., two workers claiming the same task), race conditions may cause lost updates or duplicate work. Verify whether store.rs uses BEGIN IMMEDIATE or a mutex.
 Low – Role instruction files (src/roles/*.md) are read at runtime. If a file is missing or malformed, src/roles.rs may panic or return opaque errors. No evidence of graceful fallback in the structure.
@@ -418,6 +442,75 @@ Low – CLI argument parsing in src/main.rs may lack input validation for flags 
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

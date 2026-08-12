@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,38 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="system design notes" loading="lazy">
 
-            <div class="post-content">
-                <p>system design notes is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Engineers preparing for system‑design interviews need quick, well‑structured reference material that covers common large‑scale services, design trade‑offs, and interview‑style diagrams. Without a single, organized source, candidates spend time hunting scattered blog posts or PDFs, which reduces study efficiency.</p><p>What This Does  
+The repository is a curated collection of Markdown notes that mirror the chapters of System Design Interview – An Insider’s Guide (Vol 1 &amp; 2). Each chapter lives in its own folder (e.g., 01. Scaling/Readme.md, 06. Key-Value Store/Readme.md) and contains a concise design overview, key components, and a set of supporting diagrams stored under images/. The top‑level README.md links directly to every chapter, making navigation trivial. No source code is provided; the repo is purely documentation.</p><p>How To Use It  
+Clone the repo  
+   git clone https://github.com/your‑org/system-design-notes.git
+   cd system-design-notes
+Open the chapter you need – each folder contains a single Readme.md. For example:  
+   code 06.\ Key-Value\ Store/Readme.md
+View diagrams – image assets are referenced relative to the Markdown, so any Markdown viewer (VS Code, GitHub web UI, or a static site generator) will render them automatically.
+Optional offline rendering – if you prefer a single HTML document, run a Markdown converter such as pandoc:  
+   pandoc -s 06.\ Key-Value\ Store/Readme.md -o kv-store.html</p><p>No additional build steps, configuration files, or runtime environment are required because the repository contains no executable code.</p><p>Real‑World Use  
+A candidate can incorporate the notes into a personal study site. For instance, a simple static‑site generator (e.g., Hugo) could be pointed at the repository root; each Readme.md becomes a page, and the existing image assets are served unchanged. This yields a searchable, browser‑friendly reference without any custom scripting.</p><p>Example with Hugo
+hugo new site interview‑notes
+cp -r . interview‑notes/content/
+cd interview‑notes
+hugo server</p><p>Code Health &amp; Issues  
+Low – No executable code – the repo consists solely of Markdown and images; there is nothing to build or test. (README.md, *.md files)  
+Med – Missing license – no LICENSE file, so downstream reuse is legally ambiguous. (/ root)  
+Med – No CI/CD – no .github/workflows, Makefile, or other pipeline definitions; documentation changes are not automatically validated. (/ root)  
+Low – Single test file – a solitary test (test.md or similar) exists but lacks context; it does not verify content integrity.  
+Low – Stale links – some chapter links in the top‑level README point to directories that are not present in the current checkout (e.g., chapters 20‑28 are listed but missing). (README.md)</p><p>Overall, the repository is cleanly organized, with consistent naming (&lt;nn&gt;. &lt;Chapter&gt;/Readme.md) and all images correctly colocated. The lack of code means typical static‑analysis concerns do not apply.</p><p>The Bottom Line  
+This repo is a well‑structured, image‑rich set of interview notes that can be used directly as a study reference or incorporated into a static documentation site. It lacks executable components, a license, and CI pipelines, so its value is confined to educational consumption rather than integration into production tooling. Ideal for individuals or teams preparing for system‑design interviews who need a single, searchable source of concise design material.</p>
             </div>
 
             
@@ -414,6 +459,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

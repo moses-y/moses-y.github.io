@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,31 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="FileSync" loading="lazy">
 
-            <div class="post-content">
-                <p>FileSync is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem
+Organizations and individuals need reliable real-time file sharing across distributed devices without compromising privacy or requiring third-party infrastructure. Traditional solutions either centralize data on corporate servers, impose size limits, or require client software installation—barriers that hinder spontaneous collaboration across diverse network environments.</p><p>What This Does
+FileSync is a peer-to-peer file sharing system that operates entirely in the browser. The web frontend (web/index.html with modular code in web/js/modules/) implements WebRTC data channels for direct browser-to-browser transfer. The backend (api/main.py and api/signaling.py) handles only the initial handshake and TURN relay negotiation; it never processes file contents. Docker configuration (deploy/docker-compose.yml, deploy/docker-compose-ssl.yml) provides a single-image self-hosted deployment model. The system streams received files straight to disk via blob.stream(), enabling multi-gigabyte transfers with minimal memory footprint—a key differentiator from solutions that buffer entire files in RAM.</p><p>How To Use It
+Setup: Clone the repository and install dependencies. The API runs on Python (api/requirements.txt lists aiohttp, aiohttp-cors, websockets), while the frontend uses npm-managed React dependencies (e2e/package.json confirms the build toolchain).</p><p>Configuration: Generate a secret key for TURN credential signing:
+python3 -c &quot;import secrets, base64; print(base64.b64encode(secrets.tokenbytes(32)).decode())&quot;</p><p>Replace both &lt;SECRETKEY&gt; placeholders in deploy/docker-compose.yml with your generated value.</p><p>Running it:
+HTTP (local network / quick start)
+docker compose up -d
+Opens at http://localhost</p><p>HTTPS (public domain, recommended)
+Caddy obtains and renews TLS certificates automatically
+docker compose -f deploy/docker-compose-ssl.yml up -d</p><p>Real-World Use
+A distributed product team needs to share a 2GB design assets folder across five workstations on different networks. One team member self-hosts FileSync via the HTTPS Docker Compose configuration, shares the generated room link, and colleagues access it instantly from their browsers—no VPN, no account creation, no upload queue. The TURN relay fallback in api/signaling.py ensures connectivity through restrictive corporate firewalls where direct WebRTC peer connections would otherwise fail.</p><p>Code Health &amp; Issues
+SDLC &amp; code violations: CI is configured (.github/workflows/ contains check, dependabot, and release workflows). License (MIT) and lockfile (e2e/package-lock.json) are present. However, the secret key generation command and both placeholder values appear in deploy/docker-compose.yml — committing generated secrets to version control is a medium-severity risk.
+Bugs / risks: No client-side input validation beyond basic HTML5 file API; large file transfers over plain HTTP (&gt;500 MB) are noted as unreliable in the README. The WebRTC data channel has no progress event handling for transfer resumption if a connection drops mid-transfer.
+Evidence supporting quality: End-to-end tests exist (e2e/run.mjs), GitHub Actions CI runs on every push, and the codebase has clear structural separation between signaling (api/signaling.py), WebRTC modules, and frontend UI.</p><p>The Bottom Line
+FileSync delivers on its core promise: private, limitless, one-to-many file sharing entirely in-browser with straightforward self-hosting. It&#39;s well-suited for teams that need occasional large-file transfers without third-party infrastructure, provided the secret key is managed externally and deployments use HTTPS. Organizations requiring transfer resumption, fine-grained access controls, or audit logging should look elsewhere.</p>
             </div>
 
             
@@ -414,6 +452,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

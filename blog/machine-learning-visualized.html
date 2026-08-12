@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,40 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="machine learning visualized" loading="lazy">
 
-            <div class="post-content">
-                <p>machine learning visualized is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Teams that teach or demonstrate machine‑learning fundamentals often rebuild the same notebooks, plots, and derivations for every course or blog post. Keeping the source, the visual output, and the publishing pipeline in sync is error‑prone and time‑consuming, especially when the notebooks live in separate repositories.</p><p>What This Does  
+machine-learning-visualized is a Jupyter Book wrapper that assembles a set of algorithm notebooks (linear regression, logistic regression, perceptron, neural networks, etc.) into a single, publishable website and optional EPUB. The book configuration lives in config.yml and the table of contents in toc.yml. The actual notebooks are not stored here; they are fetched on demand by the shell script downloadnotebooks.sh, which clones the algorithm‑specific repos listed in the README (e.g., gavinkhung/neural-network).  </p><p>Key artefacts:  </p><p> Dockerfile.book – builds an image that runs jupyter-book inside a container.  
+ Dockerfile.pandoc – builds a Pandoc image used to convert the merged notebook to EPUB.  
+ compose.yml – provides a Docker‑Compose service (jupyter-book) that wraps the book build.  
+ .github/workflows/ci.yml – GitHub Action that runs the build on each push/PR, publishing the HTML output.  </p><p>All visual assets (GIFs, PNGs) are stored under gifs/ and book/combinedfiles/, and the final PDF/EPUB artefacts are pre‑generated in book/.</p><p>How To Use It  </p><p>Setup  </p><p>Install Python dependencies (no lockfile – reproducibility depends on requirements.txt)
+pip install -r requirements.txt
+Make the notebook‑download script executable
+chmod +x ./downloadnotebooks.sh</p><p>Pull the notebooks  </p><p>./downloadnotebooks.sh</p><p>The script clones each algorithm repository into the corresponding chapter/ folder, creating the Jupyter notebooks required for the book build.</p><p>Build the book  </p><p>Option 1 – Local Jupyter‑Book CLI  </p><p>pip install -U jupyter-book   # already covered by requirements.txt
+jupyter-book build .</p><p>Option 2 – Docker Compose  </p><p>docker compose run --rm jupyter-book   # uses Dockerfile.book
+docker compose down --remove-orphans --volumes --rmi local</p><p>Option 3 – Stand‑alone Docker  </p><p>docker build -f Dockerfile.book -t jupyter-book .
+docker run --rm -v &quot;$(pwd)&quot;:/usr/src/app jupyter-book</p><p>The HTML output appears in _build/html/index.html.</p><p>Create EPUB (optional)  </p><p>brew install --cask mactex               # macOS only; required for LaTeX conversion
+nbmerge $(ls chapter/\.ipynb | sort) -o book/combined.ipynb
+jupyter nbconvert --to latex book/combined.ipynb
+docker build -f Dockerfile.pandoc -t my-pandoc .
+docker run --rm -v $(pwd):/data my-pandoc pandoc book/combined.tex -o book/combined.epub --mathml --embed-resources --standalone</p><p>Real‑World Use  
+A university data‑science lab can clone this repo, run the download script, and publish a course‑wide visual textbook on an internal static‑site server. The workflow integrates with CI/CD: each commit automatically rebuilds the HTML book via the GitHub Action, ensuring students always see the latest derivations without manual publishing steps.</p><p>Example snippet from .github/workflows/ci.yml
+name: Build book
+  run: jupyter-book build .</p><p>Code Health &amp; Issues  </p><p> Med – No test suite – No tests/ directory or pytest config; core build steps are untested.  
+ Low – No lockfile – requirements.txt pins versions loosely; reproducible builds rely on Docker images only.  
+ Low – License present – LICENSE file exists, satisfying open‑source compliance.  
+ Low – CI only builds book – GitHub Action runs the book build but does not lint notebooks or check for broken links.  
+ Low – Missing notebook version control – Notebooks are external; if upstream repos change API, the build may break without detection.  </p><p>Overall the repository is well‑structured for its purpose, with Docker support and a clear CI pipeline. The lack of automated tests and dependency pinning are the primary maintenance risks.</p><p>The Bottom Line  
+machine-learning-visualized provides a clean, Docker‑enabled pipeline to assemble and publish a visual ML textbook from external notebooks. It is suitable for educators or documentation teams who need a reproducible publishing flow, but they should add a test harness and lockfile to improve reliability for long‑term use.</p>
             </div>
 
             
@@ -414,6 +461,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

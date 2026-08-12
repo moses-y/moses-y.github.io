@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="HeadlessX" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>HeadlessX: A Browser Automation Platform That Flies Under the Radar</p><p>The Problem</p><p>Web scraping and browser automation are fantastic, but they’ve become a cat-and-mouse game. Sites deploy anti-bot measures like CAPTCHAs, IP blocking, and browser fingerprinting, leaving developers to fight an uphill battle. You could use a managed service, but then you’re bleeding money and trusting a third party with your data. Enter HeadlessX, which promises to give you a self-hosted, undetectable browser automation setup with zero reliance on someone else’s infrastructure.</p><p>What This Does</p><p>HeadlessX combines Camoufox (a hardened Firefox-based browser) with a scalable backend and a slick Next.js-powered dashboard. You can spin up operators to scrape websites, run search workflows, or automate tasks like YouTube data extraction. The whole thing is containerized with Docker, so you can deploy it on your own infrastructure and not worry about prying eyes.</p><p>At its core, the backend (apps/api/src) is built with TypeScript and powered by Prisma for database handling. It includes controllers like ScrapeController.ts for managing scraping workflows, ProxyController.ts for proxy settings, and JobManager.ts for queue-backed task management using Redis.</p><p>The frontend (apps/web/) is a React app on steroids using Next.js. It gives you dashboards for managing API keys, proxies, logs, and operator configurations. The apps/web/src/components directory has reusable components like ApiKeysList.tsx and ExaWorkbench.tsx for the different operator interfaces.</p><p>Need to convert HTML to Markdown? There’s even a tiny Go microservice (apps/go-html-to-md-service/main.go) running in its own Docker container. Because why not?</p><p>Real-World Use</p><p>Let’s say you want to scrape Google SERPs for a niche project. First, you set up HeadlessX using the handy CLI (headlessx init—thank me later). Then, configure your Google operator in the dashboard (apps/web/src/app/playground/operators/google/). You’ll need to run the Build Cookies flow once to bypass Google’s anti-bot measures. Once that’s done, queue up a batch of queries using the QueueJobController.ts API, and let the QueueWorker.ts handle the rest. The results? Clean, structured SERPs in your database, ready for your app.</p><p>The Bottom Line</p><p>HeadlessX is serious business for serious developers. If you’re tired of fighting detection scripts but don’t want to shell out for overpriced managed services, this project has your back. That said, it&#39;s not for beginners—expect to wrestle with Docker, Next.js, and maybe even Prisma if you want to tinker. But if you’re building a large-scale scraping operation, this is a solid foundation.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

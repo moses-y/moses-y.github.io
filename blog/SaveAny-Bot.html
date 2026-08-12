@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,56 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="SaveAny Bot" loading="lazy">
 
-            <div class="post-content">
-                <p>Save Any Telegram File to Anywhere 📂 (Alist, Disk, Webdav, S3, Rclone...) . Support restrict saving content and files beyond telegram.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Telegram imposes “restrict saving content” on many media types, and users often need to forward those files to personal storage – Alist, S3, WebDAV, local disk, or re‑upload to another chat.  A bot that can bypass that restriction, choose a backend, and optionally pull from external URLs is therefore a practical gap for power users and small teams.</p><p>What This Does  
+SaveAny‑Bot is a Go‑based Telegram bot that saves incoming files to arbitrary back‑ends.  Key capabilities, mapped to the source tree, include:
+Media type support – documents, videos, photos, stickers, and even Telegraph pages.  The bot’s handlers live in client/bot/handlers/: media.go, mediagroup.go, telegraph.go, and save.go process incoming updates.  
+Bypass “restrict saving content” – logic in client/bot/handlers/utils/ruleutil/rule.go and client/bot/handlers/utils/filters/url.go evaluates and overrides Telegram’s saving restrictions.  
+yt‑dlp integration – download from 1 000+ websites.  Tasks and format definitions reside in core/tasks/ytdlp/.  A Go wrapper (common/utils/tgutil/media.go) forwards URLs to the yt‑dlp binary.  
+Aria2 download engine – core/tasks/aria2dl/ executes metalink/magnet downloads and streams them to storage.  
+Storage back‑ends – configured via config/storage/ (local.go, s3.go, alist.go, webdav.go, rclone.go, minio.go).  A factory in config/storage/factory.go selects the appropriate backend at runtime.  
+Watch &amp; filter – client/bot/handlers/watch.go and client/bot/handlers/config.go let users monitor specific chats with custom rules.  
+Transfer between storages – core/tasks/transfer/ moves files from one backend to another without client‑side re‑download.  
+Multi‑user isolation – config/user.go defines per‑user storage whitelists/blacklists; the middleware client/middleware/default.go enforces these limits.  </p><p>How To Use It  
+Install – The repo ships three minimal Dockerfiles (Dockerfile, Dockerfile.micro, Dockerfile.pico) and a full docker-compose.yml.  Pull the image:  </p><p>   docker pull ghcr.io/krau/saveany-bot:latest
+Configuration – Create config.toml at the project root (the README provides a minimal example).  Essential sections:</p><p>   lang = &quot;en&quot;
+   [telegram]
+   token = &quot;&quot;                # from @BotFather
+   [telegram.proxy]
+   enable = false
+   url = &quot;socks5://127.0.0.1:7890&quot;</p><p>   [[storages]]
+   name = &quot;Local Disk&quot;
+   type = &quot;local&quot;
+   enable = true
+   basepath = &quot;./downloads&quot;</p><p>   [[users]]
+   id = 114514
+   storages = []
+   blacklist = true</p><p>   The file is read by config/viper.go and validated against config/storage/types.go.  
+Run – Using Docker (as documented):</p><p>   docker run -d --name saveany-bot \
+       -v ./config.toml:/app/config.toml \
+       -v ./downloads:/app/downloads \
+       ghcr.io/krau/saveany-bot:latest</p><p>   Alternatively, build from source with go build ./cmd/run.go (the entry point is cmd/run.go) or use docker-compose up -d for local dev stack.
+Interaction – Send any Telegram file to the bot; it will store it according to the user’s storage config.  Use /help (handler help.go) for command list, and /config (handler config.go) to adjust per‑user rules.</p><p>Real‑World Use  
+A marketing team wants to archive every video posted in a public channel to an S3 bucket for later analysis.  They set type = &quot;s3&quot; in config.toml, provide AWS keys via environment variables (AWSACCESSKEYID, AWSSECRETACCESSKEY), and add the storage entry:</p><p>[[storages]]
+name = &quot;S3 Archive&quot;
+type = &quot;s3&quot;
+enable = true
+bucket = &quot;my‑archive&quot;
+region = &quot;us-east-1&quot;</p><p>When a new video arrives, the yt‑dlp task (core/tasks/ytdlp/execute.go) downloads the source if the URL is from a supported site, then core/tasks/transfer/execute.go streams the file directly to the S3 bucket, avoiding local disk overhead.  The watch handler ensures only videos from the target channel are processed.</p><p>Code Health &amp; Issues  
+Tests &amp; CI – 11 test files exist (e.g., api/handlerstest.go, core/tasks/ytdlp/tasktest.go).  GitHub Actions workflows (build-release.yml, build-docker.yml, docs.yml) run on every push, providing baseline coverage.  
+License – LICENSE is present and MIT‑compatible.  
+Dependency hygiene – The project uses Go modules (go.mod/go.sum are present); no obvious vulnerable third‑party binaries are embedded, though the yt‑dlp and aria2 binaries must be available on the host/container (not vendored).  
+Potential risk – Storage credentials are read from env‑vars or the TOML file; if committed to version control they become exposed.  The repo does not ship a .env</p>
             </div>
 
             
@@ -414,6 +477,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

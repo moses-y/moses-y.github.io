@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,25 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="explore claude code" loading="lazy">
 
-            <div class="post-content">
-                <p>Learn Claude Code by exploring it as it was designed - interactive IDE-style docs for commands, MCP, skills, CLAUDE.md and more.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>Teams adopting Claude Code often struggle to understand the full configuration surface area — .claude/settings.json, .claude/commands/, .claude/skills/, and MCP integrations — without digging through official documentation or trial-and-error. This project exists to flatten that learning curve by presenting every concept as a live, inspectable file.</p><p>What This Does</p><p>The site renders a navigable tree of Claude Code&#39;s configuration surface. Everything under .claude/ represents project-level config you create and commit: settings.json for permissions and guardrails, rules/ for file-type-scoped conventions, commands/ for custom slash commands, agents/ for delegated sub-tasks, skills/ for autonomous knowledge folders, and hooks/ for lifecycle shell scripts. The built-in/ section covers features shipping with Claude Code out of the box — /simplify, /batch, /debug, /loop, /claude-api — requiring no setup. A visual separator divides project config from built-in features. The manifest.json under site/data/ drives the entire UI, mapping every file and badge. The content-loader.js handles custom markdown parsing and rendering, while app.js serves as the main controller for routing and keyboard navigation. The live demo at exploreclaudecode.com requires no install; locally, any static server pointed at site/ works — the README documents npx serve site or python -m http.server -d site 8080.</p><p>How To Use It</p><p>Clone the repo and serve the site/ directory. No build step, no framework installation:</p><p>git clone https://github.com/LukeRenton/explore-claude-code.git
+cd explore-claude-code
+npx serve site
+or
+python -m http.server -d site 8080</p><p>Open the browser at the displayed address. Click the sidebar to explore .claude/ and built-in/ sections, read annotated config files, and copy scaffolding into your own projects. The content is sourced real — each markdown file is a genuine Claude Code config example, not a description of one.</p><p>Real-World Use</p><p>A new hire joining a team can clone the repo, click through .claude/settings.json to understand permission boundaries, review .claude/commands/ to see saved workflows, and examine .claude/skills/ to learn what autonomous skills the team&#39;s Claude instances load. Instead of reading theory, they inspect live config they&#39;ll commit to their own repo. Meanwhile, a staff engineer can use the built-in/bundled-skills/code-review.md as a reference when designing a custom review skill, copying the pattern into their project&#39;s .claude/skills/ directory.</p><p>Code Health &amp; Issues
+No CI/CD pipeline — the .github/ directory contains only FUNDING.yml; there is no automated build, test, or lint gate. Any contributor can push config changes without validation.
+No test files — the heuristic detects exactly two test files; the repo contains none. Changes to the JavaScript logic (app.js, content-loader.js) have no automated regression guard.
+Static site, no framework — the zero dependencies badge is accurate; the UI is vanilla HTML/CSS/JS with no bundler. This reduces attack surface but means no code splitting or build-time checks.
+License present — LICENSE file is included, which is a minimum expectation for code redistribution.</p><p>The Bottom Line</p><p>This is a well-executed learning tool that successfully demystifies Claude Code&#39;s configuration surface. It&#39;s ideal for teams onboarding to Claude Code or wanting to audit their existing .claude/ setup. The absence of CI/CD and tests means it&#39;s not a production codebase — use it as a reference sandbox, not a starter kit for mission-critical tooling. Teams comfortable copying annotated markdown into their own repos will get the most value; those seeking a full-featured Claude Code starter project will need to add build gates and testing themselves.</p>
             </div>
 
             
@@ -414,6 +446,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

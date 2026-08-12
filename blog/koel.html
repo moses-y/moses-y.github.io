@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="koel" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>You have a massive music library, maybe a mix of your meticulously curated FLAC files and some stuff you definitely didn&#39;t torrent in college. You want access to it from any device without relying on some overpriced streaming service that randomly decides to nuke your favorite album. You’re a developer, so you don’t want some bloated, closed-source solution with a clunky UI and hidden limitations. Enter koel, a self-hosted music streaming service that doesn&#39;t suck.</p><p>What This Does</p><p>Koel is a web-based audio streaming solution built with Laravel on the backend and Vue on the frontend. The backend lives in the app/ directory, with neatly organized subfolders for controllers, builders (app/Builders/), enums (app/Enums/), and custom attributes (app/Attributes/). The controllers under app/Http/Controllers/API/ handle everything from managing playlists (PlaylistController.php) to syncing podcasts (SyncPodcastsController.php). </p><p>For configuration, there’s an .env.example file to get started, and deployment workflows are neatly defined in .github/workflows/. The api-docs/ folder even has an OpenAPI spec (api.yaml) if you want to get nerdy and integrate your own tools. Oh, and if you’re running this in a team environment, there’s support for CODEOWNERS and .husky/pre-commit hooks to keep your repo clean. It’s clear this project was built with devs in mind.</p><p>Real-World Use</p><p>Imagine you’ve just set up Koel on your home server. After configuring your .env file to point to your media folder, you run php artisan koel:init to scan your library. Koel’s backend takes over, indexing your collection using builders like AlbumBuilder.php and SongBuilder.php. Once that’s done, fire up the front-end, log in, and voilà: your music is now accessible from any device with a browser or via the official Koel Player app.</p><p>Want to customize it? Maybe you’d prefer a different storage backend—say, Dropbox or S3. No problem: SetupDropboxStorageCommand.php and SetupS3StorageCommand.php in app/Console/Commands/Storage/ have you covered. This setup screams “power user,” and that’s exactly who Koel was built for.</p><p>The Bottom Line</p><p>Koel is a great choice for developers who want total control over their music streaming and aren’t afraid of a little setup. The codebase is clean and well-structured, making it easier to extend or tweak if needed. Just don’t expect this to be as plug-and-play as Spotify—it’s not for the faint of heart. But if you’ve got the chops and the music collection to justify it, Koel’s a solid, open-source way to bring your audio library into the 21st century.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

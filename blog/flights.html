@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,27 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1607799279861-4dd421887fb3?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="flights" loading="lazy">
 
-            <div class="post-content">
-                <p>flights is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>Google Flights has no official public API. Developers who need flight data for price tracking, travel planning tools, or fare comparisons are forced to either scrape HTML (fragile, breaks often) or pay for expensive enterprise APIs. This repo provides a Python library that extracts flight data directly from Google Flights&#39; internal protobuf payloads, bypassing HTML parsing entirely.</p><p>What This Does</p><p>fastflights is a strongly-typed Python client for Google Flights. The core logic lives in fastflights/querying.py and fastflights/fetcher.py, which construct Base64-encoded protobuf requests and decode the response. The request/response schema is defined in fastflights/pb/flights.proto, with generated Python bindings in flightspb2.py.</p><p>The API is clean and ergonomic. FlightQuery in fastflights/types.py accepts per-leg filters (max stops, airlines, departure/arrival windows, layover times, emissions preference), while createquery() handles search-wide options like currency, baggage, and price caps. The package ships with two optional integrations in fastflights/integrations/: BrightData for IP rotation and SearchApi for richer response data. The getflights() entry point returns a typed FlightsResult model defined in fastflights/model.py.</p><p>How To Use It</p><p>Setup: Install via pip. The pyproject.toml specifies the package metadata and dependencies.</p><p>pip install fast-flights</p><p>Configuration: No environment variables or API keys required for the base scraper. The BrightData integration needs a zone name; SearchApi needs an API key set via environment variable (per its integration module).</p><p>Running it: The primary entry point is getflights() from fastflights/init.py. Use createquery() to build a FlightQuery and pass it to getflights().</p><p>from fastflights import FlightQuery, Passengers, createquery, getflights</p><p>query = createquery(
+    flights=[FlightQuery(date=&quot;2025-06-15&quot;, fromairport=&quot;MYJ&quot;, toairport=&quot;TPE&quot;)],
+    seat=&quot;economy&quot;,
+    trip=&quot;one-way&quot;,
+    passengers=Passengers(adults=1),
+)
+res = getflights(query)</p><p>Real-World Use</p><p>A fare-alert service that polls getflights() on a schedule, filters results for price thresholds, and notifies users when prices drop. The BrightData integration lets you run this at scale without getting IP-blocked. The SearchApi integration adds structured data like price insights and booking options if you need richer output.</p><p>Code Health &amp; Issues
+Med - Scraper fragility: The core mechanism (protobuf extraction from Google&#39;s internal payloads) is inherently brittle. The README&#39;s roadmap admits interest in using Google&#39;s private GetShoppingResults API, which would be a ToS violation and ban risk.
+Med - Testing gaps: Only 4 test files exist. tests/general.py and tests/bright_data.py look like smoke tests rather than comprehensive unit tests. The protobuf parsing logic in parser.py is the highest-risk component and appears thinly tested.
+Low - Maintainer bandwidth: The README&#39;s contribution notes (&quot;please no ai slop&quot;, &quot;im really busy with life&quot;) signal a solo maintainer with limited review capacity. The 1,875 forks suggest community interest, but bus-factor risk is real.
+Low - Sponsored integration: The SearchApi integration is explicitly sponsored. It&#39;s functional, but be aware the README&#39;s prominent sponsorship banner biases documentation toward that vendor.</p><p>The repo is otherwise clean: CI workflows exist (.github/workflows/), a license is present, and the code is typed (py.typed marker).</p><p>The Bottom Line</p><p>This is a genuinely useful library for developers who need Google Flights data without paying for an API. The typed API and protobuf-based approach are solid engineering. The main risks are the scraper&#39;s fragility against Google changes and the thin test coverage. Use it for personal projects or internal tools where occasional breakage is acceptable; for production fare-alert services, budget for maintenance or use a commercial API.</p>
             </div>
 
             
@@ -414,6 +448,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

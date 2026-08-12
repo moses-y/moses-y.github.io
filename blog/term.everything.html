@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,22 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="term.everything" loading="lazy">
 
-            <div class="post-content">
-                <p>term.everything is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>GUI applications require a display server. Running them over SSH, in a VM without a monitor, or on a headless server means either installing a full desktop environment or abandoning the GUI entirely. term.everything eliminates that dependency by replacing the display server with your terminal.</p><p>What This Does</p><p>term.everything is a Linux CLI program that runs GUI applications inside a terminal. It works by implementing a Wayland compositor from scratch (wayland/ directory, 79 files) that renders windows as ANSI escape codes instead of pixels on a monitor. The termeverything/ package handles terminal I/O, raw mode, keycode conversion, and the main event loop. A small C shim (wayland/mmap.c) handles shared memory.</p><p>The project targets both X11 and Wayland host systems. It supports standard terminals via ANSI graphics, and full-resolution rendering if the terminal supports image display (kitty, iTerm2). The compositor implements core Wayland protocols (wayland/protocols/) plus xdg-shell, xdg-decoration, and xwayland-shell extensions.</p><p>How To Use It</p><p>Setup: The repo includes a Makefile and go.mod. Build with make or go build. The distribute.sh script suggests release packaging. No lockfile is present, so go mod tidy may be needed before building.</p><p>Configuration: No config files exist. Options are passed as CLI arguments, parsed in termeverything/ParseArgs.go. The help text lives in termeverything/resources/help.md.</p><p>Running it: The entry point is main.go. Per the README, download a beta release or build from source. Run with a command that launches a GUI app:</p><p>./termeverything firefox</p><p>The README shows examples: warp terminal, Firefox, file managers, and Doom. Terminal resolution limits rendering quality; increase rows/columns for better output. For SSH use, run it on the remote host and connect from any terminal.</p><p>Real-World Use</p><p>A practical scenario: a developer maintains a remote Linux build server. To run a GUI test suite or inspect a web app without X forwarding, they SSH in and run termeverything firefox. The browser renders as ANSI graphics in their local terminal. With a terminal that supports images (kitty), they get near-native resolution over SSH.</p><p>Code Health &amp; Issues
+Med – No test files – The entire codebase (131 files) has zero tests. The Wayland protocol handling in wayland/MessageDecoder.go and wayland/SocketListener.go is complex and untested.
+Med – No CI/CD – No pipeline in .github/ or elsewhere. No automated build or regression gate.
+Low – No dependency lockfile – go.mod without go.sum means builds are not reproducible.
+Low – Generated protocol code – wayland/generate/ contains generators; the generated .xml.go files are large and will be hard to maintain by hand if upstream protocols change.
+Low – Single-maintainer risk – This is a fork of mmulet/term.everything (8071 stars). The project is ambitious; bus-factor risk is real.</p><p>The Bottom Line</p><p>This is an impressive technical achievement—a functional Wayland compositor in Go that renders to a terminal. It works for demos and niche remote-GUI use cases, but the lack of tests, CI, and lockfile means it is not production-ready. Use it for experimentation or internal tooling, not for critical infrastructure. If you need GUI apps over SSH, it is worth evaluating; if you need reliability, wait for the roadmap&#39;s &quot;Term most things&quot; milestone.</p>
             </div>
 
             
@@ -414,6 +443,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="weekday" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>Building an Open-Source Google Calendar Alternative with AI: Weekday</p><p>The Problem</p><p>Let’s face it: Google Calendar is fine, but it’s not perfect. Maybe you want more customization. Maybe you don’t want to hand over your entire life to Google. Or maybe you just want a calendar that doesn’t feel like a relic from 2010. Weekday aims to fix those problems by giving you a modern, open-source alternative with built-in AI smarts. Think Google Calendar meets Notion, but without handing over your data to Big Tech.</p><p>What This Does</p><p>At its core, weekday is a monorepo built with Next.js, TypeScript, and a bunch of other modern tools like tRPC for APIs, Drizzle ORM for database interactions, and Tailwind for styling. The app lives in apps/web/, while utilities like auth, api, and db live in packages/. This structure is powered by Turborepo to keep things modular and maintainable.</p><p>The meat of the calendar functionality is in apps/web/components/event-calendar/. Everything from draggable events (draggable-event.tsx) to different views like month-view.tsx and week-view.tsx is in there. Need to hook into the calendar? There’s a hooks/index.ts file ready for you.</p><p>AI features? Yep, it’s got those too. Check out apps/web/components/ai/ for things like actions.tsx (presumably for AI-driven suggestions) and response.tsx (likely for handling AI-generated responses). It even has a chat folder with tools for creating, updating, and deleting events, which could make managing your schedule feel less like a chore.</p><p>Don’t worry, backend folks, there’s something for you too. The API lives in packages/api/, with routes for accounts (routers/account.ts) and calendar management (routers/calendar.ts). It uses PostgreSQL (configured in packages/db/) and Drizzle ORM, which is a nice touch for database abstraction without adding the bloat of something like Prisma.</p><p>Real-World Use</p><p>Let’s say you’re a busy freelancer juggling multiple clients and projects. You could use Weekday to manage your schedule, but what makes it shine is its AI features. Need to find free slots for a meeting? The get-free-slots.tsx tool in apps/web/components/chat/tools/ can do the heavy lifting. Want to auto-suggest meeting times based on your availability? That’s where the AI magic happens, likely leveraging APIs like OpenAI or Anthropic (configured in .env).</p><p>Here’s a quick example of how easy it is to set up:</p><p>Boom. You’re up and running with a fully-featured calendar app that you can self-host and customize.</p><p>The Bottom Line</p><p>Weekday is ambitious. It’s modern, feature-packed, and has a clean codebase that’s easy to navigate. But let’s be real: with zero stars and being a fork, it’s got some work to do in terms of adoption. Still, if you’re tired of the usual suspects and want to tinker with a new approach to calendar management, this is worth a look. Just be ready to get your hands dirty with the setup.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

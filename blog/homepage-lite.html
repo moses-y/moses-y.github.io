@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,33 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="homepage lite" loading="lazy">
 
-            <div class="post-content">
-                <p>homepage lite is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Managing a heterogeneous homelab—services, bookmarks, and basic system metrics—usually requires several disparate tools (Grafana, custom scripts, static HTML). Keeping the UI consistent, the status checks lightweight, and the configuration source‑controlled is a recurring pain point.</p><p>What This Does  
+homepage-lite delivers a single Go binary that serves a responsive dashboard (see templates/index.html) populated from a config.yaml file (documented in README.md). The server (main.go) reads the YAML, watches it for changes, and pushes updates to the browser via Server‑Sent Events (static/app.js). Themes and icons are loaded from static/themes/*.css and static/iconify.min.js. Asset embedding is handled in embed.go / embeddev.go, allowing the binary to run without external static files in production.</p><p>How To Use It  </p><p>Setup  
+The repository provides a Makefile with a build target that compiles the Go source into a 9 MB binary:</p><p>make build          # produces ./homepage-lite</p><p>The Docker workflow uses the Dockerfile and docker-compose.yml. Build the image and run it:</p><p>docker compose up -d   # pulls the image defined in docker-compose.yml</p><p>Configuration  
+Create a config.yaml (the README shows the required structure). The file must be mounted into the container at /app/config/ or placed at /etc/homepage-lite/config.yaml for the systemd service (homepage-lite.service). No environment variables are required by default.</p><p>Running  
+Binary: ./homepage-lite (listens on the port defined in config.yaml, default 8888).  
+Docker: http://localhost:8888 after docker compose up.  
+Systemd: sudo systemctl start homepage-lite (service file provided).</p><p>Real‑World Use  
+A home‑lab operator can place config.yaml under version control, update it with new service URLs, and rely on the built‑in file watcher to push live UI updates without restarting the service. Example workflow:</p><p>git pull origin main          # get latest config
+vim config.yaml               # add a new service
+UI automatically refreshes within 30 s</p><p>In a larger environment, the container can be orchestrated alongside other services, exposing the dashboard on the internal network for quick status checks.</p><p>Code Health &amp; Issues  
+Medium – No test files – Repository lacks test.go files; code paths for YAML parsing and SSE are unverified.  
+Low – Limited CI – .github/workflows/build.yml builds the binary but does not run tests or linting.  
+Low – Hard‑coded paths – embed_dev.go references static asset directories; switching between embed and dev modes requires manual build flag changes.  
+Low – Minimal input validation – main.go unmarshals config.yaml without explicit schema checks; malformed YAML could cause a panic.  
+Low – Documentation gaps – No schema definition for config.yaml beyond README examples; users must infer required fields.  </p><p>No obvious security secrets are committed, and the Dockerfile uses a multi‑stage build to keep the runtime image small.</p><p>The Bottom Line  
+homepage-lite offers a lightweight, Go‑native dashboard that is easy to containerize and run on modest hardware. It is well‑suited for solo operators or small teams who need a single pane of glass for service health and bookmarks. The main drawbacks are the absence of automated tests and limited validation of user‑supplied configuration, so additional testing and hardening are advisable before production deployment.</p>
             </div>
 
             
@@ -414,6 +454,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

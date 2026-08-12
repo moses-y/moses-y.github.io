@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="mesh llm" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Running large language models that exceed a single GPU’s memory forces teams into expensive hardware upgrades or slow, fragile model sharding. Existing distributed solutions often require Kubernetes, complex networking, or vendor lock-in. Mesh LLM targets the gap between single-node inference and full cluster orchestration: pooling consumer GPUs across a few machines to serve models that no single box can hold.</p><p>What This Does</p><p>Mesh LLM is a Rust-based distributed inference runtime. It discovers peers via Nostr, routes requests by model name, and can split large dense models across nodes using “Skippy stage splits” (see crates/mesh-client/src/inference/election.rs for the coordinator logic). The mesh exposes a single OpenAI-compatible endpoint at http://localhost:9337/v1 — local models run directly, remote models are forwarded transparently. The CLI (crates/mesh-llm-cli/src/lib.rs) handles setup, join, serve, and agent integration. The project ships a web console, a control plane for operator config, and supports plugin backends like Flash-MoE. Layer packages (GGUF fragments) are fetched on demand, so each peer only downloads the shards it needs.</p><p>Real-World Use</p><p>A team with two desktops (e.g., one RTX 3090 and one RTX 4090) wants to run a 70B parameter model. On each machine they run:</p><p>The coordinator in crates/mesh-client/src/inference/election.rs assigns layer ranges, the nodes fetch corresponding GGUF fragments, and the model becomes available as a single API endpoint. The team can later add a third machine without stopping service.</p><p>Code Health &amp; Issues</p><p>The codebase is structurally sound for a Rust project of this size. Evidence: 32 test files across crates, a comprehensive CI pipeline (19 workflows), a lockfile, and a license. The mesh-client crate alone has 21 test files covering cancellation, reconnection, crypto, and protocol wire format. No obvious secrets or config files committed.</p><p>Potential concerns:
 Medium — Complexity of the Nostr-based discovery and Iroh transport (crates/mesh-client/src/network/nostr.rs, transport_iroh.rs) is high; failure modes in peer discovery under network partitions are not obviously tested.
 Low — The llama-quant-ffi crate (C FFI) could introduce memory safety risks if the Rust side does not properly validate pointers from C callers; no safety wrappers visible in lib.rs.
@@ -417,6 +441,75 @@ Low — Several CI workflows (e.g., nightly-stability.yml, smoke.yml) suggest th
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

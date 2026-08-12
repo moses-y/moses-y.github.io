@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,32 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="freephdlabor" loading="lazy">
 
-            <div class="post-content">
-                <p>freephdlabor: customizing personalized multiagent systems that researchs 24/7 on your own scientific problem</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem
+Researchers spending evenings manually drafting literature reviews, designing experiments, and formatting manuscripts face repetitive drudgery before any original work begins. This repo addresses that by automating the full lifecycle—from ideation through writeup—using a coordinated multiagent architecture, but it comes with operational trade‑offs that affect adoption in production settings.</p><p>What This Does
+freephdlabor organizes work across 120+ files in freephdlabor/ and 63 files in externaltools/runexperimenttool/, encompassing agents for ideation, experimentation, review, and writeup. The system uses prompt files under freephdlabor/prompts/ to steer each agent, while toolkits in freephdlabor/toolkits/ provide concrete utilities such as arXiv fetching (freephdlabor/toolkits/generaltools/fetcharxivpapers/), file editing (freephdlabor/toolkits/generaltools/fileediting/), and knowledge‑base management (freephdlabor/toolkits/generaltools/kbrepomanagement/). A config file .llmconfig.yaml at the root lets you select models per component, and API keys are expected in .env. The framework supports two modes: running out‑of‑the‑box with python launchmultiagent.py --task &quot;your idea&quot;, or customizing agents for domain‑specific problems by modifying or adding agents in freephdlabor/agents/.</p><p>How To Use It
+Setup  
+git clone https://github.com/ltjed/freephdlabor.git
+cd freephdlabor
+conda env create -f environment.yml
+conda activate freephdlabor</p><p>Edit .env with your API keys (OPENAIAPIKEY, ANTHROPICAPIKEY, etc.) and optionally adjust model selection in .llmconfig.yaml.</p><p>Configuration  
+Required environment variables are defined in .env; model preferences go in .llmconfig.yaml. No lockfile is present, so pip install -r externaltools/runexperimenttool/requirements.txt may pull incompatible versions across runs.</p><p>Running it  
+python launchmultiagent.py --task &quot;Your research idea or direction here&quot;</p><p>The entry point launchmultiagent.py at the repo root orchestrates the agent workflow. For SLURM clusters, launchmultiagentslurm.sh is provided.</p><p>Real-World Use
+A materials‑science team could fork the repo, define domain‑specific tools in freephdlabor/toolkits/ (e.g., a custom fetcharxivpapers filter for superconductor datasets), and add a new agent subclass in freephdlabor/agents/ to propose crystal‑structure hypotheses. The manager agent would then route ideation, experiment design, and writeup generation, producing a draft manuscript with figures and citations without manual copy‑pasting between tools.</p><p>Code Health &amp; Issues
+High/Security - Possible secrets/credentials committed to the repo - .env  
+Medium/SDLC - No CI/CD pipeline detected - no automated build/test gate - .github/ or CI config missing  
+Low/Risk - Dependencies declared without a lockfile - non-reproducible builds - externaltools/runexperiment_tool/requirements.txt  
+Low/Risk - Only 2 test files found; extensive agent logic lacks automated validation  </p><p>The repo includes a LICENSE file and basic documentation, but the absence of a lockfile and CI pipeline means builds are not fully reproducible and secret handling requires external processes.</p><p>The Bottom Line
+This is a highly extensible multiagent framework that can automate end‑to‑end scientific workflows with minimal configuration, making it well‑suited for researchers who want to prototype or parallelize ideas across domains. However, the lack of a lockfile, CI/CD, and committed secrets in .env mean it demands disciplined operational practices—particularly around dependency management and credential hygiene—before it can be relied upon in production or shared collaboratively.</p>
             </div>
 
             
@@ -414,6 +453,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

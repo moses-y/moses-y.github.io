@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="Motrix" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Managing downloads—especially torrents, magnets, and direct links—sucks. Built-in browser downloaders choke on big files, don&#39;t resume, and have zero support for BitTorrent. Windows users get weird .exe wrappers, Linux users get cryptic CLI tools, and Mac users get the privilege of paying for apps that half-work. You want one tool that handles it all without making your desktop look like 2003.</p><p>What This Does</p><p>Motrix is a download manager that actually supports HTTP, FTP, BitTorrent, and Magnet links in one desktop app. The main logic sits in src/main/—stuff like Engine.js and EngineClient.js wrap the download backend, which is basically aria2c (check out the extra/*/engine/aria2c binaries for each OS/arch). The renderer, in src/renderer/components/, is mostly Vue, and the UI is clean, not a Frankenstein of Electron and Bootstrap.</p><p>Config files like .eslintrc.js and electron-builder.json keep the build sane, and the CI/CD is handled via Travis CI and .github/workflows/release.yml, so you actually get working releases across platforms. Menus are handled with JSON files per OS (src/main/menus/win32.json, etc.), making it easy to hack your own context menus if you care.</p><p>Real-World Use</p><p>Say you want to download a Linux ISO from a torrent, a movie from a magnet link, and some giant FTP backup file. Fire up Motrix, paste your links into the UI (see src/renderer/components/Browser/index.vue), and let it rip. Downloads show up in the task list. Pause, resume, restart—all there. Want to automate? The API layer in src/renderer/api/Api.js exposes functions you can call from scripts or extensions.</p><p>Example: Need to add a magnet link from the clipboard? The CommandManager in src/renderer/components/CommandManager/index.js handles stuff like that. No need to write your own download handler or parse links manually.</p><p>The Bottom Line</p><p>Motrix does what most download managers promise but rarely deliver. It’s not lightweight—if you just want to grab a PDF, use your browser. But if you regularly wrangle torrents, FTP, or weird download links across OSes, Motrix is worth your time. The UI doesn’t suck, and the guts are solid. If you like tinkering, the code is readable and hackable. If you hate Electron, well, tough luck—so does every cross-platform app these days.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,23 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="Learn Prompt Hacking" loading="lazy">
 
-            <div class="post-content">
-                <p>This is The most comprehensive prompt hacking course available, which record our progress on a prompt engineering and prompt hacking course.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>LLM applications introduce a new attack surface that traditional security tooling does not cover. Prompt injection, jailbreaks, and prompt leakage can bypass application guardrails and expose underlying system instructions or data. Most development teams lack a structured way to learn these attack classes and the corresponding defenses.</p><p>What This Does</p><p>This repository is a structured curriculum for prompt engineering and prompt hacking. It is a fork of TrustAI-laboratory/Learn-Prompt-Hacking (357 stars upstream) and contains 60 files organized into seven numbered course modules plus reference collections.</p><p>The core learning material lives in Jupyter notebooks: 1Basics/ covers prompt engineering fundamentals, 3PromptingHacking/ contains offensive and defensive techniques including 04PromptLeakageAttack.ipynb and 05BypassAIFirewall.ipynb, and 4RedTeamLLM/ covers red teaming at scale. The 5BlueTeamDefence/ notebooks demonstrate practical defenses using Meta&#39;s Llama Guard and Prompt Guard.</p><p>Reference material is substantial: PaperCollections/ has 20 markdown files organizing academic papers by topic (jailbreaks, prompt injection, model theft), and HackResourceCollections/ contains ready-to-use datasets including jailbreakprompts1.csv, jailbreakprompts2.csv, and injectionprompt.csv.</p><p>How To Use It</p><p>Setup: The repository is notebook-based. There is no requirements.txt, pyproject.toml, or environment configuration file. You need a Python environment with Jupyter and an LLM API client installed manually.</p><p>Configuration: No environment variables or config files are documented. The notebooks reference LLM APIs (OpenAI, Meta models) but the exact keys and setup steps are not specified in the README.</p><p>Running it: Open any .ipynb file in Jupyter Notebook or JupyterLab and execute cells sequentially. Start with 1Basics/02PromptEngineering.ipynb if you are new to the material, or go directly to 3PromptingHacking/01PromptHackingExamples.ipynb for attack demonstrations.</p><p>git clone https://github.com/TrustAI-laboratory/Learn-Prompt-Hacking
+cd Learn-Prompt-Hacking
+jupyter notebook</p><p>Real-World Use</p><p>A security consultant evaluating a client&#39;s LLM application would work through 3PromptingHacking/ to reproduce common attack classes, then apply the defenses in 5BlueTeamDefence/. The HackResourceCollections/*.csv files provide test payloads for automated scanning. A red team engineer could use 4RedTeamLLM/01Redteamingatscale.ipynb and 02RedteamingLLMswithLLMs.ipynb to build an automated attack pipeline against an internal LLM endpoint.</p><p>Code Health &amp; Issues
+Med - No CI/CD pipeline - no .github/ directory or CI config exists, so there is no automated test or lint gate. This is a documentation/education repo, so the impact is low, but it means notebook quality is unverified.
+Med - No dependency manifest - the absence of requirements.txt or similar means the notebooks&#39; library versions are unmanaged. Notebooks that worked at authoring time may break as APIs and packages change.
+Low - No license file - the root contains only README.md and LICENSE is listed in the file structure, so licensing appears present. The README references upstream badges but the fork&#39;s own metadata is sparse.
+Low - No evaluation harness - the 7Evaluationand_BenchmarksTesting/ notebooks use third-party tools (Inspect, Mindgard, garak) but there is no wrapper or script to run them as a repeatable suite.</p><p>The Bottom Line</p><p>This is a solid educational resource for anyone needing to understand LLM attack and defense patterns quickly. The notebook format and curated paper lists make it practical for self-study or internal training. It is not a tool or library—there is nothing to install or integrate. Teams looking for automated LLM security scanning should look at garak or Mindgard directly; teams needing to build awareness and skill should start here.</p>
             </div>
 
             
@@ -414,6 +444,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

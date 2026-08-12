@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="tabularis" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>The Problem</p><p>Database tools typically force a trade-off: simple clients lack analytical depth, while full IDEs are heavy and don&#39;t support notebook-style workflows. Teams who need to explore databases interactively, document queries alongside results, and integrate AI assistance often end up juggling multiple tools.</p><p>What This Does</p><p>Tabularis is a desktop database client built with Tauri (Rust backend, React frontend) that supports PostgreSQL, MySQL/MariaDB, and SQLite. Its core differentiator is SQL notebooks—documents combining SQL cells, Markdown, and charts with cross-cell variable passing. The demo/ directory shows sample notebooks and database init scripts for all supported engines.</p><p>The plugin system, defined in packages/plugin-api/ and scaffolded via packages/create-plugin/, lets you extend the client in any language using JSON-RPC over stdio. Templates in packages/create-plugin/templates/ cover both Rust drivers and UI extensions. The project also ships a built-in MCP server for AI agent integration and a visual EXPLAIN tool.</p><p>Real-World Use</p><p>A data analyst connects to a Postgres analytics database using demo/init/postgres/02-analytics-demo.sql. They run parameterized queries in a notebook, share results as a .tabularis-notebook file, and use the visual EXPLAIN to optimize a slow JOIN. The MCP server lets an AI agent query the database directly from a chat interface.</p><p>Code Health &amp; Issues</p><p>The codebase appears well-structured with CI (ci.yml), release automation (release.yml), and package distribution workflows for AUR, Snap, and WinGet. Tests exist in packages/create-plugin/tests/, and the project uses ESLint, TypeScript strict mode, and Rust toolchain configuration. No obvious security red flags like hardcoded credentials.</p><p>Med - Plugin API types are defined in packages/plugin-api/src/types.ts but the validation logic in packages/create-plugin/src/validate.ts covers only plugin metadata, not runtime input sanitization for plugin-host communication. This could allow malformed JSON-RPC messages.</p><p>Low - The .claude/ and .agents/ directories contain AI agent skill definitions that duplicate content (e.g., identical SKILL.md files in both folders). This suggests incomplete cleanup rather than a functional issue.</p><p>Low - No end-to-end tests for the Tauri desktop application itself. The five test files cover only the plugin scaffolding CLI.</p><p>The Bottom Line</p><p>Tabularis is a well-architected database client that genuinely differentiates with notebook support and a language-agnostic plugin system. It&#39;s production-ready for individual developers and small teams who need an open-source alternative to TablePlus or DBeaver with better analytical workflow support. The plugin ecosystem is still young, and enterprise features like SSO or audit logging are absent.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

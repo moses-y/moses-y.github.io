@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,35 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="TREK" loading="lazy">
 
-            <div class="post-content">
-                <p>A self-hosted travel/trip planner with real-time collaboration, interactive maps, PWA support, SSO, budgets, packing lists, and more.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Coordinating travel plans across multiple participants is fragmented: spreadsheets for budgets, separate chat tools for discussion, and ad‑hoc map screenshots for routing. Teams waste time syncing updates and reconciling expenses, especially when itineraries change on the fly.</p><p>What This Does  
+TREK delivers a single self‑hosted web app that combines real‑time collaboration, interactive mapping, budgeting, packing lists, and a journal. The front‑end lives under client/ (the bulk of the repo, 160 files) and is built with React + TypeScript. Core UI components such as the drag‑and‑drop planner (client/src/components/Planner/...) and the collaborative chat (client/src/components/Collab/CollabChat.tsx) are shipped as reusable TSX modules. Backend services are packaged in the same Docker image defined by the top‑level Dockerfile, allowing the whole stack to run behind a single container.</p><p>How To Use It  </p><p>Setup  
+Clone the repo
+git clone https://github.com/liketrek/TREK.git
+cd TREK</p><p>Build the Docker image (the Dockerfile copies the client build)
+docker build -t trek .</p><p>The Dockerfile pulls Node, runs npm ci (note: no lockfile, see Issues), builds the React app, and serves it with a lightweight web server.</p><p>Configuration  
+ API endpoint and authentication details are read from client/src/api/client.ts. Adjust the BASEURL constant or inject environment variables at container start (e.g., APIURL).  
+ Optional SSO settings are stored in the Helm chart under charts/trek/values.yaml; the chart creates ConfigMaps and Secrets (templates/configmap.yaml, templates/secret.yaml).  </p><p>Running  
+Run the container, exposing the web UI on port 3000
+docker run -d -p 3000:3000 --name trek trek</p><p>The entry point is the built client/index.html, which loads the bundled SPA (client/src/App.tsx). Access the UI at http://localhost:3000.</p><p>For development without Docker, inspect client/package.json for the standard scripts (npm install, npm run dev) and run them from the client/ directory.</p><p>Real‑World Use  
+A small travel agency can deploy TREK on an internal server, point the BASE_URL to its own authentication provider, and let clients collaboratively edit itineraries. Changes appear instantly in the planner and map view, while the budget panel (client/src/components/Budget/BudgetPanel.tsx) automatically recalculates cost splits for each participant.</p><p>Code Health &amp; Issues  
+Low – Missing lockfile – client/package.json declares dependencies but no package-lock.json or yarn.lock; reproducible builds depend on the npm registry state.  
+Low – Limited secret handling – No encrypted secret management in the repo; any API keys must be supplied via environment variables or Helm secrets (charts/trek/templates/secret.yaml).  
+Medium – Potential runtime errors – Several WebSocket utilities (client/src/api/websocket.ts) lack explicit reconnection logic; edge‑case disconnections could crash the UI.  
+Low – Test coverage – 37 test files (e.g., client/src/components/Budget/BudgetPanel.test.tsx) indicate decent unit coverage, and CI runs them via the test.yml workflow.  
+Low – CI/CD – GitHub Actions include linting (lint-prettier.yml), Docker builds (docker.yml), and security scans (security.yml), showing an active pipeline.  
+Low – Documentation – Core README provides feature overview and Docker badge, but lacks explicit env‑var docs; the README.md does not list required configuration keys.  </p><p>Overall the codebase follows modern TypeScript practices, component separation is clear, and the presence of Helm charts (charts/trek/) suggests ready‑to‑deploy Kubernetes support.</p><p>The Bottom Line  
+TREK offers a well‑structured, feature‑rich travel‑planning SPA that can be self‑hosted via a single Docker image, making it suitable for teams that need collaborative itinerary management on‑premise. The primary drawbacks are the missing lockfile (affecting deterministic builds) and sparse runtime documentation; these are straightforward to address. Deployers comfortable with Docker/Kubernetes will find the project ready for production use.</p>
             </div>
 
             
@@ -414,6 +456,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,45 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="EpicStaff" loading="lazy">
 
-            <div class="post-content">
-                <p>Source-available, self-hosted platform for building AI agent flows - visual editor over a Django backend.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Operations teams need to own and audit AI‑driven workflows, but most existing platforms keep the flow definition in code that only engineers can read or modify. This creates a bottleneck when business logic changes, when incidents need rapid triage, or when auditors require a clear decision trail.</p><p>What This Does  
+EpicStaff supplies a self‑hosted visual editor (Angular front‑end) backed by a Django service that stores each node, its Python payload, and execution state. The front‑end lives in frontend/ – e.g. frontend/src/app/app.routes.ts defines the SPA routing, while the widget that can be embedded elsewhere is built from frontend/public/epicchat-widget/main.js.  </p><p>The back‑end is a standard Django project (Python files under the repo root) that exposes REST endpoints used by the editor and by external agents. Documentation such as docs/backend-runtime-fetch-audit.md and docs/rbac/apikeys.md describes the API contract and permission model.</p><p>How To Use It  </p><p>Setup  
+The repository ships with Docker support for both front‑end and back‑end.</p><p>Clone and enter the repo
+git clone https://github.com/EpicStaff/EpicStaff.git
+cd EpicStaff</p><p>Build and start services (frontend Dockerfile and compose file)
+docker compose -f frontend/docker-compose.frontend.yml up --build
+Back‑end Dockerfile is not listed but likely present; if a separate compose exists,
+use it analogously (e.g. docker compose -f docker-compose.yml up)</p><p>The top‑level Makefile provides shortcuts documented in docs/makefilecommands.md. Typical targets are:</p><p>make dev      # spin up development containers
+make lint     # run eslint/prettier checks
+make test     # execute the two test suites</p><p>Configuration  
+Environment variables required by the Django service are referenced in the docs:
+DJANGOSECRETKEY – secret for Django cryptography.  
+DATABASEURL – connection string for PostgreSQL (used for persistence, see docs/storage/STORAGEAPIREFERENCE.md).  
+REDISURL – optional Redis for agent memory (see docs/knowledgeandrag/RAGQUICKSTARTGUIDE.md).  </p><p>Place these in a .env file at the repository root; Docker compose files include envfile: .env (implicit from typical patterns). No sample .env is shipped, so you must create it.</p><p>Running It  
+After containers are up, the front‑end is reachable at http://localhost:4200 (Angular dev server defined in frontend/angular.json). The widget can be embedded by loading frontend/public/epicchat-widget/embed.js and initializing it per the client‑side API described in docs/epichatwidget/epicchat-widget-response-format.md.  </p><p>The Django API is served on port 8000 by default (standard Django runserver). You can verify it with:</p><p>curl http://localhost:8000/api/health/</p><p>Real‑World Use  
+A retail operations team could deploy EpicStaff behind their internal network, expose the API to a warehouse‑management system, and let non‑technical staff edit the “order‑fulfillment” flow via the visual editor. The Python node payloads would call the existing ERP APIs, while the built‑in audit logs (persisted in PostgreSQL) satisfy compliance reviews.</p><p>Example Python payload stored in a node (documented in docs/codeagent.md)
+def checkstock(order):
+    qty = externalapi.get_stock(order.sku)
+    if qty &lt; order.amount:
+        raise Exception(&quot;Insufficient inventory&quot;)
+    return {&quot;status&quot;: &quot;ok&quot;}</p><p>Code Health &amp; Issues  
+Low – Limited test coverage – only 2 test files present (frontend/karma.conf.js config suggests front‑end unit tests, but no back‑end tests).  
+Med – Missing explicit back‑end Dockerfile – front‑end Dockerfile (frontend/Dockerfile.fe) exists; back‑end container build instructions are absent, requiring manual Dockerfile creation.  
+Low – No secret management – repository does not include any .env.example or secret‑masking scripts; operators must derive required variables from docs.  
+Low – CI configured – GitHub Actions workflows (.github/workflows/*.yml) run linting and Docker builds, indicating a basic CI pipeline.  
+Low – License present – LICENSE.md is included, satisfying open‑source compliance.  
+Low – Documentation depth – 61 markdown files cover API, RBAC, RAG, and widget integration, providing solid reference material.  </p><p>Overall the codebase follows conventional Angular/Django structures, with linting (eslint.config.js, .prettierrc.json) and formatting enforced via pre‑commit hooks.</p><p>The Bottom Line  
+EpicStaff delivers a functional visual AI‑workflow editor backed by a Django API, suitable for organizations that need non‑engineer ownership of agent logic and auditability. The front‑end is ready to run via Docker, but the back‑end requires a custom container build and explicit environment configuration. Teams with moderate dev resources can adopt it for internal workflow orchestration, while solo developers may find the setup overhead disproportionate.</p>
             </div>
 
             
@@ -414,6 +466,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

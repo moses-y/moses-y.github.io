@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,50 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="build your own openclaw" loading="lazy">
 
-            <div class="post-content">
-                <p>build your own openclaw is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Developers who want a hands‑on, incremental guide to building an autonomous LLM‑powered agent often struggle to locate a single, coherent codebase that demonstrates each architectural layer (chat loop, tool use, persistence, web access, event‑driven design, etc.). Without a step‑by‑step scaffold, integration effort and debugging time increase dramatically.</p><p>What This Does  
+The repository is a linear tutorial split into 18 folders, each representing a progressive stage of an OpenClaw‑style agent. Every stage contains a self‑contained Python package with its own pyproject.toml, a minimal CLI (src/mybot/cli/main.py), and supporting modules under src/mybot/core, src/mybot/tools, and src/mybot/provider.  
+00‑chat‑loop delivers the bare‑bones REPL (mybot.cli.chat.ChatCLI) and the core agent (mybot.core.agent.Agent).  
+01‑tools adds a pluggable tool registry (mybot.tools.registry) and built‑in tools (builtintools.py).  
+02‑skills introduces a skill loader (mybot.core.skillloader) that parses SKILL.md files.  
+03‑persistence adds mybot.core.history and a simple file‑based storage layer.  
+04‑slash‑commands implements a command‑registry (mybot.core.commands) for user‑driven session control.  
+05‑compaction adds history compression (mybot.core.contextguard).  
+06‑web-tools brings two web providers (webread, websearch) and corresponding CLI tools.  
+07‑event-driven refactors the agent around an eventbus and events module, exposing the same CLI entry point but now ready for external consumers.</p><p>Each folder can be built and run independently, letting a learner focus on one concern at a time while reusing the same code layout.</p><p>How To Use It  
+Clone the repo
+git clone https://github.com/yourorg/build-your-own-openclaw.git
+cd build-your-own-openclaw
+Install a step (example: step 06 – web tools)
+cd 06-web-tools
+pip install -e .   # pyproject.toml defines the package; editable install keeps changes in sync
+Prepare API keys
+cp defaultworkspace/config.example.yaml defaultworkspace/config.user.yaml
+edit defaultworkspace/config.user.yaml with your LLM and web‑search keys (see README)
+Run the CLI for that step
+python -m mybot.cli.main   # invokes src/mybot/cli/main.py</p><p>Replace 06-web-tools with any other step folder (00-chat-loop, 01-tools, …) to execute that stage. The pyproject.toml files list required dependencies (e.g., litellm, crawl4ai, httpx). No additional build scripts are present; a standard pip install -e . suffices.</p><p>Real‑World Use  
+A SaaS platform that wants a lightweight “assistant‑as‑a‑service” could adopt step 07 as a library:</p><p>from mybot.core.agentloader import loadagent
+from mybot.core.eventbus import EventBus</p><p>bus = EventBus()
+agent = loadagent(&quot;06-web-tools&quot;)   # loads the fully featured agent
+bus.subscribe(&quot;usermessage&quot;, agent.handle)
+bus.publish(&quot;user_message&quot;, {&quot;text&quot;: &quot;What’s the weather in Tokyo?&quot;})</p><p>The event‑driven core lets the platform route messages from HTTP, Slack, or mobile SDKs without rewriting the agent logic.</p><p>Code Health &amp; Issues  
+Medium – Test coverage – No tests/ directory; all code paths are untested.  
+Medium – CI/CD – No .github/workflows or other pipeline definitions; builds are manual.  
+Medium – License – Repository lacks a LICENSE file; downstream usage is legally ambiguous.  
+Low – Lockfile – pyproject.toml declares dependencies but no poetry.lock/uv.lock; reproducible installs depend on PyPI state.  
+Low – Duplicate packages – Each step repeats the same core modules (mybot.core., mybot.tools.). While intentional for the tutorial, it inflates the repo and can cause version drift if a bug is fixed in one step but not propagated.  
+Low – Minimal error handling – Core classes (e.g., mybot.provider.llm.base.LLMBase) assume successful API calls; no retries or explicit exception mapping observed.</p><p>No obvious security secrets are committed; API keys are expected only in the user‑provided YAML file.</p><p>The Bottom Line  
+The repo delivers a clear, incremental learning path for building an LLM agent, with concrete, runnable code at each stage. It is best suited for individual developers or small teams that need a pedagogical reference rather than a production‑ready library. The main drawbacks are the absence of tests, CI, and a license, which limit confidence for enterprise adoption without additional engineering effort.</p>
             </div>
 
             
@@ -414,6 +471,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

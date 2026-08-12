@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="prime rl" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>PRIME-RL: Asynchronous RL at Scale Without Losing Your Mind</p><p>The Problem</p><p>Reinforcement learning is a beast. It’s computationally expensive, hard to scale, and a nightmare to orchestrate. Throw in multi-node, multi-GPU setups, and you&#39;ve got a recipe for a dev&#39;s worst day. If you&#39;ve ever tried to cobble together a training pipeline with hacked-together scripts and cursed out at Kubernetes YAML files, you’ll understand the pain. That’s where prime-rl comes in: it’s a framework for large-scale, async RL training that promises to make your life suck a little less.</p><p>What This Does</p><p>prime-rl is built for scaling reinforcement learning workflows. It’s packed with everything you need to take an RL model from SFT (Supervised Fine-Tuning) to full-blown agent training. The project is neatly organized, with directories like benchmarks/ for performance metrics, configs/ for training setups, and examples/ for real-world use cases. If you&#39;re into Kubernetes (or just forced to use it), there’s a k8s/ directory to help deploy your experiments on multi-node clusters.</p><p>The framework leans heavily on tools like Docker, Kubernetes, and PyTorch&#39;s FSDP2 for distributed training. The pyproject.toml handles dependencies, while the scripts/ folder provides utilities for everything from environment setup (install.sh) to managing SLURM jobs (slurm_tmux.sh). If you’re wondering how to get started, the README.md has a one-liner install command using curl. For once, a project that doesn&#39;t make you hunt for setup instructions.</p><p>Real-World Use</p><p>Imagine you&#39;re training an RL agent to solve a complex task like multi-modal reasoning or optimizing a transformer-based model. With prime-rl, you can spin up a training job using a config file from configs/. For example, the configs/debug/rl/train.toml is a good starting point for single-GPU experiments. Once you&#39;re ready to scale, you can move to multi-node setups using the Kubernetes templates in k8s/prime-rl/.</p><p>Want benchmarks? Check out the benchmarks/baselines/ folder for JSON files with detailed performance data for a bunch of GPU setups (A100, H100, B200—you name it). These are great for comparing your hardware or tweaking your training to squeeze out that last 2% improvement.</p><p>The Bottom Line</p><p>prime-rl is overkill for your weekend &quot;flappy bird RL&quot; side project, but it&#39;s a solid pick for serious research or production-grade training. The modular design and clear documentation make it easy to adapt to your needs, though the heavy reliance on Kubernetes and the NVIDIA ecosystem might alienate smaller teams. If you&#39;re ready to tackle async RL at scale without losing your sanity, give this repo a spin. Just don’t forget to budget for GPUs.</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

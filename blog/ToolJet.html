@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,28 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="ToolJet" loading="lazy">
 
-            <div class="post-content">
-                <p>ToolJet is the open-source foundation of ToolJet AI - the enterprise app generation platform for building internal tools, dashboard, business applications, workflows and AI agents 🚀</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem</p><p>Building internal tools—admin panels, dashboards, approval workflows—is repetitive and expensive. Each one needs a UI, database connections, authentication, and business logic. Teams either hand-code these apps or pay for closed-source low-code platforms that lock them into a vendor and limit customization.</p><p>What This Does</p><p>ToolJet is an open-source low-code platform for building internal tools. It provides a visual app builder with 60+ components, a built-in no-code database, and connectors to 80+ data sources (Postgres, MySQL, REST APIs, S3, SaaS tools). The repo is the community edition; a commercial &quot;ToolJet AI&quot; tier adds AI-assisted app generation, query building, and enterprise features like SSO and audit logs.</p><p>The repository structure is heavily weighted toward testing and CI. The cypress-tests/ directory (113 files) contains end-to-end tests for the platform, marketplace plugins, and app builder. The .github/workflows/ directory (48 files) shows a mature CI/CD setup: ci.yml, codeql.yml, docker-release.yml, cypress-platform.yml, and vulnerability scanning. The cli/ directory holds a TypeScript CLI (plugin/create.ts, plugin/install.ts) for building and installing custom connectors.</p><p>Note: this is a fork of the main ToolJet repo (38.5k stars). The core application code (server, frontend, database migrations) is not in this snapshot—only the root configuration, CLI, and test infrastructure are present.</p><p>How To Use It</p><p>The repo does not contain the full application source, so standard setup instructions are limited. Based on what exists:</p><p>Setup
+cd cli
+npm install
+npm run build</p><p>Configuration
+cli/package.json defines the CLI package. It likely needs a ToolJet instance URL and API key, but no .env file for the CLI is present.
+.env.example exists at the root for the full application, but the corresponding server code is not in this snapshot.</p><p>Running it
+The CLI entry points are cli/bin/run and cli/bin/dev (likely oclif-based). node cli/bin/run plugin:install &lt;name&gt; would be the pattern, but this is inferred from the oclif structure, not documented in the README.
+For the full platform, the README points to tooljet.com for hosted setup or Docker deployment. The deploy.template.yaml in .do/ suggests DigitalOcean App Platform support.</p><p>Real-World Use</p><p>A typical deployment: self-host ToolJet via Docker, connect it to a Postgres database, and build an internal order-management dashboard. The app reads from the orders table, displays it in a sortable table component, and includes a form to update order status. The built-in the ToolJet Database can store app state without a separate backend. Custom connectors, if needed, are scaffolded via the CLI and installed as plugins.</p><p>Code Health &amp; Issues
+Med - Incomplete snapshot: This fork lacks the core server/frontend source. Only test infrastructure and CLI are present. Cannot assess application code quality.
+Low - Test infrastructure is extensive: 115 test files and dedicated Cypress configs (cypress-platform.config.js, cypress-marketplace.config.js) indicate strong E2E coverage. No unit test framework is visible, so backend logic testing is unclear.
+Low - CI is well-configured: 30+ workflows cover linting, security scanning (CodeQL, Grype), license compliance, and Docker builds. This is better than most open-source repos.
+Low - Documentation gaps: The README is marketing-focused. The cli/README.md is minimal, and there are no docs for the CLI commands or plugin API.</p><p>The Bottom Line</p><p>The full ToolJet project is a serious, production-grade low-code platform with an active community and mature CI/CD. This particular fork is a partial snapshot—useful for evaluating the test strategy and CLI tooling, but not for reviewing the core application. For teams evaluating low-code options, ToolJet is a credible self-hosted alternative to Retool; for developers wanting to contribute, the main repo is the better target.</p>
             </div>
 
             
@@ -414,6 +449,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');

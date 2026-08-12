@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,7 +398,16 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="endurain" loading="lazy">
 
-            <div class="post-content">
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
                 <p>Endurain: Take Control of Your Fitness Data</p><p>The Problem</p><p>Fitness tracking apps like Strava and Garmin Connect are great—until you realize you’re handing over all your personal data to someone else’s server. Want privacy, customizations, or control over how your data is stored or shared? Too bad. Unless you’re cool with giving Big Fitness™ your location, workout history, and heart rate data, you’re out of luck.  </p><p>What This Does</p><p>Endurain is like Strava, but self-hosted. You own your data, you control the hosting, and you get to decide who sees your post-run victory lap. It’s built with FastAPI (see backend/app for the magic), uses PostgreSQL for storing all those sweaty .gpx and .fit files (backend/app/core/database.py), and even integrates with platforms like Strava and Garmin Connect (backend/app/garmin/*). There&#39;s also support for manual uploads if you&#39;re rocking old-school GPS devices. </p><p>The project is Docker-friendly (docker-compose.yml.example), and configuration is handled via environment variables (.env.example). Want to set up custom activity types or tweak the rate limiter? Check out backend/app/core/config.py—it&#39;s all there. Observability nerds will appreciate the basic Jaeger tracing setup in backend/app/core/tracing.py.</p><p>And yeah, it’s not just for you. Endurain supports multi-user setups, so you can bring your friends along for the ride (or run, or swim). The backend/app/auth folder handles authentication, identity providers, tokens, and even MFA. Fancy.</p><p>Real-World Use</p><p>Let’s say you’re a privacy-conscious athlete who’s sick of sharing your data with strangers for the privilege of being spammed with ads. You could spin up an Endurain instance using the provided docker-compose.yml.example file, tweak your .env variables, and be running your own fitness tracker in minutes.  </p><p>Want to import your old Strava data? Just link your account using the backend/app/auth/security.py setup or use the manual upload option for .gpx, .tcx, and .fit files. Oh, and if you’re a dev, you can fork the project and add custom features—check out backend/app/activities to see how the activity tracking is structured and start hacking away.</p><p>The Bottom Line</p><p>If you’re into self-hosting and value privacy, Endurain is awesome. It’s got solid tech (FastAPI, PostgreSQL, and Docker), decent documentation, and actual practical use for fitness enthusiasts. That said, it’s not beginner-friendly—setting up Docker, managing environment variables, and configuring CI/CD in GitHub Actions isn’t for the faint of heart. But for those willing to dig in, it’s a great way to tell Strava, “Nah, I’m good.”</p>
             </div>
 
@@ -414,6 +438,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');
