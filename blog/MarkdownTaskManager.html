@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -383,8 +398,21 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="MarkdownTaskManager" loading="lazy">
 
-            <div class="post-content">
-                <p>MarkdownTaskManager is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>Technical Briefing: MarkdownTaskManager</p><p>The Problem</p><p>Teams needing a task tracking system often require database setup, server infrastructure, or cloud dependencies. This introduces overhead for small teams, distributed workers, or offline scenarios. The constraint is finding task management that remains versionable, syncable, and editable with standard tools without external services.</p><p>What This Does</p><p>MarkdownTaskManager is a standalone web application contained in a single HTML file (task-manager.html) that uses the browser&#39;s File System Access API to read and write local Markdown files. The data files are kanban.md for active tasks and archive.md for completed work. The interface transforms these Markdown files into an interactive Kanban board with columns for To Do, In Progress, and Done, plus filtering and project management capabilities. The application runs entirely client-side in Chrome 86+, Edge 86+, or Opera 72+—Firefox and Safari are not supported due to File System API limitations. Source files include kanban.md and archive.md markdown templates, README.md and readmeFR.md documentation, and example configurations in examples/.</p><p>How To Use It</p><p>Setup: Copy task-manager.html to your project directory alongside kanban.md and archive.md. The README provides minimal markdown templates for both files specifying configuration sections for columns, categories, users, and tags. Open task-manager.html in a compatible browser, select the containing folder on first launch, and the application will initialize the markdown files if empty. For subdirectory setups, place kanban.md and archive.md in a .tasks/ folder and select that directory instead. To version tasks with Git, add kanban.md and archive.md to .gitignore if history is not desired.</p><p>Configuration: No environment variables or keys are required. The application configuration is embedded in the markdown files via headers and lists for columns, categories, users, and tags. The README.md documents the format with examples under ## ⚙️ Configuration.</p><p>Running it: No build step, server, or installation beyond opening the HTML file. The entry point is task-manager.html invoked via double-click or open task-manager.html from a terminal. The application memoryizes the selected folder path between sessions using local storage.</p><p>Real-World Use</p><p>A distributed development team can clone a repository containing task-manager.html, kanban.md, and archive.md to a shared drive. Each member opens the HTML file, selects the local project folder, and begins triaging tasks in the Kanban board. Because the data is plain Markdown, changes are immediately visible in Git diffs, editable in VS Code or any text editor, and syncable via any file synchronization method. A developer working offline on a train can complete tasks, and changes will sync when connectivity returns, with no merge conflicts beyond standard Markdown editing.</p><p>Code Health &amp; Issues
+No test files detected - repository-wide untested code paths. No Jest, pytest, or other test framework configuration is present.
+No CI/CD pipeline detected - no automated build/test gate in .github/ or equivalent. Pushes to the repository have no continuous integration coverage.
+Browser compatibility limitation - File System Access API availability restricts use to Chrome, Edge, and Opera 72+. Firefox and Safari users cannot access the local file feature.
+Single-file architecture risk - all application logic resides in task-manager.html. Modifications require editing a single large HTML file, which can become unwieldy for extensions or refactoring.</p><p>The Bottom Line</p><p>This is a practical local-first task manager for teams comfortable with Markdown workflows and Git versioning. It eliminates server overhead and keeps data portable, editable, and diffable. The browser restriction and absence of tests or CI are the primary constraints. It is well-suited for solo developers, small offline teams, or integration into existing Markdown-heavy workflows where a database-backed issue tracker is unnecessary overhead.</p><p>Verdict: Useful for Markdown-native teams operating within compatible browsers. Not recommended for teams requiring cross-browser support, automated testing, or CI/CD gates.</p>
             </div>
 
             
@@ -414,6 +442,75 @@
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');
