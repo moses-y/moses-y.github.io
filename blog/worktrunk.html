@@ -123,6 +123,21 @@
             margin-bottom: 48px;
         }
 
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
+
         .post-meta {
             display: flex;
             flex-wrap: wrap;
@@ -383,16 +398,51 @@
 
             <img class="post-image" src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="worktrunk" loading="lazy">
 
-            <div class="post-content">
-                <p>Managing Git Worktrees with Worktrunk: A CLI for the Sane Developer</p><p>The Problem</p><p>Git worktrees are amazing—when you’re juggling multiple branches or, as in this case, running a bunch of parallel AI agents, they save you from the nightmare of cloning a repo ten times. But here’s the catch: Git’s native worktree UX is trash. Even simple tasks like creating a new worktree or switching between them feel like a typing test for advanced keyboard masochists. And automating workflows? Yeah, good luck with that. </p><p>What This Does</p><p>Worktrunk makes git worktree as easy to use as git branch. Think of it as a modern, streamlined CLI wrapper that spares you from Git’s clunky syntax and injects much-needed developer sanity into your workflow. The repo is packed with features, but the core focus is on three commands: wt switch, wt remove, and wt list.</p><p>The wt switch command is the standout here. Need a new worktree for a feature? Just run wt switch -c feat and you’re off to the races. If you’re spinning up an AI agent alongside, add -x claude for instant integration. Want to clean up? wt remove takes care of deleting the worktree and the branch, sparing you from the usual multi-step dance of git worktree remove and git branch -d. Meanwhile, wt list gives you a readable, status-inclusive overview of all your active worktrees—none of that raw, path-only nonsense from git worktree list.</p><p>The repo isn’t just a CLI; it’s a full ecosystem. Check out the .claude-plugin/ directory for tight coupling with tools like Claude, including hooks (hooks.json) and skills (skills/worktrunk/SKILL.md) that automate workflows. There’s also a .config/wt.toml, which lets you define a path template for worktrees—no more hardcoding paths like a caveman. </p><p>Real-World Use</p><p>Let’s say you’re managing 5 AI agents, each working on a different feature. With native Git, you’d be running commands like:</p><p>git worktree add -b feat-1 ../repo.feat-1 &amp;&amp; cd ../repo.feat-1 &amp;&amp; agent
-git worktree add -b feat-2 ../repo.feat-2 &amp;&amp; cd ../repo.feat-2 &amp;&amp; agent</p><p>Repeat this for every agent, and hope you don’t typo yourself into a rage spiral. With Worktrunk:</p><p>wt switch -c -x agent feat-1
-wt switch -c -x agent feat-2</p><p>Done. Oh, and when you’re done? wt remove cleans up the entire mess for you.</p><p>The Bottom Line</p><p>Worktrunk is a no-brainer if you’re using Git worktrees, especially if you’re working with AI agents or juggling multiple branches. The CLI is clean, the commands make sense, and it saves you from Git’s abysmal worktree ergonomics. That said, if you’re just hacking on one branch at a time, this might be overkill. But if you’re scaling workflows or automating tasks, you’ll never want to go back.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Managing many concurrent Git worktrees is cumbersome: creating a worktree requires multiple commands, switching directories is manual, and cleaning up involves both git worktree remove and branch deletion. When dozens of AI agents operate in parallel, this friction multiplies, leading to wasted cycles and higher risk of conflicts.</p><p>What This Does  
+worktrunk provides a thin CLI that treats worktrees like branches. Core commands live in src/cli/ and src/commands/:</p><p> wt switch &lt;branch&gt; – creates (if needed) and cd‑s into a worktree (src/commands/worktree/mod.rs).  
+ wt list – shows worktrees with status, built on the list module (src/commands/list/).  
+ wt remove – deletes the current worktree and its branch (src/commands/worktree/remove.rs).  </p><p>Configuration is driven by a TOML template (.config/wt.toml) that maps a branch name to a directory path, making the path deterministic and reproducible. Hooks (src/cli/hook.rs and src/commands/hookcommands.rs) let users run arbitrary scripts (e.g., start Claude, run tests) automatically after a worktree is created or switched.</p><p>Documentation is extensive: the docs/ folder contains the full site (docs/templates/.html, docs/content/*.md), and the README lists the core workflow with screenshots.</p><p>How To Use It  </p><p>Setup  
+Build and install the CLI locally
+cargo install --path .
+Or run directly without installing
+cargo run --bin worktrunk -- &lt;args&gt;</p><p>The presence of Cargo.toml and Cargo.lock confirms a standard Rust build.</p><p>Configuration  
+Create or edit the user config (example in dev/config.example.toml):
+.config/wt.toml
+pathtemplate = &quot;{reporoot}/{branch}&quot;</p><p>The file is read by src/cli/config.rs.</p><p>Running it  
+Switch to (or create) a worktree for branch feat-x
+wt switch feat-x</p><p>Create and launch Claude automatically (hook defined in .config/wt.toml or via CLI flag)
+wt switch -c -x claude feat-x</p><p>List all worktrees with Git status
+wt list</p><p>Remove the current worktree and its branch
+wt remove</p><p>All commands resolve to functions in src/commands/, e.g., switch → src/commands/handleswitch.rs, list → src/commands/list/mod.rs.</p><p>Real‑World Use  
+A CI pipeline that runs multiple autonomous agents can spin up isolated environments with:</p><p>Agent A
+wt switch -c -x claude agent-a
+Agent B
+wt switch -c -x claude agent-b
+After work is done
+wt remove   # executed by each agent in its own worktree</p><p>Each agent works in its own directory (repo/agent-a, repo/agent-b) without stepping on each other, and the hooks automatically start the appropriate LLM client.</p><p>Code Health &amp; Issues  
+Low – CI configured – .github/workflows/ci.yaml runs cargo test and benchmarks.  
+Low – Test coverage – 4 test files (src/commands/list/spacing_test.rs etc.) exist, but many core modules lack direct unit tests (e.g., src/commands/worktree/mod.rs).  
+Medium – Hook safety – Hooks execute external scripts (src/cli/hook.rs) without sandboxing; a malicious hook could run arbitrary code.  
+Low – Documentation depth – docs/ provides comprehensive site generation, but the README lacks a quick‑start for non‑Rust users; a short “install via cargo” section would improve onboarding.  
+Low – Platform assumptions – The CLI calls out to the system git binary; no fallback or mock is provided, which could break on minimal containers.  </p><p>No obvious licensing issues (MIT in LICENSE), secrets are absent, and the repository includes a lockfile (Cargo.lock) and a pre‑commit config.</p><p>The Bottom Line  
+worktrunk delivers a practical abstraction over Git worktrees, lowering friction for parallel AI‑agent workflows. The codebase is well‑structured, CI‑protected, and documented, though core functionality would benefit from broader test coverage and tighter hook sandboxing. Teams that already use Rust and need to manage dozens of concurrent worktrees will find it immediately valuable; smaller or non‑Rust environments may need additional onboarding effort.</p>
             </div>
 
             
 
             <div class="post-actions">
-                <a href="https://github.com/yebeai/worktrunk" target="_blank" rel="noopener" class="primary-btn">
+                <a href="https://github.com/moses-y/worktrunk" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>
@@ -416,6 +466,75 @@ wt switch -c -x agent feat-2</p><p>Done. Oh, and when you’re done? wt remove c
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');
