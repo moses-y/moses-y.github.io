@@ -9,7 +9,7 @@
     <!-- Open Graph -->
     <meta property="og:title" content="voxtral.c - Moses Yebei">
     <meta property="og:description" content="Pure C inference of Mistral Voxtral Realtime 4B speech to text model">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/voxtral.c.html">
 
@@ -17,7 +17,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="voxtral.c">
     <meta name="twitter:description" content="Pure C inference of Mistral Voxtral Realtime 4B speech to text model">
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/voxtral.c.html">
 
@@ -122,6 +122,21 @@
         .post-header {
             margin-bottom: 48px;
         }
+
+        /* Read-aloud controls - hidden until JS confirms speechSynthesis exists. */
+        .listen-bar { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; }
+        .listen-btn, .listen-stop {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text-primary, #fff); font-family: inherit; font-size: 0.85rem;
+            padding: 8px 16px; border-radius: 999px; cursor: pointer; transition: .2s;
+        }
+        .listen-btn:hover, .listen-stop:hover { border-color: var(--accent, #4f7cff); color: var(--accent, #4f7cff); }
+        .listen-stop { padding: 8px 12px; }
+        .listen-icon { font-size: 0.7rem; }
+        .listen-progress { font-size: 0.75rem; color: var(--text-secondary, #9aa4bf); font-variant-numeric: tabular-nums; }
+        .post-content p.speaking { background: color-mix(in srgb, var(--accent, #4f7cff) 12%, transparent); border-radius: 4px; }
 
         .post-meta {
             display: flex;
@@ -372,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -381,21 +396,52 @@
                 <p class="post-parent">Forked from <a href="https://github.com/antirez/voxtral.c" target="_blank" rel="noopener">antirez/voxtral.c</a></p>
             </div>
 
-            <img class="post-image" src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="voxtral.c" loading="lazy">
+            <img class="post-image" src="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80" alt="voxtral.c" loading="lazy">
 
-            <div class="post-content">
-                <p>The Problem
-Transcribing audio is a pain, especially when you need a solution that doesn&#39;t demand an entire tech stack. Most speech-to-text services are either tied to cloud APIs or come with a ton of dependencies. Enter voxtral.c, a pure C implementation of Mistral&#39;s Voxtral Real-time 4B model, which cuts the bloat and keeps it simple.</p><p>What This Does
-The repo offers a straightforward inference pipeline for the Voxtral model with zero external dependencies, aside from the C standard library. You can build it for Apple Silicon or Intel using the Makefile, and it even supports MPS for some nice GPU acceleration. The audio processing is handled in voxtralaudio.c, which uses a chunked encoder to manage memory efficiently, regardless of how long your audio is. Want to transcribe a file? Just run ./voxtral -d voxtral-model -i audio.wav and watch the tokens stream to stdout.</p><p>Need to pipe audio from ffmpeg? That’s easy too. Use the --stdin flag for real-time transcription. The voxstreamt API lets you feed audio incrementally, which is a pretty slick feature for those who need continuous input.</p><p>Real-World Use
-Imagine you have a podcast episode in .wav format and want to transcribe it without the hassle of setting up a Python environment or worrying about cloud costs. Just download the model using ./downloadmodel.sh, then run:</p><p>ffmpeg -i podcast.mp3 -f s16le -ar 16000 -ac 1 - 2&gt;/dev/null | \
-    ./voxtral -d voxtral-model --stdin</p><p>You’ll get a steady stream of transcription tokens printed out as the audio plays. It’s efficient, doesn’t drown you in dependencies, and just works.</p><p>The Bottom Line
-voxtral.c is a no-nonsense solution for real-time speech-to-text transcription. It’s lightweight and efficient, perfect for developers who want a straightforward implementation without the corporate fluff. Just keep in mind, the project still needs more testing for production use, especially with longer audio. If you’re tired of the usual overhead, give this a shot.</p>
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content" id="post-content">
+                <p>The Problem  
+Transcribing speech on‑device or in low‑resource environments often requires heavy Python stacks (PyTorch, vLLM, CUDA) and large runtime dependencies. Teams that need a lightweight, self‑contained inference engine for the Voxtral Realtime 4B model lack a reference implementation that runs directly from C without a Python interpreter or GPU‑specific toolkits.</p><p>What This Does  
+The repository supplies a pure‑C inference pipeline for the Mistral Voxtral Realtime 4B speech‑to‑text model. Core components live in the voxtral.c/.h files:</p><p> voxtralencoder.c / voxtraldecoder.c – implement the chunked audio encoder and transformer decoder.  
+ voxtralkernels.c + voxtralmetal.m – provide CPU (BLAS) and Metal‑GPU kernels for attention and matrix ops.  
+ voxtraltokenizer.c – converts model logits to token strings.  
+ voxtralsafetensors.c – memory‑maps the BF16 weights from the Safetensors file, avoiding full loading.</p><p>The command‑line driver main.c (built as ./voxtral) exposes a simple CLI (-d &lt;modeldir&gt; -i &lt;wav&gt; or --stdin) and a streaming C API (voxstreamt) that can be linked into other applications. The pythonsimpleimplementation.py mirrors the same flow in Python for reference, but the C binary is fully independent of any Python runtime.</p><p>How To Use It  
+Build (choose backend)
+make mps          # Apple Silicon – Metal acceleration (fastest)
+or
+make blas         # Intel/macOS/Linux – OpenBLAS fallback
+Pull the model (≈8.9 GB)
+./downloadmodel.sh   # places model files under ./voxtral-model
+Transcribe a WAV file
+./voxtral -d voxtral-model -i samples/testspeech.wav
+Stream any audio format via ffmpeg
+ffmpeg -i audio.mp3 -f s16le -ar 16000 -ac 1 - 2&gt;/dev/null | \
+    ./voxtral -d voxtral-model --stdin</p><p>No external libraries are required for the binary itself; the only optional dependency is OpenBLAS when the blas target is used. All configuration is passed via CLI flags; there is no separate config file.</p><p>Real‑World Use  
+A voice‑assistant service running on a macOS edge device can embed voxtral.c as a static library, instantiate voxstreamt, feed microphone PCM buffers, and emit token strings to downstream NLU components in real time. Because the KV cache is circular and capped at 8192 positions, memory usage stays bounded even for hour‑long recordings.</p><p>voxstreamt st = voxstreamnew(&quot;voxtral-model&quot;);
+voxstreamfeed(st, pcmchunk, chunklen);
+char *text = voxstreamnexttoken(st);
+printf(&quot;%s &quot;, text);</p><p>Code Health &amp; Issues  
+Medium – No CI/CD – No .github/workflows or other automation; build/test gating is manual.  
+Low – Limited test coverage – Only two test files (inspectweights.c, voxtraldecoder.c‑related checks) exist; core audio pipeline and streaming API lack unit tests.  
+Medium – Platform‑specific kernels – Metal implementation (voxtralmetal.m, voxtralshaders.metal) works only on Apple Silicon; fallback to BLAS may be slow due to BF16→FP32 conversion noted in README.  
+Low – Sparse documentation – README covers build and run steps, but internal APIs (voxstream_t, weight loading) have no inline docs or examples beyond the CLI.  
+Low – License present – LICENSE file exists; no apparent proprietary code.  
+Low – No runtime error handling – Functions like fopen or mmap are used without exhaustive checks, which could cause crashes on missing model files.</p><p>Overall the code is compact and self‑contained, but the lack of automated testing and limited platform support increase integration risk.</p><p>The Bottom Line  
+voxtral.c delivers a functional, zero‑dependency C inference engine for the Voxtral Realtime 4B model, suitable for low‑overhead or Apple‑silicon deployments. It is a solid reference implementation, but production use should account for the modest test suite, missing CI, and the performance penalty of BF16‑to‑FP32 conversion on non‑Metal backends. Teams comfortable with C integration and willing to add their own validation harness will find it valuable.</p>
             </div>
 
             
 
             <div class="post-actions">
-                <a href="https://github.com/yebeai/voxtral.c" target="_blank" rel="noopener" class="primary-btn">
+                <a href="https://github.com/moses-y/voxtral.c" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>
@@ -419,6 +465,75 @@ voxtral.c is a no-nonsense solution for real-time speech-to-text transcription. 
     </footer>
 
     <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
         // Theme toggle
         const toggle = document.getElementById('theme-toggle');
         const stored = localStorage.getItem('theme');
