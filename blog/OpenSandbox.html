@@ -387,7 +387,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 14, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -408,7 +408,35 @@
             </div>
 
             <div class="post-content" id="post-content">
-                <p>OpenSandbox is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+                <p>The Problem  
+AI agents need a controlled execution environment that isolates code, restricts network egress, and injects credentials safely. Without a unified sandbox, teams cobble ad‑hoc containers, risk secret leakage, and spend effort on custom networking policies.</p><p>What This Does  
+OpenSandbox delivers a full sandbox platform built around Docker/Kubernetes runtimes. The core runtime lives in components/egress/ (e.g., main.go, Dockerfile, go.mod) and implements network egress control, credential vault, and nftables‑based policy enforcement. The user‑facing CLI resides in cli/src/opensandboxcli/, with commands such as sandbox, file, egress, and credentialvault wired in commands/.py. SDKs for multiple languages are generated from the same protocol (see specs/), but the repository focuses on the Go egress component and the Python CLI.</p><p>How To Use It  </p><p>Setup  
+Build the egress component container
+cd components/egress
+docker build -t opensandbox/egress:latest -f Dockerfile .</p><p>Install the CLI in a virtual environment
+cd ../../cli
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .</p><p>The pyproject.toml defines the CLI package; pip install -e . pulls in all dependencies declared there.</p><p>Configuration  
+ Network policy: edit components/egress/pkg/policy/policy.go or supply a JSON policy file referenced by the --policy flag of the CLI (see cli/src/opensandboxcli/commands/egress.py).  
+ Credential vault: place secrets in a JSON file and point the CLI via --vault-file (handled in pkg/credentialvault/vault.go).  
+ Docker/K8s runtime selection is controlled by flags in cli/src/opensandboxcli/commands/sandbox.py.</p><p>Running it  
+Start the egress service container:
+docker run -d --name osb-egress -p 8080:8080 opensandbox/egress:latest</p><p>Create a sandbox and execute a command:
+opensandboxcli sandbox create --runtime docker --image python:3.11
+opensandboxcli sandbox exec &lt;sandbox-id&gt; &quot;python -c &#39;print(42)&#39;&quot;</p><p>The CLI entry point is cli/src/opensandboxcli/main.py, which invokes opensandboxcli/main.py.</p><p>Real‑World Use  
+A CI pipeline for a coding‑assistant agent can spin up a sandbox, run user‑submitted code, and destroy the environment automatically:
+name: Run user code
+  run: |
+    sandboxid=$(opensandboxcli sandbox create --runtime docker --image python:3.11)
+    opensandboxcli sandbox exec $sandboxid &quot;python solution.py&quot;
+    opensandboxcli sandbox delete $sandboxid</p><p>Network egress is automatically filtered by the egress component, preventing the code from reaching external services unless whitelisted.</p><p>Code Health &amp; Issues  
+Low – Test coverage – 60 test files exist (components/egress/_test.go, cli/tests/.py), but integration tests for full sandbox lifecycle are limited to CI workflows (.github/workflows/real-e2e.yml).  
+Medium – Documentation gaps – The README outlines features but lacks a quick‑start guide; docs/ folder is sparse, and required CLI flags are only described in code comments (commands/.py).  
+Low – Platform assumptions – Egress code uses Linux‑specific nftables and iptables (pkg/iptables/.go), which will fail on non‑Linux hosts without a fallback.  
+Low – Secret handling – Credential vault expects a JSON file; the repository does not ship a template or validation schema, increasing risk of malformed input.  
+None – Licensing/CI – A LICENSE file is present, and CI pipelines cover linting, unit tests, and end‑to‑end builds, indicating a disciplined SDLC.</p><p>The Bottom Line  
+OpenSandbox offers a well‑structured, container‑based sandbox with strong egress controls and a usable Python CLI. It is ready for teams that need reproducible, isolated AI agent execution and are comfortable managing Docker/Kubernetes runtimes. Minor work is needed on onboarding documentation and cross‑platform support, but the codebase is test‑covered and CI‑driven, making it a solid foundation for production workloads.</p>
             </div>
 
             
