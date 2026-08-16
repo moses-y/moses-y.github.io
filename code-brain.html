@@ -51,6 +51,32 @@
             display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
         }
         .stage { position: relative; min-height: 0; height: 100%; overflow: hidden; }
+        .deck-hd { display: flex; justify-content: space-between; gap: 10px; padding: 9px 18px;
+            border-bottom: 1px solid var(--border,rgba(255,255,255,0.09));
+            border-top: 1px solid var(--border,rgba(255,255,255,0.09)); }
+        .deck { overflow-y: auto; flex: 1; min-height: 0; }
+        .drow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+            padding: 11px 18px; background: none; border: 0; cursor: pointer; position: relative;
+            border-bottom: 1px solid var(--border,rgba(255,255,255,0.07)); color: inherit; }
+        .drow::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: transparent; }
+        .drow:hover { background: rgba(192,132,87,0.08); }
+        .drow[data-active="1"] { background: rgba(224,82,31,0.09); }
+        .drow[data-active="1"]::before { background: var(--accent-secondary,#E0521F); }
+        .drow .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+        .drow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 0.92rem; }
+        .drow .ct { font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+            font-size: 0.66rem; color: var(--text-tertiary,#6B5D51); flex: none; }
+        .dback { font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-size: 0.66rem;
+            letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent,#C08457);
+            background: none; border: 0; cursor: pointer; padding: 10px 18px; text-align: left; width: 100%;
+            border-bottom: 1px solid var(--border,rgba(255,255,255,0.09)); }
+        .dmeta { padding: 12px 18px; border-bottom: 1px solid var(--border,rgba(255,255,255,0.07));
+            font-size: 0.84rem; color: var(--text-secondary,#A99584); }
+        .dmeta a { color: var(--accent,#C08457); text-decoration: none;
+            font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-size: 0.68rem;
+            letter-spacing: 0.09em; text-transform: uppercase; }
+
         .ro-lab { font-family: var(--font-mono, ui-monospace, Menlo, monospace);
             font-size: 0.66rem; letter-spacing: 0.15em; text-transform: uppercase;
             color: var(--text-tertiary,#6B5D51); }
@@ -280,6 +306,12 @@
         </a>
         <div class="legend" id="legend"></div>
         </div>
+
+        <div class="deck-hd">
+            <span class="ro-lab" id="deck-crumb">All domains</span>
+            <span class="ro-lab" id="deck-count"></span>
+        </div>
+        <div class="deck" id="deck" tabindex="0" aria-label="Drill-down browser"></div>
       </aside>
 
       <div class="stage">
@@ -413,6 +445,8 @@
         fetch('forks.json').then(function (r) { return r.json(); }).then(build)
             .catch(function (e) { el.loading.innerHTML = '<div>Could not load graph data.</div>'; console.error(e); });
 
+        var deckSync = function () {};
+
         function build(data) {
             var forks = (data.forks || []).slice();
 
@@ -456,6 +490,113 @@
                 });
                 addLink(langIds[lkey], rid);
             });
+
+
+            // ---- Drill deck -------------------------------------------------
+            // The rail follows the graph's own hierarchy (domain -> language ->
+            // repo) rather than listing 1296 repos flat, which would fight the
+            // structure the graph is showing. Selecting a row drives the graph
+            // through the same onNodeClick the canvas uses.
+            (function buildDeck() {
+                var deckEl = document.getElementById('deck');
+                var crumbEl = document.getElementById('deck-crumb');
+                var countEl = document.getElementById('deck-count');
+                if (!deckEl) return;
+                var level = { kind: 'root' };
+
+                function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
+                function nf(n) { return (n || 0).toLocaleString('en-US'); }
+
+                function rowsFor(lv) {
+                    if (lv.kind === 'root') {
+                        return nodes.filter(function (n) { return n.kind === 'domain'; })
+                            .map(function (n) {
+                                var kids = nodes.filter(function (r) { return r.kind === 'repo' && r.domain === n.name; });
+                                return { node: n, name: n.name, count: kids.length + ' repos', color: n.color };
+                            }).sort(function (a, b) { return parseInt(b.count) - parseInt(a.count); });
+                    }
+                    if (lv.kind === 'domain') {
+                        return nodes.filter(function (n) { return n.kind === 'lang' && n.domain === lv.node.name; })
+                            .map(function (n) {
+                                var kids = nodes.filter(function (r) {
+                                    return r.kind === 'repo' && r.domain === lv.node.name && r.language === n.name;
+                                });
+                                return { node: n, name: n.name, count: kids.length + ' repos', color: n.color };
+                            }).sort(function (a, b) { return parseInt(b.count) - parseInt(a.count); });
+                    }
+                    if (lv.kind === 'lang') {
+                        return nodes.filter(function (n) {
+                            return n.kind === 'repo' && n.domain === lv.node.domain && n.language === lv.node.name;
+                        }).map(function (n) {
+                            return { node: n, name: n.name, count: nf(n.files) + ' files', color: n.color };
+                        }).sort(function (a, b) { return (b.node.files || 0) - (a.node.files || 0); });
+                    }
+                    return [];
+                }
+
+                function render() {
+                    var html = '';
+                    if (level.kind !== 'root') {
+                        html += '<button class="dback" data-back="1">&larr; ' +
+                            (level.kind === 'domain' ? 'All domains' : esc(level.node.domain)) + '</button>';
+                    }
+                    // A repo is a leaf: show what it is and where to read more.
+                    if (level.kind === 'repo') {
+                        var f = level.node.repo || {}, kg = f.knowledgeGraph || {};
+                        html += '<div class="dmeta">' + esc(f.description || 'No description available') +
+                            '<div style="margin-top:10px;display:flex;gap:14px;flex-wrap:wrap">' +
+                            '<a href="report.html?repo=' + encodeURIComponent(f.id) + '" target="_blank" rel="noopener">Full report &rarr;</a>' +
+                            '<a href="blog/' + encodeURIComponent(f.name) + '.html" target="_blank" rel="noopener">Briefing &rarr;</a>' +
+                            '</div></div>';
+                        crumbEl.textContent = level.node.name;
+                        countEl.textContent = nf(kg.totalFiles || level.node.files) + ' files';
+                        deckEl.innerHTML = html;
+                        wire();
+                        return;
+                    }
+                    var rows = rowsFor(level);
+                    html += rows.map(function (r) {
+                        var active = currentFocus && currentFocus.id === r.node.id;
+                        return '<button class="drow" data-id="' + esc(r.node.id) + '" data-active="' + (active ? 1 : 0) + '">' +
+                            '<span class="dot" style="background:' + esc(r.color) + '"></span>' +
+                            '<span class="nm">' + esc(r.name) + '</span>' +
+                            '<span class="ct">' + esc(r.count) + '</span></button>';
+                    }).join('');
+                    crumbEl.textContent = level.kind === 'root' ? 'All domains' :
+                        (level.kind === 'domain' ? level.node.name : level.node.domain + ' / ' + level.node.name);
+                    countEl.textContent = rows.length + (level.kind === 'lang' ? ' repos' : ' items');
+                    deckEl.innerHTML = html;
+                    wire();
+                }
+
+                function wire() {
+                    var back = deckEl.querySelector('[data-back]');
+                    if (back) back.addEventListener('click', function () {
+                        level = level.kind === 'domain' ? { kind: 'root' }
+                            : level.kind === 'lang' ? { kind: 'domain', node: nodeById['domain:' + level.node.domain] || { name: level.node.domain } }
+                            : { kind: 'root' };
+                        if (level.kind === 'domain' && !level.node.name) level = { kind: 'root' };
+                        render();
+                    });
+                    deckEl.querySelectorAll('.drow').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            var n = nodeById[btn.dataset.id];
+                            if (!n) return;
+                            onNodeClick(n);
+                            level = { kind: n.kind, node: n };
+                            render();
+                        });
+                    });
+                }
+
+                // Selecting on the canvas moves the deck to the same place.
+                deckSync = function (node) {
+                    if (!node) { level = { kind: 'root' }; render(); return; }
+                    level = { kind: node.kind, node: node };
+                    render();
+                };
+                render();
+            })();
 
             (function renderReadout() {
                 var host = document.getElementById('ro-figs');
@@ -621,6 +762,7 @@
                 computeHighlight(node.id);
                 flyTo(node, node.kind === 'repo' ? 150 : node.kind === 'domain' ? 260 : 120);
                 showInfo(node);
+                deckSync(node);
             }
             function clearFocus() {
                 currentFocus = null; computeHighlight(null); el.info.classList.remove('open');
@@ -686,6 +828,19 @@
                 });
             }
 
+            // Re-supplying graphData reheats the whole simulation, so growing one repo
+            // re-laid-out all 1296 of them and the estate appeared to explode. Pinning
+            // everything that already has a position means only the new structure
+            // settles; the map the user was reading stays exactly where it was.
+            function pinExisting() {
+                nodes.forEach(function (n) {
+                    if (typeof n.x === 'number') { n.fx = n.x; n.fy = n.y; n.fz = n.z; }
+                });
+            }
+            function unpinAll() {
+                nodes.forEach(function (n) { delete n.fx; delete n.fy; delete n.fz; });
+            }
+
             function diveInto(repoNode) {
                 if (repoNode.dived) { flyTo(repoNode, 90); return; }
                 el.diveBtn.disabled = true; el.diveBtn.textContent = 'Loading…';
@@ -721,6 +876,15 @@
                         if (isModule) nComm = colorByCommunity(newNodes, newLinks);
                         // Clear the repo-focus dimming so the grown structure shows in full colour.
                         highlightNodes.clear(); highlightLinks.clear();
+                        pinExisting();
+                        newNodes.forEach(function (n) {
+                            // Start the new nodes on their parent so they grow outward
+                            // from it rather than flying in from the origin.
+                            delete n.fx; delete n.fy; delete n.fz;
+                            n.x = (repoNode.x || 0) + (Math.random() - 0.5) * 12;
+                            n.y = (repoNode.y || 0) + (Math.random() - 0.5) * 12;
+                            n.z = (repoNode.z || 0) + (Math.random() - 0.5) * 12;
+                        });
                         Graph.graphData({ nodes: nodes, links: links });
                         refresh();
                         repoNode.dived = true;
@@ -742,6 +906,7 @@
                 links = links.filter(function (l) { return !drop[idOf(l.source)] && !drop[idOf(l.target)]; });
                 Object.keys(adjacency).forEach(function (k) { adjacency[k] = adjacency[k].filter(function (x) { return !drop[x]; }); });
                 repoNode.dived = false;
+                pinExisting();
                 Graph.graphData({ nodes: nodes, links: links });
                 el.collapseBtn.style.display = 'none'; el.diveBtn.textContent = '↴ Grow structure';
                 computeHighlight(repoNode.id);
@@ -900,11 +1065,30 @@
             function doReset() {
                 el.search.value = ''; el.fDomain.value = ''; el.fSize.value = '';
                 nodes.filter(function (n) { return n.kind === 'repo' && n.dived; }).forEach(collapse);
+                // Reset is the one place the layout should be free to re-form.
+                unpinAll();
                 applyFilters();
                 Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1300);
                 controls.autoRotate = true; spinning = true;
             }
             el.reset.addEventListener('click', doReset);
+
+            // Read-only handle for the run-skill's regression loop, which asserts that
+            // growing a repo does not re-lay-out the estate. Exposes no setters.
+            window.__codeBrain = {
+                positions: function () {
+                    var out = {};
+                    nodes.forEach(function (n) {
+                        if (n.kind === 'repo' || n.kind === 'lang' || n.kind === 'domain') out[n.id] = [n.x, n.y, n.z];
+                    });
+                    return out;
+                },
+                grow: function (id) { var n = nodeById[id]; if (n && n.kind === 'repo') { onNodeClick(n); diveInto(n); return n.id; } return null; },
+                firstRepo: function () {
+                    var r = nodes.filter(function (n) { return n.kind === 'repo' && n.files > 40; })[0];
+                    return r ? r.id : null;
+                }
+            };
 
             Graph.onEngineStop(function () { Graph.zoomToFit(800, 130); Graph.onEngineStop(function () {}); });
             el.loading.style.display = 'none';
