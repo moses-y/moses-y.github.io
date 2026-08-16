@@ -59,6 +59,11 @@ function surfaces() {
       ['cards', 'document.querySelectorAll(".project-card").length'],
       ['total_repos', '(()=>{const m=document.body.innerText.match(/of\\s+([\\d,]+)\\s+repos/);return m?+m[1].replace(/,/g,""):0})()'],
       ['filter_chips', 'document.querySelectorAll(".filter-chip").length'],
+      // The listing must come from the lean index, never the 10MB feed or the DB.
+      ['no_heavy_payload',
+        'performance.getEntriesByType("resource").filter(r=>/forks\\.(json|db)|sql-wasm/.test(r.name)).length'],
+      ['index_used',
+        'performance.getEntriesByType("resource").filter(r=>/data\\/index\\.json/.test(r.name)).length'],
       ['search_narrows',
         '(()=>{const s=document.getElementById("search-input");s.value="agent";s.dispatchEvent(new Event("input",{bubbles:true}));return new Promise(r=>setTimeout(()=>r(document.getElementById("projects-container").children.length>0),900))})()']
     ], '.project-card'],
@@ -110,7 +115,7 @@ function probe(url, expr, waitSel) {
 
 if (withPipeline) {
   console.log('# pipeline');
-  for (const s of ['build-db', 'generate-blog-pages', 'generate-rss', 'build-stats']) {
+  for (const s of ['build-db', 'generate-blog-pages', 'generate-rss', 'build-stats', 'build-index']) {
     const t0 = Date.now();
     try {
       execFileSync('node', ['scripts/' + s + '.js'], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 300000 });

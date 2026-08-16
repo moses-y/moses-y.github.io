@@ -202,7 +202,10 @@
         }
         async function loadStats() {
             const [forks, stats] = await Promise.all([
-                fetch('/forks.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null),
+                fetch('/data/index.json', { cache: 'no-cache' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(i => i && i.repos ? { forks: i.repos.map(expandIndexRecord) } : null)
+                    .catch(() => null),
                 fetch('/stats.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)
             ]);
             // Live, accurate counts straight from the feed.
@@ -266,6 +269,30 @@
                 .replace(/\n\n+/g, '</p><p class="md-para">')
                 .replace(/^(.)/m, '<p class="md-para">$1')
                 + '</p>';
+        }
+
+        // Lean index records use short keys to keep the file small. This restores the
+        // field names the renderers use, so nothing downstream had to change.
+        function expandIndexRecord(r) {
+            const c = r.c || '00000';
+            return {
+                id: r.i, name: r.n, displayName: r.t,
+                description: r.d, summary: null,
+                url: 'https://github.com/moses-y/' + r.n,
+                language: r.l, domain: r.g, kind: r.k,
+                stars: r.s, type: r.y ? 'original' : 'fork',
+                image: r.m, readTime: r.r || 2, updatedAt: r.z,
+                parent: r.p ? { name: r.p.n, url: r.p.u, stars: r.p.s } : null,
+                topics: [], umap: r.u, hasArticle: !!r.a, findings: r.x,
+                knowledgeGraph: {
+                    totalFiles: r.f,
+                    codeHealth: {
+                        hasTests: c[0] === '1', hasLicense: c[3] === '1',
+                        committedSecrets: c[4] === '1' ? 1 : 0
+                    },
+                    hasCI: c[1] === '1', hasDocker: c[2] === '1'
+                }
+            };
         }
 
         // Render project card
@@ -502,24 +529,27 @@
             const updatedEl = document.getElementById('last-updated');
 
             try {
-                // Try SQLite first
+                // data/index.json is the read-side build: 160KB gzipped for all 1295
+                // repos, versus the 2.4MB forks.json and the 11.7MB SQLite copy of the
+                // same rows that this page used to pull. Article prose and file trees
+                // are not here by design - the card never showed them.
                 let loadedFromDb = false;
                 try {
-                    await ForksDB.init();
-                    const result = ForksDB.getRepos({ page: 1, limit: 9999, sort: 'updated_at' });
-                    if (result.repos.length > 0) {
-                        allProjects = result.repos.map(normalizeRepo);
-                        loadedFromDb = true;
-
-                        const meta = ForksDB.getMeta();
-                        if (meta.last_updated && updatedEl) {
-                            updatedEl.textContent = `Last updated: ${new Date(meta.last_updated).toLocaleDateString('en-US', {
-                                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                            })}`;
+                    const ires = await fetch('/data/index.json', { cache: 'no-cache' });
+                    if (ires.ok) {
+                        const idx = await ires.json();
+                        if (idx.repos?.length) {
+                            allProjects = idx.repos.map(expandIndexRecord);
+                            loadedFromDb = true;
+                            if (idx.generated && updatedEl) {
+                                updatedEl.textContent = `Last updated: ${new Date(idx.generated).toLocaleDateString('en-US', {
+                                    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                })}`;
+                            }
                         }
                     }
-                } catch (dbErr) {
-                    console.log('SQLite unavailable, falling back to JSON:', dbErr.message);
+                } catch (idxErr) {
+                    console.log('Index unavailable, falling back to forks.json:', idxErr.message);
                 }
 
                 // Fallback to forks.json
