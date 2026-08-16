@@ -102,7 +102,7 @@
         /* The option popup renders on the OS's own surface - force a dark bg with
            light text so the entries aren't white-on-white and invisible. */
         .dock select option { background: #12151f; color: #fff; }
-        .dock .stats { display: flex; gap: 14px; font-size: 0.78rem; color: var(--text-secondary,#9aa4bf); flex-wrap: wrap; flex: none; }
+        .dock .stats { display: none; gap: 14px; font-size: 0.78rem; color: var(--text-secondary,#9aa4bf); flex-wrap: wrap; flex: none; }
         .dock .stats strong { color: var(--text-primary,#fff); font-variant-numeric: tabular-nums; }
         .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
         .cg-btn {
@@ -138,11 +138,13 @@
         @media (max-width: 820px) { .dock .sub { display: none; } .dock input { width: 130px; } }
 
         .info {
-            /* top is set in JS to sit just below the (wrapping) dock - never overlap it. */
-            position: fixed; z-index: 20; right: 22px; top: 128px; width: 330px;
-            max-width: calc(100vw - 44px);
-            max-height: calc(100vh - var(--info-top, 128px) - 26px); overflow-y: auto; overscroll-behavior: contain;
-            background: rgba(10,12,24,0.82); backdrop-filter: blur(22px);
+            /* Anchored to the stage, not the viewport: the dock no longer floats over
+               the canvas, so there is nothing to measure around. */
+            position: absolute; z-index: 20; right: 18px; top: 18px; bottom: 18px;
+            width: 330px; max-width: calc(100% - 36px);
+            overflow-y: auto; overscroll-behavior: contain;
+            background: color-mix(in srgb, var(--bg-secondary,#14100C) 90%, transparent);
+            backdrop-filter: blur(22px);
             border: 1px solid var(--border,rgba(255,255,255,0.08));
             border-radius: 18px; padding: 20px; color: var(--text-primary,#fff);
             transform: translateX(120%); transition: transform .35s cubic-bezier(.2,.8,.2,1); opacity: 0;
@@ -248,7 +250,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="18 15 12 9 6 15"/></svg>
                 </button>
             </div>
-            <p class="sub">Domains → languages → repos. Click a repo to grow its inner structure.</p>
+            <p class="sub">Domains → languages → repos. Double-click a repo to grow its inner structure.</p>
         </div>
         <div class="search">
             <input type="text" id="search" placeholder="Search a repo, then Enter…" autocomplete="off">
@@ -401,15 +403,7 @@
 
         // Keep the info panel docked just below the (wrapping) control bar, so a
         // multi-row dock at medium widths never overlaps it.
-        var dockEl = document.querySelector('.dock');
-        function positionInfo() {
-            var top = Math.round(dockEl.getBoundingClientRect().bottom) + 12;
-            el.info.style.top = top + 'px';
-            document.documentElement.style.setProperty('--info-top', top + 'px');
-        }
-        positionInfo();
-        if (window.ResizeObserver) new ResizeObserver(positionInfo).observe(dockEl);
-        window.addEventListener('resize', positionInfo);
+        // The dock is in the rail now; the panel is positioned by CSS against the stage.
 
         // Which repos have a full architecture report (analyzed deep graph).
         var reportSet = {};
@@ -527,6 +521,23 @@
                 .onNodeClick(onNodeClick)
                 .onNodeRightClick(function (node) { if (node.kind === 'repo') diveInto(node); })
                 .onBackgroundClick(clearFocus);
+
+            // force-graph sizes itself from the window, but the canvas lives in a grid
+            // cell that is narrower than the viewport. Left alone the canvas was
+            // 1440x757 inside a 1060x701 box, so every pointer coordinate was offset:
+            // clicks selected the wrong node and zoom/pan felt wrong. Drive the size
+            // from the container and keep it in step.
+            (function () {
+                var box = document.getElementById('graph');
+                function fitCanvas() {
+                    var r = box.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) Graph.width(r.width).height(r.height);
+                }
+                fitCanvas();
+                if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(box);
+                window.addEventListener('resize', fitCanvas);
+            })();
+
 
             // Double-click expands. force-graph has no dblclick hook, so pair the
             // clicks by time; the same gesture works on both graph pages now.
