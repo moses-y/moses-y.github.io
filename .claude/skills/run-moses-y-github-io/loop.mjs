@@ -39,14 +39,19 @@ function sampleArticle(withDiagram) {
 // Opens the Code Brain reader on a known repo, then evaluates the caller's
 // expression against it. Every probe re-navigates, so the open cannot be done
 // once and shared: prefix it and close the paren at the end of your expression.
+// Polls for the report button rather than sleeping a fixed interval: a fixed
+// 1800ms wait was marginal and one probe in four would return null while the
+// other three opened the reader fine in the same run.
 const READER_OPEN =
   '(()=>{const s=document.getElementById("search");s.value="hummingbot";' +
   's.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));' +
-  'return new Promise(r=>setTimeout(()=>{const b=document.getElementById("report-btn");' +
-  'if(!b||b.style.display==="none"){r(null);return}b.click();' +
+  'return new Promise(r=>{let n=0;const t=setInterval(()=>{' +
+  'const b=document.getElementById("report-btn");' +
+  'if(b&&b.style.display!=="none"){clearInterval(t);b.click();' +
   'setTimeout(()=>r(';
-// ...caller expression here, then: '),3200)},1800))})()'
-const READER_END = '),3200)},1800))})()';
+// ...caller expression here, then READER_END
+const READER_END =
+  '),3200);return}if(++n>60){clearInterval(t);r(null)}},150)})})()';
 
 // name -> { url, probes: [[label, jsExpression]] }. Numbers are compared to the
 // baseline (must not decrease); strings must match exactly.
