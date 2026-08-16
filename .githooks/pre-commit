@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+#
+# pre-commit - three gates, cheapest and most important first.
+#
+#   1. secrets    nothing key-shaped may enter this repo. It is public and
+#                 Pages-served, so a leaked key is published, not just pushed.
+#   2. syntax     staged JS must parse.
+#   3. size       no file over MAX_LINES. Files already over it are listed in
+#                 .githooks/loc-baseline.txt and may shrink but never grow.
+#
+# Install:  git config core.hooksPath .githooks
+# Bypass:   git commit --no-verify   (say so in the message if you do)
+
+set -uo pipefail
+
+MAX_LINES=450
+BASELINE="$(git rev-parse --show-toplevel)/.githooks/loc-baseline.txt"
+fail=0
+
+# Generated output is not hand-written code and is not held to these rules.
+is_generated() {
+  case "$1" in
+    blog/*|data/*|structure/*|node_modules/*|Resume/*|images/*) return 0 ;;
+    forks.json|sitemap.xml|embeddings.json|stats.json|feed.xml|atom.xml) return 0 ;;
+    *.db|*.png|*.jpg|*.svg|*.min.js|*.min.css|package-lock.json) return 0 ;;
+  esac
+  return 1
+}
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# ---- 1. secrets ------------------------------------------------------------
+# Matched against staged content, not the working tree, so a key cannot slip in
+# via `git add -p` on a file that looks clean on disk.
+secret_patterns='nvapi-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in *.db|*.png|*.jpg|*.jpeg|*.gif|*.woff*) continue ;; esac
+  if git show ":$f" 2>/dev/null | grep -nEq "$secret_patterns"; then
+    echo "BLOCKED  $f contains something key-shaped:"
+    git show ":$f" 2>/dev/null | grep -nE "$secret_patterns" | head -3 | sed 's/^/           /'
+    fail=1
+  fi
+done <<< "$staged"
+
+if [ "$fail" -eq 1 ]; then
+  echo
+  echo "This repo is public and served by GitHub Pages. Keys belong in"
+  echo "~/.nvidia-api-key and the repository Actions secrets, never here."
+  exit 1
+fi
+
+# ---- 2. syntax -------------------------------------------------------------
+if command -v node >/dev/null 2>&1; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    is_generated "$f" && continue
+    case "$f" in
+      *.js|*.mjs|*.cjs)
+        if ! node --check "$f" 2>/dev/null; then
+          echo "BLOCKED  $f does not parse:"
+          node --check "$f" 2>&1 | head -3 | sed 's/^/           /'
+          fail=1
+        fi ;;
+    esac
+  done <<< "$staged"
+fi
+
+# ---- 3. size ratchet -------------------------------------------------------
+# A hard cap was unenforceable: 12 files were already over it when this landed.
+# The baseline grandfathers those at their recorded length, so existing code can
+# be worked on while it can only get smaller.
+baseline_for() {
+  [ -f "$BASELINE" ] || { echo ""; return; }
+  awk -F'\t' -v k="$1" '$2 == k { print $1; exit }' "$BASELINE"
+}
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  is_generated "$f" && continue
+  [ -f "$f" ] || continue
+  case "$f" in
+    *.js|*.mjs|*.cjs|*.css|*.html|*.sh|*.yml|*.yaml) ;;
+    *) continue ;;
+  esac
+
+  n=$(git show ":$f" 2>/dev/null | wc -l)
+  allowed=$(baseline_for "$f")
+
+  if [ -n "$allowed" ]; then
+    if [ "$n" -gt "$allowed" ]; then
+      echo "BLOCKED  $f grew to $n lines (baseline $allowed, target $MAX_LINES)."
+      echo "           Grandfathered files may shrink, never grow. Split it or"
+      echo "           move the new code into a new file."
+      fail=1
+    fi
+  elif [ "$n" -gt "$MAX_LINES" ]; then
+    echo "BLOCKED  $f is $n lines (limit $MAX_LINES). Split it."
+    fail=1
+  fi
+done <<< "$staged"
+
+if [ "$fail" -ne 0 ]; then
+  echo
+  echo "Commit refused. Override with --no-verify only if you mean it."
+  exit 1
+fi
+
+exit 0
