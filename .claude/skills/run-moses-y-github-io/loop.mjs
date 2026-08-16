@@ -54,8 +54,12 @@ function surfaces() {
   const article = sampleArticle(true);
   return [
     ['home', '/', [
-      ['reveal_hidden_after_scroll',
-        'window.scrollTo(0,document.body.scrollHeight),new Promise(r=>setTimeout(()=>r([...document.querySelectorAll(".reveal")].filter(e=>getComputedStyle(e).opacity==="0").length),1500))'],
+      // Counted the elements still HIDDEN, so fewer was better while the loop
+      // treats a smaller number as a regression - the one probe where the rule
+      // ran backwards, and it recorded a broken 9 as the baseline to beat.
+      // A boolean cannot invert like that.
+      ['reveal_all_shown',
+        'window.scrollTo(0,document.body.scrollHeight),new Promise(r=>setTimeout(()=>r([...document.querySelectorAll(".reveal")].filter(e=>getComputedStyle(e).opacity==="0").length===0),1500))'],
       ['nav_links', 'document.querySelectorAll("#navbar a[href]").length'],
       ['hero_stats', 'document.querySelectorAll(".stats-bar .stat-number").length'],
       // The bar was trimmed and the full list moved into the menu, so the menu is
