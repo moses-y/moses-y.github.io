@@ -100,6 +100,8 @@ function isFallbackArticle(article) {
 }
 
 // Strip markdown formatting from text for clean display
+const { looksLikeReasoning } = require('./lib-quality.js');
+
 function stripMarkdown(text) {
   if (!text) return '';
   return text
@@ -1134,7 +1136,8 @@ async function main() {
 
   for (const repo of recentRepos) {
     const existing = existingArticles.get(repo.id);
-    if (existing && !isFallbackArticle(existing.summary)) {
+    // A stored scratchpad is not a good article: regenerate it.
+    if (existing && !isFallbackArticle(existing.summary) && !looksLikeReasoning(existing.summary)) {
       hasArticle.push({ repo, existing });
     } else {
       needsGeneration.push(repo);
@@ -1268,6 +1271,16 @@ async function main() {
       if (!rateLimitHit) {
         article = await generateBlogArticle(detailed, readme, fileTree, knowledgeGraph);
         aiCallCount++;
+
+        // Reasoning models sometimes emit their scratchpad as the answer. There
+        // was no gate here, so 16 of those shipped as published briefings -
+        // paragraphs of "We need to parse the repo data" on a public site.
+        // Rejecting rather than storing lets the normal retry path pick it up
+        // with another model on a later run.
+        if (article && looksLikeReasoning(article)) {
+          console.log(`  - Article rejected: model returned its reasoning, not a briefing`);
+          article = null;
+        }
 
         if (article) {
           consecutiveRateLimits = 0;

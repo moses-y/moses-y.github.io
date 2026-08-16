@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { looksLikeReasoning } = require('./lib-quality.js');
 
 // Directory for blog posts
 const BLOG_DIR = 'blog';
@@ -31,7 +32,18 @@ function looksLikeHeading(block) {
     return /^[A-Z0-9]/.test(block) && block.split(/\s+/).length <= 8;
 }
 
-function renderSummary(summary) {
+function renderSummary(summary, post) {
+    // A briefing that failed the quality gate is not published. It cannot be
+    // salvaged by trimming either: these start with the prompt template echoed
+    // back, so cutting to the first section heading would publish the prompt.
+    // The deterministic analysis below still renders, and update-forks queues
+    // the repo for regeneration.
+    if (looksLikeReasoning(summary)) {
+        const d = (post && post.description) || '';
+        return (d ? `<p>${escapeHtml(d)}</p>` : '') +
+            '<p class="post-pending">A written briefing for this repository is being regenerated. ' +
+            'The analysis below is produced by static analysis and is unaffected.</p>';
+    }
     const blocks = String(summary || '').split('\n\n').map(b => b.trim()).filter(Boolean);
     return blocks.map(b => looksLikeHeading(b)
         ? `<h3 class="post-h">${escapeHtml(b)}</h3>`
@@ -531,6 +543,13 @@ function generateBlogPostHTML(post) {
         }
         .post-content .post-h:first-child { margin-top: 0; }
 
+        .post-content .post-pending {
+            font-size: 0.92rem;
+            color: var(--text-tertiary, #6B5D51);
+            border-left: 2px solid var(--border, rgba(255,240,228,0.14));
+            padding-left: 14px;
+        }
+
         .post-topics {
             display: flex;
             flex-wrap: wrap;
@@ -720,7 +739,7 @@ function generateBlogPostHTML(post) {
             </div>
 
             <div class="post-content" id="post-content">
-                ${renderSummary(post.summary)}
+                ${renderSummary(post.summary, post)}
             </div>
 
             ${renderAnalysis(post)}
