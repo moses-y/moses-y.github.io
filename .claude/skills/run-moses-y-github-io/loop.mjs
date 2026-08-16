@@ -36,6 +36,18 @@ function sampleArticle(withDiagram) {
   return files[0];
 }
 
+// Opens the Code Brain reader on a known repo, then evaluates the caller's
+// expression against it. Every probe re-navigates, so the open cannot be done
+// once and shared: prefix it and close the paren at the end of your expression.
+const READER_OPEN =
+  '(()=>{const s=document.getElementById("search");s.value="hummingbot";' +
+  's.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));' +
+  'return new Promise(r=>setTimeout(()=>{const b=document.getElementById("report-btn");' +
+  'if(!b||b.style.display==="none"){r(null);return}b.click();' +
+  'setTimeout(()=>r(';
+// ...caller expression here, then: '),3200)},1800))})()'
+const READER_END = '),3200)},1800))})()';
+
 // name -> { url, probes: [[label, jsExpression]] }. Numbers are compared to the
 // baseline (must not decrease); strings must match exactly.
 function surfaces() {
@@ -87,7 +99,19 @@ function surfaces() {
       ['grow_keeps_layout',
         '(()=>{const cb=window.__codeBrain;if(!cb)return false;return new Promise(done=>{setTimeout(()=>{const b=cb.positions();const id=cb.firstRepo();if(!id){done(false);return;}cb.grow(id);setTimeout(()=>{const a=cb.positions();let m=0;for(const k of Object.keys(b)){if(!a[k]||b[k][0]==null||a[k][0]==null)continue;const d=Math.hypot(a[k][0]-b[k][0],a[k][1]-b[k][1],a[k][2]-b[k][2]);if(d>m)m=d}done(m<120)},4500)},7000)})})()'],
       ['deck_rows', 'document.querySelectorAll(".drow").length'],
-      ['readout_figures', 'document.querySelectorAll(".ro-fig .n").length']
+      ['readout_figures', 'document.querySelectorAll(".ro-fig .n").length'],
+      // The reader must open in place, render the deterministic report, lift the
+      // briefing prose, and paint above the nav. It shipped once with its own back
+      // button unreachable because the nav painted over it.
+      // Each probe re-navigates, so every one of these opens the reader itself.
+      ['reader_findings',
+        READER_OPEN + 'document.querySelectorAll("#rd-body .finding").length' + READER_END],
+      ['reader_above_nav',
+        READER_OPEN + '(()=>{const e=document.elementFromPoint(700,20);return !!e&&!!e.closest(".reader")})()' + READER_END],
+      ['reader_briefing_chars',
+        READER_OPEN + 'document.getElementById("rd-brief").innerText.length' + READER_END],
+      ['reader_closes',
+        READER_OPEN + '(()=>{document.getElementById("rd-close").click();return new Promise(d=>setTimeout(()=>d(document.getElementById("reader").hidden),700))})()' + READER_END]
     ], '.drow'],
     ['knowledge-graph', '/knowledge-graph.html', [
       ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("#graph canvas").length),6000))'],
@@ -109,7 +133,10 @@ function surfaces() {
         '(()=>{document.querySelectorAll(".card")[2].click();return new Promise(r=>setTimeout(()=>r(document.querySelectorAll(\'.card[data-active="1"]\').length===1 && document.getElementById("info").classList.contains("open")),1500))})()']
     ], '.card'],
     ['article', '/blog/' + article, [
-      ['paragraphs', 'document.querySelectorAll("#post-content p").length'],
+      // Counts prose blocks, not <p> specifically: headings are promoted out of
+      // <p> now, and a tag-specific probe would read that as lost content.
+      ['paragraphs', 'document.querySelectorAll("#post-content p, #post-content .post-h").length'],
+      ['headings', 'document.querySelectorAll("#post-content .post-h").length'],
       ['listen_bar', 'getComputedStyle(document.getElementById("listen-bar")).display'],
       ['analysis_section', 'document.querySelectorAll(".analysis").length'],
       ['readiness_checks', 'document.querySelectorAll(".an-checks li").length'],
