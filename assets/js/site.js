@@ -7,6 +7,97 @@
             'Shell': '#89e051', 'Jupyter Notebook': '#DA5B0B'
         };
 
+        // ---- Navigation, rendered from one source ---------------------------
+        // The nav was hand-copied into 18 pages. Only 4 had the current version, the
+        // insights pages had no menu at all behind a visible menu button, and every
+        // fix drifted again on the next page. Defined once here and injected, so the
+        // header cannot differ between pages.
+        const NAV_PRIMARY = [
+            ['Projects', '/projects.html'],
+            ['Code Graph', '/knowledge-graph.html'],
+            ['Code Brain', '/code-brain.html'],
+            ['Services', '/services.html'],
+            ['Case Studies', '/case-studies.html'],
+            ['About', '/#about']
+        ];
+        const NAV_MENU = [
+            ['Work', [['Projects', '/projects.html'], ['Code Graph', '/knowledge-graph.html'],
+                      ['Code Brain', '/code-brain.html'], ['Insights', '/insights/']]],
+            ['Consulting', [['Services', '/services.html'], ['Case Studies', '/case-studies.html']]],
+            ['About', [['About me', '/#about'], ['Skills', '/#skills'],
+                       ['Experience', '/#experience'], ['Contact', '/#contact']]]
+        ];
+        const THEME_SVG =
+            '<svg class="sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>' +
+            '<svg class="moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+        function renderNav() {
+            const here = location.pathname.replace(/index\.html$/, '') || '/';
+            const isHere = href => {
+                const path = href.split('#')[0];
+                return path && path !== '/' && here.indexOf(path) === 0;
+            };
+
+            const ul = document.querySelector('#navbar .nav-links');
+            if (ul) {
+                ul.innerHTML = NAV_PRIMARY.map(function (l) {
+                    return '<li><a href="' + l[1] + '"' + (isHere(l[1]) ? ' class="active"' : '') + '>' + l[0] + '</a></li>';
+                }).join('');
+            }
+
+            const nav = document.getElementById('navbar');
+            if (!nav) return;
+
+            // Several pages ship a menu button with no menu behind it.
+            let menu = document.getElementById('mobile-menu');
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.className = 'mobile-menu';
+                menu.id = 'mobile-menu';
+                nav.parentNode.insertBefore(menu, nav.nextSibling);
+            }
+            const existingToggle = menu.querySelector('#mobile-theme-toggle');
+            menu.innerHTML = NAV_MENU.map(function (g) {
+                return '<span class="menu-group">' + g[0] + '</span>' +
+                    g[1].map(function (l) {
+                        return '<a href="' + l[1] + '"' + (isHere(l[1]) ? ' class="active"' : '') + '>' + l[0] + '</a>';
+                    }).join('');
+            }).join('');
+            if (existingToggle) {
+                menu.appendChild(existingToggle);
+            } else {
+                const b = document.createElement('button');
+                b.className = 'theme-toggle mobile-theme-toggle';
+                b.id = 'mobile-theme-toggle';
+                b.setAttribute('aria-label', 'Toggle dark/light mode');
+                b.innerHTML = THEME_SVG;
+                menu.appendChild(b);
+            }
+            menu.querySelectorAll('a').forEach(function (a) {
+                a.addEventListener('click', function () {
+                    menu.classList.remove('active');
+                    const t = document.getElementById('nav-toggle');
+                    if (t) t.classList.remove('active');
+                    document.body.style.overflow = '';
+                });
+            });
+
+            // A menu button with nothing behind it is worse than no button.
+            let toggle = document.getElementById('nav-toggle');
+            if (!toggle) {
+                toggle = document.createElement('button');
+                toggle.className = 'nav-toggle';
+                toggle.id = 'nav-toggle';
+                toggle.setAttribute('aria-label', 'Toggle menu');
+                toggle.innerHTML = '<span></span><span></span><span></span>';
+                const content = nav.querySelector('.nav-content') || nav;
+                content.appendChild(toggle);
+            }
+        }
+        renderNav();
+
         // Mobile Menu
         const navToggle = document.getElementById('nav-toggle');
         const mobileMenu = document.getElementById('mobile-menu');
@@ -25,10 +116,11 @@
 
         // Typing Animation
         const typingPhrases = [
-            'AI policy & governance',
-            'data governance & AI readiness',
-            'forward-deployed engineering',
-            'model training & fine-tuning'
+            'retrieval & embeddings at estate scale',
+            'knowledge graphs from real source trees',
+            'model routing that survives dead APIs',
+            'computer vision & deep learning',
+            'pipelines that repair themselves'
         ];
         let phraseIndex = 0;
         let charIndex = 0;
@@ -217,7 +309,7 @@
 
             const items = [
                 { n: secrets.length, label: 'ship credentials in the repository',
-                  sub: 'Keys, .env files and certificates committed to source control.',
+                  sub: 'Keys, .env files and certificates committed to source control. Almost all are forks of other people\'s projects, found by the scanner.',
                   href: '/projects.html?flag=secrets', tone: 'bad' },
                 { n: noTests.length, label: 'have no test suite at all',
                   sub: pct(noTests.length) + '% of the estate. Not one test file detected.',
@@ -242,11 +334,86 @@
             if (hr) hr.textContent = n.toLocaleString('en-US');
         }
 
+        // Draws the estate behind the hero from the umap coordinates already in the
+        // index: 1295 points and their strongest similarity links. Deliberately 2D
+        // canvas rather than the 3D graph - same data, no WebGL, no second fetch.
+        function drawHeroMap(idx) {
+            const cv = document.getElementById('hero-map');
+            if (!cv || !idx || !idx.repos) return;
+            const pts = idx.repos.filter(r => r.u);
+            if (!pts.length) return;
+
+            const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const DOM_COLOR = {
+                'AI & Data': '#E0521F', 'Web & Interfaces': '#C08457',
+                'Systems & Infra': '#6d9e70', 'Mobile': '#D9A441'
+            };
+            const pos = new Map(pts.map(r => [r.i, r]));
+            // The strongest links only: 3187 faint lines is noise, not a picture.
+            const links = (idx.links || [])
+                .filter(l => l[2] >= 0.55 && pos.has(l[0]) && pos.has(l[1]))
+                .slice(0, 900);
+
+            let w = 0, h = 0, t = 0, raf = 0;
+            const ctx = cv.getContext('2d');
+            const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+            function size() {
+                const d = Math.min(2, window.devicePixelRatio || 1);
+                const b = cv.getBoundingClientRect();
+                w = b.width; h = b.height;
+                cv.width = Math.max(1, w * d); cv.height = Math.max(1, h * d);
+                ctx.setTransform(d, 0, 0, d, 0, 0);
+            }
+            // Fill the frame and keep the layout square so clusters stay recognisable.
+            const P = (r, drift) => {
+                const span = Math.max(w, h) * 1.05;
+                const ox = (w - span) / 2, oy = (h - span) / 2;
+                const wob = drift ? Math.sin(t / 90 + r.u[2] * 6) * 3 : 0;
+                return { x: ox + r.u[0] * span + wob, y: oy + r.u[1] * span - wob };
+            };
+
+            function frame() {
+                ctx.clearRect(0, 0, w, h);
+                ctx.strokeStyle = css('--accent') || '#C08457';
+                ctx.globalAlpha = 0.10; ctx.lineWidth = 0.6;
+                ctx.beginPath();
+                for (const l of links) {
+                    const a = P(pos.get(l[0]), !still), b = P(pos.get(l[1]), !still);
+                    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+                }
+                ctx.stroke();
+                for (const r of pts) {
+                    const p = P(r, !still);
+                    ctx.globalAlpha = r.x ? 0.75 : 0.42;
+                    ctx.fillStyle = DOM_COLOR[r.g] || '#9C8B7D';
+                    const rad = 1 + Math.min(2.6, (r.f || 0) / 400);
+                    ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 6.284); ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+                if (!still) { t += 1; raf = requestAnimationFrame(frame); }
+            }
+
+            size(); frame();
+            addEventListener('resize', () => { size(); if (still) frame(); });
+            // Nothing to animate while it is off-screen.
+            if (!still && 'IntersectionObserver' in window) {
+                new IntersectionObserver(es => {
+                    for (const e of es) {
+                        if (e.isIntersecting && !raf) { raf = requestAnimationFrame(frame); }
+                        else if (!e.isIntersecting && raf) { cancelAnimationFrame(raf); raf = 0; }
+                    }
+                }, { threshold: 0 }).observe(cv);
+            }
+            const cta = document.querySelector('.hero-map-cta span');
+            if (cta) cta.textContent = pts.length.toLocaleString('en-US') + ' repositories, positioned by meaning';
+        }
+
         async function loadStats() {
             const [forks, stats] = await Promise.all([
                 fetch('/data/index.json', { cache: 'no-cache' })
                     .then(r => r.ok ? r.json() : null)
-                    .then(i => { if (i) renderFindings(i); return i && i.repos ? { forks: i.repos.map(expandIndexRecord) } : null; })
+                    .then(i => { if (i) { renderFindings(i); drawHeroMap(i); } return i && i.repos ? { forks: i.repos.map(expandIndexRecord) } : null; })
                     .catch(() => null),
                 fetch('/stats.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)
             ]);
