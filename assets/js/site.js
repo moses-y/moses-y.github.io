@@ -200,11 +200,53 @@
                 findings: deepStats.findings
             });
         }
+        // Curiosity hooks computed from the index rather than typed into the page, so a
+        // number can never drift from the estate it describes. Each links to the
+        // evidence rather than asking to be believed.
+        function renderFindings(idx) {
+            const grid = document.getElementById('findings-grid');
+            if (!grid || !idx || !idx.repos) return;
+            const R = idx.repos, n = R.length;
+            const flag = (r, i) => (r.c || '00000')[i] === '1';
+            const pct = v => Math.round(v / n * 100);
+
+            const secrets = R.filter(r => flag(r, 4));
+            const noTests = R.filter(r => !flag(r, 0));
+            const docker  = R.filter(r => flag(r, 2));
+            const noLicense = R.filter(r => !flag(r, 3));
+
+            const items = [
+                { n: secrets.length, label: 'ship credentials in the repository',
+                  sub: 'Keys, .env files and certificates committed to source control.',
+                  href: '/projects.html?flag=secrets', tone: 'bad' },
+                { n: noTests.length, label: 'have no test suite at all',
+                  sub: pct(noTests.length) + '% of the estate. Not one test file detected.',
+                  href: '/projects.html?flag=notests', tone: 'warn' },
+                { n: noLicense.length, label: 'declare no license',
+                  sub: 'Legally unusable by anyone who finds them.',
+                  href: '/projects.html?flag=nolicense', tone: 'warn' },
+                { n: docker.length, label: 'are container-ready',
+                  sub: pct(docker.length) + '% ship a Dockerfile and can be run today.',
+                  href: '/projects.html?flag=docker', tone: 'good' }
+            ];
+
+            grid.innerHTML = items.map(function (it) {
+                return '<a class="finding-card tone-' + it.tone + '" href="' + it.href + '">'
+                    + '<div class="fc-n">' + it.n.toLocaleString('en-US') + '</div>'
+                    + '<div class="fc-l">repositories ' + it.label + '</div>'
+                    + '<p class="fc-s">' + it.sub + '</p>'
+                    + '<span class="fc-go">See them &rarr;</span></a>';
+            }).join('');
+
+            const hr = document.getElementById('hero-repos');
+            if (hr) hr.textContent = n.toLocaleString('en-US');
+        }
+
         async function loadStats() {
             const [forks, stats] = await Promise.all([
                 fetch('/data/index.json', { cache: 'no-cache' })
                     .then(r => r.ok ? r.json() : null)
-                    .then(i => i && i.repos ? { forks: i.repos.map(expandIndexRecord) } : null)
+                    .then(i => { if (i) renderFindings(i); return i && i.repos ? { forks: i.repos.map(expandIndexRecord) } : null; })
                     .catch(() => null),
                 fetch('/stats.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)
             ]);
@@ -341,8 +383,49 @@
         const itemsPerPage = 10;
 
         // Filter projects
+        // Deep links from the landing's findings band. Without this, "See them" landed
+        // on an unfiltered list and the number on the card meant nothing.
+        const FLAG_TESTS = {
+            secrets:   r => (r.c || '00000')[4] === '1',
+            notests:   r => (r.c || '00000')[0] !== '1',
+            nolicense: r => (r.c || '00000')[3] !== '1',
+            docker:    r => (r.c || '00000')[2] === '1'
+        };
+        const FLAG_LABELS = {
+            secrets: 'shipping credentials in the repository',
+            notests: 'with no test suite',
+            nolicense: 'with no license declared',
+            docker: 'that are container-ready'
+        };
+        let urlFlag = null;
+        try {
+            const q = new URLSearchParams(location.search).get('flag');
+            if (q && FLAG_TESTS[q]) urlFlag = q;
+        } catch (e) { /* no URLSearchParams, no deep link */ }
+
+        function flagMatches(p) {
+            if (!urlFlag) return true;
+            const kg = p.knowledgeGraph || {}, h = kg.codeHealth || {};
+            const c = [h.hasTests ? 1 : 0, kg.hasCI ? 1 : 0, kg.hasDocker ? 1 : 0,
+                       h.hasLicense ? 1 : 0, (h.committedSecrets > 0) ? 1 : 0].join('');
+            return FLAG_TESTS[urlFlag]({ c });
+        }
+
+        function showFlagNotice(count) {
+            if (!urlFlag) return;
+            const host = document.getElementById('projects-controls') || document.getElementById('projects-container');
+            if (!host || document.getElementById('flag-notice')) return;
+            const el = document.createElement('div');
+            el.id = 'flag-notice';
+            el.className = 'flag-notice';
+            el.innerHTML = '<span>Showing <strong>' + count.toLocaleString('en-US') + '</strong> repositories '
+                + FLAG_LABELS[urlFlag] + '.</span><a href="/projects.html">Clear filter</a>';
+            host.parentNode.insertBefore(el, host);
+        }
+
         function filterProjects() {
             filteredProjects = allProjects.filter(p => {
+                if (!flagMatches(p)) return false;
                 // Search filter
                 const matchesSearch = !searchQuery ||
                     p.name.toLowerCase().includes(searchQuery) ||
@@ -570,6 +653,10 @@
                     }
                 }
 
+                if (urlFlag) {
+                    allProjects = allProjects.filter(flagMatches);
+                    showFlagNotice(allProjects.length);
+                }
                 filteredProjects = [...allProjects];
                 if (container) {
                     renderFeaturedProjects(allProjects);
