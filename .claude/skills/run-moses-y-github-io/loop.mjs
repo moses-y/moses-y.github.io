@@ -114,7 +114,11 @@ function surfaces() {
       ['analysis_section', 'document.querySelectorAll(".analysis").length'],
       ['readiness_checks', 'document.querySelectorAll(".an-checks li").length'],
       ['mermaid_svg', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll(".mermaid svg").length),4000))'],
-      ['graph_links', 'document.querySelectorAll(".an-links a").length']
+      ['graph_links', 'document.querySelectorAll(".an-links a").length'],
+      // Dependency reporting is data-dependent, so assert the site-wide count from
+      // the generator rather than a single article that may not have data yet.
+      ['dep_blocks_sitewide',
+        'fetch("/data/deps.json").then(r=>r.ok?r.json():null).then(d=>d?Object.keys(d.repos).length:0).catch(()=>0)']
     ], '.analysis']
   ];
 }
