@@ -45,7 +45,15 @@ function surfaces() {
       ['reveal_hidden_after_scroll',
         'window.scrollTo(0,document.body.scrollHeight),new Promise(r=>setTimeout(()=>r([...document.querySelectorAll(".reveal")].filter(e=>getComputedStyle(e).opacity==="0").length),1500))'],
       ['nav_links', 'document.querySelectorAll("#navbar a[href]").length'],
-      ['hero_stats', 'document.querySelectorAll(".stats-bar .stat-number").length']
+      ['hero_stats', 'document.querySelectorAll(".stats-bar .stat-number").length'],
+      // The bar was trimmed and the full list moved into the menu, so the menu is
+      // now where navigation coverage has to be asserted.
+      ['menu_opens',
+        '(()=>{document.getElementById("nav-toggle").click();return new Promise(r=>setTimeout(()=>r(getComputedStyle(document.getElementById("mobile-menu")).visibility),700))})()'],
+      ['menu_links', 'document.querySelectorAll("#mobile-menu a[href]").length'],
+      ['menu_groups', 'document.querySelectorAll("#mobile-menu .menu-group").length'],
+      ['menu_has_contact', '!!document.querySelector(\'#mobile-menu a[href*="#contact"]\')'],
+      ['about_section', 'document.querySelectorAll("#about .about-body p").length']
     ]],
     ['projects', '/projects.html', [
       ['cards', 'document.querySelectorAll(".project-card").length'],

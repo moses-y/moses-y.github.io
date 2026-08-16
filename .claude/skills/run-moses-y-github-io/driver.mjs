@@ -158,8 +158,11 @@ for (const cmd of cmds) {
     } else if (verb === 'sleep') {
       await sleep(Number(arg));
 
-    } else if (verb === 'shot') {
-      const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    } else if (verb === 'shot' || verb === 'shotv') {
+      // Full-page capture re-lays-out the page, which drops position:fixed overlays
+      // (the nav menu). Use shotv for anything fixed.
+      const { data } = await send('Page.captureScreenshot',
+        { format: 'png', captureBeyondViewport: verb === 'shot' });
       mkdirSync(dirname(arg), { recursive: true });
       writeFileSync(arg, Buffer.from(data, 'base64'));
       console.log(`shot   ${arg} -> ${(Buffer.from(data, 'base64').length / 1024).toFixed(0)}KB`);
