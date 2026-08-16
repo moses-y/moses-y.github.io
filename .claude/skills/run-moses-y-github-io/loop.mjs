@@ -69,9 +69,15 @@ function surfaces() {
       ['languages', '+(document.getElementById("s-langs")||{}).textContent']
     ]],
     ['knowledge-graph', '/knowledge-graph.html', [
-      ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("canvas").length),6000))'],
-      ['repos', '+(document.getElementById("s-repos")||{}).textContent']
-    ]],
+      ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("#graph canvas").length),6000))'],
+      ['repos', '+(document.getElementById("s-repos")||{}).textContent'],
+      // Plate layout: the deck must stay in sync with the graph it drives.
+      ['deck_cards', 'document.querySelectorAll(".card").length'],
+      ['readout_figures', 'document.querySelectorAll(".ro-fig .n").length'],
+      ['controls_kept', 'document.querySelectorAll("#search,#reset,#semantic-toggle,#legend-toggle,#prev,#next").length'],
+      ['card_drives_focus',
+        '(()=>{document.querySelectorAll(".card")[2].click();return new Promise(r=>setTimeout(()=>r(document.querySelectorAll(\'.card[data-active="1"]\').length===1 && document.getElementById("info").classList.contains("open")),1500))})()']
+    ], '.card'],
     ['article', '/blog/' + article, [
       ['paragraphs', 'document.querySelectorAll("#post-content p").length'],
       ['listen_bar', 'getComputedStyle(document.getElementById("listen-bar")).display'],
