@@ -439,7 +439,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 20, 2026</span>
-                    <span>6 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -460,7 +460,14 @@
             </div>
 
             <div class="post-content" id="post-content">
-                <p>High-performance wait-free memory reclamation for wait-free data structures (ASMR). Bounded memory usage, predictable latency.</p><p class="post-pending">A written briefing for this repository is being regenerated. The analysis below is produced by static analysis and is unaffected.</p>
+                <h3 class="post-h">The Problem</h3><p>Lock-free data structures face a fundamental safety question: when is it safe to free memory that another thread might still be reading? Epoch-based reclamation (like crossbeam-epoch) can let memory grow unboundedly under thread delays, while hazard pointers add significant read overhead. kovan implements Automatic Safe Memory Reclamation (ASMR) to provide bounded memory usage with near-zero read cost.</p><h3 class="post-h">What This Does</h3><p>kovan is a Rust workspace of seven crates. The core crate (kovan/) implements the reclamation algorithm with an Atom&lt;T&gt; wrapper for safe usage and a lower-level pin()/load()/retire() API. The kovan/src/reclaim.rs and kovan/src/retired.rs files handle the reclamation logic; kovan/src/guard.rs manages critical sections.</p><p>The workspace includes five consumer crates: kovan-channel (MPMC channels), kovan-map (hopscotch and hash maps), kovan-queue (array queue and disruptor), kovan-mvcc (Percolator-style MVCC), and kovan-stm (TL2-style software transactional memory). Each has its own lib.rs entry point and test suite. A TLA+ model in modelchk/Kovan.tla formally specifies the algorithm.</p><p>The README reports pin overhead of 2.79 ns versus 13.66 ns for crossbeam, 9.70 ns for seize, and 18.09 ns for haphazard, with benchmark code in kovan/benches/.</p><h3 class="post-h">How To Use It</h3><p>Setup: kovan is a Cargo workspace. Build with cargo build --workspace from the root. Individual crates have their own Cargo.toml files.</p><p>Configuration: No environment variables or config files required. The .cargo/config.toml exists but contains no documented runtime settings.</p><p>Running it:</p><p>Run all tests
+cargo test --workspace</p><p>Run benchmarks
+cargo bench -p kovan</p><p>Run the Treiber stack example
+cargo run -p kovan --example treiberstack</p><p>The basic API is documented in the README: Atom::new() for safe atomic values, or the low-level pin()/load()/retire() pattern for custom node types that embed RetiredNode as the first field.</p><h3 class="post-h">Real-World Use</h3><p>A typical use case is a concurrent hash map where threads constantly insert and remove entries. With kovan-map, a reader calls load() on a key, holds the returned guard while processing, and the old value is automatically reclaimed when safe. The kovan-map/examples/concurrent.rs file shows this pattern in practice. The bounded memory guarantee makes it suitable for latency-sensitive systems where epoch-based reclamation could accumulate retired nodes indefinitely.</p><p>Code Health &amp; Issues
+Med - Unsafe code density: The core reclamation logic in kovan/src/reclaim.rs, retired.rs, and guard.rs is inherently unsafe (raw pointers, manual memory management). The TLA+ model and Miri CI (kovan/.github/workflows/miri.yml) mitigate risk, but this code requires expert review.
+Low - Workspace fragmentation: Seven crates with overlapping concerns. The core kovan crate is the essential piece; the consumer crates (MVCC, STM) may be heavier than needed for most users.
+Low - Documentation gaps: Only 2 doc files despite 36 test files. The README covers the core API well, but the consumer crates (especially kovan-mvcc and kovan-stm) lack usage documentation.
+Low - Version status: The crate is at version 0.1 (per README), suggesting pre-1.0 API instability.</p><p>The codebase has solid hygiene: 36 test files, CI with both test.yml and miri.yml, a license, and a lockfile.</p><h3 class="post-h">The Bottom Line</h3><p>kovan is a serious, well-engineered implementation of a hard problem, with credible performance claims backed by benchmarks and formal verification. The core reclamation algorithm is production-quality, but the workspace&#39;s breadth (MVCC, STM, disruptor) signals an ambitious research project rather than a focused library. Teams building wait-free data structures in Rust should evaluate the core kovan crate; the surrounding ecosystem is worth watching but not yet mature.</p>
             </div>
 
             
