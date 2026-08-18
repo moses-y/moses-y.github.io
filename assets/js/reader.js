@@ -67,7 +67,11 @@
                 '<div class="rd-brief" id="rd-brief"></div>' +
                 '<div id="rd-body"></div>' +
                 '<div class="rd-next" id="rd-next" role="navigation" aria-label="Adjacent repositories"></div>' +
-                '</article></div>';
+                '</article></div>' +
+                // The visible equivalent of the arrow keys. Outside .rd-scroll so
+                // they stay put while the column scrolls under them.
+                '<button type="button" class="rd-arrow prev" id="rd-prev-arrow" data-step="-1">&#8249;</button>' +
+                '<button type="button" class="rd-arrow next" id="rd-next-arrow" data-step="1">&#8250;</button>';
             document.body.appendChild(existing);
         }
         el = {
@@ -82,10 +86,16 @@
             body: existing.querySelector('#rd-body'),
             newtab: existing.querySelector('#rd-newtab'),
             nextNav: existing.querySelector('#rd-next'),
-            closeBtn: existing.querySelector('#rd-close')
+            closeBtn: existing.querySelector('#rd-close'),
+            prevArrow: existing.querySelector('#rd-prev-arrow'),
+            nextArrow: existing.querySelector('#rd-next-arrow')
         };
 
         el.closeBtn.addEventListener('click', close);
+        // Same step() the keys use, so the two cannot diverge.
+        [el.prevArrow, el.nextArrow].forEach(function (b) {
+            b.addEventListener('click', function () { step(+b.dataset.step); });
+        });
         window.addEventListener('popstate', hide);
 
         // Clicking the page outside the column closes it. This is what people
@@ -102,21 +112,8 @@
             else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
         });
 
-        // Reaching the end reveals the next repository; one more deliberate
-        // scroll past it advances. Auto-advancing the instant the end is reached
-        // takes the decision away from the reader, so it takes a second gesture.
-        var pastEnd = 0, lastNudge = 0;
-        el.scroll.addEventListener('wheel', function (e) {
-            if (el.root.hidden || e.deltaY <= 0) return;
-            var atEnd = el.scroll.scrollTop + el.scroll.clientHeight >= el.scroll.scrollHeight - 4;
-            if (!atEnd) { pastEnd = 0; return; }
-            pastEnd += e.deltaY;
-            var now = Date.now();
-            if (pastEnd > 240 && now - lastNudge > 700) {
-                pastEnd = 0; lastNudge = now;
-                step(1);
-            }
-        }, { passive: true });
+        // Reaching the end names the next repository but never moves to it on its
+        // own: advancing is the reader's decision, made with the arrows or a card.
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape' || el.root.hidden) return;
             // Stop the host page also acting on Escape behind a dialog it
@@ -146,8 +143,20 @@
 
     function renderNext() {
         if (!el) return;
-        if (pos < 0 || queue.length < 2) { el.nextNav.innerHTML = ''; return; }
         var prev = queue[pos - 1], nxt = queue[pos + 1];
+        // A bare glyph says nothing about where it goes, so the label names the
+        // destination and the key that does the same thing.
+        var arrow = function (b, r, word, key) {
+            var hide = pos < 0 || queue.length < 2;
+            b.hidden = hide;
+            b.disabled = !r;
+            var label = r ? word + ': ' + (r.displayName || r.name) : 'No ' + word.toLowerCase() + ' repository';
+            b.setAttribute('aria-label', label);
+            b.title = label + ' (' + key + ')';
+        };
+        arrow(el.prevArrow, prev, 'Previous', '←');
+        arrow(el.nextArrow, nxt, 'Next', '→');
+        if (pos < 0 || queue.length < 2) { el.nextNav.innerHTML = ''; return; }
         var card = function (r, dir) {
             if (!r) return '';
             return '<button type="button" class="rd-step ' + dir + '" data-step="' +
@@ -158,8 +167,7 @@
                 '</button>';
         };
         el.nextNav.innerHTML =
-            '<div class="rd-step-hint">' + (pos + 1) + ' of ' + queue.length +
-            (nxt ? ' &middot; keep scrolling for the next one' : '') + '</div>' +
+            '<div class="rd-step-hint">' + (pos + 1) + ' of ' + queue.length + '</div>' +
             '<div class="rd-steps">' + card(prev, 'prev') + card(nxt, 'next') + '</div>';
         el.nextNav.querySelectorAll('[data-step]').forEach(function (b) {
             b.addEventListener('click', function () { step(+b.dataset.step); });
