@@ -100,7 +100,7 @@ function isFallbackArticle(article) {
 }
 
 // Strip markdown formatting from text for clean display
-const { looksLikeReasoning } = require('./lib-quality.js');
+const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js');
 
 function stripMarkdown(text) {
   if (!text) return '';
@@ -912,7 +912,7 @@ async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
   }
 
   try {
-    const graphContext = knowledgeGraph ? formatKnowledgeGraph(knowledgeGraph) : '';
+    const graphContext = knowledgeGraph ? formatKnowledgeGraph(knowledgeGraph) : '', measured = factsFor(repo, knowledgeGraph);
     const context = `
 REPOSITORY: ${repo.name}
 DESCRIPTION: ${repo.description || 'No description'}
@@ -921,7 +921,7 @@ TOPICS/TAGS: ${(repo.topics || []).join(', ') || 'None'}
 STARS: ${repo.stargazers_count || 0}
 ${repo.parent ? `FORKED FROM: ${repo.parent.name} (${repo.parent.stars} stars)` : 'ORIGINAL PROJECT'}
 
-${graphContext ? `PROJECT ANALYSIS:\n${graphContext}\n` : ''}
+${graphContext ? `PROJECT ANALYSIS:\n${graphContext}\n` : ''}${measured ? `\nMEASURED ANALYSIS - deterministic, produced by this pipeline's static analysis. These are facts, not guesses. Use them; do not contradict or pad them:\n${measured}\n` : ''}
 FILE STRUCTURE:
 ${fileTree.length > 0 ? fileTree.join('\n') : 'Not available'}
 
@@ -951,10 +951,10 @@ Use a fenced code block for commands. If the README documents the commands, use 
 A practical scenario showing where this fits in a working system. A short code snippet or example workflow.
 
 ## Code Health & Issues
-Before the verdict, assess the codebase like a reviewer. Call out concrete, likely issues you can infer from the structure, README, and analysis - be specific and reference files. Cover:
-- **Bugs / risks**: probable defects, unsafe patterns, missing error handling, race conditions, untested paths.
-- **SDLC & code violations**: missing tests/CI, no license, secrets or config in the repo, no input validation, weak separation of concerns, missing docs, dependency/security hygiene.
-Format each as a short bullet: \`Severity (High/Med/Low) - the issue - where\`. If the repo looks genuinely clean, say so briefly and note what evidence supports that (tests present, CI configured, etc.). Do not invent issues.
+If a MEASURED ANALYSIS block is present, this section reports it. Lead with what it found, quoting the real counts and the real file paths, and say plainly that it comes from static analysis rather than opinion. Do not add invented issues alongside it, do not soften or inflate its numbers, and do not repeat the same finding kind more than once - it is already grouped with a count.
+Beyond the measured findings you may add SDLC observations the block does not cover, but only where the file structure is evidence for them: missing tests or CI, absent licence, configuration or secrets committed, missing docs.
+Format each as a short bullet: \`Severity (High/Med/Low) - the issue - where\`. With no measured block, say that deep analysis has not run for this repo yet and keep this section to what the structure genuinely supports.
+If the analysis found nothing, say so and name the axes it checked.
 
 ## The Bottom Line
 Your honest take in 2-3 sentences. What's good, what's not, who should use it.
