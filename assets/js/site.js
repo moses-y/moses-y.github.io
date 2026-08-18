@@ -448,16 +448,6 @@
 
         revealElements.forEach(el => revealObserver.observe(el));
 
-        // Toggle read more
-        function toggleRead(btn) {
-            const summary = btn.previousElementSibling;
-            const isCollapsed = summary.classList.contains('collapsed');
-            summary.classList.toggle('collapsed');
-            btn.innerHTML = isCollapsed
-                ? 'Show less <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>'
-                : 'Read more <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>';
-        }
-
         // Escape HTML to prevent XSS from user-controlled data
         function escapeHtml(text) {
             if (!text) return '';
@@ -466,19 +456,6 @@
             return div.innerHTML;
         }
 
-        // Simple markdown parser for blog content
-        function parseMarkdown(text) {
-            if (!text) return '';
-            return text
-                .replace(/^## (.+)$/gm, '<h4 class="md-heading">$1</h4>')
-                .replace(/^### (.+)$/gm, '<h5 class="md-subheading">$1</h5>')
-                .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="md-code"><code>$2</code></pre>')
-                .replace(/`([^`]+)`/g, '<code class="md-inline">$1</code>')
-                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                .replace(/\n\n+/g, '</p><p class="md-para">')
-                .replace(/^(.)/m, '<p class="md-para">$1')
-                + '</p>';
-        }
 
         // Lean index records use short keys to keep the file small. This restores the
         // field names the renderers use, so nothing downstream had to change.
@@ -505,41 +482,73 @@
         }
 
         // Render project card
+        //
+        // The stock photo is gone. It was a random Unsplash image unrelated to
+        // the repository, spending roughly 40% of the card on decoration while
+        // the things we actually measured - files, issues, whether it has tests
+        // or CI - were not shown at all.
+        //
+        // The briefing is not in this payload on purpose: the lean index omits
+        // the 3,200-character summaries, so the card links into the reader,
+        // which fetches one article on demand.
         function renderProject(p) {
-            const hasLongSummary = (p.summary || '').length > 300;
+            const kg = p.knowledgeGraph || {};
+            const h = kg.codeHealth || {};
+            const files = kg.totalFiles || 0;
+            const issues = p.findings || 0;
+
+            const facts = [];
+            if (files) facts.push(`<span class="fact"><strong>${files.toLocaleString()}</strong> files</span>`);
+            if (issues) facts.push(`<span class="fact"><strong>${issues.toLocaleString()}</strong> ${issues === 1 ? 'issue' : 'issues'}</span>`);
+            facts.push(`<span class="fact"><strong>${p.stars || p.parent?.stars || 0}</strong> stars</span>`);
+
+            // Present state, absent state, and a warning are three different
+            // things, so they do not all render as the same grey pill.
+            const flag = (label, on, warn) =>
+                `<span class="flag ${warn ? 'warn' : (on ? 'on' : 'off')}">${on || warn ? '✓' : '✗'} ${label}</span>`;
+            const flags = [
+                flag('tests', h.hasTests),
+                flag('CI', kg.hasCI),
+                flag('Docker', kg.hasDocker),
+                flag('license', h.hasLicense)
+            ];
+            if (h.committedSecrets) flags.unshift('<span class="flag warn">! secrets</span>');
+
             return `
-                <article class="project-card">
-                    <div class="image-wrap">
-                        <img class="image" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.displayName || p.name)}" loading="lazy"
-                             onerror="this.src='https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop'">
-                        <div class="image-overlay"></div>
-                        <span class="type-badge ${p.type || 'fork'}">${p.type === 'original' ? 'Original' : 'Fork'}</span>
-                    </div>
+                <article class="project-card" data-id="${escapeHtml(String(p.id))}">
                     <div class="content">
-                        <div class="meta">
-                            <span class="meta-item">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                                ${p.readTime || 2} min read
-                            </span>
-                            ${p.parent ? `<span class="meta-item">from <a href="${escapeHtml(p.parent.url)}" target="_blank" style="color: var(--accent); text-decoration: none;">${escapeHtml(p.parent.name.split('/')[0])}</a></span>` : ''}
+                        <div class="card-top">
+                            <span class="type-badge ${p.type || 'fork'}">${p.type === 'original' ? 'Original' : 'Fork'}</span>
+                            ${p.language ? `<span class="language"><span class="lang-dot" style="background: ${langColors[p.language] || '#888'}"></span>${escapeHtml(p.language)}</span>` : ''}
+                            ${p.kind ? `<span class="kind">${escapeHtml(p.kind)}</span>` : ''}
                         </div>
-                        <h3><a href="${escapeHtml(p.url)}" target="_blank">${escapeHtml(p.displayName || p.name)}</a></h3>
-                        <div class="summary ${hasLongSummary ? 'collapsed' : ''}">${parseMarkdown(escapeHtml(p.summary || p.description))}</div>
-                        ${hasLongSummary ? `<button class="read-toggle" onclick="toggleRead(this)">Read more <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>` : ''}
+                        <h3><button type="button" class="card-title" data-read="${escapeHtml(String(p.id))}">${escapeHtml(p.displayName || p.name)}</button></h3>
+                        <p class="card-desc">${escapeHtml(p.description || 'No description available')}</p>
+                        <div class="facts">${facts.join('')}</div>
+                        <div class="flags">${flags.join('')}</div>
                         <div class="footer">
-                            <div class="tech">
-                                ${p.language ? `<span class="language"><span class="lang-dot" style="background: ${langColors[p.language] || '#888'}"></span>${escapeHtml(p.language)}</span>` : ''}
-                                <span class="stars">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                                    ${p.parent?.stars || p.stars || 0}
-                                </span>
-                            </div>
-                            <a href="${escapeHtml(p.url)}" class="view-btn" target="_blank">View <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+                            <button type="button" class="read-btn" data-read="${escapeHtml(String(p.id))}">
+                                Read briefing
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            </button>
+                            <a href="${escapeHtml(p.url)}" class="gh-btn" target="_blank" rel="noopener">GitHub ↗</a>
                         </div>
                     </div>
                 </article>
             `;
         }
+
+        // One listener for the whole grid rather than an inline handler per card.
+        document.addEventListener('click', function (e) {
+            const t = e.target.closest('[data-read]');
+            if (!t || !window.SiteReader) return;
+            const p = allProjects.find(x => String(x.id) === t.dataset.read);
+            if (p) SiteReader.open({
+                id: p.id, name: p.name, displayName: p.displayName,
+                description: p.description, url: p.url,
+                crumb: [p.domain, p.language].filter(Boolean).join(' · ')
+            });
+        });
 
         // Pagination & Filter state
         let allProjects = [];
@@ -630,9 +639,6 @@
 
             container.innerHTML = pageProjects.map(renderProject).join('');
 
-            // Initialize image loading
-            initImageLoading();
-
             // Update pagination info
             const totalPages = Math.ceil(projectsToRender.length / itemsPerPage);
             const showStart = start + 1;
@@ -694,17 +700,6 @@
             gridViewBtn.classList.remove('active');
             projectsContainer.classList.add('list-view');
         });
-
-        // Image Loading
-        function initImageLoading() {
-            document.querySelectorAll('.project-card .image').forEach(img => {
-                if (img.complete) {
-                    img.classList.add('loaded');
-                } else {
-                    img.addEventListener('load', () => img.classList.add('loaded'));
-                }
-            });
-        }
 
         // Fallback stats from the projects feed (used only if stats.json is missing).
         // Files come from the real knowledge-graph data; modules/findings need the

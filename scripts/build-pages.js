@@ -13,7 +13,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const SITE = 'https://moses-y.github.io';
 const CAL = 'https://cal.com/moses-yebei';
-const YEAR = 2025;
+const YEAR = new Date().getFullYear();   // was hardcoded, read 2025 in 2026
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -68,7 +68,7 @@ const NAV = `    <a href="#main-content" class="skip-link">Skip to main content<
 
 const FOOTER = `    <footer>
         <div class="container">
-            <p>&copy; ${YEAR} Moses Yebei. Based in Nairobi, Kenya. Built with <a href="https://github.com/moses-y/moses-y.github.io" target="_blank">passion</a>.</p>
+            <p>&copy; ${YEAR} Moses Yebei. Based in Nairobi, Kenya. Built with <a href="https://github.com/moses-y/moses-y.github.io" target="_blank">passion</a>. <a href="/sitemap.html">Site map</a>.</p>
         </div>
     </footer>
     <button class="back-to-top" id="back-to-top" aria-label="Back to top">

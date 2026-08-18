@@ -86,7 +86,18 @@ function surfaces() {
       ['index_used',
         'performance.getEntriesByType("resource").filter(r=>/data\\/index\\.json/.test(r.name)).length'],
       ['search_narrows',
-        '(()=>{const s=document.getElementById("search-input");s.value="agent";s.dispatchEvent(new Event("input",{bubbles:true}));return new Promise(r=>setTimeout(()=>r(document.getElementById("projects-container").children.length>0),900))})()']
+        '(()=>{const s=document.getElementById("search-input");s.value="agent";s.dispatchEvent(new Event("input",{bubbles:true}));return new Promise(r=>setTimeout(()=>r(document.getElementById("projects-container").children.length>0),900))})()'],
+      // The cards carry measured facts now, not a stock photo. A photo coming
+      // back means the old renderer is live again.
+      ['card_photos', 'document.querySelectorAll(".project-card img").length'],
+      ['card_read_buttons', 'document.querySelectorAll(".read-btn").length'],
+      ['cards_equal_height',
+        '(()=>{const h=[...document.querySelectorAll(".featured-card .project-card")].map(e=>Math.round(e.getBoundingClientRect().height));return h.length>1&&new Set(h).size===1})()'],
+      // The lean index has no summaries, so opening a briefing must fetch one.
+      // This is the regression that started it: cards showed the one-line
+      // description and there was no way to reach the writing at all.
+      ['reader_briefing_chars',
+        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>r(document.getElementById("rd-brief").innerText.length),3200))})()']
     ], '.project-card'],
     ['code-brain', '/code-brain.html', [
       ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("canvas").length),6000))'],
@@ -122,6 +133,12 @@ function surfaces() {
       ['reader_closes',
         READER_OPEN + '(()=>{document.getElementById("rd-close").click();return new Promise(d=>setTimeout(()=>d(document.getElementById("reader").hidden),700))})()' + READER_END]
     ], '.drow'],
+    ['sitemap', '/sitemap.html', [
+      ['domains', 'document.querySelectorAll(".sm-domain").length'],
+      ['briefing_links', 'document.querySelectorAll(".sm-briefings li a").length'],
+      ['surface_links', 'document.querySelectorAll(".sm-cols li a").length'],
+      ['nav_present', 'document.querySelectorAll(".sm-nav a").length']
+    ], '.sm-domain'],
     ['knowledge-graph', '/knowledge-graph.html', [
       ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("#graph canvas").length),6000))'],
       ['repos', '+(document.getElementById("s-repos")||{}).textContent'],
