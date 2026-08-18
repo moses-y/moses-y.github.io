@@ -16,6 +16,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/site.css">
+    <link rel="stylesheet" href="assets/css/panel.css">
+    <link rel="stylesheet" href="assets/css/report.css">
+    <link rel="stylesheet" href="assets/css/reader.css">
     <style>
         html, body { height: 100%; margin: 0; overflow: hidden; }
         body { background: var(--bg-primary, #06070f); }
@@ -200,40 +203,6 @@
         .legend::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
         @media (max-width: 760px) { .dock .sub { display: none; } .dock input { width: 140px; } }
 
-        /* Info panel */
-        .info {
-            position: absolute; z-index: 20; right: 18px; top: 18px; bottom: 18px;
-            width: 330px; max-width: calc(100% - 36px);
-            overflow-y: auto; overscroll-behavior: contain;
-            background: color-mix(in srgb, var(--bg-secondary,#14100C) 88%, transparent);
-            backdrop-filter: blur(22px);
-            border: 1px solid var(--border,rgba(255,255,255,0.08));
-            border-radius: 18px; padding: 20px; color: var(--text-primary,#fff);
-            transform: translateX(120%); transition: transform .35s cubic-bezier(.2,.8,.2,1); opacity: 0;
-        }
-        .info::-webkit-scrollbar { width: 8px; }
-        .info::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
-        .info::-webkit-scrollbar-track { background: transparent; }
-        .info.open { transform: translateX(0); opacity: 1; }
-        .info .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-tertiary,#34e0c4); }
-        .info h2 { font-size: 1.15rem; margin: 6px 0 10px; word-break: break-word; }
-        .info p { font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary,#9aa4bf); margin: 0 0 14px; }
-        .info .meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-secondary,#9aa4bf); margin-bottom: 14px; }
-        .info .meta strong { color: #fff; }
-        .info .links a { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 0.82rem; color: var(--accent,#4f7cff); text-decoration: none; }
-        .info .links a:hover { text-decoration: underline; }
-        /* Semantically closest repos - derived from embedding cosine similarity. */
-        .info .kin:not(:empty) { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border,rgba(255,255,255,0.08)); }
-        .info .kin .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-secondary,#a06bff); margin-bottom: 8px; }
-        .info .kin button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left;
-            background: none; border: none; padding: 5px 0; cursor: pointer; font-family: inherit;
-            font-size: 0.82rem; color: var(--text-secondary,#9aa4bf); }
-        .info .kin button:hover { color: var(--text-primary,#fff); }
-        .info .kin .score { color: var(--accent-secondary,#a06bff); font-variant-numeric: tabular-nums; flex: none; }
-        .info .step { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border,rgba(255,255,255,0.08)); }
-        .info .step .label { font-size: 0.72rem; color: var(--text-secondary,#9aa4bf); margin-bottom: 8px; }
-        .info .close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text-secondary,#9aa4bf); font-size: 1.1rem; cursor: pointer; }
-
         .hint {
             position: fixed; z-index: 20; bottom: 18px; left: 50%; transform: translateX(-50%);
             background: rgba(10,12,24,0.72); backdrop-filter: blur(18px);
@@ -300,8 +269,11 @@
         <div id="graph"></div>
 
     <div class="info" id="info">
-        <button class="close" id="info-close" aria-label="Close">✕</button>
-        <div class="kind" id="i-kind">Repository</div>
+        <div class="pnl-hd">
+            <div class="kind" id="i-kind">Repository</div>
+            <button class="min" id="info-min" aria-label="Collapse panel" aria-expanded="true" title="Collapse">–</button>
+            <button class="close" id="info-close" aria-label="Close panel" title="Close">✕</button>
+        </div>
         <h2 id="i-name">Node</h2>
         <p id="i-desc"></p>
         <div class="meta" id="i-meta"></div>
@@ -329,6 +301,8 @@
     </div>
 
     <script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+    <script src="assets/js/report-render.js"></script>
+    <script src="assets/js/reader.js"></script>
     <script>
     (function () {
         'use strict';
@@ -823,10 +797,19 @@
                     if (kg.totalFiles) meta.push('<span><strong>' + kg.totalFiles + '</strong> files</span>');
                     if (f.type) meta.push('<span>' + f.type + '</span>');
                     el.iMeta.innerHTML = meta.join('');
-                    var briefing = 'blog/' + encodeURIComponent(f.name) + '.html';
+                    // The briefing opens in place. It used to navigate away, which
+                    // meant losing the graph position you had just found.
                     el.iLinks.innerHTML =
-                        (f.url ? '<a href="' + f.url + '" target="_blank" rel="noopener">View on GitHub ↗</a>' : '') +
-                        '<a href="' + briefing + '">Read briefing →</a>';
+                        (f.url ? '<a href="' + f.url + '" target="_blank" rel="noopener">GitHub ↗</a>' : '') +
+                        '<button type="button" data-read-briefing>Read briefing →</button>';
+                    var rb = el.iLinks.querySelector('[data-read-briefing]');
+                    if (rb) rb.addEventListener('click', function () {
+                        if (window.SiteReader) SiteReader.open({
+                            id: f.id, name: f.name, displayName: f.displayName || f.name,
+                            description: f.description, url: f.url,
+                            crumb: [f.domain, node.language].filter(Boolean).join(' · ')
+                        });
+                    });
                 } else if (node.kind === 'lang') {
                     el.iDesc.textContent = 'Repositories primarily written in ' + node.name + '. Click a connected node to explore one.';
                     el.iMeta.innerHTML = '<span><strong>' + (langCounts[node.name] || 0) + '</strong> repositories</span>';
@@ -861,6 +844,15 @@
             el.next.addEventListener('click', function () { stepNeighbor(1); });
             el.prev.addEventListener('click', function () { stepNeighbor(-1); });
             el.infoClose.addEventListener('click', clearFocus);
+            // Collapse to the header, so the panel can be pushed aside without
+            // losing which node is selected.
+            var infoMin = document.getElementById('info-min');
+            infoMin.addEventListener('click', function () {
+                var collapsed = el.info.classList.toggle('collapsed');
+                infoMin.textContent = collapsed ? '+' : '–';
+                infoMin.title = collapsed ? 'Expand' : 'Collapse';
+                infoMin.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            });
             document.addEventListener('keydown', function (e) {
                 if (document.activeElement === el.search) return;
                 if (e.key === 'ArrowRight') stepNeighbor(1);
