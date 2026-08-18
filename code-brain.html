@@ -363,30 +363,9 @@
 
     <div class="toast" id="toast"></div>
 
-    <!-- The reader: a repo brought to the front, read against the graph rather
-         than in a tab that has lost its way home. -->
-    <div class="reader" id="reader" role="dialog" aria-modal="true" aria-labelledby="rd-title" hidden>
-        <div class="rd-bar">
-            <button type="button" class="rd-back" id="rd-close">&larr; Back to the graph</button>
-            <div class="rd-bar-mid" id="rd-crumb"></div>
-            <a class="rd-tab" id="rd-newtab" href="#" target="_blank" rel="noopener">Open as a page &#8599;</a>
-        </div>
-        <div class="rd-scroll" id="rd-scroll" tabindex="-1">
-            <article class="rd-col rpt">
-                <div class="eyebrow" id="rd-eyebrow"></div>
-                <h1 id="rd-title">Repository</h1>
-                <p class="lede" id="rd-lede"></p>
-                <div class="repolinks" id="rd-links"></div>
-                <hr class="rule">
-                <div class="rd-brief" id="rd-brief"></div>
-                <div id="rd-body"><div class="loading">Loading report&hellip;</div></div>
-            </article>
-        </div>
-    </div>
-
-
     <script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
     <script src="assets/js/report-render.js"></script>
+    <script src="assets/js/reader.js"></script>
     <script>
     (function () {
         'use strict';
@@ -986,114 +965,52 @@
             }
 
             // ---- reader ------------------------------------------------------
-            // Opening a repo brings it to the front in place. The graph keeps
-            // turning behind the column instead of being replaced by a tab with
-            // no route back.
-            var reader = {
-                root: document.getElementById('reader'),
-                scroll: document.getElementById('rd-scroll'),
-                crumb: document.getElementById('rd-crumb'),
-                eyebrow: document.getElementById('rd-eyebrow'),
-                title: document.getElementById('rd-title'),
-                lede: document.getElementById('rd-lede'),
-                links: document.getElementById('rd-links'),
-                brief: document.getElementById('rd-brief'),
-                body: document.getElementById('rd-body'),
-                newtab: document.getElementById('rd-newtab'),
-                close: document.getElementById('rd-close')
-            };
-            var readerReturn = null;
-
-            function firstSentences(s, n) {
-                if (!s) return '';
-                var parts = String(s).split(/(?<=[.!?])\s+/).slice(0, n).join(' ');
-                return parts.length > 320 ? parts.slice(0, 317) + '…' : parts;
-            }
-
-            // The graph is the reading background, so it drifts while the reader
-            // is open even if the visitor had stopped it by dragging. Whatever
-            // they had set is restored on the way out.
+            // Shared with Projects via assets/js/reader.js. This page used to
+            // carry its own copy, which meant the two drifted the moment the
+            // reader gained backdrop-close, arrow keys and next-article.
+            // The graph keeps drifting behind the column while it is open.
             var spinBeforeReader = null;
 
-            // hideReader does the teardown; closeReader is the user gesture and
-            // prefers unwinding history, which comes back through popstate.
-            function hideReader() {
-                if (reader.root.hidden) return;
-                reader.root.hidden = true;
-                if (spinBeforeReader !== null) {
-                    controls.autoRotate = spinBeforeReader;
-                    controls.autoRotateSpeed = 0.5;
-                    spinBeforeReader = null;
-                }
-                if (readerReturn && readerReturn.focus) readerReturn.focus();
-            }
-
-            function closeReader() {
-                if (reader.root.hidden) return;
-                if (history.state && history.state.reader) { history.back(); return; }
-                hideReader();
+            function readerQueue() {
+                // Whatever the current filters leave visible, in deck order, so
+                // reading straight through follows the estate the visitor built.
+                return nodes.filter(function (n) { return n.kind === 'repo' && n.repo; })
+                    .map(function (n) {
+                        return {
+                            id: n.repo.id, name: n.repo.name,
+                            displayName: n.repo.displayName || n.repo.name,
+                            description: n.repo.description, url: n.repo.url,
+                            crumb: [n.domain, n.language].filter(Boolean).join(' \u00b7 ')
+                        };
+                    });
             }
 
             function openReader(repo, node) {
-                if (!repo || repo.id == null) return;
-                readerReturn = document.activeElement;
-                var id = repo.id;
-                var name = repo.displayName || repo.name || (node && node.name) || 'Repository';
-
-                if (spinBeforeReader === null) spinBeforeReader = controls.autoRotate;
-                controls.autoRotate = true;
-                controls.autoRotateSpeed = 0.22;
-
-                reader.root.hidden = false;
-                reader.scroll.scrollTop = 0;
-                reader.scroll.focus();
-                reader.crumb.textContent = [node && node.domain, node && node.language]
-                    .filter(Boolean).join(' · ');
-                reader.eyebrow.innerHTML = 'Architecture report <span class="live">&middot; live</span>';
-                reader.title.textContent = name;
-                // The one-line description, not the summary: the summary is the
-                // briefing's own opening paragraphs, so using it here printed
-                // several thousand characters twice.
-                reader.lede.textContent = repo.description || firstSentences(repo.summary, 2);
-                reader.brief.innerHTML = '';
-                reader.body.innerHTML = '<div class="loading">Loading report&hellip;</div>';
-                reader.newtab.href = 'report.html?repo=' + encodeURIComponent(id);
-
-                var links = [];
-                if (repo.url) links.push('<a href="' + esc(repo.url) + '" target="_blank" rel="noopener">GitHub &#8599;</a>');
-                if (repo.name) links.push('<a href="blog/' + encodeURIComponent(repo.name) + '.html">Full briefing &rarr;</a>');
-                reader.links.innerHTML = links.join('');
-
-                // A back-press should dismiss the reader, not leave the page.
-                try { history.pushState({ reader: id }, '', '#read-' + id); } catch (e) { /* file:// */ }
-
-                fetch('structure/' + id + '.deep.json')
-                    .then(function (r) { return r.ok ? r.json() : null; })
-                    .catch(function () { return null; })
-                    .then(function (d) {
-                        reader.body.innerHTML = window.ReportRender.body(d, repo, { heading: false });
-                        window.ReportRender.bindMore(reader.body);
-                    });
-
-                // The briefing is a generated page; lift its prose rather than
-                // duplicating the generator's wording here.
-                if (repo.name) {
-                    fetch('blog/' + encodeURIComponent(repo.name) + '.html')
-                        .then(function (r) { return r.ok ? r.text() : null; })
-                        .catch(function () { return null; })
-                        .then(function (html) {
-                            if (!html || reader.root.hidden) return;
-                            var doc = new DOMParser().parseFromString(html, 'text/html');
-                            var post = doc.getElementById('post-content');
-                            if (!post) return;
-                            post.querySelectorAll('script, style').forEach(function (n) { n.remove(); });
-                            reader.brief.innerHTML = '<div class="sec"><span class="no">00</span> Briefing</div>' + post.innerHTML;
-                        });
-                }
+                if (!repo || repo.id == null || !window.SiteReader) return;
+                SiteReader.open({
+                    id: repo.id, name: repo.name,
+                    displayName: repo.displayName || repo.name,
+                    description: repo.description, summary: repo.summary, url: repo.url,
+                    crumb: [node && node.domain, node && node.language].filter(Boolean).join(' \u00b7 '),
+                    queue: readerQueue(),
+                    onOpen: function () {
+                        if (spinBeforeReader === null) spinBeforeReader = controls.autoRotate;
+                        controls.autoRotate = true;
+                        controls.autoRotateSpeed = 0.22;
+                    },
+                    onClose: function () {
+                        if (spinBeforeReader !== null) {
+                            controls.autoRotate = spinBeforeReader;
+                            controls.autoRotateSpeed = 0.5;
+                            spinBeforeReader = null;
+                        }
+                    }
+                });
             }
 
-            reader.close.addEventListener('click', closeReader);
-            window.addEventListener('popstate', hideReader);
+            function closeReader() { if (window.SiteReader) SiteReader.close(); }
+            function readerOpen() { return !!window.SiteReader && SiteReader.isOpen(); }
+
             function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
             function hoverCard(n) {
@@ -1195,7 +1112,7 @@
                 if (document.activeElement === el.search) return;
                 // Esc closes the reader first: resetting the graph underneath a
                 // dialog the reader cannot see would be a surprise.
-                if (e.key === 'Escape' && !reader.root.hidden) { closeReader(); return; }
+                if (e.key === 'Escape' && readerOpen()) return;   // reader.js handles it
                 if (e.key === 'Escape') { clearFocus(); doReset(); }
             });
 

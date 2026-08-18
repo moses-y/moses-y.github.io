@@ -543,11 +543,13 @@
             const t = e.target.closest('[data-read]');
             if (!t || !window.SiteReader) return;
             const p = allProjects.find(x => String(x.id) === t.dataset.read);
-            if (p) SiteReader.open({
-                id: p.id, name: p.name, displayName: p.displayName,
-                description: p.description, url: p.url,
-                crumb: [p.domain, p.language].filter(Boolean).join(' · ')
-            });
+            if (!p) return;
+            // The queue is whatever the visitor is currently looking at, filters
+            // and search included, so reading straight through follows the list
+            // they built rather than the whole estate.
+            SiteReader.open(Object.assign({}, p, {
+                queue: (filteredProjects && filteredProjects.length ? filteredProjects : allProjects)
+            }));
         });
 
         // Pagination & Filter state

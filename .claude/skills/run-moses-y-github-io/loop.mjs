@@ -97,7 +97,20 @@ function surfaces() {
       // This is the regression that started it: cards showed the one-line
       // description and there was no way to reach the writing at all.
       ['reader_briefing_chars',
-        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>r(document.getElementById("rd-brief").innerText.length),3200))})()']
+        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>r(document.getElementById("rd-brief").innerText.length),3200))})()'],
+      // Clicking the gutter closes it. It did nothing, which is the first thing
+      // anyone tries on an overlay.
+      ['reader_backdrop_closes',
+        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>{const sc=document.getElementById("rd-scroll");const b=sc.getBoundingClientRect();const t=document.elementFromPoint(b.left+30,b.top+250);if(t)t.click();setTimeout(()=>r(document.getElementById("reader").hidden),600)},2600))})()'],
+      // The next repository is named at the end of the article, and arrow keys
+      // move between them without going back to the list.
+      ['reader_next_block',
+        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>r(document.querySelectorAll("#rd-next .rd-step").length),2800))})()'],
+      ['reader_arrow_advances',
+        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>{const a=SiteReader.position().pos;document.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));setTimeout(()=>r(SiteReader.position().pos===a+1),1800)},2600))})()'],
+      // A block torn out of the reading column by site.css's bare `nav` rule.
+      ['reader_next_inside_column',
+        '(()=>{document.querySelector(".read-btn").click();return new Promise(r=>setTimeout(()=>{const n=document.getElementById("rd-next").getBoundingClientRect();const c=document.querySelector(".rd-col").getBoundingClientRect();r(n.left>=c.left-2&&n.right<=c.right+2)},2800))})()']
     ], '.project-card'],
     ['code-brain', '/code-brain.html', [
       ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("canvas").length),6000))'],
@@ -109,8 +122,10 @@ function surfaces() {
       // "is there a panel" rather than "is it on screen".
       ['canvas_matches_container',
         'new Promise(r=>setTimeout(()=>{const c=document.querySelector("#graph canvas");const g=document.getElementById("graph").getBoundingClientRect();r(!!c&&c.style.width===Math.round(g.width)+"px"&&c.style.height===Math.round(g.height)+"px")},6500))'],
+      // 700ms was marginal against the panel's 350ms slide under load, and this
+      // reported false on geometry that measures correct at 1600ms.
       ['panel_within_stage',
-        '(()=>{const i=document.getElementById("info");i.classList.add("open");return new Promise(r=>setTimeout(()=>{const s=document.querySelector(".stage").getBoundingClientRect();const b=i.getBoundingClientRect();i.classList.remove("open");r(b.top>=s.top-2&&b.bottom<=s.bottom+2&&b.right<=s.right+2)},700))})()'],
+        '(()=>{const i=document.getElementById("info");i.classList.add("open");return new Promise(r=>setTimeout(()=>{const s=document.querySelector(".stage").getBoundingClientRect();const b=i.getBoundingClientRect();i.classList.remove("open");r(b.top>=s.top-2&&b.bottom<=s.bottom+2&&b.right<=s.right+2)},1600))})()'],
       ['graph_fills_stage',
         '(()=>{const g=document.getElementById("graph").getBoundingClientRect();const s=document.querySelector(".stage").getBoundingClientRect();return Math.round(g.width)>=Math.round(s.width)-2&&Math.round(g.height)>=Math.round(s.height)-2})()'],
       // Growing one repo must not re-lay-out the estate. Unpinned this drifted 435px;
@@ -152,7 +167,7 @@ function surfaces() {
       ['canvas_matches_container',
         'new Promise(r=>setTimeout(()=>{const c=document.querySelector("#graph canvas");const g=document.getElementById("graph").getBoundingClientRect();r(!!c&&c.style.width===Math.round(g.width)+"px"&&c.style.height===Math.round(g.height)+"px")},6500))'],
       ['panel_within_stage',
-        '(()=>{const i=document.getElementById("info");i.classList.add("open");return new Promise(r=>setTimeout(()=>{const s=document.querySelector(".stage").getBoundingClientRect();const b=i.getBoundingClientRect();i.classList.remove("open");r(b.top>=s.top-2&&b.bottom<=s.bottom+2&&b.right<=s.right+2)},700))})()'],
+        '(()=>{const i=document.getElementById("info");i.classList.add("open");return new Promise(r=>setTimeout(()=>{const s=document.querySelector(".stage").getBoundingClientRect();const b=i.getBoundingClientRect();i.classList.remove("open");r(b.top>=s.top-2&&b.bottom<=s.bottom+2&&b.right<=s.right+2)},1600))})()'],
       ['graph_fills_stage',
         '(()=>{const g=document.getElementById("graph").getBoundingClientRect();const s=document.querySelector(".stage").getBoundingClientRect();return Math.round(g.width)>=Math.round(s.width)-2&&Math.round(g.height)>=Math.round(s.height)-2})()'],
       ['card_drives_focus',

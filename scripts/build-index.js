@@ -235,6 +235,8 @@ function writeSitemapPage(records, staticPages, articles) {
         .sm-lede { color: var(--text-secondary); max-width: 62ch; margin: 0 0 34px; }
         .sm-lede a { color: var(--accent); }
         .sm-nav { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            /* site.css styles the bare nav element as a fixed bar; this one is in flow. */
+            position: static; background: var(--bg-primary);
             padding: 14px 28px; border-bottom: 1px solid var(--border); }
         .sm-nav a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
         .sm-nav a:hover { color: var(--text-primary); }
