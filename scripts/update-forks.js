@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const LLM_API_KEY = process.env.NVIDIA_API_KEY || process.env.LLM_API_KEY;
 const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1/chat/completions';
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '120000', 10);   // hung requests stalled the run
 const LLM_BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
 const EMBED_ENDPOINT = process.env.EMBED_ENDPOINT || `${LLM_BASE}/embeddings`;
 const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
@@ -100,7 +101,7 @@ function isFallbackArticle(article) {
 }
 
 // Strip markdown formatting from text for clean display
-const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js');
+const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js'), { detectSubProjects, isCollection } = require('./lib-subprojects.js');
 
 function stripMarkdown(text) {
   if (!text) return '';
@@ -428,7 +429,8 @@ async function fetchRepoTree(repo) {
     );
     if (response.ok) {
       const data = await response.json();
-      return (data.tree || []).filter(f => f.type === 'blob').map(f => f.path).slice(0, CONFIG.maxFiles);
+      // Whole tree: slicing here made a 1,302-file repo count as 200. Capped at the prompt.
+      return (data.tree || []).filter(f => f.type === 'blob').map(f => f.path);
     }
   } catch (e) {
     console.log(`  Failed to fetch tree for ${repo.name}: ${e.message}`);
@@ -585,7 +587,7 @@ function buildKnowledgeGraph(fileTree) {
     dependencies: [],
     testFiles: [],
     docs: [],
-    fileTypes: {}
+    fileTypes: {}, subProjects: [], isCollection: false
   };
 
   const extToLang = {
@@ -597,13 +599,11 @@ function buildKnowledgeGraph(fileTree) {
     '.html': 'HTML', '.css': 'CSS', '.scss': 'SCSS', '.less': 'LESS',
     '.vue': 'Vue', '.svelte': 'Svelte', '.jsx': 'JSX', '.tsx': 'TSX',
     '.yml': 'YAML', '.yaml': 'YAML', '.json': 'JSON', '.toml': 'TOML',
-    '.md': 'Markdown', '.rst': 'reStructuredText',
-    '.sql': 'SQL', '.graphql': 'GraphQL', '.proto': 'Protocol Buffers',
+    '.md': 'Markdown', '.rst': 'reStructuredText', '.ipynb': 'Jupyter Notebook', '.sql': 'SQL', '.graphql': 'GraphQL', '.proto': 'Protocol Buffers',
     '.tf': 'Terraform', '.hcl': 'HCL',
     '.dockerfile': 'Docker', '.ex': 'Elixir', '.exs': 'Elixir',
     '.lua': 'Lua', '.dart': 'Dart', '.zig': 'Zig'
   };
-
   const entryFileNames = [
     'main.js', 'main.ts', 'main.py', 'main.go', 'main.rs', 'main.c', 'main.cpp', 'main.java', 'main.kt', 'main.dart',
     'index.js', 'index.ts', 'index.jsx', 'index.tsx', 'index.html',
@@ -823,7 +823,7 @@ function buildKnowledgeGraph(fileTree) {
     hasLockfile,
     committedSecrets: committedSecrets.length
   };
-
+  graph.subProjects = detectSubProjects(fileTree); graph.isCollection = isCollection(graph.subProjects, fileTree.length);
   return graph;
 }
 
@@ -915,6 +915,7 @@ async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
     const graphContext = knowledgeGraph ? formatKnowledgeGraph(knowledgeGraph) : '', measured = factsFor(repo, knowledgeGraph);
     const context = `
 REPOSITORY: ${repo.name}
+CLONE URL: ${repo.html_url || ''} (use this verbatim in any clone command)
 DESCRIPTION: ${repo.description || 'No description'}
 PRIMARY LANGUAGE: ${repo.language || 'Not specified'}
 TOPICS/TAGS: ${(repo.topics || []).join(', ') || 'None'}
@@ -923,7 +924,7 @@ ${repo.parent ? `FORKED FROM: ${repo.parent.name} (${repo.parent.stars} stars)` 
 
 ${graphContext ? `PROJECT ANALYSIS:\n${graphContext}\n` : ''}${measured ? `\nMEASURED ANALYSIS - deterministic, produced by this pipeline's static analysis. These are facts, not guesses. Use them; do not contradict or pad them:\n${measured}\n` : ''}
 FILE STRUCTURE:
-${fileTree.length > 0 ? fileTree.join('\n') : 'Not available'}
+${(() => { const cap = (knowledgeGraph && knowledgeGraph.isCollection) ? 60 : CONFIG.maxFiles; if (!fileTree.length) return 'Not available'; return fileTree.slice(0, cap).join('\n') + (fileTree.length > cap ? `\n... and ${fileTree.length - cap} more files not listed here` : ''); })()}
 
 README EXCERPT:
 ${readme || 'No README available'}
@@ -982,10 +983,8 @@ Keep it under 550 words. Precision over volume.`;
     console.log(`  Using model: ${model}`);
     const response = await fetch(CONFIG.models.endpoint, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LLM_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${LLM_API_KEY}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),   // a hung request stalled the whole run
       body: JSON.stringify({
         model: model,
         messages: [

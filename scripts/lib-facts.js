@@ -26,6 +26,7 @@ const MAX_HUBS = 8;
 const MAX_FINDINGS = 14;
 const MAX_SYMBOLS = 16;
 const MAX_STALE = 8;
+const MAX_PROJECTS = 18;
 
 let SYMBOLS = null;      // lazily built id -> {fns, classes, names[]}
 let DEPS = null;
@@ -164,6 +165,29 @@ function factsFor(repo, kg) {
     if (names.length) out.push(`  Examples: ${names.join(', ')}`);
   }
 
+  // Some repos are a shelf of separate projects, not one codebase. Told to
+  // describe "the architecture" of 29 unrelated projects, the model can only
+  // generalise, which is what made these briefings say nothing.
+  if (kg && (kg.subProjects || []).length) {
+    const sp = kg.subProjects;
+    out.push('');
+    if (kg.isCollection) {
+      out.push(`THIS REPOSITORY IS A COLLECTION of ${sp.length} self-contained projects, not one codebase.`);
+      out.push('  Describe it as a portfolio: what the projects cover, the techniques recurring across');
+      out.push('  them, and name the substantial ones. Do not invent a single architecture for it.');
+    } else {
+      out.push(`PROJECTS INSIDE THIS REPOSITORY (${sp.length}):`);
+    }
+    for (const g of sp.slice(0, MAX_PROJECTS)) {
+      const bits = [`${g.files} files`];
+      if (g.notebooks) bits.push(`${g.notebooks} notebook${g.notebooks === 1 ? '' : 's'}`);
+      if (g.code) bits.push(`${g.code} code file${g.code === 1 ? '' : 's'}`);
+      if (g.data) bits.push(`${g.data} data file${g.data === 1 ? '' : 's'}`);
+      out.push(`  ${g.name} - ${bits.join(', ')}`);
+    }
+    if (sp.length > MAX_PROJECTS) out.push(`  ... and ${sp.length - MAX_PROJECTS} more`);
+  }
+
   // The model invented "no LICENSE file" for a repo that has one, because these
   // were measured but never shown to it. State them rather than leave a gap.
   if (kg) {
@@ -177,8 +201,9 @@ function factsFor(repo, kg) {
     // The file tree is capped at 200 entries, so a count of exactly 200 is a
     // floor rather than a total, and test detection over that tree can miss a
     // test directory the import graph clearly contains.
-    if ((kg.totalFiles || 0) >= 200) {
-      out.push('  Note: the file listing is capped at 200 entries, so treat file counts as "at least".');
+    // Exactly 200 is the fingerprint of the old cap; a real total rarely lands there.
+    if ((kg.totalFiles || 0) === 200) {
+      out.push('  Note: this count predates the removal of a 200-file cap, so read it as "at least 200".');
     }
   }
 
