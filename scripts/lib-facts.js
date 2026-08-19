@@ -27,7 +27,9 @@ const MAX_FINDINGS = 14;
 const MAX_SYMBOLS = 16;
 const MAX_STALE = 8;
 const MAX_PROJECTS = 18;
+const MAX_HYGIENE = 10;
 
+let HYGIENE = null;
 let SYMBOLS = null;      // lazily built id -> {fns, classes, names[]}
 let DEPS = null;
 let REGISTRY = null;
@@ -82,6 +84,16 @@ function depsFor(id) {
   return { total, stale };
 }
 
+// The code-health audit: actionable findings, already ranked by severity times
+// confidence times production reach. Descriptive findings say a file is deeply
+// nested; these say what to do before shipping, which is what the health section
+// of a briefing should be reporting.
+function hygieneFor(id) {
+  if (HYGIENE === null) HYGIENE = readJson(path.join('data', 'hygiene.json'), { repos: {} });
+  const e = (HYGIENE.repos || {})[String(id)];
+  return e && e.findings && e.findings.length ? e : null;
+}
+
 // Returns a prompt-ready block, or '' when nothing has been measured yet. The
 // caller must treat absence as normal: analysis lags the feed by design.
 function factsFor(repo, kg) {
@@ -90,7 +102,8 @@ function factsFor(repo, kg) {
   const deep = readJson(path.join('structure', id + '.deep.json'), null);
   const sym = symbolsFor(id);
   const deps = depsFor(id);
-  if (!deep && !sym && !deps) return '';
+  const hyg = hygieneFor(id);
+  if (!deep && !sym && !deps && !hyg) return '';
 
   const out = [];
 
@@ -205,6 +218,23 @@ function factsFor(repo, kg) {
     if ((kg.totalFiles || 0) === 200) {
       out.push('  Note: this count predates the removal of a 200-file cap, so read it as "at least 200".');
     }
+  }
+
+  if (hyg) {
+    const sev = hyg.totals.severity;
+    out.push('');
+    out.push(`CODE HEALTH AUDIT - ${hyg.totals.total} findings ` +
+      `(${sev.critical} critical, ${sev.high} high, ${sev.medium} medium, ${sev.low} low), ` +
+      'ranked by severity, confidence and production reach. Report these as the health section; ' +
+      'each already carries its own fix, so do not invent alternatives:');
+    for (const f of hyg.findings.slice(0, MAX_HYGIENE)) {
+      out.push(`  [${f.severity.toUpperCase()}] ${f.title}` + (f.where ? ` - ${f.where}` : ''));
+      if (f.evidence) out.push(`      evidence: ${f.evidence}`);
+      out.push(`      why it matters: ${f.why}`);
+      out.push(`      fix: ${f.fix}`);
+    }
+    if (hyg.findings.length > MAX_HYGIENE) out.push(`  ... and ${hyg.findings.length - MAX_HYGIENE} lower-ranked findings`);
+    if (hyg.truncated) out.push('  Note: the file listing was truncated, so absence of a finding is not proof of its absence.');
   }
 
   if (deps) {

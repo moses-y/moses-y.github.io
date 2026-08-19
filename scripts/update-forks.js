@@ -805,14 +805,15 @@ function buildKnowledgeGraph(fileTree) {
     issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No test files detected - untested code paths', where: 'repository-wide' });
   if (hasCodeFiles && !graph.hasCI)
     issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No CI/CD pipeline detected - no automated build/test gate', where: '.github/ or CI config' });
-  if (!hasLicense)
-    issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No LICENSE file - unclear usage/redistribution rights', where: 'root' });
+  if (!hasLicense) issues.push({ severity: 'Medium', kind: 'SDLC', issue: 'No LICENSE file - unclear usage/redistribution rights', where: 'root' });
   if (!hasReadme)
     issues.push({ severity: 'Low', kind: 'SDLC', issue: 'No README - onboarding and intent are undocumented', where: 'root' });
   if (graph.dependencies.length > 0 && !hasLockfile)
     issues.push({ severity: 'Low', kind: 'Risk', issue: 'Dependencies declared without a lockfile - non-reproducible builds', where: graph.dependencies[0] });
-  if (committedSecrets.length > 0)
-    issues.push({ severity: 'High', kind: 'Security', issue: 'Possible secrets/credentials committed to the repo', where: committedSecrets.slice(0, 3).join(', ') });
+  // Measured on 19 real trees this path heuristic fired on 15, and on 9 it had
+  // matched source named secrets.go, honeypot bait, or a PNG. build-hygiene.js
+  // reads the file instead, so this stays a signal and is no longer a High.
+  if (committedSecrets.length > 0) issues.push({ severity: 'Low', kind: 'Security', issue: 'Secret-shaped paths present; the code-health audit confirms or clears them', where: committedSecrets.slice(0, 3).join(', ') });
 
   graph.issues = issues;
   graph.codeHealth = {
