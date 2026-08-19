@@ -26,6 +26,10 @@ is_generated() {
     # both of which are under the limit. Ratcheting a build artifact would mean
     # splitting the source to satisfy a rule about its output.
     assets/css/blog-post.css) return 0 ;;
+    # Built by scripts/build-css.js from assets/css/site/*.css, all of which are
+    # under the limit. A staleness check below catches editing a partial without
+    # rebuilding, which is the failure that matters for a committed artifact.
+    assets/css/site.css) return 0 ;;
     *.db|*.png|*.jpg|*.svg|*.min.js|*.min.css|package-lock.json) return 0 ;;
   esac
   return 1
@@ -48,6 +52,18 @@ while IFS= read -r f; do
     fail=1
   fi
 done <<< "$staged"
+
+# ---- generated stylesheet freshness ---------------------------------------
+# GitHub Pages serves what is committed and no build runs before it, so a partial
+# edited without rebuilding would ship the old stylesheet and look like a CSS bug
+# rather than a missing step.
+if echo "$staged" | grep -qE '^assets/css/site/'; then
+  if ! node scripts/build-css.js --check >/dev/null 2>&1; then
+    echo "BLOCKED  assets/css/site/ changed but assets/css/site.css was not rebuilt."
+    echo "           Run:  node scripts/build-css.js"
+    fail=1
+  fi
+fi
 
 if [ "$fail" -eq 1 ]; then
   echo
