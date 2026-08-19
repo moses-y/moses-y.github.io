@@ -23,6 +23,7 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const { LANGS, extensionsOf, acceptsLanguage, normalizeImport, ambiguousFor } = require('./lib-languages.js');
+const { effectOf } = require('./lib-effects.js');
 
 const argv = process.argv.slice(2);
 const numArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? parseInt(argv[i + 1], 10) : d; };
@@ -278,6 +279,13 @@ async function main() {
     const symbols = [];
     const imports = new Set();
     const rawCalls = [];
+    // function name -> effect category -> one example receiver expression. The
+    // example is kept because "reaches a database" is a claim a reader should be
+    // able to check, and cursor.execute is the evidence for it.
+    const effects = new Map();
+    // Which files hold a symbol, so per-file responsibility can be derived
+    // without a second pass over the tree.
+    const fileOf = new Map();
     for (const f of files) {
       let src;
       try {
@@ -329,6 +337,17 @@ async function main() {
           if (mod) imports.add(mod);
           continue;
         }
+        if (cap.name === 'mfull') {
+          const kind = effectOf(text);
+          if (!kind) continue;
+          const owner = enclosing(cap.node) || '<module>';
+          let byKind = effects.get(owner);
+          if (!byKind) { byKind = {}; effects.set(owner, byKind); }
+          // First example wins; a function calling requests.get eleven times is
+          // still one fact about that function.
+          if (!byKind[kind]) byKind[kind] = text.slice(0, 60);
+          continue;
+        }
         if (cap.name === 'call' || cap.name === 'mcall') {
           if (cap.name === 'mcall' && ambiguous.has(text)) continue;
           rawCalls.push([enclosing(cap.node) || '<module>', text, rel]);
@@ -340,6 +359,7 @@ async function main() {
           f: rel,
           l: cap.node.startPosition.row + 1
         });
+        if (!fileOf.has(text)) fileOf.set(text, rel);
       }
       if (tree.delete) tree.delete();
     }
@@ -373,7 +393,10 @@ async function main() {
       imports: [...imports].sort(),
       symbols: symbols.slice(0, 4000),
       calls: calls,
-      fanIn: fanIn
+      fanIn: fanIn,
+      // Only for functions actually defined here, so an effect recorded against a
+      // name the repo does not define cannot be attributed to it.
+      effects: Object.fromEntries([...effects].filter(([k]) => k === '<module>' || defined.has(k)).slice(0, 400))
     }));
     okRepos++;
     perLangCount[r.lang] = (perLangCount[r.lang] || 0) + 1;

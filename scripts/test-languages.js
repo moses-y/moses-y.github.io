@@ -60,7 +60,7 @@ async function main() {
     catch (e) { console.log(`FAIL  ${name}: query does not compile - ${e.message.split('\n')[0]}`); fail++; continue; }
 
     const tree = parser.parse(fx.src);
-    const got = { fn: [], cls: [], imp: [], call: [], mcall: [] };
+    const got = { fn: [], cls: [], imp: [], call: [], mcall: [], mfull: [] };
     for (const cap of query.captures(tree.rootNode)) got[cap.name].push(cap.node.text);
 
     for (const kind of ['fn', 'cls', 'imp']) {
@@ -77,7 +77,7 @@ async function main() {
         fail++;
       }
     }
-    console.log(`  ${name.padEnd(11)} fn ${got.fn.length}  cls ${got.cls.length}  imp ${got.imp.length}  call ${got.call.length}  mcall ${got.mcall.length}`);
+    console.log(`  ${name.padEnd(11)} fn ${got.fn.length}  cls ${got.cls.length}  imp ${got.imp.length}  call ${got.call.length}  mcall ${got.mcall.length}  mfull ${got.mfull.length}`);
   }
 
   console.log(fail ? `\n  ${fail} failures` : '\n  all languages capture what they claim');

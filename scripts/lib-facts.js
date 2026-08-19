@@ -21,6 +21,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { flowFor } = require('./lib-flow.js');
 
 const MAX_HUBS = 8;
 const MAX_FINDINGS = 14;
@@ -188,6 +189,54 @@ function factsFor(repo, kg) {
     if (sample.length) {
       out.push('  Representative edges (caller -> callee, times):');
       for (const [from, to, n] of sample) out.push(`    ${from} -> ${to}${n > 1 ? ' x' + n : ''}`);
+    }
+  }
+
+  /*
+   * Where execution starts, what it ends up touching, and what each file is for.
+   * This is the part a reader actually came for: a call graph says which functions
+   * call which, and it still does not say where the program begins or that a CLI
+   * flag ends up in a database write two calls later.
+   */
+  const flow = perRepo ? flowFor(perRepo) : null;
+  if (flow) {
+    if (flow.entries.length) {
+      out.push('');
+      out.push('ENTRY POINTS (where execution starts, by name, file and how much of the program each reaches):');
+      for (const e of flow.entries) {
+        out.push(`    ${e.name}  ${e.file}:${e.line}  reaches ${e.reach} function(s)` +
+          `${e.calledBy ? `, itself called from ${e.calledBy} place(s)` : ', called by nothing else in the repo'}`);
+      }
+    }
+    const kinds = Object.entries(flow.effectTotals || {});
+    if (kinds.length) {
+      out.push('');
+      out.push('WHAT THIS CODE TOUCHES OUTSIDE ITSELF: ' +
+        kinds.map(([k, n]) => `${n} function(s) ${flow.meaning[k] || k}`).join('; ') + '.');
+    }
+    if (flow.paths.length) {
+      out.push('  Traced paths from an entry point to the call that leaves the process:');
+      for (const p of flow.paths) {
+        const ev = Object.entries(p.examples).map(([k, v]) => `${k} via ${v}`).join(', ');
+        out.push(`    ${p.chain.join(' -> ')}  [${ev}]`);
+      }
+      out.push('  These are shortest paths over resolved edges. A route through a framework ' +
+        'callback is invisible here, because the framework calling a handler is not an edge in the source.');
+    }
+    if (flow.roles.length) {
+      out.push('');
+      out.push('WHAT EACH FILE IS RESPONSIBLE FOR (ranked by how much routes through it, not by size):');
+      for (const r of flow.roles) {
+        const bits = [];
+        if (r.functions.length) bits.push(`${r.functions.length} function(s)`);
+        if (r.classes.length) bits.push(`${r.classes.length} class(es)/type(s)`);
+        if (r.inbound) bits.push(`called from ${r.inbound} other file(s)`);
+        if (r.outbound) bits.push(`calls into ${r.outbound}`);
+        const eff = Object.keys(r.effects);
+        if (eff.length) bits.push(eff.map(k => flow.meaning[k] || k).join(' and '));
+        const named = r.functions.concat(r.classes).slice(0, 5).join(', ');
+        out.push(`    ${r.file} - ${bits.join(', ')}${named ? `. Defines ${named}` : ''}`);
+      }
     }
   }
 

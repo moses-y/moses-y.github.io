@@ -26,6 +26,13 @@
  * call whose receiver is unknown - the last of those is filtered against a list
  * of ambiguous names, because without type inference x.get() cannot be told from
  * a call to a function named get.
+ *
+ * mfull captures the whole receiver expression rather than the final name, which
+ * is what makes sink detection possible. The internal call graph deliberately
+ * drops every edge whose target is not defined in the repository, and that is
+ * exactly where the sinks live: requests.post, cursor.execute, subprocess.run.
+ * From `get` alone nothing can be concluded; from `requests.get` a great deal
+ * can. So the effect classification reads mfull and the call graph ignores it.
  */
 'use strict';
 
@@ -37,7 +44,8 @@ const PY = `
   (import_statement name: (dotted_name) @imp)
   (import_from_statement module_name: (dotted_name) @imp)
   (call function: (identifier) @call)
-  (call function: (attribute attribute: (identifier) @mcall))`;
+  (call function: (attribute attribute: (identifier) @mcall))
+  (call function: (attribute) @mfull)`;
 
 // JavaScript names functions in several shapes, and the anonymous ones matter:
 // `const handler = async () => {}` is a definition to any reader, so the
@@ -56,7 +64,8 @@ const jsQuery = className => `
   (class_declaration name: (${className}) @cls)
   (import_statement source: (string) @imp)
   (call_expression function: (identifier) @call)
-  (call_expression function: (member_expression property: (property_identifier) @mcall))`;
+  (call_expression function: (member_expression property: (property_identifier) @mcall))
+  (call_expression function: (member_expression) @mfull)`;
 
 const JS = jsQuery('identifier');
 
@@ -76,7 +85,8 @@ const GO = `
   (type_spec name: (type_identifier) @cls)
   (import_spec path: (interpreted_string_literal) @imp)
   (call_expression function: (identifier) @call)
-  (call_expression function: (selector_expression field: (field_identifier) @mcall))`;
+  (call_expression function: (selector_expression field: (field_identifier) @mcall))
+  (call_expression function: (selector_expression) @mfull)`;
 
 // Rust's struct/enum/trait are all type definitions, and a macro invocation is
 // close enough to a call to be worth the edge.
@@ -91,7 +101,9 @@ const RUST = `
   (use_declaration argument: (identifier) @imp)
   (call_expression function: (identifier) @call)
   (call_expression function: (field_expression field: (field_identifier) @mcall))
-  (call_expression function: (scoped_identifier name: (identifier) @mcall))`;
+  (call_expression function: (scoped_identifier name: (identifier) @mcall))
+  (call_expression function: (field_expression) @mfull)
+  (call_expression function: (scoped_identifier) @mfull)`;
 
 const LANGS = {
   python: {
