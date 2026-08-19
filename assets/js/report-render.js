@@ -249,5 +249,33 @@
             '<hr class="rule"><div class="rgrid">' + cards + '</div>';
     }
 
-    global.ReportRender = { body: body, index: index, bindMore: bindMore, esc: esc, summarise: summarise };
+    /*
+     * The audit result as a single chip for a project card. Only the worst
+     * severity present, because a card is a summary and "1 critical" is the
+     * sentence that decides whether to click.
+     *
+     * Three states that must not collapse into one, since two of them are claims
+     * and only one of them is ours to make:
+     *   [c, h, m, l]   findings exist, coloured by the worst
+     *   0              audited and nothing found
+     *   undefined      not audited yet, which is not the same as clean
+     */
+    function healthChip(v) {
+        if (Array.isArray(v)) {
+            var crit = v[0] || 0, high = v[1] || 0, med = v[2] || 0;
+            var label = crit ? 'critical' : high ? 'high' : med ? 'medium' : null;
+            if (!label) return '';
+            var n = crit || high || med;
+            var total = v.reduce(function (a, b) { return a + (b || 0); }, 0);
+            return '<span class="health sev-' + label + '" title="' + total +
+                ' audit finding' + (total === 1 ? '' : 's') + '">' + n + ' ' + label + '</span>';
+        }
+        if (v === 0) {
+            return '<span class="health sev-clean" title="Audited, nothing found">audit clean</span>';
+        }
+        return '';
+    }
+
+    global.ReportRender = { body: body, index: index, bindMore: bindMore, esc: esc,
+        summarise: summarise, healthChip: healthChip };
 })(window);

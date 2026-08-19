@@ -46,6 +46,15 @@ function main() {
   // ---- lean index -------------------------------------------------------
   // Single-letter keys: at 1295 records the key names themselves were a
   // measurable share of the file.
+  // The audit lives in its own file, and until now it was only visible after
+  // opening a report. The worst repositories in the estate were therefore
+  // indistinguishable from the clean ones on the page that lists all of them.
+  const readHygiene = () => {
+    try { return JSON.parse(fs.readFileSync(path.join('data', 'hygiene.json'), 'utf8')).repos || {}; }
+    catch (e) { return {}; }
+  };
+  const hygiene = readHygiene();
+
   const records = forks.map(f => {
     const kg = f.knowledgeGraph || {};
     const h = kg.codeHealth || {};
@@ -65,6 +74,17 @@ function main() {
       c: [h.hasTests ? 1 : 0, kg.hasCI ? 1 : 0, kg.hasDocker ? 1 : 0,
           h.hasLicense ? 1 : 0, (h.committedSecrets > 0) ? 1 : 0].join('')
     };
+    // Audit severity counts, as a fixed-length tuple to keep the record small:
+    // [critical, high, medium, low]. Omitted entirely when a repo has not been
+    // audited yet, so the card can tell "clean" from "not looked at".
+    const hy = hygiene[String(f.id)];
+    if (hy && hy.totals && hy.totals.severity) {
+      const sv = hy.totals.severity;
+      const tuple = [sv.critical || 0, sv.high || 0, sv.medium || 0, sv.low || 0];
+      if (tuple.some(Boolean)) rec.v = tuple;
+      else rec.v = 0;                       // audited and clean, which is worth saying
+    }
+
     // Fields the card renderer reads directly. Small, and including them keeps the
     // front-end swap to a change of data source rather than a rewrite.
     if (f.image) rec.m = f.image;

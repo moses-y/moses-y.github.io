@@ -456,7 +456,6 @@
             return div.innerHTML;
         }
 
-
         // Lean index records use short keys to keep the file small. This restores the
         // field names the renderers use, so nothing downstream had to change.
         function expandIndexRecord(r) {
@@ -470,6 +469,7 @@
                 image: r.m, readTime: r.r || 2, updatedAt: r.z,
                 parent: r.p ? { name: r.p.n, url: r.p.u, stars: r.p.s } : null,
                 topics: [], umap: r.u, hasArticle: !!r.a, findings: r.x,
+                v: r.v,     // audit severities; undefined (unaudited) is not 0 (clean)
                 knowledgeGraph: {
                     totalFiles: r.f,
                     codeHealth: {
@@ -514,6 +514,8 @@
             ];
             if (h.committedSecrets) flags.unshift('<span class="flag warn">! secrets</span>');
 
+            // Audit chip, in ReportRender: the audit is rendered there already.
+            const health = window.ReportRender ? ReportRender.healthChip(p.v) : '';
             return `
                 <article class="project-card" data-id="${escapeHtml(String(p.id))}">
                     <div class="content">
@@ -521,6 +523,7 @@
                             <span class="type-badge ${p.type || 'fork'}">${p.type === 'original' ? 'Original' : 'Fork'}</span>
                             ${p.language ? `<span class="language"><span class="lang-dot" style="background: ${langColors[p.language] || '#888'}"></span>${escapeHtml(p.language)}</span>` : ''}
                             ${p.kind ? `<span class="kind">${escapeHtml(p.kind)}</span>` : ''}
+                            ${health}
                         </div>
                         <h3><button type="button" class="card-title" data-read="${escapeHtml(String(p.id))}">${escapeHtml(p.displayName || p.name)}</button></h3>
                         <p class="card-desc">${escapeHtml(p.description || 'No description available')}</p>
