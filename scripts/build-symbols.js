@@ -22,12 +22,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
+const { LANGS, extensionsOf, acceptsLanguage, normalizeImport, ambiguousFor } = require('./lib-languages.js');
 
 const argv = process.argv.slice(2);
 const numArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? parseInt(argv[i + 1], 10) : d; };
 const strArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? argv[i + 1] : d; };
 const BUDGET = numArg('--budget', 20);
-const LANG = strArg('--lang', 'python');
+// Every language by default. Python was the default for as long as it was the
+// only grammar, which quietly meant a cron run never touched the 464 repos in
+// the other four languages even after they were supported.
+const LANG = strArg('--lang', 'all');
 const DRY = argv.includes('--dry-run');
 const ONLY = strArg('--only', '');   // parse a single repo by name, for debugging
 const TOKEN = process.env.GITHUB_TOKEN;
@@ -35,7 +39,9 @@ const TOKEN = process.env.GITHUB_TOKEN;
 // Bumped when the extraction changes. A per-repo file written by an older
 // version is re-parsed rather than skipped: without this, the 422 repos parsed
 // before call edges existed would never gain them.
-const SYMBOLS_VERSION = 2;
+//   2: call edges and fan-in
+//   3: TypeScript, JavaScript, Go and Rust, which had no symbols at all
+const SYMBOLS_VERSION = 3;
 
 const OUT_DIR = path.join('data', 'symbols');
 const INDEX_FILE = path.join('data', 'symbols-index.json');
@@ -63,16 +69,6 @@ const AMBIGUOUS_METHODS = new Set(['read', 'write', 'get', 'set', 'append', 'add
 const SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', '.venv', 'venv',
   'site-packages', 'dist', 'build', 'vendor', 'third_party']);
 
-const LANGS = {
-  // Notebooks are parsed with the same grammar: their code cells are Python.
-  python: { ext: ['.py', '.ipynb'], wasm: 'tree-sitter-python/tree-sitter-python.wasm', query: `
-      (function_definition name: (identifier) @fn)
-      (class_definition name: (identifier) @cls)
-      (import_statement name: (dotted_name) @imp)
-      (import_from_statement module_name: (dotted_name) @imp)
-      (call function: (identifier) @call)
-      (call function: (attribute attribute: (identifier) @mcall))` }
-};
 
 function walk(dir, exts, out = []) {
   let entries;
@@ -169,52 +165,96 @@ async function fetchViaTree(owner, repo, exts, dest) {
   return written;
 }
 
+// A repo needs re-parsing when it has no symbol file or the file predates the
+// current extraction.
+function isDue(id) {
+  const p = path.join(OUT_DIR, id + '.json');
+  if (!fs.existsSync(p)) return true;
+  try { return (JSON.parse(fs.readFileSync(p, 'utf8')).v || 1) !== SYMBOLS_VERSION; }
+  catch (e) { return true; }
+}
+
+/*
+ * Candidates across every requested language, interleaved rather than
+ * concatenated. Concatenating starves: Python alone has a backlog larger than any
+ * single run's budget, so every run would spend itself on Python and the Go and
+ * Rust repos would stay unparsed forever no matter how many times cron fired.
+ * Round-robin gives each language a share of every run.
+ */
+function selectCandidates(idx, langKeys) {
+  const perLang = langKeys.map(key => {
+    const spec = LANGS[key];
+    return idx.repos
+      // --only still has to respect the language, or the first spec in the loop
+      // claims the repo and parses it with the wrong grammar: a Go repo went
+      // through the Python pass and reported 0 files rather than an error.
+      .filter(r => acceptsLanguage(spec, r.l) && (ONLY ? r.n === ONLY : r.f > 5))
+      .filter(r => isDue(r.i))
+      // Smallest first, so a run completes many repos rather than stalling on one.
+      .sort((a, b) => (a.f || 0) - (b.f || 0))
+      .map(r => Object.assign({ lang: key }, r));
+  });
+  const out = [];
+  for (let i = 0; out.length < perLang.reduce((n, l) => n + l.length, 0); i++) {
+    for (const list of perLang) if (i < list.length) out.push(list[i]);
+  }
+  return { out, perLang };
+}
+
+// One parser per grammar, held for the whole run: loading a wasm grammar costs
+// far more than parsing a file with it, and TypeScript needs two.
+async function loadGrammars(ts, langKeys) {
+  const { Parser, Language, Query } = ts;
+  const loaded = {};
+  for (const key of langKeys) {
+    const spec = LANGS[key];
+    loaded[key] = { spec, byExt: new Map() };
+    for (const g of spec.grammars) {
+      const wasmPath = require.resolve(g.wasm, { paths: [process.cwd(), path.join(process.cwd(), 'node_modules')] });
+      const lang = await Language.load(wasmPath);
+      const parser = new Parser();
+      parser.setLanguage(lang);
+      const query = new Query(lang, spec.query);
+      for (const e of g.ext) loaded[key].byExt.set(e, { parser, query });
+    }
+  }
+  return loaded;
+}
+
 async function main() {
-  const spec = LANGS[LANG];
-  if (!spec) { console.error('Unsupported --lang ' + LANG); process.exit(1); }
+  const langKeys = LANG === 'all' ? Object.keys(LANGS) : [LANG];
+  for (const k of langKeys) {
+    if (!LANGS[k]) { console.error('Unsupported --lang ' + k); process.exit(1); }
+  }
 
   const idx = JSON.parse(fs.readFileSync(path.join('data', 'index.json'), 'utf8'));
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  // A repo GitHub labels "Jupyter Notebook" is a Python repo whose code lives in
-  // notebook cells, so the Python pass claims it too. Without this, the repos
-  // most in need of symbol extraction were the ones excluded from it.
-  const langName = LANG === 'python' ? 'Python' : LANG;
-  const accepts = LANG === 'python'
-    ? (l => l === 'Python' || l === 'Jupyter Notebook')
-    : (l => l === langName);
-  const candidates = idx.repos
-    .filter(r => (ONLY ? r.n === ONLY : accepts(r.l) && r.f > 5))
-    .filter(r => {
-      const p2 = path.join(OUT_DIR, r.i + '.json');
-      if (!fs.existsSync(p2)) return true;
-      try { return (JSON.parse(fs.readFileSync(p2, 'utf8')).v || 1) !== SYMBOLS_VERSION; }
-      catch (e) { return true; }
-    })
-    .sort((a, b) => (a.f || 0) - (b.f || 0));
+  const { out: candidates, perLang } = selectCandidates(idx, langKeys);
 
-  console.log('=== Symbols (' + LANG + ') ===');
-  console.log(`  candidates: ${candidates.length} | already parsed: ${fs.readdirSync(OUT_DIR).length}`);
+  console.log('=== Symbols (' + langKeys.join(', ') + ') ===');
+  langKeys.forEach((k, i) => console.log(`  ${k.padEnd(11)} due: ${perLang[i].length}`));
+  console.log(`  total due: ${candidates.length} | files on disk: ${fs.readdirSync(OUT_DIR).length}`);
   if (DRY) { console.log('  (dry run)'); return; }
   if (!candidates.length) { console.log('  nothing to do'); return; }
 
   // web-tree-sitter is loaded lazily so --dry-run works without it installed.
-  const { Parser, Language, Query } = require('web-tree-sitter');
-  await Parser.init();
-  const wasmPath = require.resolve(spec.wasm, { paths: [process.cwd(), path.join(process.cwd(), 'node_modules')] });
-  const lang = await Language.load(wasmPath);
-  const parser = new Parser();
-  parser.setLanguage(lang);
-  const query = new Query(lang, spec.query);
+  const treeSitter = require('web-tree-sitter');
+  await treeSitter.Parser.init();
+  const grammars = await loadGrammars(treeSitter, langKeys);
 
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'symbols-'));
   const batch = candidates.slice(0, BUDGET);
   let okRepos = 0, totalFns = 0, totalCls = 0, totalFiles = 0, t0 = Date.now();
 
   let skippedBig = 0;
+  const perLangCount = {};
   for (const r of batch) {
     // Wall-clock guard: a cron step needs a predictable ceiling, not a repo count.
     if (Date.now() - t0 > RUN_MS) { console.log('  time budget reached, stopping early'); break; }
+    const { spec, byExt } = grammars[r.lang];
+    const exts = extensionsOf(spec);
+    const ambiguous = ambiguousFor(spec, AMBIGUOUS_METHODS);
     const dir = path.join(tmpRoot, String(r.i));
     fs.mkdirSync(dir, { recursive: true });
     const tgz = path.join(dir, 'src.tar.gz');
@@ -229,12 +269,12 @@ async function main() {
           got = true;
         }
       } catch (e) { got = false; }
-      if (!got && !await fetchViaTree('moses-y', r.n, spec.ext, dir)) {
+      if (!got && !await fetchViaTree('moses-y', r.n, exts, dir)) {
         skippedBig++; fs.rmSync(dir, { recursive: true, force: true }); continue;
       }
     } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); continue; }
 
-    const files = walk(dir, spec.ext);
+    const files = walk(dir, exts);
     const symbols = [];
     const imports = new Set();
     const rawCalls = [];
@@ -249,8 +289,12 @@ async function main() {
         src = fs.readFileSync(f, 'utf8');
         if (nb) { src = notebookToPython(src); if (!src || src.length > MAX_FILE) continue; }
       } catch (e) { continue; }
+      // .tsx and .ts are different grammars, so the parser is chosen per file
+      // rather than per repo.
+      const g = byExt.get(path.extname(f).toLowerCase());
+      if (!g) continue;
       let tree;
-      try { tree = parser.parse(src); } catch (e) { continue; }
+      try { tree = g.parser.parse(src); } catch (e) { continue; }
       if (!tree) continue;
       const rel = path.relative(dir, f).split(path.sep).slice(1).join('/');
       // The nearest enclosing function names the caller. Calls outside any
@@ -258,18 +302,35 @@ async function main() {
       // where scripts do their work.
       const enclosing = node => {
         for (let n = node; n; n = n.parent) {
-          if (n.type === 'function_definition') {
-            const nm = n.childForFieldName('name');
-            return nm ? nm.text : null;
+          if (!spec.fnNodes.includes(n.type)) continue;
+          const nm = n.childForFieldName('name');
+          if (nm) return nm.text;
+          // An anonymous function is named by what it is bound to, because
+          // `const handler = async () => {...}` is a named function to every
+          // reader of the code and attributing its calls to <module> would lose
+          // most of the call graph in any modern JavaScript repo.
+          for (let up = n.parent; up; up = up.parent) {
+            if (spec.fnNodes.includes(up.type)) break;
+            if (up.type === 'variable_declarator' || up.type === 'pair' ||
+                up.type === 'assignment_expression' || up.type === 'public_field_definition') {
+              const bound = up.childForFieldName('name') || up.childForFieldName('key') ||
+                up.childForFieldName('left');
+              if (bound) return bound.text;
+            }
           }
+          return null;
         }
         return null;
       };
-      for (const cap of query.captures(tree.rootNode)) {
+      for (const cap of g.query.captures(tree.rootNode)) {
         const text = cap.node.text;
-        if (cap.name === 'imp') { imports.add(text.split('.')[0]); continue; }
+        if (cap.name === 'imp') {
+          const mod = normalizeImport(spec, text);
+          if (mod) imports.add(mod);
+          continue;
+        }
         if (cap.name === 'call' || cap.name === 'mcall') {
-          if (cap.name === 'mcall' && AMBIGUOUS_METHODS.has(text)) continue;
+          if (cap.name === 'mcall' && ambiguous.has(text)) continue;
           rawCalls.push([enclosing(cap.node) || '<module>', text, rel]);
           continue;
         }
@@ -308,13 +369,14 @@ async function main() {
       .sort((a, b) => b[1] - a[1]).slice(0, 300));
 
     fs.writeFileSync(path.join(OUT_DIR, r.i + '.json'), JSON.stringify({
-      id: r.i, name: r.n, v: SYMBOLS_VERSION, lang: langName, files: files.length,
+      id: r.i, name: r.n, v: SYMBOLS_VERSION, lang: spec.language, files: files.length,
       imports: [...imports].sort(),
       symbols: symbols.slice(0, 4000),
       calls: calls,
       fanIn: fanIn
     }));
     okRepos++;
+    perLangCount[r.lang] = (perLangCount[r.lang] || 0) + 1;
     totalFiles += files.length;
     totalFns += symbols.filter(s => s.k === 'function').length;
     totalCls += symbols.filter(s => s.k === 'class').length;
@@ -342,6 +404,8 @@ async function main() {
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
   console.log(`  parsed ${okRepos} repos, ${totalFiles} files in ${secs}s (${skippedBig} skipped: too large or unavailable)`);
   console.log(`  functions ${totalFns} | classes ${totalCls}`);
+  const share = Object.entries(perLangCount).map(([k, n]) => `${k} ${n}`).join(', ');
+  if (share) console.log(`  by language: ${share}`);
   console.log(`  global index: ${all.length} symbols, ${(fs.statSync(INDEX_FILE).size / 1024).toFixed(0)} KB`);
   const left = candidates.length - batch.length;
   if (left > 0) console.log(`  ${left} repos remaining for the next run`);
