@@ -6,6 +6,7 @@ const { looksLikeReasoning } = require('./lib-quality.js');
 const BLOG_DIR = 'blog';
 
 const { escapeHtml, renderSummary, renderAnalysis } = require('./lib-blog-analysis.js');
+const { renderAudit } = require('./lib-blog-audit.js');
 const { POST_CSS } = require('./lib-blog-css.js');
 const { ARTICLE_CSS } = require('./lib-blog-css-article.js');
 const { INDEX_CSS } = require('./lib-blog-index-css.js');
@@ -42,6 +43,10 @@ function generateBlogPostHTML(post) {
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 
     <link rel="stylesheet" href="/assets/css/blog-post.css">
+    <!-- The audit findings reuse the report's markup rather than a second copy of
+         it. Every rule in report.css is namespaced under .rpt, so it styles that
+         section and cannot reach the article. -->
+    <link rel="stylesheet" href="/assets/css/report.css">
 </head>
 <body>
     <header>
@@ -94,6 +99,8 @@ function generateBlogPostHTML(post) {
             </div>
 
             ${renderAnalysis(post)}
+
+            ${renderAudit(post)}
 
             ${post.topics && post.topics.length > 0 ? `
             <div class="post-topics">
