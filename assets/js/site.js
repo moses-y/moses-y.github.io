@@ -1,3 +1,11 @@
+/* GENERATED FILE - do not edit.
+ *
+ * Built by scripts/build-bundles.js from assets/js/site/
+ * Edit the partials there and run: node scripts/build-bundles.js
+ *
+ * Concatenated, not separate scripts: these partials share one top-level scope.
+ */
+/* nav */
         // Language colors
         const langColors = {
             'JavaScript': '#f1e05a', 'TypeScript': '#3178c6', 'Python': '#3572A5',
@@ -114,6 +122,7 @@
             document.body.style.overflow = '';
         }
 
+/* hero */
         // Typing Animation
         const typingPhrases = [
             'retrieval & embeddings at estate scale',
@@ -240,6 +249,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
+/* stats */
         // Animate Stats - real Code Brain metrics, K-formatted.
         let statsAnimated = false;
         function fmtStat(n) {
@@ -436,6 +446,7 @@
             renderStats();
         }
 
+/* index-records */
         // Reveal animation
         const revealElements = document.querySelectorAll('.reveal');
         const revealObserver = new IntersectionObserver((entries) => {
@@ -481,6 +492,7 @@
             };
         }
 
+/* projects */
         // Render project card
         //
         // The stock photo is gone. It was a random Unsplash image unrelated to
@@ -708,6 +720,8 @@
 
         // Fallback stats from the projects feed (used only if stats.json is missing).
         // Files come from the real knowledge-graph data; modules/findings need the
+
+/* repo-stats */
         // deep graphs, so they stay 0 in the fallback rather than being faked.
         const NON_CODE = { Markdown:1, JSON:1, YAML:1, TOML:1, INI:1, XML:1, CSV:1, Text:1, SVG:1, Dockerfile:1, Makefile:1, HTML:1 };
         // Mirrors scripts/build-stats.js primaryLanguage() exactly so the in-browser
@@ -864,6 +878,7 @@
             }
         }
 
+/* theme */
         // Theme Toggle
         const themeToggle = document.getElementById('theme-toggle');
         const mobileThemeToggle = document.getElementById('mobile-theme-toggle');
@@ -976,6 +991,7 @@
             }
         }
 
+/* extras */
         function generateMockHeatmap() {
             const grid = document.getElementById('heatmap-grid');
             const monthsContainer = document.getElementById('heatmap-months');

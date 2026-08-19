@@ -26,10 +26,11 @@ is_generated() {
     # both of which are under the limit. Ratcheting a build artifact would mean
     # splitting the source to satisfy a rule about its output.
     assets/css/blog-post.css) return 0 ;;
-    # Built by scripts/build-css.js from assets/css/site/*.css, all of which are
-    # under the limit. A staleness check below catches editing a partial without
-    # rebuilding, which is the failure that matters for a committed artifact.
-    assets/css/site.css) return 0 ;;
+    # Built by scripts/build-bundles.js from assets/css/site/ and assets/js/site/,
+    # whose partials are all under the limit. A staleness check below catches
+    # editing a partial without rebuilding, which is the failure that matters for
+    # a committed artifact.
+    assets/css/site.css|assets/js/site.js) return 0 ;;
     *.db|*.png|*.jpg|*.svg|*.min.js|*.min.css|package-lock.json) return 0 ;;
   esac
   return 1
@@ -57,10 +58,11 @@ done <<< "$staged"
 # GitHub Pages serves what is committed and no build runs before it, so a partial
 # edited without rebuilding would ship the old stylesheet and look like a CSS bug
 # rather than a missing step.
-if echo "$staged" | grep -qE '^assets/css/site/'; then
-  if ! node scripts/build-css.js --check >/dev/null 2>&1; then
-    echo "BLOCKED  assets/css/site/ changed but assets/css/site.css was not rebuilt."
-    echo "           Run:  node scripts/build-css.js"
+if echo "$staged" | grep -qE '^assets/(css|js)/site/'; then
+  if ! node scripts/build-bundles.js --check >/dev/null 2>&1; then
+    echo "BLOCKED  a partial changed but its bundle was not rebuilt:"
+    node scripts/build-bundles.js --check 2>&1 | grep STALE | sed 's/^/         /'
+    echo "           Run:  node scripts/build-bundles.js"
     fail=1
   fi
 fi
