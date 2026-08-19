@@ -64,7 +64,7 @@ const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = requi
 // one every change was squeezed into: three edits this week were paid for by
 // folding unrelated logging together, which is a bad reason to change code.
 const { CONFIG, LLM_API_KEY } = require('./lib-config.js');
-const { stripMarkdown } = require('./lib-text.js');
+const { cleanArticle } = require('./lib-text.js');
 const { fetchReadme, fetchRepoTree, fetchRepos, fetchRepoDetails,
   generateFallbackSummary } = require('./lib-github.js');
 const { generateBlogArticle } = require('./lib-article.js');
@@ -184,7 +184,10 @@ async function main() {
     }
 
     // Strip markdown from summary if needed
-    const cleanSummary = stripMarkdown(existing.summary);
+    // Left as stored. Flattening on every pass would strip the structure out of
+    // articles written after markdown started being preserved, one run at a time,
+    // so a table would survive generation and quietly disappear two hours later.
+    const cleanSummary = existing.summary;
 
     forks.push({
       ...existing,
@@ -270,7 +273,12 @@ async function main() {
       // Prefer: AI article > existing article > fallback
       const existing = existingArticles.get(repo.id);
       const rawArticle = article || (existing && existing.summary) || generateFallbackSummary(repo);
-      const finalArticle = stripMarkdown(rawArticle);
+      // Stored with its markdown intact. stripMarkdown used to run here, which is
+      // why no article ever had a code block or a table: the prompt asked for both,
+      // the model produced both, and this line deleted them before anything could
+      // render them. The renderer that reads this escapes before it formats, so
+      // keeping the structure does not mean trusting the text.
+      const finalArticle = cleanArticle(rawArticle);
       const source = article ? 'AI generated' : (existing && existing.summary) ? 'preserved' : 'fallback';
       console.log(`  - Article: ${finalArticle.length} chars (${source})`);
 

@@ -13,6 +13,7 @@ const path = require('path');
 // renderSummary refuses to publish a stored scratchpad, so the gate has to travel
 // with it rather than stay behind in the generator.
 const { looksLikeReasoning } = require('./lib-quality.js');
+const { renderMarkdown, hasMarkdown } = require('./lib-markdown.js');
 
 function escapeHtml(text) {
     if (!text) return '';
@@ -53,6 +54,14 @@ function renderSummary(summary, post) {
             '<p class="post-pending">A written briefing for this repository is being regenerated. ' +
             'The analysis below is produced by static analysis and is unaffected.</p>';
     }
+    // An article written since markdown stopped being stripped at storage carries
+    // real structure - headings, a fenced block of install commands, a
+    // blast-radius table - and is rendered as that. The 1,331 written before were
+    // flattened on the way in and have none, so they keep the paragraph treatment:
+    // guessing headings from their shape is the best available reading of text
+    // whose structure was already thrown away.
+    if (hasMarkdown(summary)) return renderMarkdown(summary);
+
     const blocks = String(summary || '').split('\n\n').map(b => b.trim()).filter(Boolean);
     return blocks.map(b => looksLikeHeading(b)
         ? `<h3 class="post-h">${escapeHtml(b)}</h3>`

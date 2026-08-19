@@ -7,6 +7,7 @@ const BLOG_DIR = 'blog';
 
 const { escapeHtml, renderSummary, renderAnalysis } = require('./lib-blog-analysis.js');
 const { POST_CSS } = require('./lib-blog-css.js');
+const { ARTICLE_CSS } = require('./lib-blog-css-article.js');
 const { INDEX_CSS } = require('./lib-blog-index-css.js');
 function generateBlogPostHTML(post) {
     const formattedDate = post.updatedAt || post.forkedAt || 'Unknown date';
@@ -40,9 +41,7 @@ function generateBlogPostHTML(post) {
     <!-- Mermaid.js for diagrams -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 
-    <style>
-${POST_CSS}
-    </style>
+    <link rel="stylesheet" href="/assets/css/blog-post.css">
 </head>
 <body>
     <header>
@@ -80,7 +79,6 @@ ${POST_CSS}
                 ${parentInfo}
             </div>
 
-            <img class="post-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.displayName)}" loading="lazy">
 
             <div class="listen-bar" id="listen-bar" hidden>
                 <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
@@ -275,6 +273,17 @@ async function main() {
     console.log(`Found ${posts.length} posts to generate.\n`);
 
     // Create blog directory if it doesn't exist
+    // The stylesheet is written, not inlined. Every page links it, so it has to be
+    // emitted by the same run that emits the pages or all 1,331 of them lose their
+    // styling at once.
+    const cssDir = path.join('assets', 'css');
+    fs.mkdirSync(cssDir, { recursive: true });
+    // The page styles, then the document styles. Order matters: the article rules
+    // are meant to win where they overlap with the page's generic prose rules.
+    fs.writeFileSync(path.join(cssDir, 'blog-post.css'),
+      POST_CSS.trim() + '\n' + ARTICLE_CSS.trim() + '\n');
+    console.log('Wrote assets/css/blog-post.css');
+
     if (!fs.existsSync(BLOG_DIR)) {
         fs.mkdirSync(BLOG_DIR, { recursive: true });
         console.log(`Created ${BLOG_DIR}/ directory`);

@@ -9,6 +9,32 @@
  */
 'use strict';
 
+/*
+ * Tidy an article without flattening it.
+ *
+ * stripMarkdown used to run on every article before storage, which is why none of
+ * them ever had a code block or a table. This does the part that was worth doing -
+ * removing the artifacts of a model writing markdown - and leaves the structure
+ * for the renderer.
+ */
+function cleanArticle(text) {
+  if (!text) return '';
+  let t = String(text).replace(/\r\n?/g, '\n').trim();
+
+  // Models routinely wrap the whole answer in one fence. Left alone, the entire
+  // article renders as a single code block.
+  const wrapped = t.match(/^`{3,}\s*(markdown|md)?\s*\n([\s\S]*?)\n`{3,}\s*$/i);
+  if (wrapped) t = wrapped[2].trim();
+
+  // An odd number of fences means one is unclosed, and everything after it would
+  // render as code to the end of the article. Closing it loses nothing; deleting
+  // the opener would lose a real code block.
+  const fences = (t.match(/^\s*`{3,}/gm) || []).length;
+  if (fences % 2 === 1) t += '\n```';
+
+  return t.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function stripMarkdown(text) {
   if (!text) return '';
   return text
@@ -53,4 +79,4 @@ function stripMarkdown(text) {
 // description or summary changes is automatically re-embedded, while an unchanged
 // repo costs nothing on later runs.
 
-module.exports = { stripMarkdown };
+module.exports = { stripMarkdown, cleanArticle };
