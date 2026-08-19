@@ -25,22 +25,23 @@ const ARTICLE_CSS = `
            because the renderer shifts markdown down one level: the page already
            owns the h1, so the article's own top-level heading is a section in it. */
         .post-content { counter-reset: section figure; }
-        /* Only headings the renderer produced from real markdown. .post-h is a
-           heading guessed from the shape of a line in one of the 1,331 flattened
-           articles, and guesses should not be numbered: in a flattened article
-           where only one line happened to look like a heading, numbering it
-           printed a lone "1." and implied a structure that is not there. */
-        .post-content h3:not(.post-h) { counter-increment: section; counter-reset: subsection; }
+        /* Numbering is gated on .numbered, which the generator adds only when it
+           found at least three sections. Doing it by heading class instead was
+           wrong twice over: it skipped the recovered headings, which now come from
+           a specific pattern rather than a loose guess and are worth numbering,
+           and it still printed a lone "1." on an article that happened to have
+           exactly one. */
+        .post-content.numbered h3 { counter-increment: section; counter-reset: subsection; }
         .post-content h4 { counter-increment: subsection; }
-        .post-content h3:not(.post-h)::before,
-        .post-content h4::before {
+        .post-content.numbered h3::before,
+        .post-content.numbered h4::before {
             color: var(--text-tertiary);
             font-variant-numeric: tabular-nums;
             font-weight: 500;
             margin-right: 0.5em;
         }
-        .post-content h3:not(.post-h)::before { content: counter(section) "."; }
-        .post-content h4::before { content: counter(section) "." counter(subsection); }
+        .post-content.numbered h3::before { content: counter(section) "."; }
+        .post-content.numbered h4::before { content: counter(section) "." counter(subsection); }
 
         .post-content h3 {
             font-size: 1.32rem;
@@ -57,6 +58,59 @@ const ARTICLE_CSS = `
         /* The first section should not be pushed away from the lede. */
         .post-content > h3:first-child,
         .post-content > h4:first-child { margin-top: 0.2em; }
+
+        /* ---- abstract and contents ---------------------------------------
+           A paper opens with both. The abstract is the repository's own one-line
+           description, which was already on the page as small grey text; labelling
+           and setting it apart is the whole change, and it introduces no content
+           that could be wrong.
+
+           The contents is one line rather than a stacked list. The median article
+           here is 3,503 characters across six sections, and a bulleted list of six
+           links is a screenful restating what a scroll already shows. */
+        .post-abstract {
+            border-left: 2px solid var(--border);
+            padding: 0.1em 0 0.1em 1.1em;
+            margin: 0 0 1.8em;
+        }
+        .post-abstract-lab {
+            display: block;
+            font-family: var(--font-mono, ui-monospace, monospace);
+            font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+            color: var(--text-tertiary); margin-bottom: 0.35em;
+        }
+        .post-abstract .post-description { margin: 0; }
+
+        .post-toc {
+            display: flex; flex-wrap: wrap; align-items: baseline;
+            gap: 0.35em 1.1em;
+            margin: 0 0 2.4em;
+            padding-bottom: 1em;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.84rem;
+        }
+        .post-toc-lab {
+            font-family: var(--font-mono, ui-monospace, monospace);
+            font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+            color: var(--text-tertiary);
+        }
+        /* Numbered to match the headings they point at, from the same counter, so
+           the strip and the body cannot disagree. */
+        .post-content.numbered .post-toc { counter-reset: tocitem; }
+        .post-content.numbered .post-toc a { counter-increment: tocitem; }
+        .post-content.numbered .post-toc a::before {
+            content: counter(tocitem) ". ";
+            color: var(--text-tertiary);
+            font-variant-numeric: tabular-nums;
+        }
+        .post-toc a {
+            color: var(--text-secondary); text-decoration: none;
+            border-bottom: 1px solid transparent;
+        }
+        .post-toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+        /* A heading linked from the strip should not land under the fixed nav. */
+        .post-content h3, .post-content h4 { scroll-margin-top: 90px; }
 
         /* ---- prose -------------------------------------------------------- */
         .post-content p { margin: 0 0 1.15em; }

@@ -100,7 +100,24 @@
 
         // Clicking the page outside the column closes it. This is what people
         // try first on an overlay, and it did nothing.
+        /*
+         * A section link inside the briefing scrolls the panel; it must not
+         * navigate. Article pages now carry a contents strip and an id on every
+         * heading, and the reader lifts that markup wholesale - so clicking one of
+         * those links performed a fragment navigation, which fires popstate in
+         * Chrome, which is what closes the reader. The panel simply closed under
+         * the reader's feet.
+         */
         el.scroll.addEventListener('click', function (e) {
+            var frag = e.target.closest('a[href^="#"]');
+            if (frag && frag.closest('.rd-col')) {
+                e.preventDefault();
+                var target = null;
+                try { target = el.scroll.querySelector('#' + CSS.escape(frag.getAttribute('href').slice(1))); }
+                catch (err) { target = null; }
+                if (target && target.scrollIntoView) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                return;
+            }
             if (!e.target.closest('.rd-col')) close();
         });
 

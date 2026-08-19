@@ -13,7 +13,7 @@ const path = require('path');
 // renderSummary refuses to publish a stored scratchpad, so the gate has to travel
 // with it rather than stay behind in the generator.
 const { looksLikeReasoning } = require('./lib-quality.js');
-const { renderMarkdown, hasMarkdown } = require('./lib-markdown.js');
+const { renderMarkdown, hasMarkdown, hasStrongStructure } = require('./lib-markdown.js');
 
 function escapeHtml(text) {
     if (!text) return '';
@@ -55,17 +55,42 @@ function renderSummary(summary, post) {
             'The analysis below is produced by static analysis and is unaffected.</p>';
     }
     // An article written since markdown stopped being stripped at storage carries
-    // real structure - headings, a fenced block of install commands, a
-    // blast-radius table - and is rendered as that. The 1,331 written before were
-    // flattened on the way in and have none, so they keep the paragraph treatment:
-    // guessing headings from their shape is the best available reading of text
-    // whose structure was already thrown away.
-    if (hasMarkdown(summary)) return renderMarkdown(summary);
+    // real section headings or fenced code, and is rendered as the document it is.
+    if (hasStrongStructure(summary)) return renderMarkdown(summary);
 
+    /*
+     * Everything else is one of the articles flattened on the way in, and it is
+     * not uniformly flat. Handing the whole text to renderMarkdown is wrong -
+     * with no headings left it collapses into an undifferentiated run of
+     * paragraphs - and so is treating every block as prose, because the old
+     * stripMarkdown had no table rule, so pipe tables survived it intact and 34
+     * articles still carry one.
+     *
+     * So each block is read on its own terms. The heading case is the one both
+     * previous attempts missed: these articles write a short title, two trailing
+     * spaces, a newline, then the body, which is markdown's hard line break and
+     * plainly a heading to any reader. Block-level heading detection rejected it
+     * for containing a newline, and renderMarkdown glued the title onto the
+     * paragraph. Reading the first line separately recovers roughly eight
+     * headings per article where the old path found one.
+     */
     const blocks = String(summary || '').split('\n\n').map(b => b.trim()).filter(Boolean);
-    return blocks.map(b => looksLikeHeading(b)
-        ? `<h3 class="post-h">${escapeHtml(b)}</h3>`
-        : `<p>${escapeHtml(b)}</p>`).join('');
+    return blocks.map(b => {
+        // A table, list or fence inside an otherwise flat article: render it.
+        if (hasMarkdown(b)) return renderMarkdown(b);
+
+        const nl = b.indexOf('\n');
+        if (nl > -1) {
+            const first = b.slice(0, nl).trim();
+            const rest = b.slice(nl + 1).trim();
+            if (rest && looksLikeHeading(first)) {
+                return `<h3 class="post-h">${escapeHtml(first)}</h3><p>${escapeHtml(rest)}</p>`;
+            }
+        }
+        return looksLikeHeading(b)
+            ? `<h3 class="post-h">${escapeHtml(b)}</h3>`
+            : `<p>${escapeHtml(b)}</p>`;
+    }).join('');
 }
 
 function loadDeep(id) {

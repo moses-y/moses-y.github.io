@@ -7,11 +7,16 @@ const BLOG_DIR = 'blog';
 
 const { escapeHtml, renderSummary, renderAnalysis } = require('./lib-blog-analysis.js');
 const { renderAudit } = require('./lib-blog-audit.js');
+const { annotate } = require('./lib-blog-toc.js');
 const { POST_CSS } = require('./lib-blog-css.js');
 const { ARTICLE_CSS } = require('./lib-blog-css-article.js');
 const { INDEX_CSS } = require('./lib-blog-index-css.js');
 function generateBlogPostHTML(post) {
     const formattedDate = post.updatedAt || post.forkedAt || 'Unknown date';
+    // Anchors on every section so a reader can cite one, plus the contents strip.
+    // Both live inside #post-content, which the in-page reader lifts wholesale, so
+    // the panel gets them without a second implementation.
+    const article = annotate(renderSummary(post.summary, post));
     const parentInfo = post.parent
         ? `<p class="post-parent">Forked from <a href="${escapeHtml(post.parent.url)}" target="_blank" rel="noopener">${escapeHtml(post.parent.name)}</a></p>`
         : '';
@@ -80,7 +85,7 @@ function generateBlogPostHTML(post) {
                     <span class="post-type">${post.type || 'fork'}</span>
                 </div>
                 <h1>${escapeHtml(post.displayName)}</h1>
-                <p class="post-description">${escapeHtml(post.description || '')}</p>
+                ${post.description ? `<div class="post-abstract"><span class="post-abstract-lab">Abstract</span><p class="post-description">${escapeHtml(post.description)}</p></div>` : ''}
                 ${parentInfo}
             </div>
 
@@ -94,8 +99,9 @@ function generateBlogPostHTML(post) {
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                ${renderSummary(post.summary, post)}
+            <div class="post-content${article.numbered ? ' numbered' : ''}" id="post-content">
+                ${article.toc}
+                ${article.html}
             </div>
 
             ${renderAnalysis(post)}
