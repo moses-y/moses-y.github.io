@@ -37,6 +37,13 @@ const DEPS_FILE = path.join(OUT, 'deps.json');
 const REG_FILE = path.join(OUT, 'registry.json');
 const TOKEN = process.env.GITHUB_TOKEN;
 
+// Bumped when extraction changes, so stored results from older parsers are
+// re-read rather than trusted.
+//   1: names, with versions for npm, PyPI and simple Cargo
+//   2: versions for go.mod, Gemfile, composer.json, pubspec, Gradle and Cargo
+//      inline tables, and Go module paths no longer lowercased
+const DEPS_VERSION = 2;
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const readJson = (p, dflt) => {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return dflt; }
@@ -92,9 +99,16 @@ async function main() {
   const deps = readJson(DEPS_FILE, { repos: {}, generated: null });
   const registry = readJson(REG_FILE, {});
 
-  // Repos with a parseable manifest we have not read yet.
+  // Repos with a parseable manifest we have not read yet, or read with an older
+  // extraction. Without the version check the parser fixes never reach the stored
+  // data: 366 repos were extracted when go.mod, Gemfile, composer.json, pubspec
+  // and Gradle all discarded their versions, and they would have kept those
+  // versionless entries permanently.
   const pending = forks.filter(f => {
-    if (deps.repos[f.id]) return false;
+    // Per repo, not per file: a file-level stamp would mark the whole estate
+    // current as soon as one run finished, leaving the rest unread forever.
+    const prev = deps.repos[f.id];
+    if (prev && ((deps.versions || {})[f.id] || 1) >= DEPS_VERSION) return false;
     const m = ((f.knowledgeGraph || {}).dependencies) || [];
     return m.some(isParseable);
   });
@@ -124,6 +138,8 @@ async function main() {
     }
     // Recorded even when empty, so an unreadable repo is not retried every run.
     deps.repos[f.id] = {};
+    if (!deps.versions) deps.versions = {};
+    deps.versions[f.id] = DEPS_VERSION;
     for (const eco of Object.keys(found)) {
       const seen = new Set();
       deps.repos[f.id][eco] = found[eco]
