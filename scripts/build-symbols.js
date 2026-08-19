@@ -39,6 +39,7 @@ const SYMBOLS_VERSION = 2;
 
 const OUT_DIR = path.join('data', 'symbols');
 const INDEX_FILE = path.join('data', 'symbols-index.json');
+const STATUS_FILE = path.join('data', 'symbols-status.json');
 const MAX_FILE = 400_000;                // a 400KB+ source file is generated, not written
 const MAX_NOTEBOOK = 25 * 1024 * 1024;   // outputs inflate notebooks enormously
 const MAX_FILES_PER_REPO = 600;
@@ -322,15 +323,21 @@ async function main() {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 
   // Compact global index: enough to search and locate, not to reconstruct.
+  // The same pass records which extraction version produced each repo's file,
+  // because article generation needs to know whether a repo's call graph exists
+  // yet without opening 41 MB of symbol data to find out.
   const all = [];
+  const status = {};
   for (const f of fs.readdirSync(OUT_DIR)) {
     if (!f.endsWith('.json')) continue;
     try {
       const j = JSON.parse(fs.readFileSync(path.join(OUT_DIR, f), 'utf8'));
       for (const s of j.symbols) all.push([s.n, s.k === 'class' ? 1 : 0, j.id, s.f, s.l]);
+      status[j.id] = j.v || 1;
     } catch (e) { /* skip unreadable */ }
   }
   fs.writeFileSync(INDEX_FILE, JSON.stringify({ generated: new Date().toISOString(), n: all.length, s: all }));
+  fs.writeFileSync(STATUS_FILE, JSON.stringify({ v: SYMBOLS_VERSION, repos: status }));
 
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
   console.log(`  parsed ${okRepos} repos, ${totalFiles} files in ${secs}s (${skippedBig} skipped: too large or unavailable)`);

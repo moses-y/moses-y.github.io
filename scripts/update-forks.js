@@ -101,7 +101,7 @@ function isFallbackArticle(article) {
 }
 
 // Strip markdown formatting from text for clean display
-const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js'), { detectSubProjects, isCollection } = require('./lib-subprojects.js');
+const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js'), { detectSubProjects, isCollection } = require('./lib-subprojects.js'), { ARTICLE_VERSION, articleIsCurrent, versionReport } = require('./lib-article-version.js');
 
 function stripMarkdown(text) {
   if (!text) return '';
@@ -1136,17 +1136,16 @@ async function main() {
 
   for (const repo of recentRepos) {
     const existing = existingArticles.get(repo.id);
-    // A stored scratchpad is not a good article: regenerate it.
-    if (existing && !isFallbackArticle(existing.summary) && !looksLikeReasoning(existing.summary)) {
+    // A stored scratchpad is not a good article, and neither is one written by
+    // an older prompt than the one running now.
+    if (existing && articleIsCurrent(existing) && !isFallbackArticle(existing.summary) && !looksLikeReasoning(existing.summary)) {
       hasArticle.push({ repo, existing });
     } else {
       needsGeneration.push(repo);
     }
   }
 
-  console.log(`Articles status:`);
-  console.log(`  - Already have good articles: ${hasArticle.length}`);
-  console.log(`  - Need AI generation: ${needsGeneration.length}`);
+  console.log(`Articles status:\n  - Already have good articles: ${hasArticle.length}\n  - Need AI generation: ${needsGeneration.length}\n${versionReport(existingArticles)}`);
 
   // Batch processing: only process up to batchSize per run.
   const wasAttempted = (repo) => {
@@ -1234,9 +1233,7 @@ async function main() {
 
   const remainingKg = needsKnowledgeGraph.length - kgGeneratedCount;
   console.log(`Generated ${kgGeneratedCount} knowledgeGraphs this run`);
-  if (remainingKg > 0) {
-    console.log(`Remaining repos needing knowledgeGraph: ${remainingKg}`);
-  }
+  if (remainingKg > 0) console.log(`Remaining repos needing knowledgeGraph: ${remainingKg}`);
   console.log(`Preserved ${hasArticle.length} existing articles\n`);
 
   // Generate articles only for repos in this batch
@@ -1312,6 +1309,8 @@ async function main() {
         displayName: repo.name.replace(/-/g, ' ').replace(/_/g, ' '),
         description: repo.description || 'No description available',
         summary: finalArticle,
+        // Records the prompt generation, so a later bump can find this article.
+        av: article ? ARTICLE_VERSION : (existing && existing.av) || 1,
         url: repo.html_url,
         language: repo.language,
         stars: repo.stargazers_count,
