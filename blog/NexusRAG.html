@@ -439,7 +439,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -460,7 +460,46 @@
             </div>
 
             <div class="post-content" id="post-content">
-                <p>Hybrid RAG system combining vector search, knowledge graph (LightRAG), and cross-encoder reranking — with Docling document parsing, visual intelligence (image/table captioning), agentic streaming chat, and inline citations. Powered by Gemini or local Ollama models.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+                <p>The Problem  
+Enterprise knowledge bases often collapse after ingestion: PDFs lose layout, images and tables disappear, and retrieved answers lack provenance. Teams that need accurate citations, visual context, and multi‑modal retrieval end up stitching together separate tools, which introduces latency and maintenance overhead.</p><p>What This Does  
+NexusRAG delivers a single pipeline that preserves document structure, extracts visual assets, builds a lightweight knowledge graph (LightRAG), and ranks results with a cross‑encoder. The backend lives in backend/app/ (FastAPI entry point backend/app/main.py) and the UI in frontend/src/. Core services include:</p><p>backend/app/services/documentparser/doclingparser.py and markerparser.py – parse PDFs/Docs while keeping headings, page numbers, and images.  
+ backend/app/services/vectorstore.py – stores BGE‑M3 embeddings for fast ANN search.  
+ backend/app/services/knowledgegraphservice.py – builds the LightRAG entity graph.  
+ backend/app/services/reranker.py – cross‑encoder re‑ranking.  
+ frontend/src/components/rag/ChatPanel.tsx – streaming, agentic chat with inline citations.</p><p>The widest blast radius lies in the three “oversized” modules (ChatPanel.tsx, backend/app/api/chatagent.py, backend/app/api/rag.py – each &gt;1 600 lines) because they house routing, orchestration, and UI logic; changes ripple across both API and front‑end.</p><p>How It Is Wired  
+Startup – docker-compose.yml brings up three containers: backend (built from Dockerfile.backend), frontend (from Dockerfile.frontend), and an optional mcp-server.  
+Request flow – The UI calls frontend/src/lib/api.ts, which hits FastAPI routes defined in backend/app/api/router.py.  
+    /chat → backend/app/api/chatagent.py → backend/app/services/nexusragservice.py →  
+      document retrieval (ragservice.py → vectorstore.py, knowledgegraphservice.py)  
+      reranking (reranker.py)  
+      LLM generation (services/llm/.py).  
+Citation stitching – backend/app/services/ragservice.py attaches 4‑char IDs derived from ParsedDocument metadata; the front‑end renders them via MemoizedMarkdown.tsx.  
+State – Global stores (ragPanelStore.ts, workspaceStore.ts) keep chat history and selected workspace, feeding back into API calls.</p><p>No circular imports were detected (0 cycles), and the import graph contains 102 internal modules with 18 edges, confirming a relatively flat dependency tree.</p><p>How To Use It  
+Clone the repo
+git clone https://github.com/moses-y/NexusRAG.git
+cd NexusRAG
+Create a .env from the example (adjust keys for Gemini/Ollama)
+cp .env.example .env
+Build and start all services
+docker compose up --build -d</p><p>The backend becomes reachable at http://localhost:8000/docs (FastAPI OpenAPI UI).  
+ The front‑end is served on http://localhost:3000 (Vite dev server).</p><p>To run the backend locally without Docker:</p><p>Python 3.10+
+python -m venv venv &amp;&amp; source venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000</p><p>Configuration lives in backend/app/api/config.py and the .env.example file (model provider, document parser choice, DB URL).</p><p>Real‑World Use  
+A product team can point NexusRAG at a corpus of technical manuals. When a sales engineer asks “What safety warnings apply to the XYZ actuator?” the system:
+Retrieves relevant sections (preserving page numbers).  
+Augments with a KG node for “XYZ actuator” and any linked hazard entities.  
+Returns a response like “Refer to §3.2.1 (page 42) …” with a clickable link that opens the viewer at the exact location.</p><p>The same flow works for image‑heavy datasheets because extracted figures are indexed and shown in ImageGallery.tsx.</p><h3 class="post-h">Code Health &amp; Issues</h3><p>HIGH – LICENSE missing (root): No LICENSE file, so reuse is legally blocked.  
+ HIGH – No test suite (root): 102 source files, 0 test files; regressions are unchecked.  
+ HIGH – No CI pipeline (root): No .github/workflows, so builds aren’t automatically verified.  
+ HIGH – No build gate for Docker Compose (docker-compose.yml): Deployable artifacts lack validation.  
+ MEDIUM – Dependabot disabled (root): Three manifest files (requirements.txt, package.json, pnpm-lock.yaml) have no automated update config.  
+ MEDIUM – Large binaries in repo (showcase/demonexusvideo.mp4, .gif): 12 + MB files should be moved to LFS or external storage.  
+ LOW – Missing repo conventions (root): No .editorconfig, .gitattributes, or formatter config, risking inconsistent style.</p><p>Additional static findings:</p><p>HIGH – Duplicated code blocks (e.g., backend/app/api/chatagent.py, rag.py, database.py).  
+ HIGH – Deep nesting (max depth 8 in several service files).  
+ HIGH – Oversized files (ChatPanel.tsx, chat_agent.py, rag.py &gt; 1 600 lines).  
+MEDIUM – Broad exception handling (bare except: in API and parser modules).</p><p>The Bottom Line  
+NexusRAG provides a well‑integrated, multi‑modal RAG stack with citation and KG support, but the codebase suffers from maintainability hotspots and lacks the safety nets (tests, CI, licence) needed for production use. It is a solid foundation for teams willing to invest in refactoring and adding automated quality checks.</p>
             </div>
 
             
@@ -490,6 +529,30 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>16</strong> of 59 declared dependencies are a major version behind. Resolved 59 of 59 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>sentence-transformers</code></td>
+                            <td>&gt;=2.2.2</td><td>5.7.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>aiofiles</code></td>
+                            <td>&gt;=23.2.1</td><td>25.1.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>pillow</code></td>
+                            <td>&gt;=10.0.0</td><td>12.3.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>@types/node</code></td>
+                            <td>^24.10.1</td><td>26.2.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>typescript</code></td>
+                            <td>~5.9.3</td><td>7.0.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>chromadb</code></td>
+                            <td>&gt;=0.4.22</td><td>1.5.9</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>marker-pdf</code></td>
+                            <td>&gt;=1.10.0</td><td>2.0.0</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>langchain-text-splitters</code></td>
+                            <td>&gt;=0.0.1</td><td>1.1.2</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
