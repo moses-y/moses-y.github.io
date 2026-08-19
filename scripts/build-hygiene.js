@@ -146,6 +146,9 @@ async function main() {
     if (ONLY) return f.name === ONLY;
     const prev = store.repos[f.id];
     if (!prev) return true;
+    // A result produced by older rules is not trusted: fixed false positives
+    // would otherwise stay published until the recheck window expired.
+    if ((prev.v || 1) !== hygiene.CHECKS_VERSION) return true;
     return !prev.audited || Date.parse(prev.audited) < cutoff;
   });
 
@@ -191,6 +194,7 @@ async function main() {
     }
     store.repos[f.id] = {
       name: f.name,
+      v: hygiene.CHECKS_VERSION,
       audited: new Date().toISOString(),
       truncated: tree.truncated,
       files: tree.files.length,

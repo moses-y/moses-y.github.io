@@ -40,6 +40,20 @@ const MAX_FILES_PER_REPO = 600;
 const MAX_TARBALL = 40 * 1024 * 1024;   // one giant repo must not eat a whole run
 const RUN_MS = numArg('--max-seconds', 240) * 1000;
 
+// Attribute calls cannot be resolved to a definition without type inference, so
+// f.read() would be attributed to any function named read. These names collide
+// with repo-defined functions often enough to be worth dropping outright.
+const AMBIGUOUS_METHODS = new Set(['read', 'write', 'get', 'set', 'append', 'add',
+  'remove', 'update', 'close', 'open', 'run', 'start', 'stop', 'send', 'join',
+  'split', 'strip', 'format', 'keys', 'values', 'items', 'load', 'save', 'copy',
+  'next', 'push', 'pop', 'sort', 'reverse', 'count', 'index', 'find', 'replace',
+  // Logging and lifecycle methods, which inflated fan-in badly: self.logger()
+  // ranked as the most-called "function" in a repo at 336 callers.
+  'logger', 'log', 'debug', 'info', 'warning', 'warn', 'error', 'exception',
+  'critical', 'notify', 'emit', 'time', 'now', 'connect', 'disconnect', 'cancel',
+  'submit', 'execute', 'process', 'handle', 'validate', 'reset', 'clear', 'flush',
+  'encode', 'decode', 'dumps', 'loads', 'json', 'text', 'items', 'get_json']);
+
 const SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', '.venv', 'venv',
   'site-packages', 'dist', 'build', 'vendor', 'third_party']);
 
@@ -49,7 +63,9 @@ const LANGS = {
       (function_definition name: (identifier) @fn)
       (class_definition name: (identifier) @cls)
       (import_statement name: (dotted_name) @imp)
-      (import_from_statement module_name: (dotted_name) @imp)` }
+      (import_from_statement module_name: (dotted_name) @imp)
+      (call function: (identifier) @call)
+      (call function: (attribute attribute: (identifier) @mcall))` }
 };
 
 function walk(dir, exts, out = []) {
@@ -210,6 +226,7 @@ async function main() {
     const files = walk(dir, spec.ext);
     const symbols = [];
     const imports = new Set();
+    const rawCalls = [];
     for (const f of files) {
       let src;
       try {
@@ -225,9 +242,26 @@ async function main() {
       try { tree = parser.parse(src); } catch (e) { continue; }
       if (!tree) continue;
       const rel = path.relative(dir, f).split(path.sep).slice(1).join('/');
+      // The nearest enclosing function names the caller. Calls outside any
+      // function belong to module-level code, which is worth keeping: that is
+      // where scripts do their work.
+      const enclosing = node => {
+        for (let n = node; n; n = n.parent) {
+          if (n.type === 'function_definition') {
+            const nm = n.childForFieldName('name');
+            return nm ? nm.text : null;
+          }
+        }
+        return null;
+      };
       for (const cap of query.captures(tree.rootNode)) {
         const text = cap.node.text;
         if (cap.name === 'imp') { imports.add(text.split('.')[0]); continue; }
+        if (cap.name === 'call' || cap.name === 'mcall') {
+          if (cap.name === 'mcall' && AMBIGUOUS_METHODS.has(text)) continue;
+          rawCalls.push([enclosing(cap.node) || '<module>', text, rel]);
+          continue;
+        }
         symbols.push({
           n: text,
           k: cap.name === 'fn' ? 'function' : 'class',
@@ -238,10 +272,36 @@ async function main() {
       if (tree.delete) tree.delete();
     }
 
+    // An edge is kept only when its target is defined in this repository: the
+    // internal call graph is the useful part, and it drops stdlib and library
+    // calls that cannot be followed anyway.
+    const defined = new Set(symbols.map(s2 => s2.n));
+    const edgeCount = new Map();
+    for (const [from, to] of rawCalls) {
+      if (!defined.has(to) || from === to) continue;
+      const k = from + '\u0000' + to;
+      edgeCount.set(k, (edgeCount.get(k) || 0) + 1);
+    }
+    const calls = [...edgeCount.entries()]
+      .map(([k, n]) => { const [from, to] = k.split('\u0000'); return [from, to, n]; })
+      .sort((a, b) => b[2] - a[2])
+      .slice(0, 6000);
+    // Fan-in per symbol: how many distinct callers reach it. This is blast radius
+    // at function level, which the module graph cannot express.
+    const callers = {};
+    for (const [from, to] of calls) {
+      (callers[to] || (callers[to] = new Set())).add(from);
+    }
+    const fanIn = Object.fromEntries(Object.entries(callers)
+      .map(([k, v]) => [k, v.size]).filter(([, v]) => v > 1)
+      .sort((a, b) => b[1] - a[1]).slice(0, 300));
+
     fs.writeFileSync(path.join(OUT_DIR, r.i + '.json'), JSON.stringify({
       id: r.i, name: r.n, lang: langName, files: files.length,
       imports: [...imports].sort(),
-      symbols: symbols.slice(0, 4000)
+      symbols: symbols.slice(0, 4000),
+      calls: calls,
+      fanIn: fanIn
     }));
     okRepos++;
     totalFiles += files.length;

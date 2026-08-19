@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const LLM_API_KEY = process.env.NVIDIA_API_KEY || process.env.LLM_API_KEY;
 const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '120000', 10);   // hung requests stalled the run
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '240000', 10);   // 120s aborted legitimate work on large prompts
 const LLM_BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
 const EMBED_ENDPOINT = process.env.EMBED_ENDPOINT || `${LLM_BASE}/embeddings`;
 const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
@@ -942,6 +942,9 @@ One paragraph about the specific pain point this solves. Be concrete.
 ## What This Does
 2-3 short paragraphs. Reference actual files/folders from the structure. Use \`inline code\` for file names and functions.
 
+## How It Is Wired
+The section a technical reader comes for: how control actually flows, not how files are filed. If an INTERNAL CALL GRAPH is present, use it. Name the functions everything routes through and say what depends on them, trace the path from the entry point to the core work, and say which functions carry the widest blast radius and why. Use the real names and the real counts. Where the module graph shows a hub or a cycle, explain what that costs a reader trying to change it. Without a call graph, say the wiring has not been mapped for this repository yet rather than guessing at it.
+
 ## How To Use It
 Concrete steps to get this running, grounded in files that actually exist in the structure above. Where the evidence supports it, cover:
 - **Setup**: the real install or build command, inferred from the dependency and config files present (\`package.json\` implies npm/pnpm, \`pyproject.toml\` implies pip or uv, \`Dockerfile\` implies a container build, \`Makefile\` implies make targets).
@@ -964,11 +967,8 @@ Your honest take in 2-3 sentences. What's good, what's not, who should use it.
 ---
 
 STYLE RULES:
-- Short paragraphs (2-4 sentences max)
-- Use \`code formatting\` for technical terms
-- Be specific and evidence-based: "the config.yaml handles..." not "it provides configuration..."
-- Professional and clear - write for a technical decision-maker, not a casual reader
-- Give a measured, honest assessment. A clear trade-off ("better suited to large teams than solo projects") is welcome; sarcasm and snark are not.
+- Short paragraphs (2-4 sentences max), \`code formatting\` for technical terms, and specific evidence: "the config.yaml handles..." not "it provides configuration..."
+- Write for an engineer who will change this code, and give a measured, honest assessment: a clear trade-off is welcome, sarcasm is not.
 
 NEVER USE:
 - Buzzword filler: "rapidly evolving", "paramount", "leverage", "streamline", "robust"

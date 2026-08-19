@@ -23,6 +23,11 @@
  */
 'use strict';
 
+// Bumped whenever a rule changes. A stored result from an older version is
+// re-audited rather than trusted, so a false positive that has been fixed stops
+// being published immediately instead of surviving the recheck window.
+const CHECKS_VERSION = 2;
+
 const SEVERITY_WEIGHT = { critical: 8, high: 5, medium: 2, low: 1 };
 
 // Ranking, borrowed from how build-analyze already ranks its findings and from
@@ -207,4 +212,4 @@ function summarise(findings) {
 }
 
 module.exports = { register, audit, summarise, makeContext, CHECKS, rank,
-  SEVERITY_WEIGHT, looksReal, entropy, DEV_PASSWORDS, workflowText };
+  SEVERITY_WEIGHT, looksReal, entropy, DEV_PASSWORDS, workflowText, CHECKS_VERSION };

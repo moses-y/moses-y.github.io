@@ -28,6 +28,8 @@ const MAX_SYMBOLS = 16;
 const MAX_STALE = 8;
 const MAX_PROJECTS = 18;
 const MAX_HYGIENE = 10;
+const MAX_FANIN = 12;
+const MAX_EDGES = 14;
 
 let HYGIENE = null;
 let SYMBOLS = null;      // lazily built id -> {fns, classes, names[]}
@@ -165,6 +167,27 @@ function factsFor(repo, kg) {
         if (g.evidence) out.push(`      ${g.n > 1 ? 'example ' : ''}evidence: ${g.evidence}`);
         if (g.fix) out.push(`      fix: ${g.fix}`);
       }
+    }
+  }
+
+  // The internal call graph. This is the difference between "which module ripples
+  // widest" and "which function breaks what", and it is the part a reader needs to
+  // understand how the thing is wired rather than how it is filed.
+  const perRepo = readJson(path.join('data', 'symbols', id + '.json'), null);
+  if (perRepo && perRepo.calls && perRepo.calls.length) {
+    const fanIn = Object.entries(perRepo.fanIn || {}).slice(0, MAX_FANIN);
+    out.push('');
+    out.push(`INTERNAL CALL GRAPH: ${perRepo.calls.length} resolved call edges between functions ` +
+      'defined in this repository. Edges to libraries and to unresolvable method calls are excluded, ' +
+      'so this is the code calling itself.');
+    if (fanIn.length) {
+      out.push('  Called from the most distinct places (change these and the most breaks):');
+      for (const [name, n] of fanIn) out.push(`    ${name} - called from ${n} places`);
+    }
+    const sample = perRepo.calls.filter(c => c[0] !== '<module>').slice(0, MAX_EDGES);
+    if (sample.length) {
+      out.push('  Representative edges (caller -> callee, times):');
+      for (const [from, to, n] of sample) out.push(`    ${from} -> ${to}${n > 1 ? ' x' + n : ''}`);
     }
   }
 
