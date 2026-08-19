@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const hygiene = require('./lib-hygiene.js');
 require('./checks-hygiene.js');            // registers the checks
+const runtime = require('./checks-runtime.js');
 
 const argv = process.argv.slice(2);
 const numArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? parseInt(argv[i + 1], 10) : d; };
@@ -34,7 +35,10 @@ const strArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? argv[i + 1
 const BUDGET = numArg('--budget', 60);
 const ONLY = strArg('--only', '');
 const RECHECK_DAYS = numArg('--recheck-after', 14);
-const READS = numArg("--reads", 14);   // raw.githubusercontent is not on the REST limit
+// Raised from 14 with the runtime catalogue, which needs the config files that
+// govern the running process on top of the secret and workflow reads. raw is not
+// on the REST limit, so the extra cost is bandwidth and time, not API budget.
+const READS = numArg("--reads", 20);
 const RUN_MS = numArg('--max-seconds', 300) * 1000;
 const DRY = argv.includes('--dry-run');
 const TOKEN = process.env.GITHUB_TOKEN;
@@ -131,6 +135,18 @@ function pathsToRead(files) {
     .sort((a, b) => b.size - a.size).slice(0, 3).map(f => f.path));
 
   push(has(/^\.gitattributes$/).map(f => f.path));
+
+  // 6. The runtime catalogue picks its own files, because "which file governs
+  //    the running process" is a judgement about names and depth that belongs
+  //    next to the rules that depend on it. It goes last: a confirmed credential
+  //    or a workflow that ships is worth a slot ahead of a settings module.
+  const shim = {
+    tree: files,
+    find: re => files.map(f => f.path).filter(p => re.test(p)),
+    sizeOf: p => { const f = files.find(x => x.path === p); return f ? (f.size || 0) : 0; }
+  };
+  push(runtime.selectPaths(shim));
+
   return ordered;
 }
 

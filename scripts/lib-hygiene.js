@@ -26,7 +26,9 @@
 // Bumped whenever a rule changes. A stored result from an older version is
 // re-audited rather than trusted, so a false positive that has been fixed stops
 // being published immediately instead of surviving the recheck window.
-const CHECKS_VERSION = 2;
+// 2: the four original catalogues, with the placeholder-gate fixes.
+// 3: the runtime catalogue, 13 rules that read the running program's config.
+const CHECKS_VERSION = 3;
 
 const SEVERITY_WEIGHT = { critical: 8, high: 5, medium: 2, low: 1 };
 
