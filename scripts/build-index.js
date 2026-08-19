@@ -146,6 +146,16 @@ function main() {
     if (p === 'index.html') continue;
     add(`${SITE}/${p}`, '0.8', 'weekly');
   }
+  // The hand-written pages live in subdirectories, which a root scan does not
+  // reach. Without these, build-pages had to write its own sitemap, and the two
+  // then overwrote each other: whichever ran last won, so the file held either the
+  // 1,331 articles or the case studies and insights, never both.
+  for (const dir of ['case-studies', 'insights']) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.html')).sort()) {
+      add(`${SITE}/${dir}/${f === 'index.html' ? '' : f}`, '0.7', 'monthly');
+    }
+  }
   const articles = fs.existsSync('blog')
     ? fs.readdirSync('blog').filter(f => f.endsWith('.html') && f !== 'index.html').sort()
     : [];
