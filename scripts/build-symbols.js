@@ -32,6 +32,11 @@ const DRY = argv.includes('--dry-run');
 const ONLY = strArg('--only', '');   // parse a single repo by name, for debugging
 const TOKEN = process.env.GITHUB_TOKEN;
 
+// Bumped when the extraction changes. A per-repo file written by an older
+// version is re-parsed rather than skipped: without this, the 422 repos parsed
+// before call edges existed would never gain them.
+const SYMBOLS_VERSION = 2;
+
 const OUT_DIR = path.join('data', 'symbols');
 const INDEX_FILE = path.join('data', 'symbols-index.json');
 const MAX_FILE = 400_000;                // a 400KB+ source file is generated, not written
@@ -179,7 +184,12 @@ async function main() {
     : (l => l === langName);
   const candidates = idx.repos
     .filter(r => (ONLY ? r.n === ONLY : accepts(r.l) && r.f > 5))
-    .filter(r => !fs.existsSync(path.join(OUT_DIR, r.i + '.json')))
+    .filter(r => {
+      const p2 = path.join(OUT_DIR, r.i + '.json');
+      if (!fs.existsSync(p2)) return true;
+      try { return (JSON.parse(fs.readFileSync(p2, 'utf8')).v || 1) !== SYMBOLS_VERSION; }
+      catch (e) { return true; }
+    })
     .sort((a, b) => (a.f || 0) - (b.f || 0));
 
   console.log('=== Symbols (' + LANG + ') ===');
@@ -297,7 +307,7 @@ async function main() {
       .sort((a, b) => b[1] - a[1]).slice(0, 300));
 
     fs.writeFileSync(path.join(OUT_DIR, r.i + '.json'), JSON.stringify({
-      id: r.i, name: r.n, lang: langName, files: files.length,
+      id: r.i, name: r.n, v: SYMBOLS_VERSION, lang: langName, files: files.length,
       imports: [...imports].sort(),
       symbols: symbols.slice(0, 4000),
       calls: calls,
