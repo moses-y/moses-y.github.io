@@ -66,26 +66,38 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # A failed build step must not read as success. Each one is allowed to
+          # fail so the remaining steps still run and the backlog still drains,
+          # but the failure is recorded and the job turns red at the end, instead
+          # of a crash in build-symbols producing a green run whose next step
+          # commits whatever partial state resulted.
+          note() { echo "$1" >> "$RUNNER_TEMP/failed-steps.txt"; echo "::error::$1 failed"; }
+
           # Fill file/folder structures for any repos added since last run.
-          node scripts/build-structure.js --limit 150 || true
+          node scripts/build-structure.js --limit 150 || note build-structure
           # Deep static analysis, incremental: a budget per run so giants + new forks
           # get absorbed over successive cron passes. Bump --max-files over time to
           # let ever-larger repos qualify. Skips repos already analyzed.
-          node scripts/build-analyze.js --all --budget 40 --max-files 2500 || true
+          node scripts/build-analyze.js --all --budget 40 --max-files 2500 || note build-analyze
           # Recompute the honest hero stats (repos, languages, files, modules, findings).
-          node scripts/build-stats.js || true
+          node scripts/build-stats.js || note build-stats
           # Dependency extraction + registry resolution, budgeted so a run costs a
           # bounded number of requests and the 934-repo backlog drains over time.
-          node scripts/build-deps.js --budget 120 --registry 150 || true
+          node scripts/build-deps.js --budget 120 --registry 150 || note build-deps
           # Symbol layer via tree-sitter. Wall-clock bounded: ~10s per repo, so a
           # 300s slice drains ~30 repos and the 400-repo backlog clears over runs.
-          node scripts/build-symbols.js --budget 60 --max-seconds 300 || true
+          node scripts/build-symbols.js --budget 60 --max-seconds 300 || note build-symbols
           # Read-side build: the lean index, the search index and a sitemap that
           # includes every article. Must run after the pages exist.
           # Code-health audit: one tree request per repo plus a bounded number of
           # raw reads, budgeted so a run has a predictable ceiling.
-          node scripts/build-hygiene.js --budget 80 --max-seconds 240 || true
-          node scripts/build-index.js || true
+          node scripts/build-hygiene.js --budget 80 --max-seconds 240 || note build-hygiene
+          # Named advisories for the declared dependencies. api.osv.dev is
+          # unauthenticated and batches 100 packages per request, so the whole
+          # estate is about 60 requests; the advisory descriptions are the part
+          # that is one request each, hence the separate budget.
+          node scripts/build-osv.js --budget 80 --details 150 || note build-osv
+          node scripts/build-index.js || note build-index
 
       - name: Commit and push changes
         run: |
@@ -112,3 +124,17 @@ jobs:
           DB_SIZE=$(stat -c%s forks.db 2>/dev/null || echo 0)
           DB_KB=$((DB_SIZE / 1024))
           echo "Repos: $TOTAL | Missing KG: $MISSING | DB: ${DB_KB}KB"
+
+      # Runs last, after the commit, so a step that crashed still contributes
+      # whatever it produced and the run still turns red. Before this the whole
+      # build stage ended in `|| true` and a crash was indistinguishable from a
+      # clean pass, which the audit flagged against this repository as a high
+      # finding and was right to.
+      - name: Fail the run if any build step failed
+        run: |
+          if [ -s "$RUNNER_TEMP/failed-steps.txt" ]; then
+            echo "These build steps failed:"
+            cat "$RUNNER_TEMP/failed-steps.txt"
+            exit 1
+          fi
+          echo "All build steps succeeded."

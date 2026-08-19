@@ -12,3 +12,4 @@ require('./checks-supply.js');
 require('./checks-ci.js');
 require('./checks-quality.js');
 require('./checks-runtime.js');
+require('./checks-osv.js');

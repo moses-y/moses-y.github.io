@@ -46,6 +46,7 @@ const OWNER = process.env.GITHUB_USERNAME || 'moses-y';
 
 const OUT = path.join('data', 'hygiene.json');
 const DISMISSED = path.join('data', 'hygiene-dismissed.json');
+const OSV = path.join('data', 'osv.json');
 
 const readJson = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return d; } };
 const ghHeaders = () => Object.assign({ 'User-Agent': 'build-hygiene' },
@@ -156,6 +157,9 @@ async function main() {
   const forks = data.forks || [];
   const store = readJson(OUT, { generated: null, repos: {} });
   const dismissed = readJson(DISMISSED, {});
+  // Loaded once: the advisory data is one file for the whole estate, and a repo
+  // absent from it has not been looked up rather than been found clean.
+  const osvByRepo = (readJson(OSV, { repos: {} }) || {}).repos || {};
 
   const cutoff = Date.now() - RECHECK_DAYS * 86400000;
   const due = forks.filter(f => {
@@ -195,6 +199,7 @@ async function main() {
       symbols: readJson(path.join('data', 'symbols', f.id + '.json'), null),
       isOriginal: f.type === 'original',
       repoId: f.id,
+      osv: osvByRepo[f.id] || null,
       readBudget: READS
     });
     ctx.workflowsUnread = Math.max(0, wfCount - 4);

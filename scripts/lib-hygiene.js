@@ -61,7 +61,7 @@ function rank(check, ctx) {
  *   symbols     { fns, classes, names[] } or null
  *   isOriginal  the owner wrote it, rather than collected it
  */
-function makeContext({ tree, readFile, kg, deep, symbols, isOriginal, readBudget, repoId }) {
+function makeContext({ tree, readFile, kg, deep, symbols, isOriginal, readBudget, repoId, osv }) {
   const paths = new Set((tree || []).map(f => f.path));
   let spent = 0;
   const cache = new Map();
@@ -73,6 +73,11 @@ function makeContext({ tree, readFile, kg, deep, symbols, isOriginal, readBudget
     kg: kg || {},
     deep: deep || null,
     symbols: symbols || null,
+    // This repo's entry from data/osv.json: named advisories against the declared
+    // dependencies, already split into versions that are pinned and ranges that
+    // merely permit a vulnerable resolution. Absent when the lookup has not
+    // reached this repo yet, which is unknown rather than clean.
+    osv: osv || null,
     isOriginal: !!isOriginal,
     repoId: repoId == null ? null : String(repoId),
     // Set by the runner between tiers, so a cause-of-leak check can require that
