@@ -44,22 +44,37 @@ const BUNDLES = [
     out: path.join('assets', 'js', 'site.js'),
     ext: '.js',
     note: 'Concatenated, not separate scripts: these partials share one top-level scope.'
+  },
+  {
+    // A landing page rather than code, and the only one of the three with no
+    // inline style or script to extract: it was over the limit purely on its own
+    // markup, across thirteen sections. Assembled from those sections instead.
+    src: path.join('assets', 'partials', 'index'),
+    out: 'index.html',
+    ext: '.html',
+    html: true,
+    note: 'Assembled from the section partials; HTML has no include mechanism of its own.'
   }
 ];
 
 const CHECK = process.argv.includes('--check');
 
 function header(bundle) {
-  return [
-    '/* GENERATED FILE - do not edit.',
-    ' *',
-    ' * Built by scripts/build-bundles.js from ' + bundle.src.replace(/\\/g, '/') + '/',
-    ' * Edit the partials there and run: node scripts/build-bundles.js',
-    ' *',
-    ' * ' + bundle.note,
-    ' */',
-    ''
-  ].join('\n');
+  const src = bundle.src.replace(/\\/g, '/');
+  const lines = [
+    'GENERATED FILE - do not edit.',
+    '',
+    'Built by scripts/build-bundles.js from ' + src + '/',
+    'Edit the partials there and run: node scripts/build-bundles.js',
+    '',
+    bundle.note
+  ];
+  // An HTML comment cannot open with /*, and in a document it has to sit after the
+  // doctype or the browser drops into quirks mode.
+  if (bundle.html) {
+    return '<!DOCTYPE html>\n<!--\n  ' + lines.join('\n  ') + '\n-->\n';
+  }
+  return '/* ' + lines[0] + '\n' + lines.slice(1).map(l => ' *' + (l ? ' ' + l : '')).join('\n') + '\n */\n';
 }
 
 function partials(bundle) {
@@ -76,11 +91,19 @@ function build(bundle) {
   // file still says which section a line came from when read in devtools.
   const body = files.map(f => {
     const raw = fs.readFileSync(path.join(bundle.src, f), 'utf8');
-    const stripped = raw.replace(/^\/\*[\s\S]*?\*\/\n+/, '');
+    const stripped = bundle.html
+      ? raw.replace(/^<!--[\s\S]*?-->\n/, '')
+      : raw.replace(/^\/\*[\s\S]*?\*\/\n+/, '');
     const label = f.replace(/^\d+-/, '').replace(new RegExp('\\' + bundle.ext + '$'), '');
-    return '/* ' + label + ' */\n' + stripped.replace(/\s+$/, '');
+    const marker = bundle.html ? '<!-- ' + label + ' -->' : '/* ' + label + ' */';
+    return marker + '\n' + stripped.replace(/\s+$/, '');
   }).join('\n\n');
-  return { text: header(bundle) + body + '\n', files };
+  let text = header(bundle) + body + '\n';
+  if (bundle.html) {
+    // 00-head opens with its own doctype; the header already emitted one.
+    text = text.replace(/(<!DOCTYPE html>\n[\s\S]*?-->\n[\s\S]*?)<!DOCTYPE html>\n/i, '$1');
+  }
+  return { text, files };
 }
 
 let stale = 0;
