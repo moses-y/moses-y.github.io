@@ -66,6 +66,44 @@
 
     // opts.heading  include the h1 + lede masthead (the overlay draws its own)
     // opts.repoLink an href for "explore in the graph", omitted inside the graph
+    // The code-health audit, rendered straight from data/hygiene.json. It is
+    // deterministic and already ranked, so it is published as-is rather than
+    // paraphrased by a model, and it appears the moment a repo is audited.
+    function auditSection(h) {
+        if (!h || !h.findings || !h.findings.length) return '';
+        var sev = (h.totals && h.totals.severity) || {};
+        var out = '<div class="sec"><span class="no">04</span> What would stop me shipping this ' +
+            '<span class="qual">ranked severity &times; confidence &times; production reach</span></div>';
+        out += '<div class="bars">';
+        ['critical', 'high', 'medium', 'low'].forEach(function (k) {
+            if (!sev[k]) return;
+            var max = Math.max(1, sev.critical || 0, sev.high || 0, sev.medium || 0, sev.low || 0);
+            out += bar(k, sev[k], max, k === 'critical' ? 'high' : k);
+        });
+        out += '</div>';
+        out += h.findings.map(function (f) {
+            var cls = f.severity === 'critical' ? 'high' : f.severity;
+            return '<div class="finding ' + esc(cls) + '"><div class="head">' +
+                '<span class="ttl">' + esc(f.title) + '</span>' +
+                '<span class="chip">' + esc(f.severity) + '</span>' +
+                (f.n > 1 ? '<span class="rankchip">' + f.n + ' occurrences</span>' : '') +
+                '</div>' +
+                (f.where ? '<div class="loc">' + esc(f.where) + '</div>' : '') +
+                (f.evidence ? '<div class="ev">' + esc(f.evidence) + '</div>' : '') +
+                (f.why ? '<div class="ev">' + esc(f.why) + '</div>' : '') +
+                (f.fix ? '<div class="rec"><b>Fix:</b> ' + esc(f.fix) + '</div>' : '') +
+                '</div>';
+        }).join('');
+        if (h.truncated) {
+            out += '<p class="note">The file listing for this repository was truncated, so the absence of a finding is not proof of its absence.</p>';
+        }
+        out += '<p class="method">Checked deterministically against the repository tree and a bounded set of its files: ' +
+            'committed credentials, unpinned actions and base images, missing lockfiles and update bots, ' +
+            'workflows that never run the tests or that discard failures, licensing, and notebook reproducibility. ' +
+            'No language model is involved in this section.</p>';
+        return out;
+    }
+
     function body(d, meta, opts) {
         opts = opts || {};
         var name = (d && d.name) || meta.displayName || meta.name || '';
@@ -73,8 +111,10 @@
 
         if (!d || !d.deep || !d.nodes || !d.nodes.length) {
             if (opts.heading) h += '<h1>' + esc(name) + '</h1>';
-            h += '<p class="lede">' + esc(meta.summary || meta.description || '') + '</p>' +
-                '<hr class="rule"><p class="note">No deep analysis is available for this repository yet. ' +
+            h += '<p class="lede">' + esc(meta.description || '') + '</p>';
+            // The audit does not depend on the deep analysis, so it still renders.
+            if (opts.audit) h += auditSection(opts.audit);
+            h += '<hr class="rule"><p class="note">No module-level analysis is available for this repository yet. ' +
                 'It is either awaiting the next analysis pass or was skipped as too large for a module-level dive.' +
                 (meta.url ? ' View it <a href="' + esc(meta.url) + '" target="_blank" rel="noopener">on GitHub &#8599;</a>.' : '') +
                 '</p>';
@@ -160,6 +200,8 @@
                     '<button type="button" class="more-btn" data-more-btn>Show ' + n + ' more finding' + (n === 1 ? '' : 's') + '</button>';
             }
         }
+
+        if (opts.audit) h += auditSection(opts.audit);
 
         h += '<hr class="rule">';
         h += '<div class="sec"><span class="no">&middot;</span> Method &amp; scope</div>';

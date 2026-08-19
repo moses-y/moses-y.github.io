@@ -242,6 +242,12 @@ register({
       .filter(f => /\.(sql|dump|bak|sqlite3?|db|mdb|rdb)$/i.test(f.path) && (f.size || 0) > 262144)
       .filter(f => !/(^|\/)(migrations?|schema|seeds?|fixtures?|tests?)\//i.test(f.path))
       .filter(f => !/schema|migration|structure|ddl|create_table/i.test(f.path))
+      // Teaching material: a 300KB .sql in "SQL 3/Lesson 4" is an exercise, not a
+      // dump of anyone's data, and calling it a disclosure on a public page is
+      // worse than missing it.
+      .filter(f => !/lesson|tutorial|course|exercise|workshop|day[-_ ]?\d|chapter/i.test(f.path))
+      // A real dump either says so or is genuinely large.
+      .filter(f => /(dump|backup|export|snapshot)/i.test(f.path) || (f.size || 0) > 2000000)
       .map(f => f.path);
     if (!hits.length) return null;
     return { where: hits[0], evidence: hits.slice(0, 3).join(', '), n: hits.length };

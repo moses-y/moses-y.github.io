@@ -260,17 +260,21 @@
             el.brief.innerHTML = '';
         }
 
-        // The report is optional: most repos have no deep analysis yet.
+        // The report is optional: most repos have no deep analysis yet. The audit
+        // is separate and may exist without it, so both are fetched and either
+        // one is enough to render a section.
         if (id != null && global.ReportRender) {
-            fetch('structure/' + id + '.deep.json')
-                .then(function (r) { return r.ok ? r.json() : null; })
-                .catch(function () { return null; })
-                .then(function (d) {
-                    if (el.root.hidden || !d) return;
-                    el.body.innerHTML = '<hr class="rule">' +
-                        global.ReportRender.body(d, repo, { heading: false });
-                    global.ReportRender.bindMore(el.body);
-                });
+            Promise.all([
+                fetch('structure/' + id + '.deep.json').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+                fetch('data/hygiene.json').then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (j) { return j && j.repos ? j.repos[String(id)] : null; })
+                    .catch(function () { return null; })
+            ]).then(function (res) {
+                if (el.root.hidden || (!res[0] && !res[1])) return;
+                el.body.innerHTML = '<hr class="rule">' +
+                    global.ReportRender.body(res[0], repo, { heading: false, audit: res[1] });
+                global.ReportRender.bindMore(el.body);
+            });
         }
     }
 
