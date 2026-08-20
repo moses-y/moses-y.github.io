@@ -17,25 +17,11 @@
 'use strict';
 
 // Article typography, the analysis tables, the mermaid diagrams.
-const POST_CSS = `        :root {
-            --bg-primary: #030303;
-            --bg-secondary: #0a0a0a;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-tertiary: #64748b;
-            --border: rgba(255, 255, 255, 0.08);
-            --accent: #6366f1;
-            --gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-        }
+const POST_CSS = `        /* The palette is not declared here. It lives in assets/css/tokens.css,
+           which every page links, because this file used to carry its own -
+           indigo on near-black - and a link or a button therefore meant one
+           colour on a briefing and a different one on every other page. */
 
-        [data-theme="light"] {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f8fafc;
-            --text-primary: #0f172a;
-            --text-secondary: #64748b;
-            --text-tertiary: #94a3b8;
-            --border: rgba(0, 0, 0, 0.08);
-        }
 
         * {
             margin: 0;
@@ -300,7 +286,7 @@ const POST_CSS = `        :root {
 
         .primary-btn {
             background: var(--gradient);
-            color: white;
+            color: var(--on-accent);
         }
 
         .primary-btn:hover {

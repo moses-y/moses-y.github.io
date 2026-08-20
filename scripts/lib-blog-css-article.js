@@ -112,12 +112,45 @@ const ARTICLE_CSS = `
         /* A heading linked from the strip should not land under the fixed nav. */
         .post-content h3, .post-content h4 { scroll-margin-top: 90px; }
 
+        /* ---- the reading setting -----------------------------------------
+           A serif at 19px on a 44rem column, chosen from a four-way comparison of
+           the same real article on this exact ground.
+
+           The size and the width travel together and neither is decorative. A
+           serif fits more characters into a column than a sans of the same size,
+           so keeping 18px and only swapping the face pushed the line to 84
+           characters - past where the eye reliably finds the start of the next
+           one. One extra pixel and a slightly narrower column bring it back to 74,
+           inside the comfortable 65 to 75.
+
+           No download: this is the system stack the headings already use, and
+           these pages deliberately load no webfont at all. */
+        .post-content {
+            font-family: var(--font-display, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif);
+            font-size: 19px;
+            line-height: 1.72;
+            max-width: 44rem;
+        }
+
         /* ---- prose -------------------------------------------------------- */
         .post-content p { margin: 0 0 1.15em; }
         /* Identifiers are the nouns of this writing, and there are a great many of
            them: a paragraph naming six functions carried six coloured pills, which
            speckled the page and made the prose harder to read rather than easier.
            Monospace and a slight warmth is enough to mark a name as a name. */
+        /* Monospace and the labelled strips keep their own faces: the serif is for
+           running prose, and an identifier set in it stops looking like an
+           identifier. */
+        .post-content code,
+        .post-content pre {
+            font-family: 'JetBrains Mono', var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+        }
+        .post-content .post-toc,
+        .post-content .post-toc-lab {
+            font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+        }
+        .post-content .post-toc-lab { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+
         .post-content code {
             white-space: nowrap;
             background: none;

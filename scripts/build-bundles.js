@@ -37,6 +37,10 @@ const BUNDLES = [
     src: path.join('assets', 'css', 'site'),
     out: path.join('assets', 'css', 'site.css'),
     ext: '.css',
+    // The palette is prepended rather than kept in a partial, because the article
+    // pages link it on its own and a second copy in here would be a second place
+    // for the accent to drift.
+    prepend: [path.join('assets', 'css', 'tokens.css')],
     note: 'One file rather than eight stylesheets because nine pages load it.'
   },
   {
@@ -78,9 +82,14 @@ function header(bundle) {
 }
 
 function partials(bundle) {
-  return fs.readdirSync(bundle.src)
+  return (bundle.prepend || []).concat(fs.readdirSync(bundle.src)
     .filter(f => f.endsWith(bundle.ext))
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true })));
+}
+
+// A prepended file is given by full path; a partial is a name inside bundle.src.
+function partialPath(bundle, f) {
+  return f.includes(path.sep) ? f : path.join(bundle.src, f);
 }
 
 function build(bundle) {
@@ -90,11 +99,11 @@ function build(bundle) {
   // the source and noise in the output. It becomes a one-line marker so the built
   // file still says which section a line came from when read in devtools.
   const body = files.map(f => {
-    const raw = fs.readFileSync(path.join(bundle.src, f), 'utf8');
+    const raw = fs.readFileSync(partialPath(bundle, f), 'utf8');
     const stripped = bundle.html
       ? raw.replace(/^<!--[\s\S]*?-->\n/, '')
       : raw.replace(/^\/\*[\s\S]*?\*\/\n+/, '');
-    const label = f.replace(/^\d+-/, '').replace(new RegExp('\\' + bundle.ext + '$'), '');
+    const label = path.basename(f).replace(/^\d+-/, '').replace(new RegExp('\\' + bundle.ext + '$'), '');
     const marker = bundle.html ? '<!-- ' + label + ' -->' : '/* ' + label + ' */';
     return marker + '\n' + stripped.replace(/\s+$/, '');
   }).join('\n\n');
@@ -123,7 +132,7 @@ for (const bundle of BUNDLES) {
   fs.writeFileSync(bundle.out, text);
   console.log(`=== ${bundle.out} ===`);
   for (const f of files) {
-    const n = fs.readFileSync(path.join(bundle.src, f), 'utf8').split('\n').length;
+    const n = fs.readFileSync(partialPath(bundle, f), 'utf8').split('\n').length;
     console.log(`  ${f.padEnd(22)} ${String(n).padStart(4)} lines`);
   }
   console.log(`  -> ${text.split('\n').length} lines, ${(text.length / 1024).toFixed(0)} KB`);
