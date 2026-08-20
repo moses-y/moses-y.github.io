@@ -10,84 +10,13 @@
     (function () {
         'use strict';
 
-        var LANG_COLORS = {
-            'JavaScript': '#f1e05a', 'TypeScript': '#3178c6', 'Python': '#3776ab',
-            'Rust': '#dea584', 'Go': '#00add8', 'Java': '#b07219', 'C++': '#f34b7d',
-            'C': '#a8b9cc', 'C#': '#178600', 'Ruby': '#701516', 'PHP': '#4f5d95',
-            'Shell': '#89e051', 'HTML': '#e34c26', 'CSS': '#563d7c', 'Jupyter Notebook': '#da5b0b',
-            'Swift': '#f05138', 'Kotlin': '#a97bff', 'Dart': '#00b4ab', 'Vue': '#41b883',
-            'Solidity': '#aa6746', 'Lua': '#000080', 'Zig': '#ec915c', 'Elixir': '#6e4a7e',
-            'Svelte': '#ff3e00', 'Astro': '#ff5d01', 'SQL': '#e38c00', 'Markdown': '#6a737d',
-            'JSON': '#8a93ad', 'YAML': '#cb171e', 'TOML': '#9c4221'
-        };
-        var ACCENT = '#4f7cff', ACCENT3 = '#34e0c4';
-        function langColor(l) { return LANG_COLORS[l] || '#8a93ad'; }
-
-        // Domains - the "capability" framing: what the code does, not just its language.
-        var DOMAIN_COLORS = {
-            'AI / ML & Data': '#a06bff', 'Web & UI': '#4f7cff', 'Systems': '#f34b7d',
-            'Mobile': '#34e0c4', 'Backend & Services': '#00add8', 'DevOps & Tooling': '#89e051',
-            'Other': '#8a93ad'
-        };
-        var LANG_DOMAIN = {
-            'Python': 'AI / ML & Data', 'Jupyter Notebook': 'AI / ML & Data', 'R': 'AI / ML & Data',
-            'JavaScript': 'Web & UI', 'TypeScript': 'Web & UI', 'HTML': 'Web & UI', 'CSS': 'Web & UI',
-            'Vue': 'Web & UI', 'Svelte': 'Web & UI', 'Astro': 'Web & UI',
-            'Rust': 'Systems', 'C': 'Systems', 'C++': 'Systems', 'Zig': 'Systems', 'Go': 'Systems',
-            'Swift': 'Mobile', 'Kotlin': 'Mobile', 'Dart': 'Mobile',
-            'Java': 'Backend & Services', 'C#': 'Backend & Services', 'Ruby': 'Backend & Services',
-            'PHP': 'Backend & Services', 'Elixir': 'Backend & Services', 'SQL': 'Backend & Services',
-            'Shell': 'DevOps & Tooling', 'Lua': 'DevOps & Tooling', 'Dockerfile': 'DevOps & Tooling',
-            'Makefile': 'DevOps & Tooling'
-        };
-        var AI_TOPICS = /(^|[-_ ])(ai|ml|llm|nlp|rag|agent|agents|genai|machine-learning|deep-learning|transformer|embedding|chatbot|vision)([-_ ]|$)/i;
-        function domainOf(lang, topics) {
-            if (topics && topics.some(function (t) { return AI_TOPICS.test(t); })) return 'AI / ML & Data';
-            return LANG_DOMAIN[lang] || 'Other';
-        }
-        function domainColor(d) { return DOMAIN_COLORS[d] || '#8a93ad'; }
-
-        var NON_CODE = { 'Markdown': 1, 'JSON': 1, 'YAML': 1, 'TOML': 1, 'INI': 1, 'XML': 1,
-            'CSV': 1, 'Text': 1, 'SVG': 1, 'Dockerfile': 1, 'Makefile': 1, 'HTML': 1 };
-        function primaryLanguage(f) {
-            if (f.language) return f.language;
-            var langs = (f.knowledgeGraph && f.knowledgeGraph.languages) || {};
-            var best = null, bestN = 0;
-            Object.keys(langs).forEach(function (k) { if (NON_CODE[k]) return; if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
-            if (!best) Object.keys(langs).forEach(function (k) { if (langs[k] > bestN) { bestN = langs[k]; best = k; } });
-            return best || 'Other';
-        }
-
-        var el = {
-            loading: document.getElementById('loading'),
-            sRepos: document.getElementById('s-repos'),
-            sFiles: document.getElementById('s-files'),
-            sLangs: document.getElementById('s-langs'),
-            sDomains: document.getElementById('s-domains'),
-            legend: document.getElementById('legend'),
-            search: document.getElementById('search'),
-            fDomain: document.getElementById('f-domain'),
-            fSize: document.getElementById('f-size'),
-            reset: document.getElementById('reset'),
-            info: document.getElementById('info'),
-            iKind: document.getElementById('i-kind'),
-            iName: document.getElementById('i-name'),
-            iDesc: document.getElementById('i-desc'),
-            iMeta: document.getElementById('i-meta'),
-            iLinks: document.getElementById('i-links'),
-            iDive: document.getElementById('i-dive'),
-            iDiveLabel: document.getElementById('i-dive-label'),
-            diveBtn: document.getElementById('dive-btn'),
-            reportBtn: document.getElementById('report-btn'),
-            collapseBtn: document.getElementById('collapse-btn'),
-            infoClose: document.getElementById('info-close'),
-            toast: document.getElementById('toast')
-        };
-
-        function toast(msg) {
-            el.toast.textContent = msg; el.toast.classList.add('show');
-            clearTimeout(el.toast._t); el.toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, 2200);
-        }
+    var langColor = CBDom.langColor, domainColor = CBDom.domainColor,
+        domainOf = CBDom.domainOf, primaryLanguage = CBDom.primaryLanguage;
+    // One definition of the highlight colour, in cb-dom.
+    var ACCENT = CBDom.ACCENT, ACCENT3 = CBDom.ACCENT3, structColor = CBDom.structColor;
+    // Element map, palettes and text helpers: cb-dom.js.
+    var el = CBDom.el, toast = CBDom.toast;
+    CBData.useDom(CBDom);
 
         // Keep the info panel docked just below the (wrapping) control bar, so a
         // multi-row dock at medium widths never overlaps it.
@@ -99,168 +28,30 @@
             .then(function (list) { (list || []).forEach(function (r) { reportSet[String(r.id)] = r; }); });
 
         fetch('forks.json').then(function (r) { return r.json(); }).then(build)
-            .catch(function (e) { el.loading.innerHTML = '<div>Could not load graph data.</div>'; console.error(e); });
+            .catch(function (e) {
+                // On the page, not only the console: a build error used to read as
+                // "could not load graph data", pointing at the network and hiding
+                // a code fault. That cost two debugging rounds during this split.
+                el.loading.innerHTML = '<div>Could not load graph data.</div>' +
+                    '<div class="err">' + CBDom.esc(e && e.message ? e.message : String(e)) + '</div>';
+                console.error(e);
+            });
 
         var deckSync = function () {};
 
         function build(data) {
-            var forks = (data.forks || []).slice();
-
-            var nodes = [], links = [];
-            var adjacency = {}, nodeById = {};
-            function addNode(n) { if (nodeById[n.id]) return; nodes.push(n); nodeById[n.id] = n; adjacency[n.id] = []; }
-            function addLink(a, b) { links.push({ source: a, target: b }); (adjacency[a] = adjacency[a] || []).push(b); (adjacency[b] = adjacency[b] || []).push(a); }
-
-            addNode({ id: '__root__', kind: 'root', name: 'Moses Yebei', val: 50, color: '#ffffff' });
-
-            var domainIds = {}, langIds = {}, langCounts = {}, domainCounts = {}, totalFiles = 0;
-            forks.forEach(function (f) {
-                var lang = primaryLanguage(f);
-                var domain = domainOf(lang, f.topics);
-                var files = (f.knowledgeGraph && f.knowledgeGraph.totalFiles) || 0;
-                totalFiles += files;
-                langCounts[lang] = (langCounts[lang] || 0) + 1;
-                domainCounts[domain] = (domainCounts[domain] || 0) + 1;
-
-                if (!domainIds[domain]) {
-                    var did = 'domain:' + domain;
-                    domainIds[domain] = did;
-                    addNode({ id: did, kind: 'domain', name: domain, val: 26, color: domainColor(domain) });
-                    addLink('__root__', did);
-                }
-                var lkey = domain + '|' + lang;
-                if (!langIds[lkey]) {
-                    var lid = 'lang:' + lkey;
-                    langIds[lkey] = lid;
-                    addNode({ id: lid, kind: 'lang', name: lang, domain: domain, val: 13, color: langColor(lang) });
-                    addLink(domainIds[domain], lid);
-                }
-                var rid = 'repo:' + f.id;
-                addNode({
-                    id: rid, kind: 'repo', name: f.displayName || f.name, language: lang, domain: domain,
-                    color: langColor(lang),
-                    files: files,
-                    val: Math.max(3, Math.min(18, 3 + (f.stars || 0) / 4 + files / 120)),
-                    repo: f, structFile: 'structure/' + f.id + '.json',
-                    dived: false
-                });
-                addLink(langIds[lkey], rid);
-            });
-
-
-            // ---- Drill deck -------------------------------------------------
-            // The rail follows the graph's own hierarchy (domain -> language ->
-            // repo) rather than listing 1296 repos flat, which would fight the
-            // structure the graph is showing. Selecting a row drives the graph
-            // through the same onNodeClick the canvas uses.
-            (function buildDeck() {
-                var deckEl = document.getElementById('deck');
-                var crumbEl = document.getElementById('deck-crumb');
-                var countEl = document.getElementById('deck-count');
-                if (!deckEl) return;
-                var level = { kind: 'root' };
-
-                function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
-                function nf(n) { return (n || 0).toLocaleString('en-US'); }
-
-                function rowsFor(lv) {
-                    if (lv.kind === 'root') {
-                        return nodes.filter(function (n) { return n.kind === 'domain'; })
-                            .map(function (n) {
-                                var kids = nodes.filter(function (r) { return r.kind === 'repo' && r.domain === n.name; });
-                                return { node: n, name: n.name, count: kids.length + ' repos', color: n.color };
-                            }).sort(function (a, b) { return parseInt(b.count) - parseInt(a.count); });
-                    }
-                    if (lv.kind === 'domain') {
-                        return nodes.filter(function (n) { return n.kind === 'lang' && n.domain === lv.node.name; })
-                            .map(function (n) {
-                                var kids = nodes.filter(function (r) {
-                                    return r.kind === 'repo' && r.domain === lv.node.name && r.language === n.name;
-                                });
-                                return { node: n, name: n.name, count: kids.length + ' repos', color: n.color };
-                            }).sort(function (a, b) { return parseInt(b.count) - parseInt(a.count); });
-                    }
-                    if (lv.kind === 'lang') {
-                        return nodes.filter(function (n) {
-                            return n.kind === 'repo' && n.domain === lv.node.domain && n.language === lv.node.name;
-                        }).map(function (n) {
-                            return { node: n, name: n.name, count: nf(n.files) + ' files', color: n.color };
-                        }).sort(function (a, b) { return (b.node.files || 0) - (a.node.files || 0); });
-                    }
-                    return [];
-                }
-
-                function render() {
-                    var html = '';
-                    if (level.kind !== 'root') {
-                        html += '<button class="dback" data-back="1">&larr; ' +
-                            (level.kind === 'domain' ? 'All domains' : esc(level.node.domain)) + '</button>';
-                    }
-                    // A repo is a leaf: show what it is and where to read more.
-                    if (level.kind === 'repo') {
-                        var f = level.node.repo || {}, kg = f.knowledgeGraph || {};
-                        html += '<div class="dmeta">' + esc(f.description || 'No description available') +
-                            '<div style="margin-top:10px;display:flex;gap:14px;flex-wrap:wrap">' +
-                            '<a href="report.html?repo=' + encodeURIComponent(f.id) + '" data-read="1">Read the report &rarr;</a>' +
-                            '<a href="blog/' + encodeURIComponent(f.name) + '.html">Briefing &rarr;</a>' +
-                            '</div></div>';
-                        crumbEl.textContent = level.node.name;
-                        countEl.textContent = nf(kg.totalFiles || level.node.files) + ' files';
-                        deckEl.innerHTML = html;
-                        wire();
-                        return;
-                    }
-                    var rows = rowsFor(level);
-                    html += rows.map(function (r) {
-                        var active = currentFocus && currentFocus.id === r.node.id;
-                        return '<button class="drow" data-id="' + esc(r.node.id) + '" data-active="' + (active ? 1 : 0) + '">' +
-                            '<span class="dot" style="background:' + esc(r.color) + '"></span>' +
-                            '<span class="nm">' + esc(r.name) + '</span>' +
-                            '<span class="ct">' + esc(r.count) + '</span></button>';
-                    }).join('');
-                    crumbEl.textContent = level.kind === 'root' ? 'All domains' :
-                        (level.kind === 'domain' ? level.node.name : level.node.domain + ' / ' + level.node.name);
-                    countEl.textContent = rows.length + (level.kind === 'lang' ? ' repos' : ' items');
-                    deckEl.innerHTML = html;
-                    wire();
-                }
-
-                function wire() {
-                    var back = deckEl.querySelector('[data-back]');
-                    if (back) back.addEventListener('click', function () {
-                        level = level.kind === 'domain' ? { kind: 'root' }
-                            : level.kind === 'lang' ? { kind: 'domain', node: nodeById['domain:' + level.node.domain] || { name: level.node.domain } }
-                            : { kind: 'root' };
-                        if (level.kind === 'domain' && !level.node.name) level = { kind: 'root' };
-                        render();
-                    });
-                    // The href stays real so the link is still shareable and
-                    // middle-clickable; the handler keeps a plain click in-page.
-                    var read = deckEl.querySelector('[data-read]');
-                    if (read) read.addEventListener('click', function (e) {
-                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                        e.preventDefault();
-                        openReader((level.node && level.node.repo) || {}, level.node);
-                    });
-                    deckEl.querySelectorAll('.drow').forEach(function (btn) {
-                        btn.addEventListener('click', function () {
-                            var n = nodeById[btn.dataset.id];
-                            if (!n) return;
-                            onNodeClick(n);
-                            level = { kind: n.kind, node: n };
-                            render();
-                        });
-                    });
-                }
-
-                // Selecting on the canvas moves the deck to the same place.
-                deckSync = function (node) {
-                    if (!node) { level = { kind: 'root' }; render(); return; }
-                    level = { kind: node.kind, node: node };
-                    render();
-                };
-                render();
-            })();
+            // Assembled in cb-data.js: pure, and the bulk of what build() did.
+            var g = CBData.assembleGraph(data);
+            var forks = g.forks, nodes = g.nodes, links = g.links,
+                adjacency = g.adjacency, nodeById = g.nodeById,
+                addNode = g.addNode, addLink = g.addLink,
+                domainIds = g.domainIds, langIds = g.langIds,
+                langCounts = g.langCounts, domainCounts = g.domainCounts,
+                totalFiles = g.totalFiles;
+            // The rail lives in cb-data.js, driving the same onNodeClick as the canvas.
+            deckSync = CBData.renderDeck(g, function (n) { onNodeClick(n); },
+                function () { return currentFocus; },
+                function (repo, node) { openReader(repo, node); });
 
             (function renderReadout() {
                 var host = document.getElementById('ro-figs');
@@ -278,27 +69,11 @@
                 });
             })();
 
-            el.sRepos.textContent = forks.length;
-            el.sFiles.textContent = totalFiles.toLocaleString();
-            el.sLangs.textContent = Object.keys(langCounts).length;
-            el.sDomains.textContent = Object.keys(domainCounts).length;
-
-            // Domain filter options
-            Object.keys(domainCounts).sort(function (a, b) { return domainCounts[b] - domainCounts[a]; }).forEach(function (d) {
-                var o = document.createElement('option'); o.value = d; o.textContent = d + ' (' + domainCounts[d] + ')'; el.fDomain.appendChild(o);
-            });
+            CBData.fillReadout(g);   // readout figures and the domain filter
 
             // Legend = domains (the primary framing)
-            function buildLegend() {
-                el.legend.innerHTML = '';
-                Object.keys(domainCounts).sort(function (a, b) { return domainCounts[b] - domainCounts[a]; }).forEach(function (d) {
-                    var row = document.createElement('div'); row.className = 'row';
-                    row.innerHTML = '<span class="dot" style="background:' + domainColor(d) + '"></span>' + d + ' (' + domainCounts[d] + ')';
-                    el.legend.appendChild(row);
-                });
-            }
+            function buildLegend() { CBData.buildLegend(g); }
             buildLegend();
-
             // ---- 3D graph ----
             var highlightNodes = new Set(), highlightLinks = new Set();
 
@@ -434,49 +209,8 @@
 
             // Graphify-style community detection: label propagation over the module
             // subgraph groups tightly-coupled modules, then colors each community.
-            var COMMUNITY_PALETTE = ['#4f7cff', '#a06bff', '#34e0c4', '#f0b355', '#ff7d73', '#41b883',
-                '#63b3ff', '#f178c6', '#89e051', '#e38c00', '#00b4ab', '#c9a7ff'];
-            function colorByCommunity(subNodes, allLinks) {
-                var ids = {}; subNodes.forEach(function (n) { ids[n.id] = true; });
-                var adj = {}; subNodes.forEach(function (n) { adj[n.id] = []; });
-                allLinks.forEach(function (l) {
-                    var s = idOf(l.source), t = idOf(l.target);
-                    if (ids[s] && ids[t]) { adj[s].push(t); adj[t].push(s); }
-                });
-                var label = {}; subNodes.forEach(function (n) { label[n.id] = n.id; });
-                // Deterministic label propagation (few passes converge on ~300 nodes).
-                for (var pass = 0; pass < 6; pass++) {
-                    var changed = false;
-                    subNodes.forEach(function (n) {
-                        var nb = adj[n.id]; if (!nb.length) return;
-                        var count = {};
-                        nb.forEach(function (m) { count[label[m]] = (count[label[m]] || 0) + 1; });
-                        var best = label[n.id], bestN = -1;
-                        Object.keys(count).forEach(function (lb) { if (count[lb] > bestN || (count[lb] === bestN && lb < best)) { bestN = count[lb]; best = lb; } });
-                        if (best !== label[n.id]) { label[n.id] = best; changed = true; }
-                    });
-                    if (!changed) break;
-                }
-                var order = {}, next = 0;
-                subNodes.forEach(function (n) {
-                    var lb = label[n.id];
-                    if (order[lb] === undefined) order[lb] = next++;
-                    n.community = order[lb];
-                    n.color = COMMUNITY_PALETTE[n.community % COMMUNITY_PALETTE.length];
-                });
-                return next;
-            }
+            var colorByCommunity = CBData.colorByCommunity;
 
-            function structColor(n) {
-                if (n.kind === 'dir') return 'rgba(150,160,190,0.55)';
-                if (n.kind === 'module') {
-                    // instability: green (stable core) -> red (unstable leaf)
-                    var i = n.inst == null ? 0.5 : n.inst;
-                    var r = Math.round(80 + i * 175), g = Math.round(200 - i * 130), b = Math.round(150 - i * 60);
-                    return 'rgb(' + r + ',' + g + ',' + b + ')';
-                }
-                return n.lang ? langColor(n.lang) : '#7f8aa8';
-            }
 
             function fetchStructure(repoNode) {
                 // Prefer the LLM-analyzed deep dependency graph; fall back to the file tree.
@@ -559,7 +293,14 @@
                         toast('Grew ' + kind + (s.truncated ? ' (partial)' : ''));
                         setTimeout(function () { flyTo(repoNode, 120); }, 400);
                     })
-                    .catch(function () { toast('Structure not generated for this repo yet.'); })
+                    .catch(function (e) {
+                        // The toast stays user-facing, but the error reaches the
+                        // console. Discarding it entirely meant a code fault in this
+                        // path presented as missing data, which cost a debugging
+                        // round during the split of this file.
+                        console.error('dive failed', e);
+                        toast('Structure not generated for this repo yet.');
+                    })
                     .then(function () { el.diveBtn.disabled = false; if (!nodeById[currentFocus && currentFocus.id] || !currentFocus.dived) el.diveBtn.textContent = '↴ Grow structure'; });
             }
 
@@ -579,30 +320,9 @@
             el.diveBtn.addEventListener('click', function () { if (currentFocus && currentFocus.kind === 'repo') diveInto(currentFocus); });
             el.collapseBtn.addEventListener('click', function () { if (currentFocus && currentFocus.kind === 'repo') collapse(currentFocus); });
 
-            var elFindings = document.getElementById('i-findings');
             // The side panel is a summary, not the report. It used to render a
             // dozen full findings into a 330px column, which is what turned it
             // into an endless scroll; the detail lives in the reader now.
-            function renderFindings(node) {
-                elFindings.innerHTML = '';
-                if (!node.findings || !node.findings.length) return;
-                var sv = (node.totals && node.totals.severity) || { high: 0, medium: 0, low: 0 };
-                var html = '<div class="sev-summary">';
-                if (sv.high) html += '<span class="pill h">' + sv.high + ' high</span>';
-                if (sv.medium) html += '<span class="pill m">' + sv.medium + ' medium</span>';
-                if (sv.low) html += '<span class="pill l">' + sv.low + ' low</span>';
-                html += '</div>';
-                var sevClass = { high: 'h', medium: 'm', low: 'l' };
-                node.findings.slice(0, 3).forEach(function (f) {
-                    var c = sevClass[f.severity] || 'l';
-                    html += '<div class="item"><div class="ttl"><span class="dot ' + c + '"></span>' + esc(f.title) + '</div>' +
-                        (f.file ? '<div class="loc">' + esc(String(f.file).split('/').slice(-2).join('/')) + '</div>' : '') + '</div>';
-                });
-                if (node.findings.length > 3) {
-                    html += '<div class="scope">' + (node.findings.length - 3) + ' more in the full report</div>';
-                }
-                elFindings.innerHTML = html;
-            }
 
             // ---- reader ------------------------------------------------------
             // Shared with Projects via assets/js/reader.js. This page used to
@@ -651,97 +371,11 @@
             function closeReader() { if (window.SiteReader) SiteReader.close(); }
             function readerOpen() { return !!window.SiteReader && SiteReader.isOpen(); }
 
-            function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-
-            function hoverCard(n) {
-                var kindLabel = { root: 'Owner', domain: 'Domain', lang: 'Language', repo: 'Repository', dir: 'Folder', file: 'File', module: 'Module' }[n.kind] || 'Node';
-                var rows = '';
-                if (n.kind === 'repo') {
-                    var sub = [n.domain, n.language].filter(Boolean).join(' · ');
-                    if (sub) rows += '<div class="hc-sub">' + esc(sub) + '</div>';
-                    var meta = [];
-                    if (n.files) meta.push('<span>' + n.files + ' files</span>');
-                    if (n.repo && n.repo.stars) meta.push('<span>★ ' + n.repo.stars + '</span>');
-                    if (meta.length) rows += '<div class="hc-meta">' + meta.join('') + '</div>';
-                    var rep = (n.repo && n.repo.id != null) ? reportSet[String(n.repo.id)] : null;
-                    if (rep) {
-                        var pills = '';
-                        if (rep.high) pills += '<span class="hc-p h">' + rep.high + ' high</span>';
-                        if (rep.medium) pills += '<span class="hc-p m">' + rep.medium + ' med</span>';
-                        if (rep.low) pills += '<span class="hc-p l">' + rep.low + ' low</span>';
-                        rows += '<div class="hc-pills">' + (pills || '<span class="hc-p l">clean</span>') + '</div>';
-                        rows += '<div class="hc-cta">Click to open · full report available</div>';
-                    } else {
-                        rows += '<div class="hc-cta">Click to grow structure</div>';
-                    }
-                } else if (n.kind === 'module') {
-                    rows += '<div class="hc-sub">' + esc(n.full || '') + '</div>';
-                    rows += '<div class="hc-meta"><span>Ca ' + n.ca + '</span><span>Ce ' + n.ce + '</span><span>inst ' + n.inst + '</span>' + (n.cycle ? '<span style="color:#ff9d95">in cycle</span>' : '') + '</div>';
-                } else if (n.kind === 'dir') {
-                    rows += '<div class="hc-sub">folder</div>';
-                } else if (n.kind === 'file') {
-                    if (n.lang) rows += '<div class="hc-sub">' + esc(n.lang) + '</div>';
-                } else if (n.kind === 'domain') {
-                    rows += '<div class="hc-sub">' + (domainCounts[n.name] || 0) + ' repositories</div>';
-                }
-                return '<div class="hovercard"><div class="hc-kind">' + kindLabel + '</div>' +
-                    '<div class="hc-name">' + esc(n.name) + '</div>' + rows + '</div>';
-            }
-
-            function showInfo(node) {
-                el.info.classList.add('open');
-                el.iMeta.innerHTML = ''; el.iLinks.innerHTML = ''; el.iDesc.textContent = '';
-                el.iDive.style.display = 'none'; el.collapseBtn.style.display = 'none';
-                el.reportBtn.style.display = 'none';
-                elFindings.innerHTML = '';
-                var kindLabel = { root: 'Owner', domain: 'Domain', lang: 'Language', repo: 'Repository', dir: 'Folder', file: 'File', module: 'Module' }[node.kind] || 'Node';
-                el.iKind.textContent = kindLabel;
-                el.iName.textContent = node.name;
-
-                if (node.kind === 'repo') {
-                    var f = node.repo || {};
-                    // The one-liner, never the full summary: the summary runs to
-                    // thousands of characters and pushed every control in this
-                    // panel below the fold.
-                    el.iDesc.textContent = f.description || firstSentences(f.summary, 2) || 'No description available.';
-                    var meta = ['<span><strong>' + node.domain + '</strong></span>', '<span><strong>' + node.language + '</strong></span>'];
-                    if (f.stars) meta.push('<span><strong>' + f.stars + '</strong> stars</span>');
-                    if (node.files) meta.push('<span><strong>' + node.files + '</strong> files</span>');
-                    el.iMeta.innerHTML = meta.join('');
-                    var lnk = '';
-                    if (f.url) lnk += '<a href="' + f.url + '" target="_blank" rel="noopener">GitHub ↗</a>';
-                    if (f.name) lnk += '<button type="button" data-read-briefing>Briefing →</button>';
-                    el.iLinks.innerHTML = lnk;
-                    var rb = el.iLinks.querySelector('[data-read-briefing]');
-                    if (rb) rb.addEventListener('click', function () { openReader(f, node); });
-                    // Reading is the primary action, so it leads the row.
-                    if (f.id != null && reportSet[String(f.id)]) {
-                        el.reportBtn.style.display = '';
-                        el.reportBtn.onclick = function () { openReader(f, node); };
-                    }
-                    el.iDive.style.display = '';
-                    el.iDiveLabel.textContent = 'Grow this repo\'s file & folder structure';
-                    el.diveBtn.textContent = node.dived ? '↴ Grown' : '↴ Grow structure';
-                    el.collapseBtn.style.display = node.dived ? '' : 'none';
-                    if (node.dived && node.findings) renderFindings(node);
-                } else if (node.kind === 'domain') {
-                    el.iDesc.textContent = 'Repositories in the ' + node.name + ' domain. Grouped by what the code does - click through to a language, then a repo.';
-                    el.iMeta.innerHTML = '<span><strong>' + (domainCounts[node.name] || 0) + '</strong> repositories</span>';
-                } else if (node.kind === 'lang') {
-                    el.iDesc.textContent = node.name + ' repositories within ' + node.domain + '.';
-                } else if (node.kind === 'module') {
-                    el.iDesc.textContent = (node.lang || 'Code') + ' module. Fan-in (Ca) = who imports it; fan-out (Ce) = what it imports. High Ca + high instability = a change-risk hotspot.';
-                    el.iMeta.innerHTML = '<span><strong>' + node.ca + '</strong> imported by</span><span><strong>' + node.ce + '</strong> imports</span><span>instability <strong>' + node.inst + '</strong></span>' +
-                        (node.community != null ? '<span>community <strong>' + (node.community + 1) + '</strong></span>' : '') +
-                        (node.cycle ? '<span style="color:#ff9d95">in cycle</span>' : '');
-                } else if (node.kind === 'file') {
-                    el.iDesc.textContent = node.lang ? (node.lang + ' source file.') : 'Project file.';
-                } else if (node.kind === 'dir') {
-                    el.iDesc.textContent = 'Folder within the repository.';
-                } else {
-                    el.iDesc.textContent = 'The root of the ecosystem - every domain connects here.';
-                }
-            }
+            // A factory over el and the reader hook, so call sites are unchanged.
+            var panel = CBPanel.create(CBDom,
+                { openReader: openReader, reportSet: reportSet }, g);
+            var showInfo = panel.showInfo, hoverCard = panel.hoverCard,
+                renderFindings = panel.renderFindings;
 
             el.infoClose.addEventListener('click', clearFocus);
             var infoMin = document.getElementById('info-min');
@@ -771,7 +405,6 @@
                 el.legend.style.display = hidden ? 'flex' : 'none';
                 legendToggle.textContent = hidden ? 'Hide key' : 'Show key';
                 legendToggle.setAttribute('aria-expanded', hidden ? 'true' : 'false');
-                positionInfo();
             });
 
             // Collapse the whole control dock to a single title line and back.
@@ -781,7 +414,6 @@
                 var collapsed = dockEl.classList.toggle('collapsed');
                 dockToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
                 dockToggle.title = collapsed ? 'Expand controls' : 'Collapse controls';
-                positionInfo();
             });
 
             function doReset() {

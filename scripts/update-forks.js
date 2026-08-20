@@ -65,7 +65,7 @@ const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = requi
 // folding unrelated logging together, which is a bad reason to change code.
 // modelRateLimits is shared state, not a copy: the rotation is only correct if the
 // caller and lib-article read the same record of which models are exhausted.
-const { CONFIG, LLM_API_KEY, modelRateLimits } = require('./lib-config.js');
+const { CONFIG, LLM_API_KEY, modelRateLimits, EMBED_MODEL } = require('./lib-config.js');
 const { cleanArticle } = require('./lib-text.js');
 const { fetchReadme, fetchRepoTree, fetchRepos, fetchRepoDetails,
   generateFallbackSummary } = require('./lib-github.js');

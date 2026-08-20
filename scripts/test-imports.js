@@ -26,7 +26,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const DIRS = ['scripts', path.join('assets', 'js')];
+/*
+ * Node modules only. A browser file cannot require anything, so comparing it
+ * against Node exports only produces collisions: code-brain.js binds domainOf
+ * from CBDom, and lib-classify.js happens to export a function of the same name.
+ * The browser side has its own checker, test-globals.js.
+ */
+const DIRS = ['scripts'];
 
 /*
  * The partials under assets/js/site/ are concatenated into one file and share one
@@ -48,7 +54,15 @@ const NOT_A_REFERENCE = {
   'build-index.js': ['services'],          // 'services.html', a string key
   'lib-site-chrome.js': ['services'],      // /services.html in the nav markup
   'site.js': ['services'],                 // same, in the generated nav
-  'lib-article.js': ['LLM_MODELS']         // named in an operator-facing message
+  'lib-article.js': ['LLM_MODELS'],        // named in an operator-facing message
+  // Declared inside a template-literal interpolation, which the string stripper
+  // removes along with the declaration.
+  'lib-blog-analysis.js': ['head'],
+  // Inside the ENTRY_NAMES and ENTRY_FILES patterns, which the regex stripper
+  // declines to touch because they are assigned across a line break.
+  'lib-flow.js': ['main'],
+  // Bound from the shared dom object, which this checker reads as a property.
+  'cb-panel.js': ['esc']
 };
 
 function stripCommentsAndStrings(src) {
@@ -57,7 +71,15 @@ function stripCommentsAndStrings(src) {
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
     .replace(/`(?:\\.|[^`\\])*`/g, '``')
     .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\\n])*"/g, '""');
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    /*
+     * Regex literals, which this file is full of and which read as code to a
+     * pattern matcher. /^(main|cli|index)\./ contains four words that are also
+     * exported names elsewhere, and once a bare read counted as a use, every one
+     * of them was reported. They go after the strings so a slash inside a string
+     * cannot start a false pattern.
+     */
+    .replace(/([=(,:[!&|?+]\s*|\breturn\s+)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[gimsuy]*/g, '$1/0/');
 }
 
 // A bundle directory becomes one virtual file: its partials joined in the same
@@ -144,8 +166,15 @@ for (const unit of units) {
   for (const [name, homes] of exportedBy) {
     if (homes.includes(base)) continue;          // its own export
     if (imported.has(name) || declared.has(name) || allowed.has(name)) continue;
-    // Used as a value: called, indexed, or member-accessed.
-    const used = new RegExp('(?<![.\\w$])' + name.replace(/\$/g, '\\$') + '\\s*[({.\\[]');
+    /*
+     * Any read of the name counts, not only a call. Matching name( name[ name.
+     * missed `model: EMBED_MODEL,` - a bare value in an object literal - and that
+     * shipped to CI as the second ReferenceError of this kind. The exclusions are
+     * what a bare match cannot mean: a property after a dot, and a key before a
+     * colon.
+     */
+    const esc = name.replace(/\$/g, '\\$');
+    const used = new RegExp('(?<![.\\w$])' + esc + '(?![\\w$])(?!\\s*:)');
     if (!used.test(src)) continue;
     fail++;
     console.log(`FAIL  ${base} references ${name}, exported by ${homes.join(', ')}, without importing it`);
