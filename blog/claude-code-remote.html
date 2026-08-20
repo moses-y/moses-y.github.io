@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 21, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers need remote access to Claude Code sessions across devices without complex infrastructure setup. The typical workflow requires port forwarding, firewall configuration, or paid tunneling services just to access a local development environment from a phone or secondary machine.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repository implements a remote access layer for Claude Code sessions. The server/ directory contains 16 TypeScript files driving the core functionality: server/index.ts orchestrates the entry point, server/session-manager.ts manages session lifecycle, and server/pty-session.ts handles pseudo-terminal operations. Tunneling is abstracted through server/tunnel/ — with cloudflare.ts and tailscale.ts providing different remote access strategies via server/tunnel/index.ts. The frontend in web/ consists of app.js, index.html, styles.css, and manifest.json, presenting a terminal interface that connects back to the local server instance.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Installation is straightforward per the README:</p><p>npx claude-code-remote</p><p>Or globally:</p><p>npm install -g claude-code-remote
-claude-remote</p><p>The command launches a local server and displays a QR code for device pairing. Node.js 18+ is required. For remote access beyond localhost, cloudflared is optional but recommended — it’s the mechanism server/tunnel/cloudflare.ts uses to establish the public URL. On Linux, build tools may be needed: sudo apt install -y build-essential python3. No environment variables or configuration files are documented beyond the MIT license header; server/config.ts likely governs runtime settings but no .env or secret management is visible in the structure.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer starting a Claude Code session on their workstation can scan the displayed QR code on their phone and immediately interact with the same terminal session — file system, environment variables, and all. If they need to share that session with a teammate or access it from a different network, the Cloudflare tunnel route established by server/tunnel/cloudflare.ts provides a public URL without configuring routers or paying for ngrok. Session persistence means they can disconnect and return hours later exactly where they left off.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No test files detected — 16 TypeScript files across server/ and web/ have no corresponding test suite, leaving code paths unvalidated.
-No LICENSE file at root — though the README declares MIT, the absence of a dedicated license file creates ambiguity about redistribution rights.
-Dependency hygiene — bun</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who work with Claude Code locally need a way to reach a running terminal session from a phone or any remote device. Without a dedicated tunnel they must expose ports manually (ngrok, port‑forwarding) or keep a laptop attached to the same network, which adds friction and security risk.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a small self‑hosted service that starts a local PTY, creates a Cloudflare (or Tailscale) tunnel, and serves a single‑page web UI that can be opened on a mobile device.</p>
+<ul><li><code>server/index.ts</code> hosts the WebSocket control channel, broadcasts messages, and persists session data.</li><li><code>server/pty-session.ts</code> wraps the PTY process, exposing <code>getInfo</code>, <code>isExecutable</code>, and other helpers.</li><li><code>web/app.js</code> (1797 lines) renders the UI, handles QR‑code display and forwards user input to the WebSocket.</li><li>Tunnel providers live under <code>server/tunnel/</code> (<code>cloudflare.ts</code>, <code>tailscale.ts</code>) and are selected via <code>server/config.ts</code>.</li></ul>
+<p>All runtime code is TypeScript except the monolithic UI bundle (<code>web/app.js</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins when the CLI (<code>npx claude-code-remote</code>) runs the <code>start</code> script defined in <code>package.json</code>, which imports <code>server/index.ts</code>. The primary entry point is the <strong>WebSocket handler</strong>:</p>
+<ul><li><strong><code>handleControlMessage</code></strong> (<code>server/index.ts:247</code>) receives commands from the browser, reaches <strong>44 functions</strong> across the codebase and is the only place that calls <code>ws.send</code> (network outbound).</li><li>It frequently invokes <strong><code>sendControl</code></strong> (called 31 times) which builds a control packet and writes it to the WebSocket.</li><li><code>handleControlMessage</code> also calls <strong><code>cleanupSessionHandlers</code></strong>, <strong><code>getInfo</code></strong> (<code>server/pty-session.ts</code>), <strong><code>broadcastToAll</code></strong>, and <strong><code>getSession</code></strong>.</li></ul>
+<p>Session lifecycle is managed by <strong><code>server/session-manager.ts</code></strong>, whose <code>createSession</code>, <code>getSession</code>, and <code>destroySession</code> are referenced by 1–3 callers each. The scheduler (<code>server/scheduler.ts</code>) reads/writes schedule files and performs a cryptographic operation when generating tokens.</p>
+<p>Tunnel startup follows a short chain: <strong><code>startTunnel</code></strong> (<code>server/tunnel/index.ts:19</code>) → <strong><code>isAvailable</code></strong> (<code>server/tunnel/cloudflare.ts</code> or <code>tailscale.ts</code>) → <strong><code>start</code></strong> (creates the remote URL). This path touches only three functions.</p>
+<p>File‑level responsibilities (ordered by blast radius):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>External effect</th></tr></thead><tbody><tr><td><code>server/index.ts</code></td><td>WebSocket routing, client broadcast</td><td>Network (ws.send), file I/O</td></tr><tr><td><code>server/scheduler.ts</code></td><td>Load/create cron schedules, token crypto</td><td>File I/O, crypto</td></tr><tr><td><code>server/pty-session.ts</code></td><td>PTY process control, info queries</td><td>File I/O</td></tr><tr><td><code>server/tunnel/*</code></td><td>Tunnel provider abstraction, remote URL creation</td><td>Network</td></tr><tr><td><code>server/auth.ts</code></td><td>Token validation middleware</td><td>Network</td></tr><tr><td><code>web/app.js</code></td><td>UI rendering, QR code, input forwarding (1797 LOC)</td><td>Browser ↔ WebSocket</td></tr></tbody></table></div>
+<p>The import graph shows <strong>no circular dependencies</strong>; the most “unstable” module is <code>server/index</code> (instability = 1) because it imports nine others but is not imported itself, so changes there have the widest impact.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/claude-code-remote
+cd claude-code-remote
+
+# Install dependencies (Node 18+ required)
+npm ci
+
+# Run the service (creates a local server and a Cloudflare tunnel)
+npx claude-code-remote</code></pre>
+<p>The CLI prints a local URL (e.g., <code>http://localhost:3456</code>) and a remote Cloudflare URL with a QR code. Scanning the code with a phone opens the UI from <code>web/index.html</code> served by the Express server in <code>server/index.ts</code>. No additional configuration files are required; optional <code>cloudflared</code> must be installed separately if remote access is desired (see README).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer starts the tool on a workstation, scans the QR code on a phone, and runs <code>git status</code> inside the PTY from the mobile UI. Because the tunnel is managed automatically, the session persists across Wi‑Fi changes and can be revisited hours later without re‑authenticating.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Oversized file</strong>: <code>web/app.js</code> (1797 LOC) makes the UI hard to maintain.</li><li><strong>Medium – Deep nesting</strong>: Same file reaches indentation depth 6.</li><li><strong>Medium – High branching density</strong>: <code>server/activity-detector.ts</code> and <code>server/process-detector.ts</code> each contain &gt;44 branch points in &lt;150 LOC.</li><li><strong>Medium – Missing tests</strong>: No test files detected across the repo.</li><li><strong>Medium – No LICENSE</strong>: Repository lacks a license file despite the README claiming MIT; legal reuse is ambiguous.</li></ul>
+<p>CI is present (<code>.github/workflows/publish.yml</code>), lockfile exists, and no secrets are committed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The project delivers a functional, zero‑config remote terminal for Claude Code with a clear separation between server logic and tunnel providers. However, the monolithic UI bundle, lack of automated tests, and missing license hinder long‑term maintainability. Suitable for teams needing rapid remote access and willing to refactor the front‑end and add tests before scaling.</p>
             </div>
 
             

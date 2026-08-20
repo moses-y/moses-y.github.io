@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Swift</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Xcode remains mac-exclusive, locking iOS development to Apple hardware and OS. Teams on Linux or Windows face barriers for building, signing, and deploying iOS apps without macOS virtual machines or remote build hosts. Existing cross-platform alternatives often require macOS for critical signing steps or produce apps that fail Apple&#39;s validation.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>xtool replicates Xcode functionality across Linux, Windows (via WSL), and macOS using open standards. The codebase is Swift-dominant (125 files), with the core CLI and Apple-services logic residing in Sources/XToolSupport/ and Sources/XKit/ respectively. Sources/PackLib/ handles packaging SwiftPM projects into iOS apps, while Sources/XKit/DeveloperServices/ provides programmatic access to Apple Developer Services for authentication, device management, and provisioning. A Ruby dependency layer exists under macOS/Gemfile and macOS/Gemfile.lock, likely supporting build-tooling or automation hooks. Infrastructure includes Dockerfile, Makefile, and docker-compose.yml for containerized and local builds.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The repository uses SwiftPM with a Package.swift at the root. For macOS hosts, macOS/Gemfile and macOS/Gemfile.lock define Ruby dependencies that likely supplement the build pipeline. Docker users can build from the Dockerfile. No package.json or pyproject.toml is present; dependency management is SwiftPM-first with auxiliary Ruby gems.</p><p>Configuration: Apple Developer Services authentication requires an Apple ID and, for production workflows, a paid developer account. The Sources/XKit/DeveloperServices/ framework handles token management and API calls. No .env files or secret placeholders are committed; the README references installation guides for Linux/Windows and macOS that should be followed before running commands.</p><p>Running it: The entry point is the xtool CLI binary. From the README:</p><p>xtool --help</p><p>Subcommands include setup, auth, sdk, new, dev, ds, and device management commands (devices, install, uninstall, launch). The library can be added as a SwiftPM dependency per the README example:</p><p>// package dependency:
-.package(url: &quot;https://github.com/xtool-org/xtool&quot;, .upToNextMinor(from: &quot;1.2.0&quot;))
-// target dependency:
-.product(name: &quot;XKit&quot;, package: &quot;xtool&quot;)</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer on Linux can initialize a new SwiftPM iOS project with xtool new, which scaffolds a minimal package structure. They then edit the Package.swift to</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>iOS developers on Linux, Windows, or macOS need a way to compile, sign, and install SwiftPM‑based apps without Xcode. Apple’s tooling is macOS‑only, so teams that work on CI runners or non‑macOS workstations cannot automate builds or device deployment.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>xtool</code> supplies a command‑line replacement for Xcode that works on any platform supporting SwiftPM. The core CLI lives in <strong><code>Sources/xtool/XTool.swift</code></strong>, which defines the <code>@main</code> entry point and dispatches sub‑commands implemented in the <strong><code>Sources/XToolSupport/</code></strong> hierarchy (e.g., <code>InstallCommand.swift</code>, <code>AuthCommand.swift</code>). The library side is exposed through the <strong><code>XKit</code></strong> module (e.g., <code>Sources/XKit/DeveloperServices/*</code> and <code>Sources/XKit/GrandSlam/*</code>), allowing other Swift packages to call Apple Developer Services directly.</p>
+<p>Documentation and example scripts are under <strong><code>Documentation/xtool.docc/</code></strong>, while platform‑specific packaging files are in <strong><code>macOS/</code></strong> (Ruby Gemfile for the macOS helper) and <strong><code>Linux/</code></strong> (desktop shortcut, build script).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>Sources/xtool/XTool.swift</code> contains the <code>@main</code> struct that parses the CLI (<code>--help</code>, sub‑command selection).</li><li><strong>Command routing</strong> – The <code>XTool</code> struct creates a <code>CommandRegistry</code> (see <code>Sources/XToolSupport/DSCommands/DSCommand.swift</code>) and maps each sub‑command name to a concrete class such as <code>InstallCommand.swift</code> or <code>AuthCommand.swift</code>.</li><li><strong>Core work</strong> –   <em> <code>InstallCommand.swift</code> → <code>Sources/XKit/Installation/IPAInstaller.swift</code> → <code>Sources/XKit/Signer/AutoSigner.swift</code> → low‑level C helpers in <code>Sources/CXKit/</code> (<code>mobileprovision.c</code>, <code>version.c</code>). </em> <code>AuthCommand.swift</code> → <code>Sources/XKit/DeveloperServices/DeveloperServicesLoginManager.swift</code> → network layer in <code>Sources/XKit/HTTPClientProtocol/AsyncHTTPClient+HTTP.swift</code>. * <code>NewCommand.swift</code> scaffolds a new SwiftPM project using templates in <code>Documentation/xtool.docc/First-app-code/</code>.</li><li><strong>External effects</strong> – Network calls go through the Swift <code>AsyncHTTPClient</code> wrapper; signing writes files to a temporary directory (<code>Sources/XUtils/TemporaryDirectory.swift</code>). No database access is present.</li><li><strong>Blast radius</strong> – The largest single file is <strong><code>Sources/DeveloperAPI/Generated/Client.swift</code></strong> (6,648 lines). Because it aggregates all generated OpenAPI client code, any change ripples through every developer‑service operation. The internal module graph shows a single module with zero import edges, so the codebase is flat but heavily concentrated in a few files.</li></ol>
+<p>No circular import cycles were detected; the import graph consists of one internal module with no edges.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and enter the repo
+git clone https://github.com/moses-y/xtool
+cd xtool
+
+# Build the CLI (Makefile provides a default target)
+make          # or: swift build -c release
+
+# Or run inside a container
+docker build -t xtool .
+docker run --rm -v "$HOME/.config/xtool:/root/.config/xtool" xtool --help</code></pre>
+<p><strong>Configuration</strong> – Apple Developer authentication is required. Run <code>xtool auth login</code> (implemented in <code>Sources/XToolSupport/AuthCommand.swift</code>) and follow the on‑screen prompts; the command stores credentials in the user config directory (<code>$HOME/.config/xtool</code>). No additional secret files are committed to the repo.</p>
+<p><strong>Running a build</strong> – After authentication, create a project (<code>xtool new MyApp</code>) and build it with <code>xtool dev</code>. The <code>dev</code> sub‑command invokes <code>Sources/XKit/Installation/AppInstaller.swift</code>, which packages the SwiftPM product, signs it via <code>AutoSigner</code>, and pushes the IPA to a connected device.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline on Linux can containerize <code>xtool</code>, authenticate via a CI‑safe token, and execute:</p>
+<pre data-lang="yaml"><code>- name: Build iOS app
+  run: |
+    docker run --rm -v $PWD:/src xtool dev --project MyApp
+- name: Deploy to device
+  run: |
+    docker run --rm -v $PWD:/src xtool install --ipa MyApp.ipa</code></pre>
+<p>This replaces the typical macOS‑only Xcode build step with a reproducible, cross‑platform workflow.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Cognitive load</strong> – Deep nesting (max indent depth 8) in files such as <code>Sources/DeveloperAPI/Generated/Client.swift</code>, <code>Sources/PackLib/Packer.swift</code>, <code>Sources/XKit/DeveloperServices/App IDs/DeveloperServicesAddAppOperation.swift</code>.</li><li><strong>High – Clarity</strong> – Repeated 6‑line shell blocks across 20 documentation scripts (<code>build-2.sh</code>, <code>build-3.sh</code>, etc.).</li><li><strong>High – Oversized file</strong> – <code>Sources/DeveloperAPI/Generated/Client.swift</code> (6,648 lines).</li><li><strong>Medium – Cognitive load</strong> – High branching density in <code>Sources/PackLib/PackSchema.swift</code>, <code>Sources/PackLib/Process+Helpers.swift</code>, <code>Sources/XKit/DeveloperServices/OpenAPI/DeveloperAPIPages.swift</code>.</li><li><strong>Low – Clarity</strong> – Three stray <code>TODO/FIXME</code> markers in <code>Sources/XToolSupport/SDKBuilder.swift</code>.</li></ul>
+<p>No missing license, CI, or Dockerfile; tests exist (<code>Tests/XToolTests/MatcherTests.swift</code>). Secrets are not present in the repository.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>xtool</code> delivers a functional, cross‑platform Xcode substitute with a clear CLI surface and a reusable Swift library. The codebase is small in module count but concentrates complexity in a few large, deeply nested files, which will increase maintenance effort. Teams that need Linux/Windows iOS build pipelines will find it usable, but expect to invest in refactoring the oversized generated client and reducing nesting to keep future changes manageable.</p>
             </div>
 
             
@@ -101,9 +132,9 @@
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">213<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Swift</span><i style="width:100%"></i><b>125</b></li><li><span>Shell</span><i style="width:14%"></i><b>17</b></li><li><span>Markdown</span><i style="width:11%"></i><b>14</b></li><li><span>YAML</span><i style="width:6%"></i><b>7</b></li><li><span>C/C++ Header</span><i style="width:3%"></i><b>4</b></li><li><span>JSON</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Swift</span><i style="width:100%"></i><b>127</b></li><li><span>Shell</span><i style="width:14%"></i><b>18</b></li><li><span>Markdown</span><i style="width:11%"></i><b>14</b></li><li><span>YAML</span><i style="width:6%"></i><b>8</b></li><li><span>C/C++ Header</span><i style="width:3%"></i><b>4</b></li><li><span>JSON</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
                         <p class="an-fw"><span>Rails</span><span>Docker</span></p>
                     </div>

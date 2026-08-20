@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Extracting a design system from an existing website is typically a manual, time-intensive process involving CSS inspection, asset exporting, and token mapping. For teams needing to audit legacy projects or initialize new design systems, this friction delays consistency efforts and often results in incomplete token sets.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Dembrandt is a Node.js CLI tool that automates the extraction of design tokens from a live website URL. The core extraction logic resides in lib/, handling color parsing (lib/colors.js), DOM discovery (lib/discovery.js), and result merging (lib/merger.js). It supports multiple output formats via lib/w3c-exporter.js for W3C DTCG compliance and lib/pdf.js for brand guide generation. The project includes a React-based local UI (local-ui/) for visual inspection, but the primary value proposition is the global command-line tool for rapid, single-command extraction.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The tool is installed globally via npm. The root package.json defines the entry point, and local-ui/package.json manages the React development dependencies.</p><p>npm install -g dembrandt
-Or via npx without global install:
-npx dembrandt &lt;url&gt;</p><p>Configuration: Extraction behavior is controlled by CLI flags documented in the README. No environment variables or API keys are required for basic operation. For headless environments (e.g., Docker or CI), the --no-sandbox flag is required, and Firefox can be selected via --browser=firewall for Cloudflare-heavy sites.</p><p>Running it: The entry point is index.js. To extract tokens from a site and save the raw JSON output:</p><p>dembrandt example.com --json-only</p><p>To generate a W3C Design Tokens format file (auto-saves as .tokens.json):</p><p>dembrandt example.com --dtcg</p><p>To analyze the homepage plus four discovered sub-pages, merging results with confidence scoring:</p><p>d</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Design systems are usually reverse-engineered by hand: opening DevTools, inspecting computed styles, and manually transcribing values into tokens. That process is slow, inconsistent across pages, and goes stale the moment the site changes. Teams need a fast, repeatable way to capture what a site actually renders, not what its CSS variables claim.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>dembrandt</code> is a CLI and MCP server that crawls a URL, inspects rendered styles, and outputs design tokens: colors, typography, spacing, borders, shadows, and component styles. The core logic lives in <code>lib/extractors.js</code> (the <code>extractBranding</code> function) and <code>lib/colors.js</code> (color math like <code>hexToRgb</code>, <code>deltaE</code>). Output goes to the terminal via <code>lib/display.js</code>, to JSON, or to a W3C DTCG format via <code>lib/w3c-exporter.js</code>.</p>
+<p>It also ships a local web UI (<code>local-ui/</code>) built with React and Vite, plus two MCP server entry points (<code>mcp-server.js</code>, <code>mcp-hosted.js</code>) for AI agents. The <code>test/qa.mjs</code> file contains a QA harness with golden-file comparison.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>main</code> at <code>test/qa.mjs:381</code>. The traced path is <code>main -&gt; extractSite</code> which writes files via <code>fs.writeFileSync</code>. This is the only mapped path that leaves the process; the CLI's real browser automation (via Playwright) is not visible in the static call graph because it goes through framework callbacks.</p>
+<p>The module graph has no cycles, but there is a clear hub: <code>lib/colors.js</code> is imported by 6 files, and <code>lib/extractors.js</code> is imported by 2. The highest blast radius is <code>hexToRgb</code> (called from 9 places) and <code>hex</code> (7 places) — both in <code>lib/colors.js</code>. Changing these ripples across most of the codebase.</p>
+<p>File-by-file map:</p>
+<ul><li><code>lib/extractors.js</code> — the extraction engine (<code>extractBranding</code>, <code>extractSiteName</code>); 31 functions, the largest file.</li><li><code>lib/colors.js</code> — color conversion and distance math; 16 functions, the most imported.</li><li><code>lib/pdf.js</code> — brand guide PDF generation; 20 functions.</li><li><code>lib/display.js</code> — terminal rendering (<code>terminalLink</code>, <code>displayResults</code>).</li><li><code>lib/merger.js</code> — merges multi-page extraction results.</li><li><code>lib/discovery.js</code> — page discovery from DOM links or sitemap.</li><li><code>lib/design-md.js</code> — generates <code>DESIGN.md</code> for AI agents.</li><li><code>mcp-server.js</code> / <code>mcp-hosted.js</code> — MCP protocol implementations.</li><li><code>lib/w3c-exporter.js</code> — DTCG token export.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>npm install -g dembrandt
+dembrandt example.com
+dembrandt example.com --save-output
+dembrandt example.com --dtcg
+dembrandt example.com --pages 5 --sitemap</code></pre>
+<p>Requires Node.js 18+. For AI agents, register the MCP server:</p>
+<pre data-lang="bash"><code>claude mcp add --transport stdio dembrandt -- npx -y dembrandt-mcp</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A design system team auditing a competitor's site runs <code>dembrandt competitor.com --pages 10 --sitemap --save-output</code>. The JSON output feeds into their token pipeline, and the DTCG export imports directly into Figma or Style Dictionary. The <code>--brand-guide</code> flag produces a PDF for stakeholder review.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found 12 issues across 4 kinds:</p>
+<ul><li><strong>High - Oversized files</strong> — <code>lib/extractors.js</code>, <code>lib/display.js</code>, <code>lib/pdf.js</code>; <code>lib/extractors.js</code> alone is 2129 lines. Hard to hold in one head; changes ripple widely.</li><li><strong>High - Deep nesting</strong> — <code>lib/extractors.js</code> and <code>local-ui/src/App.tsx</code> hit indentation depth 7. Flatten with early returns.</li><li><strong>High - Duplicated code</strong> — <code>mcp-hosted.js</code> and <code>mcp-server.js</code> share 29 repeated 6-line blocks. Extract shared helpers.</li><li><strong>Medium - High branching density</strong> — 749 branch points over 2129 lines in <code>lib/extractors.js</code>, <code>lib/design-md.js</code>, <code>lib/display.js</code>. Consider table-driven dispatch.</li></ul>
+<p>SDLC observations: tests exist (<code>test/qa.mjs</code>) but there is no CI pipeline. Dependencies are stale — <code>commander</code> is 4 major versions behind, <code>typescript</code> 2 behind. License and lockfiles are present; no secrets found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A genuinely useful tool that solves a real problem — extracting design tokens from live sites in seconds. The architecture is sound (no cycles, clear module boundaries), but the core extraction files are overdue for a refactor. Worth using as-is; worth cleaning up before you extend it.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Collaborator solves the fragmentation of agentic development by delivering a single‑window macOS app that bundles terminals, code editing, and an infinite canvas for file tiles, letting agents and humans work side‑by‑side without constant tab or context switching.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The navigator sidebar (collab‑electron/packages/components/src/TreeView/TreeView.tsx) displays a resizable file‑tree rooted at the active workspace, supporting expand/collapse, two view modes, sorting, and multi‑select. Selecting a file opens it in the viewer; dragging a file onto the canvas creates a tile. The canvas (collab‑electron/packages/components/src/CodeEditorView/CodeEditorView.tsx) is an infinite pan‑and‑zoom surface with a dot‑grid background, hosting Monaco Editor for code, BlockNote/TipTap for rich markdown, and terminals backed by tmux sessions. Application state lives as JSON files in ~/.collaborator/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Run the provided install script or download the latest macOS release from the repo’s releases page:  
-  curl -fsSL https://raw.githubusercontent.com/collaborator-ai/collab-public/main/install.sh | bash</p><p>The script installs the Electron‑Vite built desktop app. No additional environment variables are required; anonymous usage analytics are collected via PostHog (opt‑out possible in the settings UI).  
-Running it: After installation, launch Collaborator from the Applications folder or via the installed binary. The first launch prompts you to add a workspace (Cmd+Shift+O or the workspace dropdown).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A developer adds a local project</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developer tooling is fragmented across terminals, editors, and file managers. Agents need context files, running code, and persistent sessions, but coordinating these across separate apps creates constant context switching. Collaborator consolidates agentic development onto a single infinite canvas where terminals, files, and code live side by side.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Collaborator is a native macOS desktop app (Electron 40, React 19) that provides an end-to-end environment for agentic development. The main application lives in <code>collab-electron/</code> with a multi-webview architecture: a navigator sidebar for file management, an infinite canvas for arranging tiles, and a viewer for file content. Terminals run through <code>xterm.js</code> backed by persistent <code>tmux</code> sessions, and code editing uses Monaco Editor.</p>
+<p>The app is organized as an npm monorepo with packages for <code>components</code> (UI), <code>shared</code> (types and utilities), and <code>theme</code>. All state persists locally as JSON in <code>~/.collaborator/</code>. The README states it's early-stage, macOS-only (Apple Silicon), and in active development.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>collab-electron/src/main/index.ts</code> (Electron main process), which imports 12 modules. The central hub is <code>collab-electron/src/main/ipc.ts</code> — it has 14 incoming imports and 14 outgoing ones (instability 0.93), making it the highest-traffic module. It routes renderer requests to filesystem operations in <code>src/main/files.ts</code> (5 modules import it) and filtering logic in <code>src/main/file-filter.ts</code> (6 importers, zero dependencies — a pure utility leaf).</p>
+<p>The renderer side splits into multiple windows: <code>src/windows/shell/src/renderer.js</code> (1,234 lines) handles canvas rendering, <code>src/windows/nav/src/App.tsx</code> manages the navigator, and <code>src/windows/viewer/src/App.tsx</code> displays file content. The <code>packages/components/src/TreeView/</code> directory owns file tree logic across 11 files, with <code>useFileTree.ts</code> and <code>SearchSortControls.tsx</code> carrying the deepest nesting. The <code>WorkspaceGraph/</code> module (8 files) renders a D3 force-directed graph of workspace connections.</p>
+<p>The import graph shows 117 internal modules with 120 edges and zero circular dependencies — a clean structure. The risk is concentration: <code>ipc.ts</code> and <code>renderer.js</code> are change hotspots where modifications ripple widely.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="sh"><code># Clone and install
+git clone https://github.com/moses-y/collab-public
+cd collab-public/collab-electron
+npm install
+
+# Build and run
+npm run dev</code></pre>
+<p>The README documents a curl installer (<code>install.sh</code> at repo root) and prebuilt macOS releases. Configuration is minimal — the app works on local folders without accounts. Note: no lockfile is committed, so <code>npm install</code> won't be reproducible across environments. The <code>bunfig.toml</code> suggests Bun is also supported, but package.json lacks a <code>bun.lockb</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer working with an AI coding agent opens Collaborator, adds a workspace via <code>Cmd+Shift+O</code>, and drags a terminal tile onto the canvas. The agent runs in the terminal (backed by tmux for persistence), while the developer drags context files from the navigator onto the canvas as tiles. Monaco Editor tiles handle code review, and the viewer shows markdown notes with KaTeX math rendering. All sessions survive app restarts via tmux.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (23 findings: 13 high, 10 medium) identified four issue kinds:</p>
+<ul><li><strong>High</strong> — Deep nesting (13 instances): <code>TreeView/useFileTree.ts</code> and <code>SearchSortControls.tsx</code> hit indentation depth 10; control flow is hard to follow. Fix: early returns and extraction.</li><li><strong>High</strong> — Duplicated code (43 repeated 6-line blocks across 15 files): <code>SourcesFeed.tsx</code>, <code>TreeView.tsx</code>, <code>shared/src/types.ts</code>. Fix: extract shared helpers.</li><li><strong>High</strong> — Oversized files (8): <code>WorkspaceGraph/forceGraph.ts</code>, <code>main/workspace-graph.ts</code>, and <code>shell/src/renderer.js</code> exceed 1,200 lines each. Fix: split by responsibility.</li><li><strong>Medium</strong> — High branching density: <code>shared/src/extract-cover-image.ts</code> has 24 branch points over 54 lines.</li></ul>
+<p>SDLC gaps: no CI/CD pipeline (no <code>.github/</code>), no lockfile for reproducible builds. Tests exist (11 files), and no secrets were committed. A license is present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A well-structured Electron app with a clean module graph and no circular dependencies, but the codebase shows signs of rapid growth — deep nesting, duplication, and oversized files will make maintenance harder. Suitable for developers who want a local-first agentic workspace and are comfortable with early-stage software; not ready for production teams needing reproducibility guarantees.</p>
             </div>
 
             

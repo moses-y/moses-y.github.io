@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,12 +79,35 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations and individuals require real-time protection against evolving phishing and scam domains, but maintaining an up-to-date blocklist demands continuous curation, format conversion, and threat intelligence integration. Existing solutions often lack free API access, community curation, or multiple output formats needed for diverse deployment environments.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The destroylist repository provides a curated phishing and scam domain blocklist with 208k+ threats maintained by a 1M+ community. The rootlist/ directory (85 files) contains monthly and weekly threat JSON files from 2025, structured for various feed formats. The dns/ directory includes activedomains.py for domain processing and metrics snapshots. Community-contributed data lives in community/, featuring blocklist.json, liveblocklist.txt, and state tracking via state.json and count.json. Multiple output formats are pregenerated: rootlist/formats/primaryactive/hosts.txt for Pi-hole/AdGuard Home, plus AdBlock, Dnsmasq, Unbound, and RPZ configurations. A threat intelligence API is available for programmatic access.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The repository uses pip as its package manager with a requirements.txt file present. No build compilation or containerization is required—deployment involves integrating the provided feed URLs.</p><p>Configuration: No environment variables or API keys are required for the primary feed usage. The README documents the jsDelivr CDN URL https://cdn.jsdelivr.net/gh/phishdestroy/destroylist@main/rootlist/formats/primaryactive/hosts.txt for immediate blocklist integration. The raw GitHub mirror https://raw.githubusercontent.com/phishdestroy/destroylist/main/rootlist/formats/primaryactive/hosts.txt serves as an alternative, though may return 429 under heavy traffic.</p><p>Running it: To integrate with Pi-hole or AdGuard Home, paste the CDN URL into the blocklist settings interface. No local execution or CLI invocation is needed for basic blocklist usage. For API access, the repository exposes an endpoint at the root list.json and list.txt for programmatic threat intelligence queries.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A security team operating a DNS sinkhole can configure their resolver to load the hosts.txt feed from the jsDelivr CDN, blocking resolved phishing domains across all client devices. The API endpoint can be queried to validate suspected domains in real time, returning verdicts based on the community-curated data. Weekly updates via the archives/weekly/ directory allow audit trails of threat evolution over time.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium/SDLC - No test files detected across the repository-wide structure; code paths for feed parsing, API handling, and format generation lack test coverage.
-Low/Risk - Dependencies declared in requirements.txt without a lockfile (e.g., requirements.lock or  Pipfile.lock), creating non-reproducible builds across environments.
-The single Python file dns/activedomains.py has no corresponding test artifacts in the directory structure.
-CI/CD pipelines exist in .github/workflows/ (rootlist.yml, onlistupdate.yml, update_stats.yml, etc.), but without test jobs, workflows likely focus on maintenance rather than validation.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo delivers a well-structured, community-maintained phishing blocklist with immediate usability via CDN-hosted feeds and multiple format outputs. The absence of test coverage and dependency lockfiles represents a moderate risk for production integration, particularly for environments requiring build reproducibility. Best suited for security practitioners, network administrators, and developers needing real-time threat intelligence without operational overhead—</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> Organizations that run DNS‑based blockers (Pi‑hole, AdGuard, Unbound, etc.) need a continuously refreshed list of phishing and scam domains. Maintaining that list manually is error‑prone and costly, especially when the threat landscape changes multiple times per day.</p>
+<p><strong>What This Does</strong> <code>destroylist</code> ships a curated blocklist of &gt;208 k domains plus daily community contributions. The repository stores the raw data (<code>rootlist/</code>, <code>community/</code>, <code>dns/</code>) and a set of small Python utilities that transform the JSON sources into the various feed formats (hosts, AdBlock, RPZ, etc.). Key scripts include:</p>
+<ul><li><code>scripts/build_rootlist.py</code> – reads the monthly JSON files in <code>rootlist/</code> and writes the canonical <code>list.txt</code>/<code>list.json</code>.</li><li><code>scripts/json_to_txt.py</code> – converts the master JSON into plain‑text feeds; functions <code>load_domains</code>, <code>header</code>, <code>adblock_header</code>, <code>rpz_header</code> are used by the CI pipelines.</li><li><code>scripts/smart_aggregator.py</code> – normalises domains, removes duplicates and IPs, and aggregates the final set (<code>is_valid_domain</code>, <code>normalize_domain</code>, <code>add_norm</code>).</li><li><code>dns/active_domains.py</code> – exposes the current active set via a tiny JSON API used by the “live” feeds (<code>fetch_domains</code>, <code>check_domain</code>).</li></ul>
+<p>The data files are version‑controlled; GitHub Actions (see <code>.github/workflows/*.yml</code>) invoke the scripts on each push, generate the feeds, and publish them through GitHub Pages and the jsDelivr CDN.</p>
+<p><strong>How It Is Wired</strong></p>
+<ol><li><strong>Trigger</strong> – A push to <code>main</code> fires the <code>rootlist.yml</code> workflow.</li><li><strong>Build</strong> – <code>scripts/build_rootlist.py</code> loads every <code>rootlist/YYYY/MM/*.json</code>, calls <code>scripts/json_to_txt.py</code> to produce <code>list.txt</code>, <code>list.json</code>, and the per‑format files under <code>rootlist/formats/</code>.</li><li><strong>Aggregation</strong> – <code>scripts/smart_aggregator.py</code> is called next; it normalises domains (<code>normalize_domain</code>), strips IPs (<code>_is_ip_addr</code> from <code>scripts/utils.py</code>), and writes the deduplicated set back to the JSON feed.</li><li><strong>Live Export</strong> – <code>dns/active_domains.py</code> reads the generated JSON (<code>dns/active_domains.json</code>) and serves a read‑only API used by the CDN‑hosted <code>hosts.txt</code> and other formats.</li><li><strong>Deploy</strong> – The <code>pages.yml</code> workflow pushes the <code>rootlist/formats/</code> directory to the GitHub Pages site, which jsDelivr mirrors for public consumption.</li></ol>
+<p>No import cycles exist; each script is self‑contained, which limits blast radius but also means shared logic is duplicated (see findings). The most‑used modules are <code>scripts/smart_aggregator.py</code> (17 functions) and <code>scripts/json_to_txt.py</code> (8 functions). All file‑level responsibilities are enumerated in the “What Each File Is Responsible For” block of the analysis.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/destroylist
+cd destroylist
+
+# Install Python runtime dependencies
+pip install -r requirements.txt
+
+# Generate the latest feeds locally (optional)
+python scripts/build_rootlist.py
+python scripts/json_to_txt.py
+python scripts/smart_aggregator.py</code></pre>
+<p>The produced feeds are available under <code>rootlist/formats/</code>. For production use point your blocker at the CDN URL, e.g.:</p>
+<pre><code>https://cdn.jsdelivr.net/gh/moses-y/destroylist@main/rootlist/formats/primary_active/hosts.txt</code></pre>
+<p>No additional configuration files or environment variables are required; the scripts operate purely on the repository data.</p>
+<p><strong>Real‑World Use</strong> A corporate network running Pi‑hole can add the CDN URL to its blocklist source. On each daily sync, Pi‑hole fetches the <code>hosts.txt</code> file, which contains the deduplicated, normalised domain set produced by <code>smart_aggregator.py</code>. Because the feed is regenerated on every push, new phishing domains appear in the blocklist within minutes of being added to the upstream JSON.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>Med – Duplicated code</strong> – 8‑line blocks repeated across <code>scripts/calculate_stats.py</code>, <code>scripts/json_to_txt.py</code>, <code>scripts/update_counts.py</code>, <code>scripts/smart_aggregator.py</code>.</li><li><strong>Med – Broad exception handling</strong> – Catch‑all <code>except:</code> in <code>dns/active_domains.py</code>, <code>scripts/allowlist_pattern_guard.py</code>, <code>scripts/calculate_stats.py</code>.</li><li><strong>Med – Deep nesting</strong> – Indentation depth of 6 in <code>scripts/smart_aggregator.py</code> and <code>tests/test_allowlist_pattern_guard.py</code>.</li><li><strong>Med – High branching density</strong> – 27 branches in <code>scripts/validate_json.py</code>.</li><li><strong>Low – Missing lockfile</strong> – Dependencies are listed only in <code>requirements.txt</code>; reproducible builds are not guaranteed.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional issues were detected.</p>
+<p><strong>The Bottom Line</strong> <code>destroylist</code> provides a well‑structured, continuously updated phishing blocklist with straightforward Python tooling for feed generation. The codebase is functional but suffers from duplicated helpers and overly broad error handling, which modestly increase maintenance effort. It is suitable for teams that need a free, community‑driven threat feed and are comfortable running the simple Python scripts or consuming the CDN‑hosted outputs.</p>
             </div>
 
             
@@ -94,16 +117,16 @@ CI/CD pipelines exist in .github/workflows/ (rootlist.yml, onlistupdate.yml, upd
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">704<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JSON</span><i style="width:100%"></i><b>116</b></li><li><span>YAML</span><i style="width:16%"></i><b>18</b></li><li><span>Markdown</span><i style="width:16%"></i><b>18</b></li><li><span>Python</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>JSON</span><i style="width:100%"></i><b>508</b></li><li><span>Markdown</span><i style="width:7%"></i><b>38</b></li><li><span>YAML</span><i style="width:4%"></i><b>18</b></li><li><span>Python</span><i style="width:3%"></i><b>17</b></li><li><span>HTML</span><i style="width:1%"></i><b>3</b></li>
                         </ul>
                         
                     </div>
@@ -119,7 +142,7 @@ CI/CD pipelines exist in .github/workflows/ (rootlist.yml, onlistupdate.yml, upd
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
                     </ul>
                 </div>
 

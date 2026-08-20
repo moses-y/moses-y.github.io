@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">TypeScript</span>
+                    <span>5 min read</span>
+                    <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>rotki</h1>
@@ -80,20 +80,28 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#2-build-the-rust-backend">2️⃣ Build the Rust backend</a><a href="#3-install-and-build-the-electron-front-end">3️⃣ Install and build the Electron front‑end</a><a href="#4-optional-docker-container-build">4️⃣ (Optional) Docker container build</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most portfolio‑tracking platforms require users to upload sensitive transaction and balance data to closed‑source SaaS services, exposing financial privacy to third‑party control. rotki addresses this by keeping all data encrypted and stored locally, while still providing multi‑chain analytics, PnL reporting, and graphical insights.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>rotki is a self‑hosted, privacy‑first portfolio manager built with a Rust backend and an Electron front‑end.  
-Rust core (colibri/) handles blockchain data, database operations, and API endpoints. Key files include colibri/src/main.rs (entry point), colibri/src/database/mod.rs, and colibri/src/blockchain/mod.rs.  
-Electron UI (frontend/app/) React‑based desktop app with preload scripts, IPC handlers, and window management. Notable files: frontend/app/electron/main/index.ts, frontend/app/electron/main/ipc-handlers/index.ts, and frontend/app/electron/preload/index.ts.  
-Configuration is read from environment files under frontend/app/.env*, which may contain API keys or database URLs.  
-Build &amp; packaging uses a Dockerfile at the repo root, a top‑level Makefile, and colibri/Cargo.toml / frontend/app/package.json for Rust and Node respectively.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>1️⃣ Clone the repo
-git clone https://github.com/rotki/rotki.git
-cd rotki</p><h3 class="post-h" id="2-build-the-rust-backend">2️⃣ Build the Rust backend</h3><p>cd colibri
-cargo build --release   # produces the rotki binary</p><h3 class="post-h" id="3-install-and-build-the-electron-front-end">3️⃣ Install and build the Electron front‑end</h3><p>cd ../frontend/app
-npm install
-npm run build            # creates the Electron bundle</p><h3 class="post-h" id="4-optional-docker-container-build">4️⃣ (Optional) Docker container build</h3><p>cd ..
-docker build -t rotki .</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy the example env file and adjust as needed: cp frontend/app/.env.example frontend/app/.env.  
-The .env files live under frontend/app/ and are used by the Electron preload script to initialise the backend connection. Do not commit real secrets – the repo already contains frontend/app/.env with placeholder values (see detected high‑severity issue).</p><h3 class="post-h" id="running-it">Running it</h3><p>Start the Rust CLI: cd colibri &amp;&amp; cargo run --release.  
-Launch the desktop app: npm start (as defined in frontend/app/package.json scripts) or run the built Electron binary directly.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A crypto trader runs rotki on a personal server to aggregate balances from</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Rotki aggregates crypto‑portfolio data across exchanges and blockchains while keeping the data encrypted and stored locally. Users who need a self‑hosted alternative to SaaS trackers face a code base that is split into six independent projects, each with its own language, build system and deployment model. The fragmentation makes it unclear how data flows from the UI to the database and which components hold the greatest operational risk.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Rotki consists of six self‑contained repositories that together provide portfolio tracking, analytics and accounting.</p>
+<ul><li><strong>rotkehlchen</strong> (2172 files, 2071 code files, 91 data files) is the Python core that owns the main data model, accounting logic and PnL reports. It lives under <code>rotkehlchen/</code> and is the primary source of truth for balances, transaction decoding and historical visualisations.</li><li><strong>frontend</strong> (2140 files, 992 code files, 41 data files) is a Vue/React Electron application (<code>frontend/app/</code>) that renders the UI, communicates with the back‑end via IPC handlers (<code>frontend/app/electron/main/ipc-handlers/</code>) and stores user preferences in <code>frontend/app/.env</code>.</li><li><strong>colibri</strong> (36 files, 32 code files, 1 data file) is a Rust binary (<code>colibri/src/main.rs</code>) that exposes a REST‑style API (<code>colibri/src/api/</code>), handles blockchain ABIs, coingecko price fetches and database operations (<code>colibri/src/database/</code>). It is the only component that directly touches the filesystem and external services.</li><li><strong>tools</strong> (50 files, 38 code files, 2 data files) and <strong>packaging</strong> (6 files, 1 code file) contain build scripts, Docker helpers and release tooling.</li><li><strong>rotkehlchen_mock</strong> (2 files) and <strong>colibri</strong>’s minimal test fixtures are used for unit‑testing the core functions.</li></ul>
+<p>The data pipeline typically starts in the Electron renderer, sends a request through an IPC handler to the Rust backend, which then queries the Python rotkehlchen model via a subprocess or shared state, persists results to a local SQLite database and returns the payload to the UI.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution follows a small, well‑defined call graph:</p>
+<ol><li><strong>Entry points</strong> – the Electron main process (<code>frontend/app/electron/main/index.ts</code>) starts the UI and registers IPC listeners; the Rust binary is launched via <code>colibri/src/main.rs</code>.</li><li><strong>IPC handling</strong> – <code>frontend/app/electron/main/ipc-handlers/</code> forwards UI actions (e.g., “load portfolio”) to the Rust backend.</li><li><strong>Rust API</strong> – <code>colibri/src/api.rs</code> and <code>colibri/src/api/database.rs</code> expose endpoints that rotkehlchen calls; blockchain ABIs are stored under <code>colibri/src/blockchain/abis/</code>.</li><li><strong>Python core</strong> – rotkehlchen’s <code>rotkehlchen/</code> package performs the actual accounting, PnL calculation and data‑export logic; it is invoked from the Rust side through a <code>subprocess</code> call or an internal Python bridge.</li><li><strong>External touch points</strong> – the Rust code contacts coingecko (<code>colibri/src/coingecko.rs</code>), reads/writes the SQLite database (<code>colibri/src/database/mod.rs</code>) and, when needed, accesses the local filesystem for export files.</li></ol>
+<p>The <strong>hub</strong> is <code>colibri/src/api.rs</code> – every UI request passes through it, so changes to the API surface ripple across both the Rust and Python layers. The <strong>cycle</strong> exists between the Rust API and the Python model (subprocess round‑trip), which adds a small latency but isolates the core accounting logic.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<div class="table-scroll"><table><thead><tr><th>Step</th><th>Command (evidence from repo)</th></tr></thead><tbody><tr><td><strong>Clone</strong></td><td><code>git clone https://github.com/moses-y/rotki</code> (use verbatim URL)</td></tr><tr><td><strong>Build Docker image</strong></td><td><code>docker build -t rotki .</code> (Dockerfile present at repo root)</td></tr><tr><td><strong>Start container</strong></td><td><code>docker run -p 8080:8080 rotki</code> (Dockerfile exposes port 8080)</td></tr><tr><td><strong>Install Node deps</strong></td><td><code>cd frontend/app &amp;&amp; npm install</code> (package.json present)</td></tr><tr><td><strong>Run Electron UI</strong></td><td><code>npm run dev</code> (script defined in <code>frontend/app/package.json</code>)</td></tr><tr><td><strong>Run Rust backend</strong></td><td><code>cargo run -p colibri</code> (colibri/Cargo.toml is the package manifest)</td></tr><tr><td><strong>Configure</strong></td><td>Edit <code>frontend/app/.env</code> – this file contains secret‑shaped paths that the health audit flagged; do not commit it to version control.</td></tr></tbody></table></div>
+<p>The Docker image bundles both the Rust binary and the Python environment, so a single <code>docker run</code> starts the full stack (UI + API + database). If only the backend is needed, <code>cargo run -p colibri</code> launches the API on <code>http://127.0.0.1:8080</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A trader runs <code>docker compose up</code> (or the single‑container commands above) on a personal laptop. The UI opens at <code>http://localhost:8080</code>, where they add exchange API keys (stored encrypted in the local SQLite DB). rotkehlchen then fetches balances, decodes recent transactions, and presents profit/loss graphs. Because all data stays on‑device, the user avoids sending sensitive portfolio information to third‑party SaaS services.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Measured static‑analysis findings</strong> (deterministic, not opinion):</li><li>878 test files found across the six projects.</li><li>22 documentation files present.</li><li>CI is active (GitHub Actions workflows under <code>.github/workflows/</code>).</li><li>Dockerfile and lockfile (<code>colibri/Cargo.lock</code>, <code>frontend/app/package-lock.json</code>) are committed.</li><li>License file <code>LICENSE.md</code> is present.</li><li><strong>Committed secrets detected</strong>: <code>frontend/app/.env</code> contains secret‑shaped paths – the code‑health audit flags this as a low‑security issue.</li></ul>
+<ul><li><strong>Dependency freshness</strong> (19 packages behind current major version):</li><li><code>electron</code> declared <code>40.1.0</code>, current <code>43.4.0</code> (3 major behind)</li><li><code>bignumber.js</code> declared <code>9.3.1</code>, current <code>11.1.5</code> (2 major behind)</li><li><code>@types/node</code> declared <code>24.10.10</code>, current <code>26.2.0</code> (2 major behind)</li><li><code>c8</code> declared <code>10.1.3</code>, current <code>12.0.0</code> (2 major behind)</li><li><code>typescript</code> declared <code>5.9.3</code>, current <code>7.0.2</code> (2 major behind)</li><li><code>@vueuse/core</code>, <code>@vueuse/math</code>, <code>@vueuse/shared</code> each declared <code>13.9.0</code>, current <code>14.4.0</code> (1 major behind)</li></ul>
+<p>These outdated declarations do not block operation but may expose known CVEs; updating them is recommended.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Rotki is a privacy‑first, self‑hosted portfolio manager built from six separate code bases—Rotkehlchen (Python core), a Vue/React Electron frontend, a Rust colibri backend, and smaller tooling projects. The architecture is clear: UI → IPC → Rust API → Python model → SQLite. Strengths include strong privacy guarantees, comprehensive test coverage and a solid CI pipeline. Weak points are the fragmented repository structure (requiring coordination across languages/build systems) and an outdated set of front‑end dependencies, plus a committed <code>.env</code> file that should be excluded from version control. It is well‑suited for teams or individuals who need full control over their crypto‑portfolio data and are comfortable maintaining a multi‑language stack.</p>
             </div>
 
             
@@ -110,11 +118,11 @@ Launch the desktop app: npm start (as defined in frontend/app/package.json scrip
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">4,463<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>49</b></li><li><span>Rust</span><i style="width:65%"></i><b>32</b></li><li><span>YAML</span><i style="width:29%"></i><b>14</b></li><li><span>Markdown</span><i style="width:20%"></i><b>10</b></li><li><span>reStructuredText</span><i style="width:12%"></i><b>6</b></li><li><span>JSON</span><i style="width:8%"></i><b>4</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>2106</b></li><li><span>TypeScript</span><i style="width:47%"></i><b>989</b></li><li><span>Vue</span><i style="width:38%"></i><b>790</b></li><li><span>JSON</span><i style="width:3%"></i><b>59</b></li><li><span>Rust</span><i style="width:2%"></i><b>33</b></li><li><span>YAML</span><i style="width:1%"></i><b>16</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Django</span><span>Flask</span><span>Express</span><span>Tailwind</span><span>Docker</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -152,7 +160,7 @@ Launch the desktop app: npm start (as defined in frontend/app/package.json scrip
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>frontend/app/.env</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>frontend/app/.env</code></span></li>
                     </ul>
                 </div>
 

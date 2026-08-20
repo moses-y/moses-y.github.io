@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>This repository addresses the demand for fully private, local voice AI experiences. It eliminates cloud dependencies for critical functions—speech-to-text, language generation, and text-to-speech—by stitching together self-hosted open-source services, targeting users who require offline operation or customized voice profiles on constrained hardware.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The system functions as a wake-word triggered pipeline centered on app.py. It listens for &quot;Hey HAL&quot; using the Porcupine engine embedded in models/porcupine/, routing audio to a local Vosk server for transcription, querying an Ollama instance (llama3, 8B parameters) for generation, and outputting audio via Piper TTS. Hardware interaction is handled by drivers/apa102.py and lights.py for LED status, while assets/ contains the 1:1 scale model imagery. Dependencies are declared solely in requirements.txt, installed via pip.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Hardware requires a Raspberry Pi Zero 2 W and a ReSpeaker 2-Mics Pi Hat. The software stack depends on three external self-hosted services running on a homelab server (detailed in the README: Proxmox VM with GTX 1060 for LLM/TTS acceleration). Clone the repository and install Python dependencies with:
-pip install -r requirements.txt</p><p>Configuration: Configure the local service endpoints in app.py to point to the Vosk, Ollama, and Piper instances on the local network. The custom-trained Piper model for the HAL voice is available on HuggingFace (campwill/HAL-9000-Piper-TTS), which must be downloaded and placed accessible to the Piper process.</p><p>Running it: Execute the entry point to start the assistant:
-python app.py</p><p>The process enters a continuous listen state, activating upon detection of the wake phrase.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A user approaches the physical HAL model kit. The system activates on &quot;Hey HAL,&quot; transcribes the question via the local Vosk server, generates a contextual response through the Ollama LLM, and speaks the answer using the custom-trained Piper voice. This workflow operates entirely on the local</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building a voice assistant that is fully local and private is awkward. Cloud APIs (Alexa, Google Home) send audio off-device and require accounts; self-hosted stacks scatter the components across STT, LLM, and TTS servers. This repo demonstrates a working alternative: a Raspberry Pi Zero 2 W acting as a thin client, with all heavy inference running on a homelab server over LAN. The result is a functional HAL 9000 replica with no cloud dependency.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>app.py</code> is the entry point, orchestrating a wake-word-triggered conversation loop. It uses Porcupine for local wake-word detection on the Pi, then records audio, sends it to a Vosk STT server, passes the transcript to an Ollama-hosted <code>llama3</code> model, and streams the reply back through a Piper TTS server with a custom-trained HAL voice (the <code>.onnx</code> model lives in <code>models/porcupine/</code>).</p>
+<p><code>lights.py</code> and <code>drivers/apa102.py</code> control the HAL eye's status LEDs, providing visual feedback (fade-in/out, color cycling) during listening, processing, and speaking states. The <code>assets/</code> folder holds build photos, and <code>requirements.txt</code> lists seven Python dependencies.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>app.py</code>, which defines the full pipeline: <code>listen_for_wake_word</code> → <code>record_prompt</code> → <code>perform_stt</code> → <code>generate_response</code> → <code>stream_tts</code>. Each function makes a network call to a self-hosted service on the LAN; the repo does not show the server-side code, so the exact protocol (HTTP/WebSocket) is not mapped here.</p>
+<p>The internal call graph shows <code>lights.py</code> is the hub: <code>set_pixel</code> is called from 3 places, <code>show</code> from 2. <code>drivers/apa102.py</code> is the low-level LED driver, with <code>__init__</code> and <code>write</code> defining the hardware interface. <code>app.py</code> imports <code>lights.py</code>, which imports the driver, so a change to <code>drivers/apa102.py</code> affects the entire LED stack.</p>
+<p>A significant gap: there is no error handling or retry logic visible between <code>app.py</code> and the external services. A network failure on any hop will crash the pipeline.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>The README documents the full build, but the repo itself lacks a <code>Dockerfile</code> or a lockfile, so setup is manual:</p>
+<pre data-lang="bash"><code># On the Raspberry Pi
+pip install -r requirements.txt
+python app.py</code></pre>
+<p>Configuration is not centralized. The README implies the STT/LLM/TTS server addresses are hardcoded or environment-specific, but no <code>.env</code> file or config module exists. You will need to edit <code>app.py</code> to point at your homelab server's IP and ports. The <code>models/porcupine/</code> directory contains the wake-word model, which is architecture-specific (Raspberry Pi).</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>This fits a homelab with an always-on server. The Pi Zero 2 W idles at low power, and the server handles all compute. A typical flow: say "Hey Hal," the Pi records, sends audio to Vosk, gets a transcript, sends it to Ollama, receives a response, sends it to Piper, and plays the audio—all over LAN.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (4 findings, all medium) reports:</p>
+<ul><li><strong>Medium – File opened without context manager (x2)</strong> – <code>drivers/apa102.py</code>, <code>app.py</code> – <code>open(...)</code> calls risk leaking handles on error. Fix with <code>with open(...)</code>.</li><li><strong>Medium – Deep nesting (x2)</strong> – <code>drivers/apa102.py</code>, <code>app.py</code> – max indentation depth of 6 makes control flow hard to follow. Flatten with early returns.</li></ul>
+<p>SDLC observations: no tests, no CI, no lockfile. The repo is a single-developer prototype; treat it as a reference implementation, not production software.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A well-documented, working proof-of-concept for a fully local voice assistant. The hardware build is the star; the code is minimal and functional but lacks error handling, tests, and configuration management. Use it as a starting point for your own build, but expect to harden the Python before relying on it.</p>
             </div>
 
             

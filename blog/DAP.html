@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 10, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real-World Use</a><a href="#a-practical">A practical</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Panoramic depth estimation remains a specialized niche compared to standard perspective depth models. This repository addresses the gap for 360° content, providing a foundation model capable of estimating depth across panoramic imagery, which is critical for immersive XR applications and 360° video processing.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The implementation is structured around a depthanythingv2_metric core, utilizing Vision Transformers (Dinov2/Dinov3) and a DPT head for depth prediction. The datasets/ directory (75 files) handles data loading for panoramic-specific datasets like insta23k and M3D, alongside standard vision datasets. Configuration is managed via config/infer.yaml and config/test.yaml, which dictate model paths and inference parameters.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone the repository and install dependencies as specified in the README. The install requires PyTorch v2.7.1 and torchvision v0.22.1.</p><p>git clone https://github.com/Insta360-Research-Team/DAP
-cd DAP</p><p>conda create -n dap python=3.12
-conda activate dap</p><p>pip install torch==2.7.1 torchvision==0.22.1
-pip install -r requirements.txt</p><h3 class="post-h" id="configuration">Configuration</h3><p>Required configuration files are located in the config/ directory. config/infer.yaml and config/test.yaml must be present or adjusted for specific model checkpoints and input resolutions prior to running scripts.</p><h3 class="post-h" id="running-it">Running it</h3><p>Inference is invoked via the test script:</p><p>python test/infer.py</p><p>Evaluation follows the same pattern:</p><p>python test/eval.py</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><h3 class="post-h" id="a-practical">A practical</h3>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Standard depth estimation models fail on equirectangular panoramas because they assume pinhole camera geometry, causing distortion at the poles and inconsistent scale across the field of view. This repo provides a foundation model trained specifically for panoramic depth estimation, handling the spherical-to-planar projection issues that break conventional approaches.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>DAP is the official implementation of "Depth Any Panoramas," a CVPR 2026 paper. It adapts the Depth-Anything-V2 architecture to panoramic input, with custom dataset loaders for equirectangular imagery (<code>datasets/</code> contains 10+ dataset adapters including <code>M3D.py</code>, <code>deep360.py</code>, <code>insta23k.py</code>). The repo includes utilities for converting between equirectangular and cubemap projections (<code>depth_anything_utils.py</code>), plus depth-to-point-cloud (<code>depth2point.py</code>) and depth-to-normal (<code>depth2normal.py</code>) conversion scripts.</p>
+<p>The core model lives in <code>depth_anything_v2_metric/</code>, which vendors the DINOv2 and DINOv3 backbones. The <code>config/</code> directory holds inference and test configurations, while <code>test/infer.py</code> and <code>test/eval.py</code> are the primary entry points.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>test/infer.py</code>, which loads configuration from <code>config/infer.yaml</code>, instantiates the DPT head from <code>depth_anything_v2_metric/depth_anything_v2/dpt.py</code>, and runs inference using the DINOv2 backbone (<code>dinov2.py</code>). The dataset loaders in <code>datasets/</code> handle equirectangular-to-cubemap conversion via functions like <code>Equirec2Cube</code>, <code>cassini2Equirec</code>, and <code>spherical_uv_to_directions</code>.</p>
+<p>The import graph shows 124 edges across 189 modules with no circular dependencies. The most-connected modules are <code>dinov3/hub/backbones</code> (5 importers) and <code>eval/detection/util/misc</code> (7 importers). The <code>depth_anything_v2_metric</code> directory is effectively a second project—a vendored copy of the DINOv3 training/eval suite—that adds substantial complexity but is only loosely coupled to the main inference path.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/DAP
+cd DAP
+pip install torch==2.7.1 torchvision==0.22.1
+pip install -r requirements.txt
+python test/infer.py</code></pre>
+<p>Configuration lives in <code>config/infer.yaml</code> (model weights path, input/output directories). The pretrained weights must be downloaded from Hugging Face (<code>Insta360-Research/DAP-weights</code>) and placed where the config expects. The training dataset is also on Hugging Face (<code>Insta360-Research/DAP_data</code>). Evaluation runs via <code>python test/eval.py</code> using <code>config/test.yaml</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>For a 360° camera system needing real-time depth, you would load the pretrained model, feed it equirectangular frames, and get per-pixel metric depth. The <code>depth2point.py</code> utility converts output to 3D point clouds for downstream tasks like obstacle avoidance or 3D reconstruction. The model handles both indoor (Stanford2D3D, Matterport3D) and outdoor (Deep360) panoramic datasets.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 34 issues across 6 categories:</p>
+<ul><li><strong>High - Deep nesting</strong> (25 occurrences): <code>datasets/util.py</code>, <code>dinov3/data/masking.py</code>, and <code>dinov3/eval/segmentation/models/utils/ops/modules/ms_deform_attn.py</code> reach indentation depth 8, making control flow hard to follow.</li><li><strong>High - Duplicated code</strong>: 1041 repeated 6-line blocks across 100 files, concentrated in <code>datasets/</code> loaders. Shared helper extraction is overdue.</li><li><strong>Medium - File opened without context manager</strong> (3 occurrences): <code>dinov3/data/datasets/decoders.py</code>, <code>dinov3/logging/__init__.py</code>, <code>dinov3/thirdparty/CLIP/clip/simple_tokenizer.py</code>.</li><li><strong>Medium - Broad exception handling</strong> (3 occurrences): <code>dinov3/checkpointer/checkpointer.py</code>, <code>dinov3/utils/utils.py</code>, and the CLIP tokenizer.</li><li><strong>Medium - Oversized file</strong>: <code>dinov3/train/ssl_meta_arch.py</code> at 679 lines.</li><li><strong>Low - 7 TODO/FIXME markers</strong> in <code>dinov3/eval/segmentation/models/heads/pixel_decoder.py</code>.</li></ul>
+<p>No CI/CD pipeline, no lockfile, and no Dockerfile are present. The repo includes compiled <code>.pyc</code> files committed to source control, which should be gitignored. A license file exists.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a functional research implementation with a solid core inference path but heavy vendored dependencies. The <code>depth_anything_v2_metric</code> subtree is a full DINOv3 codebase that inflates the repo to 372 files and complicates maintenance. Use it if you need state-of-the-art panoramic depth estimation and can tolerate the research-code hygiene issues; expect to refactor the dataset loaders before production use.</p>
             </div>
 
             
@@ -101,11 +120,11 @@ pip install -r requirements.txt</p><h3 class="post-h" id="configuration">Configu
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">372<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>68</b></li><li><span>YAML</span><i style="width:21%"></i><b>14</b></li><li><span>Markdown</span><i style="width:9%"></i><b>6</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>189</b></li><li><span>YAML</span><i style="width:10%"></i><b>18</b></li><li><span>Markdown</span><i style="width:3%"></i><b>6</b></li><li><span>Jupyter Notebook</span><i style="width:3%"></i><b>5</b></li><li><span>C/C++ Header</span><i style="width:2%"></i><b>3</b></li><li><span>C++</span><i style="width:1%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>PyTorch</span><span>Transformers</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -151,7 +170,7 @@ pip install -r requirements.txt</p><h3 class="post-h" id="configuration">Configu
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>depth_anything_v2_metric/depth_anything_v2/dinov3/pyproject.toml</code></span></li>
                     </ul>
                 </div>
 

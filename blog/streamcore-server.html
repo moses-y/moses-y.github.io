@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building a voice agent prototype is straightforward, but transitioning to a reliable product requires solving intricate realtime media infrastructure challenges that are orthogonal to agent prompts. Once NAT traversal, audio encoding, and turn-taking logic must be production-grade, the development focus shifts from AI logic to systems engineering. StreamCore was built to absorb this complexity, positioning itself as the dedicated media runtime layer.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>StreamCore provides a Go-based media runtime handling the full realtime audio path. Core functionality is concentrated in internal/: the pipeline logic in internal/pipeline/pipeline.go manages streaming STT, LLM, and TTS integration; internal/vad/vad.go provides adaptive voice activity detection with turn-debouncing; and internal/audio/rtp.go and internal/audio/opus.go handle RTP/Opus encoding and decoding. The system supports WebRTC transport via Pion, WHIP signaling, and a built-in STUN/TURN server, eliminating the need for an external coturn container. A plugin system exists under plugins/, currently supporting integrations for Gmail, weather, and math calculations via TypeScript, while external Python dependencies for ASR and TTS are managed under external/vibeVoice/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The repository is built for containerized deployment. A Dockerfile is present at the root, and infrastructure/aws/ec2/docker-compose.yml provides a local development stack. Infrastructure as code is defined using Terraform in infrastructure/aws/ec2/, including main.tf and variables.tf. For local Go development, go.mod and go.sum are present; the entry point is main.go.</p><p>Configuration: Configuration is managed via config.toml.example. The README notes optional JWT authentication on the /whip endpoint, utilizing a short-lived token endpoint for signaling security.</p><p>Running it: To run the server locally, the entry point is main.go. For production or cloud deployment, the Terraform configuration in infrastructure/aws/ec2/ can be applied to provision infrastructure on AWS EC2.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>StreamCore fits between a client device and AI services in a voice agent workflow. Audio flows from the client via WebRTC/WHIP into the server, where internal/stt/ processes streaming speech-to-text (with implementations for OpenAI and Deepgram). The transcript feeds into the agent logic, potentially querying internal/rag/rag.go for retrieval-augmented generation, before being passed to internal</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying a low‑latency voice‑agent service requires wiring WebRTC transport, VAD‑driven turn‑taking, streaming STT/LLM/TTS, and optional telephony—all while keeping the media path under the developer’s control. Building that stack from scratch forces teams to re‑implement ICE, RTP, Opus encoding, and interruption handling, which introduces bugs and latency spikes.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>streamcore-server</code> implements the media runtime in Go.</p>
+<ul><li>The core server starts in <strong><code>main.go</code></strong> (entry point <code>main</code>) and spins up the TURN server (<code>internal/turn/server.go</code>) and the WHIP endpoint (<code>internal/signaling/handler.go</code>).</li><li>Audio handling lives in <strong><code>internal/audio/opus.go</code></strong> (Opus encoder/decoder) and <strong><code>internal/audio/rtp.go</code></strong> (RTP packetisation).</li><li>Session orchestration, VAD, and barge‑in logic are in <strong><code>internal/pipeline/*</code></strong> (e.g., <code>pipeline.go</code>, <code>inbound.go</code>, <code>realtime.go</code>).</li><li>LLM, STT, and TTS adapters are under <strong><code>internal/llm/</code></strong>, <strong><code>internal/stt/</code></strong>, and <strong><code>internal/tts/</code></strong> (e.g., <code>openai.go</code>, <code>deepgram.go</code>, <code>cartesia_ws.go</code>).</li><li>Plugins (gmail, math, vision, etc.) are loaded from <strong><code>plugins/</code></strong> via the external plugin manager (<code>internal/plugin/external.go</code>).</li><li>Optional SIP bridge and ESP32 support are provided by separate modules not shown in the call graph but reachable through the plugin system.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <strong><code>main.go:25</code></strong> → <code>main</code>. <code>main</code> loads the configuration (<code>internal/config/config.go</code> → <code>Load</code>), registers plugins (<code>loadPlugins</code>), and starts the HTTP server that routes WHIP POST/DELETE to <code>handleWHIPPost</code> / <code>handleWHIPDelete</code> (<code>internal/signaling/handler.go</code>).</p>
+<p><code>handleWHIPPost</code> creates a new peer (<code>internal/peer/peer.go</code> → <code>New</code>), which in turn builds an Opus encoder/decoder and a data‑channel for realtime events. The peer registers callbacks that forward inbound RTP packets to the pipeline (<code>internal/pipeline/pipeline.go</code> → <code>HandleDataChannelMessage</code>).</p>
+<p>The pipeline (<code>pipeline.go</code>) calls <code>newRealtimeAudioQueue</code>, which invokes VAD (<code>internal/vad/vad.go</code>) to decide turn boundaries. When a turn is closed, <code>internal/pipeline/agent.go</code> triggers <code>synthesizeSentences</code>, which calls the TTS client (<code>internal/tts/cartesia_ws.go</code> → <code>SynthesizeStream</code>). The TTS client opens a WebSocket to Cartesia, streams audio chunks, and writes them back to the RTP stream.</p>
+<p>LLM interaction occurs via <code>internal/llm/openai.go</code> → <code>Chat</code>, which is invoked from <code>internal/pipeline/agent.go</code> when a user turn is ready. The call chain <code>main → Load → loadPlugins → New → handleWHIPPost → New → pipeline → Chat</code> touches external services exactly twice: once for a model inference (OpenAI) and once for a TTS WebSocket.</p>
+<p>The most widely referenced functions are <code>Load</code> (config), <code>Add</code>/<code>Close</code> (transcript handling), and <code>sessionUpdate</code> (realtime state). <code>Load</code> is called from 38 distinct locations, giving it the largest blast radius; changes here affect every request that reads configuration or plugin metadata.</p>
+<p>No circular import cycles were detected, and the internal call graph contains 739 resolved edges, indicating a fairly flat dependency structure. However, deep nesting (up to 7 levels) appears in <code>inbound.go</code>, <code>pipeline.go</code>, and <code>cartesia_ws.go</code>, which can make future modifications harder to trace.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/streamcore-server
+cd streamcore-server
+
+# Build the Go binary (requires Go 1.22+)
+go build -o streamcore .
+
+# Or run directly
+go run main.go</code></pre>
+<p>The server reads configuration from <code>config.toml.example</code> (copy to <code>config.toml</code> and edit). Required keys include:</p>
+<ul><li><code>whip.secret</code> – JWT secret for optional WHIP auth.</li><li><code>stt.provider</code> / <code>tts.provider</code> – names matching the adapters under <code>internal/stt/</code> and <code>internal/tts/</code>.</li></ul>
+<p>For the bundled Python STT/TTS helpers:</p>
+<pre data-lang="bash"><code>cd external/vibeVoice/vibeVoiceAsr
+pip install -r requirements.txt
+python server.py &amp;
+cd ../../vibeVoiceTTS
+pip install -r requirements.txt
+python server.py &amp;</code></pre>
+<p>These expose local HTTP endpoints that the Go runtime can call if configured.</p>
+<p>To launch the full Docker stack (includes Caddy proxy and optional Supabase DB):</p>
+<pre data-lang="bash"><code>docker build -t streamcore .
+docker compose -f infrastructure/aws/ec2/docker-compose.yml up -d</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS voice‑assistant product can point its client SDKs (React, Python, Rust) at the WHIP endpoint (<code>POST /whip</code>). Audio is streamed over Opus/RTP, VAD splits turns, the server forwards the user transcript to a hosted LLM (e.g., OpenAI), receives a response, streams TTS back to the client, and reports per‑turn latency via the data‑channel. Plugins such as <code>plugins/plugins/gmail</code> can be invoked as tool calls from the LLM without leaving the media runtime.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – clarity</strong> – duplicated 6‑line blocks across 14 files (e.g., <code>vibeVoiceAsr/server.py</code>, <code>vibeVoiceTTS/server.py</code>, <code>internal/llm/ollama.go</code>, <code>internal/llm/openai.go</code>). Refactor into shared helpers.</li><li><strong>Medium – cognitive_load</strong> – deep nesting (max depth 7) in <code>internal/pipeline/inbound.go</code>, <code>pipeline.go</code>, <code>cartesia_ws.go</code>. Flatten with early returns.</li><li><strong>Medium – resilience</strong> – broad <code>except:</code> in <code>plugins/plugins/time-get/main.py</code>. Replace with specific exception handling.</li><li><strong>Medium – cognitive_load</strong> – high branching density (46 branches over 156 lines) in several pipeline files. Consider strategy tables or smaller functions.</li></ul>
+<p>No missing license, CI, or Dockerfile; tests are present (27 files). The repository includes a lockfile (<code>go.sum</code>, <code>package-lock.json</code>) and no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>streamcore-server</code> delivers a production‑grade, Go‑native media layer for real‑time voice agents, with clear separation of transport, VAD, and AI integration. The codebase is well‑tested but suffers from duplicated snippets and deeply nested logic that will increase maintenance cost. Teams needing tight control over latency and media handling will find it usable, provided they allocate effort to clean up the identified hotspots.</p>
             </div>
 
             
@@ -102,7 +143,7 @@
                         <ul class="an-bars">
                             <li><span>Go</span><i style="width:100%"></i><b>90</b></li><li><span>Markdown</span><i style="width:21%"></i><b>19</b></li><li><span>YAML</span><i style="width:10%"></i><b>9</b></li><li><span>JSON</span><i style="width:9%"></i><b>8</b></li><li><span>TypeScript</span><i style="width:6%"></i><b>5</b></li><li><span>Python</span><i style="width:3%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span><span>Terraform</span></p>
+                        <p class="an-fw"><span>React</span><span>Docker</span><span>Terraform</span><span>Vector store</span></p>
                     </div>
                 </div>
 

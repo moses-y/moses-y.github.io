@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,31 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Designers needing parametric 3D-printable models typically face a choice between learning a full CAD package or relying on generic generators that lack precision. This repo addresses that gap by providing a Claude Code skill that translates natural language descriptions into executable CadQuery scripts, automating the modeling, preview rendering, and iteration cycle.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository functions as a specialized skill for the Claude Code environment, activating when users describe physical objects. Core functionality is concentrated in gridfinity.py, which generates parametric bins with customizable profiles, stacking lips, and magnetic compartments. The scan-to-pocket pipeline operates via outlinefromscan.py, which processes 3D scans into usable profiles for pocket generation. Model execution and error handling are managed by runcadquerymodel.py, a subprocess wrapper that captures output and optionally triggers preview.py for STL-to-PNG rendering. Example scripts in examples/ demonstrate practical applications, such as the mxmaster3bin3x3.py generator, which uses outlinefrom_scan.py to trace a real object&#39;s footprint.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Installation requires Python 3.10 through 3.12, as CadQuery&#39;s OCC kernel lacks wheels for 3.13+. Create a virtual environment and install dependencies:</p><p>mkdir -p ~/.claude/skills
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Generating parametric 3D-printable models typically means hand-writing CadQuery scripts, iterating on geometry, and managing STL exports and previews manually. This repo packages that workflow as a Claude Code skill so an LLM can design, validate, and refine a part through natural-language requests, with the user inspecting rendered previews between iterations.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo is a Claude Code skill plus a Python toolchain. <code>gridfinity.py</code> is the core: a tested parametric Gridfinity bin generator supporting stacking lips, magnets, compartments, and custom pockets. <code>outline_from_scan.py</code> extracts a pocket outline from a 3D scan, and <code>preview.py</code> renders headless STL-to-PNG previews. <code>run_cadquery_model.py</code> wraps script execution, captures errors, and emits JSON so Claude can self-correct in a loop.</p>
+<p>Supporting files: <code>mesh_io.py</code> handles validated STL loading, <code>stl_to_3mf.py</code> converts to Bambu/Prusa formats, and <code>examples/</code> contains two complete model scripts (a D110 label-printer cradle and an MX Master 3 mouse bin). <code>SKILL.md</code> defines the skill's trigger keywords and workflow instructions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>outline_from_scan.py:82</code>, which reaches 22 functions. The typical flow: user describes a part → Claude writes a CadQuery script → <code>run_cadquery_model.py</code> executes it in a subprocess → <code>preview.py</code> renders views → Claude iterates.</p>
+<p>The import graph shows 13 modules with 9 edges and no circular dependencies. <code>mesh_io.py</code> is the most-imported module (5 importers) but imports nothing itself—it's a stable leaf. <code>gridfinity.py</code> is the functional hub: 35 functions, 7 classes, called from 1 other file. The call graph confirms its blast radius: <code>GridfinityBin</code> and <code>build</code> are each called from 20 distinct places; <code>_validate</code> calls <code>GridfinityError</code> 17 times. Change those and the most breaks.</p>
+<p>File-by-file responsibility: <code>gridfinity.py</code> owns bin geometry, <code>preview.py</code> owns rendering, <code>run_cadquery_model.py</code> owns the subprocess loop, <code>outline_from_scan.py</code> owns scan processing, <code>stl_to_3mf.py</code> owns format conversion. The two example scripts are thin—each defines one function and routes through <code>gridfinity.py</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code>mkdir -p ~/.claude/skills
 git clone https://github.com/flowful-ai/cad-skill ~/.claude/skills/parametric-3d-printing
 python3.12 -m venv .venv &amp;&amp; source .venv/bin/activate
-pip install</p>
+pip install -r requirements.txt</code></pre>
+<p><strong>Running it:</strong> Install as a Claude Code skill. Trigger via natural language ("design a wall mount for an Arduino Uno") or the <code>/parametric-3d-printing</code> slash command. Requires Python 3.10-3.12—CadQuery's OCC kernel has no wheels for 3.13+.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A user asks for a Gridfinity bin for a Logitech MX Master 3. Claude writes a script using <code>gridfinity.py</code>, calls <code>outline_from_scan.py</code> to trace the mouse's footprint from a 3D scan, rotates it to minimize the bounding square, and generates a bin with a tilted thumb scoop. <code>run_cadquery_model.py</code> executes the script, <code>preview.py</code> renders six views, and the user inspects before printing.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (deterministic, from the pipeline's code analysis) found 10 issues: 3 high, 7 medium, 4 kinds.</p>
+<ul><li><strong>High - Deep nesting</strong> - <code>gridfinity.py</code>, <code>outline_from_scan.py</code>, <code>tests/test_gridfinity.py</code>. Max indentation depth 11; control flow is hard to follow. Flatten with early returns/guard clauses.</li><li><strong>Medium - Broad exception handling</strong> - <code>preview.py</code>. Bare or Exception-wide <code>except</code> swallows errors. Catch specific exceptions.</li><li><strong>Medium - File opened without context manager</strong> - <code>outline_from_scan.py</code>. Use <code>with open(...)</code> for deterministic close.</li><li><strong>Medium - Duplicated code blocks</strong> - <code>examples/gridfinity_d110_bin.py</code>, <code>examples/mx_master3_bin_3x3.py</code>. 5 repeated 6-line blocks across 2 files.</li></ul>
+<p>SDLC observations: no CI/CD pipeline (no <code>.github/</code> or CI config), dependencies declared without a lockfile (<code>requirements.txt</code> only, non-reproducible builds). Tests exist (5 files) and a license is present. Four of six dependencies are behind current major versions (pillow, lxml, trimesh, numpy).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A focused, well-structured toolchain for LLM-driven parametric CAD. <code>gridfinity.py</code> is the workhorse and carries the most risk when changed. The main gaps are reproducibility (no lockfile), CI, and deep-nesting cleanup in the core module. Suitable for anyone using Claude Code for 3D-printable part generation who wants a tested, extensible foundation.</p>
             </div>
 
             

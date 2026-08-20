@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,55 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI-assisted programming requires diagram visualization directly in terminals or chat interfaces. The default Mermaid renderer limits customization, lacks terminal output, and pulls heavy DOM dependencies for simple diagrams. Teams building AI coding assistants need a fast, themeable renderer that works across rich UIs and plain terminals without forcing a browser environment.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>beautiful-mermaid renders Mermaid diagrams as SVGs or ASCII/Unicode art through a TypeScript codebase of 161 files. The ASCII engine lives in src/ascii/—a port from Go</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers using Mermaid often need diagram output that works in terminals, CI logs, or environments without a DOM. The upstream renderer is SVG‑only, heavy, and hard‑to‑theme, forcing teams to write custom post‑processing or maintain separate rendering pipelines.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>beautiful-mermaid</code> supplies a pure‑TypeScript engine that converts Mermaid source into either SVG (via <code>src/renderer.ts</code> and <code>src/theme.ts</code>) or ASCII/Unicode art (via <code>src/ascii/index.ts</code>, <code>src/ascii/draw.ts</code>, <code>src/ascii/canvas.ts</code>). The public API lives in <code>src/index.ts</code> and re‑exports the two entry functions <code>renderMermaid</code> and <code>renderMermaidAscii</code>. Themes are defined in <code>src/theme.ts</code> and applied without touching the DOM, leveraging the <code>shiki</code> highlighter for colour palettes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <strong><code>src/index.ts</code></strong>:</p>
+<ol><li><strong><code>renderMermaid</code></strong> → parses the diagram with <code>src/parser.ts</code>, builds a layout through <code>src/layout.ts</code> (which delegates to <code>src/dagre-adapter.ts</code> for graph positioning), then renders SVG with <code>src/renderer.ts</code>.</li><li><strong><code>renderMermaidAscii</code></strong> → calls <code>src/ascii/index.ts</code>, which creates an <code>AsciiCanvas</code> (<code>src/ascii/canvas.ts</code>), runs the ASCII draw routine (<code>src/ascii/draw.ts</code>), and finally produces a string.</li></ol>
+<p>Key dependencies:</p>
+<ul><li><code>src/layout.ts</code> imports the most modules (15 outgoing edges) and is the primary stability hotspot (<code>instability 0.71</code>).</li><li><code>src/ascii/draw.ts</code> participates in a circular import with <code>src/ascii/grid.ts</code>; both pull types from each other, inflating the blast radius for any change to grid logic.</li><li>Theme handling (<code>src/theme.ts</code>) and style constants (<code>src/styles.ts</code>) are pure data modules with zero outgoing imports, making them safe to modify.</li></ul>
+<p>The import graph shows 51 internal modules and 112 edges; only two modules are involved in cycles, limiting the risk of widespread ripple effects, but the cycle in the ASCII path adds cognitive load.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/beautiful-mermaid
+cd beautiful-mermaid
+
+# Install dependencies (npm is inferred from package.json)
+npm install
+
+# Build the library (tsup config present)
+npm run build   # runs tsup as defined in package.json scripts</code></pre>
+<p><strong>Render SVG</strong></p>
+<pre data-lang="ts"><code>import { renderMermaid } from './src/index.js';
+
+const svg = await renderMermaid(`
+graph TD
+  A[Start] --&gt; B{Decision}
+  B --&gt;|Yes| C[Action]
+  B --&gt;|No| D[End]
+`);
+console.log(svg);</code></pre>
+<p><strong>Render ASCII</strong></p>
+<pre data-lang="ts"><code>import { renderMermaidAscii } from './src/index.js';
+
+const ascii = renderMermaidAscii('graph LR; A --&gt; B --&gt; C');
+console.log(ascii);</code></pre>
+<p>The library also ships a browser bundle (<code>dist/beautiful-mermaid.browser.global.js</code>) referenced in the README, but no additional configuration files are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can embed diagram generation in markdown reports. For example, a test suite could call <code>renderMermaidAscii</code> on a generated flowchart and paste the result into a GitHub Actions log, giving reviewers a quick visual without opening a browser.</p>
+<pre data-lang="ts"><code>import { renderMermaidAscii } from 'beautiful-mermaid';
+import fs from 'fs';
+
+const diagram = fs.readFileSync('src/__tests__/testdata/ascii/cls_basic.txt', 'utf8');
+console.log(renderMermaidAscii(diagram));</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High (soundness) – Import cycle</strong>: <code>src/ascii/draw.ts</code> ↔ <code>src/ascii/grid.ts</code>. Break the cycle by extracting shared types into a separate module.</li><li><strong>High (clarity) – Duplicated code blocks</strong>: 47 identical 6‑line snippets across <code>samples-data.ts</code> and multiple test files. Consolidate into shared helpers.</li><li><strong>High (cognitive load) – Oversized files</strong>: <code>samples-data.ts</code>, <code>index.ts</code>, <code>src/layout.ts</code> each exceed 900 lines; consider splitting by responsibility.</li><li><strong>Medium – High branching density</strong>: <code>src/ascii/index.ts</code>, <code>src/ascii/draw.ts</code>, <code>src/dagre-adapter.ts</code> contain &gt;19 branch points in &lt;65 lines, making them harder to reason about. Refactor to strategy tables or smaller functions.</li><li><strong>Dependency drift</strong>: <code>@dagrejs/dagre</code> (^1.1.8), <code>typescript</code> (^5.0.0), <code>shiki</code> (^3.19.0) are 1–2 major versions behind current releases, potentially missing bug fixes and performance improvements.</li><li><strong>Missing lockfile</strong>: No <code>package-lock.json</code> or <code>pnpm-lock.yaml</code>; reproducible builds rely on the <code>bun.lock</code> which is not used by npm. Add an npm lockfile.</li><li><strong>CI present</strong>: GitHub Actions workflow (<code>.github/workflows/ci.yml</code>) runs the test suite, indicating basic quality gates are in place.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>beautiful-mermaid</code> delivers a functional, zero‑DOM Mermaid renderer with both SVG and terminal‑friendly ASCII outputs. The core architecture is clear, but the codebase suffers from a few large, tightly coupled modules and outdated dependencies. It is suitable for teams that need fast diagram rendering in non‑browser contexts, provided they allocate effort to refactor the identified hot spots and bring the dependency versions up‑to‑date.</p>
             </div>
 
             

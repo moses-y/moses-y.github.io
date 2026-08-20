@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,45 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers often want to reverse-engineer a public GitHub repo into a concise, conversational LLM prompt for &quot;vibe coding,&quot; but the manual effort of extracting metadata, file trees, and README context is time-consuming and inconsistent. GitReverse addresses this by automating the distillation flow.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The app lives in app/ with route handlers that orchestrate the reverse flow. app/api/reverse-prompt/route.ts is the primary endpoint that pulls repo metadata, a depth-1 file tree via lib/parse-github-repo.ts, and the</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want to reproduce a public GitHub project from scratch need a concise, human‑readable description that captures the repository’s intent, key files, and usage pattern. Crafting such a prompt manually is time‑consuming and error‑prone, especially for larger projects.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>gitreverse</code> is a Next.js 16 web app that turns any public GitHub repo into a single synthetic prompt suitable for LLM‑driven code generation tools (Cursor, Claude, Codex, etc.). The home page (<code>app/page.tsx</code>) presents a URL input; when a user submits <code>owner/repo</code>, the app fetches:</p>
+<ul><li>repository metadata via the GitHub API (<code>lib/github-client.ts</code>)</li><li>a shallow file‑tree (<code>lib/file-tree-formatter.ts</code>)</li><li>the README (<code>lib/parse-github-repo.ts</code>)</li></ul>
+<p>These pieces are assembled and sent to a configurable LLM endpoint (see <code>env.example</code> for provider keys). The response is displayed as a short, conversational prompt. Shareable URLs (<code>/[owner]/[repo]</code>, <code>/[owner]/[repo]/deep</code>, etc.) route directly to the same flow, enabling easy link sharing.</p>
+<p>Key files:</p>
+<ul><li><code>app/api/reverse-prompt/route.ts</code> – API route that orchestrates data collection and LLM call.</li><li><code>lib/custom-reverse-rate-limit.ts</code> – rate‑limiting middleware for the API.</li><li><code>components/reverse-prompt-home.tsx</code> – UI for input, result display, and copy‑to‑clipboard.</li><li><code>contexts/AuthContext.tsx</code> – optional Supabase‑backed auth for the <code>/library</code> page.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Next.js’ App Router treats every <code>app/**/*.tsx</code> file as a route entry point. The primary request path for a reverse operation is <code>/api/reverse-prompt</code>, handled by <code>app/api/reverse-prompt/route.ts</code>. Execution flow:</p>
+<ol><li><strong>HTTP request</strong> → <strong>Next.js server</strong> invokes the route handler.</li><li>Handler calls <code>lib/github-client.ts</code> → <code>fetchRepoInfo</code> (GitHub API).</li><li>Calls <code>lib/file-tree-formatter.ts</code> → <code>formatTree</code> (depth‑1 file list).</li><li>Calls <code>lib/parse-github-repo.ts</code> → <code>extractReadme</code> (raw README).</li><li>Packages the three payloads into a prompt and posts to the selected LLM using the provider‑specific env vars (<code>XAI_API_KEY</code>, <code>OPENAI_API_KEY</code>, etc.).</li><li>Returns the LLM’s response JSON, which <code>components/reverse-prompt-home.tsx</code> renders.</li></ol>
+<p>Static analysis detected <strong>zero import edges</strong> among the 43 TypeScript/TSX modules, meaning the import graph is not captured by the current pipeline. Consequently, the wiring map consists of isolated route files that each directly import the needed helpers; there are no observed circular dependencies or shared internal modules. The widest blast radius belongs to <code>app/api/reverse-prompt/route.ts</code>, as it touches the GitHub client, file‑tree formatter, README parser, and external LLM services.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/gitreverse.git
+cd gitreverse
+
+# Install dependencies (pnpm lockfile present)
+pnpm install
+
+# Copy env template and add at least one LLM key
+cp .env.example .env.local
+# edit .env.local → set XAI_API_KEY, OPENAI_API_KEY, etc.
+
+# Start dev server
+pnpm dev   # runs Next.js on http://localhost:3000</code></pre>
+<p>To run a production build:</p>
+<pre data-lang="bash"><code>pnpm build
+pnpm start</code></pre>
+<p>No test runner, CI config, or Dockerfile is provided.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A development team can embed <code>gitreverse</code> in an internal documentation portal. When a new open‑source dependency is added, a team member pastes its <code>owner/repo</code> into the UI; the generated prompt is stored and later fed to an LLM to scaffold a wrapper library, saving hours of manual reading.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Duplicated code</strong> – Repeated 6‑line blocks across 13 page components (<code>app/[owner]/[repo]/*.tsx</code>).</li><li><strong>HIGH – Oversized file</strong> – <code>components/reverse-prompt-home.tsx</code> (1,387 lines) makes local changes high‑risk.</li><li><strong>MED – Empty catch block</strong> – <code>app/layout.tsx</code> silently swallows errors.</li><li><strong>MED – Deep nesting</strong> – Nesting depth 6 in <code>components/auth/AuthModal.tsx</code>, <code>components/navbar.tsx</code>, and the oversized home component.</li><li><strong>MED – High branching density</strong> – Decision‑heavy logic in <code>lib/custom-reverse-rate-limit.ts</code> and <code>lib/stripe-checkout-navigate.ts</code>.</li><li><strong>MED – Missing test suite</strong> – No <code>*.test.*</code> files detected.</li><li><strong>MED – No CI/CD pipeline</strong> – No <code>.github/workflows</code> or other CI config.</li><li><strong>MED – No LICENSE</strong> – Repository lacks explicit usage rights.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional speculative issues are reported.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>gitreverse</code> delivers a functional, low‑friction UI for generating LLM prompts from public GitHub repos, but the codebase suffers from significant duplication, an oversized core component, and minimal test/CI coverage. It is suitable for prototyping or internal tooling where rapid prompt creation outweighs long‑term maintainability concerns. Teams requiring a stable, well‑tested service should address the highlighted health issues before production use.</p>
             </div>
 
             

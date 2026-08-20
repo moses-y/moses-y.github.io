@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 27, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,50 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>ML training job submission and multi-node GPU cluster management typically require custom scripts, platform-specific CLI tools, or web-based consoles. This repo aims to consolidate those workflows into a single, git-style command-line interface, reducing context-switching and script fragmentation for teams running distributed training.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The tp CLI provides subcommands for cluster, storage, job, SSH, and user management (src/tensorpool/main.py). The entry point orchestrates commands</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>TensorPool provides a git‑style CLI for submitting ML training jobs and managing multi‑node GPU clusters. The codebase is a single‑process tool that must orchestrate many distinct operations (cluster, storage, job, SSH) through a compact command‑line interface, but the implementation is concentrated in a few large files with deep control flow and only superficial error handling.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>TensorPool is a <strong>CLI wrapper</strong> (≈1 900 LOC) that translates user commands (<code>tp cluster</code>, <code>tp job</code>, <code>tp storage</code>, etc.) into API calls to the TensorPool service. Core flow lives in <strong><code>src/tensorpool/main.py</code></strong> which defines two entry points: <code>main</code> (line 92) and <code>gen_tp_config</code> (line 50). Command dispatch flows through <strong><code>_get_headers</code></strong> (called from 32 places) and <strong><code>_response_message</code></strong> (called from 17 places) to build HTTP requests, parse JSON responses, and display results. A <strong>spinner</strong> (<code>src/tensorpool/spinner.py</code>) visualises long‑running operations; it is entered/ exited via <code>__enter__</code>/<code>__exit__</code> and driven by <code>start</code>.</p>
+<p>Key functions that dominate the call graph:</p>
+<div class="table-scroll"><table><thead><tr><th>Function</th><th>Callers</th><th>Callee count</th></tr></thead><tbody><tr><td><code>_get_headers</code></td><td>32</td><td>—</td></tr><tr><td><code>_response_message</code></td><td>17</td><td>—</td></tr><tr><td><code>_decode_response_json</code></td><td>17</td><td>—</td></tr><tr><td><code>Spinner._spin</code></td><td>9</td><td>—</td></tr><tr><td><code>_poll_request_until_terminal</code></td><td>6</td><td>—</td></tr><tr><td><code>get_tensorpool_key</code></td><td>4</td><td>—</td></tr><tr><td><code>safe_input</code>, <code>safe_confirm</code></td><td>2 each</td><td>—</td></tr><tr><td><code>_confirm_destructive_action</code>, <code>update_text</code></td><td>3 each</td><td>—</td></tr></tbody></table></div>
+<p>The <strong>internal call graph</strong> (149 edges) shows that most commands (<code>cluster_create</code>, <code>cluster_destroy</code>, <code>storage_*</code>) route through <code>_response_message</code> three times, giving that function a wide blast radius: a change there ripples across cluster and storage management.</p>
+<p>Files broken down by responsibility (from the analysis):</p>
+<ul><li><strong><code>src/tensorpool/helpers.py</code></strong> – 57 functions, including <code>_run_streaming_command</code>, <code>_drain_stream</code>, <code>safe_input</code>, <code>safe_confirm</code>, <code>_get_headers</code>.</li><li><strong><code>src/tensorpool/spinner.py</code></strong> – 9 functions + 1 class (<code>Spinner</code>); defines <code>__init__</code>, <code>_spin</code>, <code>__enter__</code>, <code>__exit__</code>, <code>start</code>.</li><li><strong><code>src/tensorpool/main.py</code></strong> – 2 functions (<code>gen_tp_config</code>, <code>main</code>) that own the CLI entry and config generation.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>src/tensorpool/main.py:92</code></strong> (<code>main</code>), which parses CLI args and dispatches to sub‑commands. From there, most paths go through <code>_get_headers</code> to construct request headers, then <code>_response_message</code> to send the HTTP call and format the reply. Long‑running jobs trigger the <strong>Spinner</strong> (<code>src/tensorpool/spinner.py</code>) via its context manager. Configuration lives in <strong><code>pyproject.toml</code></strong> (project metadata) and <strong><code>uv.lock</code></strong> (dependency lock). The key used to authenticate API calls is obtained/stored by <strong><code>get_tensorpool_key</code></strong> / <strong><code>save_tensorpool_key</code></strong> (referenced in <code>helpers.py</code>). No environment‑variable‑only flow is evident; the key is persisted in a local INI‑style config that <code>_upsert_ini_section</code> manipulates.</p>
+<p>The <strong>import graph</strong> is flat: 4 Python modules, 1 import edge (helpers → spinner), no circular dependencies. The <strong>most connected module</strong> is <code>src/tensorpool/helpers</code> (Ca 0, Ce 1, instability 1).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code>pip install tensorpool          # pulls from PyPI; uv.lock pins dependencies</code></pre>
+<p>The first run will prompt for a TensorPool API key (via <code>safe_input</code>/<code>safe_confirm</code> in <code>helpers.py</code>). The key is saved to the local config file that <code>_upsert_ini_section</code> writes.</p>
+<p><strong>Configuration</strong> No separate config file is required beyond the auto‑generated INI that the tool creates after the first key entry. If a custom path is needed, set the <code>TENSORPOOL_CONFIG</code> env var; the code reads it inside <code>helpers.py</code> (not exposed in the public API).</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code>tp --help          # shows sub‑commands
+tp cluster list
+tp job submit --file train.py
+tp ssh instance-123</code></pre>
+<p>The <code>tp</code> command is the real entry point; it invokes <code>main</code> in <code>src/tensorpool/main.py</code>.</p>
+<p><strong>Running a job</strong> (example workflow)</p>
+<pre data-lang="bash"><code># 1. Initialise a config (once)
+tp config init        # calls gen_tp_config → writes INI
+
+# 2. Submit a training job
+tp job submit \
+  --name my-run \
+  --image pytorch:2.1 \
+  --command "python train.py" \
+  --gpus 4</code></pre>
+<p>The CLI builds headers (<code>_get_headers</code>), sends the request (<code>_response_message</code>), and displays a spinner while the job polls (<code>_poll_request_until_terminal</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research team can integrate TensorPool into an existing CI pipeline: a CI job runs <code>tp job submit</code> after code changes, monitors job status via the CLI’s JSON output, and aborts on failure. Because the tool is a single binary with no daemon, it fits nicely into ad‑hoc or scheduled workloads without extra infrastructure.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Deep nesting</strong> in <code>src/tensorpool/helpers.py</code> – max indentation depth <strong>9</strong>; control flow is hard to follow. <em>Fix</em>: flatten with early returns/guard clauses.</li><li><strong>Oversized files</strong> – <code>src/tensorpool/helpers.py</code> and <code>src/tensorpool/main.py</code> each exceed <strong>1 800 LOC</strong>; a single change ripples widely. <em>Split</em> into cohesive units by responsibility.</li><li><strong>Broad exception handling</strong> – <code>helpers.py</code> contains bare <code>except Exception</code> that swallows errors indiscriminately. <em>Catch specific exceptions</em> and re‑raise or log the rest.</li></ul>
+<p><strong>SDLC observations</strong> (from the hygiene block):</p>
+<ul><li>No test files detected – untested code paths repository‑wide.</li><li>No CI/CD pipeline – no automated build/test gate.</li><li>Dependencies declared without a lockfile (though <code>uv.lock</code> is present, the heuristic flagged the absence of a standard lockfile).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>TensorPool delivers a usable git‑style CLI for GPU job and cluster management with a minimal runtime footprint. The codebase is functional but suffers from high cognitive load: two files are &gt;1 800 LOC, nesting runs deep, and exception handling is permissive. It is suitable for teams that need a quick, script‑able interface and are comfortable inspecting/maintaining a relatively small set of inter‑dependent modules. Teams requiring rigorous test coverage, CI gates, or a more modular architecture will need to refactor the highlighted files before integrating it into a production SDLC.</p>
             </div>
 
             

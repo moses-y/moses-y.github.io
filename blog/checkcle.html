@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 22, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">TSX</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>checkcle</h1>
@@ -80,31 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations that need real‑time visibility across servers, APIs, and containers often rely on SaaS monitoring tools that lock data into proprietary pipelines. A self‑hosted alternative that can run on modest hardware, expose a full‑stack dashboard, and integrate with existing alert channels is scarce without heavy custom engineering.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>CheckCle is a React‑based web application (≈100 TSX files under application/src) that provides uptime checks, incident tracking, and a public status page. The front‑end communicates with a backend API located at application/src/api/ – index.ts aggregates endpoints, while realtime/index.ts and settings/index.ts handle streaming data and configuration respectively.</p><p>Deployment is containerised: application/Dockerfile builds the image, and application/package.json (npm) manages the JavaScript dependencies. The repository also ships a GitHub Actions workflow (.github/workflows/build-frontend-image.yml.dev) that compiles and pushes the image on each push. Data such as persistent storage and user settings are held on a host volume (/opt/pbdata) mapped in the Docker Compose example found in the README.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>The simplest path is the Docker Compose snippet documented in the README:</p><p>version: &#39;3.9&#39;
-services:
-  checkcle:
-    image: operacle/checkcle:latest
-    containername: checkcle
-    restart: unless-stopped
-    ports:
-&quot;8090:8090&quot;
-    volumes:
-/opt/pbdata:/mnt/pbdata
-    ulimits:
-      nofile:
-        soft: 4096
-        hard: 8192</p><p>Alternatively, a one‑liner docker run command is provided:</p><p>docker run -d \
-  --name checkcle \
-  --restart unless-stopped \
-  -p 8090:8090 \
-  -v /opt/pbdata:/mnt/pbdata \
-  --ulimit nofile=4096:8192 \
-  operacle/checkcle:latest</p><h3 class="post-h" id="configuration">Configuration</h3><p>No .env files are committed; the application reads its default settings from the backend API (application/src/api/settings/). The settings/actions/getSettings.ts and updateSettings.ts endpoints allow administrators to adjust user management, data retention, theme, and notification channels through the UI or via the API.</p><h3 class="post-h" id="running-it">Running it</h3><p>After the container starts, the web UI is reachable at http://0.0.0.0:8090. The initial credentials are admin@example.com / Admin123456 (as noted in README.md). From there you can add monitors, configure regional agents under application/src/components/regional-monitoring/, and create incidents via application/src/components/schedule-incident/.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A DevOps team running a mix of Linux servers and Docker containers can deploy CheckCle on a single low‑cost VM. They point the /opt/pbdata volume to a durable disk, then use the UI to add HTTP/TCP checks for each service. When a check fails, the system creates an incident record (application/src/components/schedule-incident/incident/) and can push notifications to Slack, Telegram, or email through the settings panel. The regional monitoring feature (RegionalAgentCard.tsx, RegionalMonitoringContent.tsx) lets them distribute checks across multiple geographic nodes, providing a view of global uptime without third‑party SaaS.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests &amp; CI – Four test files exist under application/src/components/…/hooks/ and a GitHub Actions workflow builds the frontend image on every push, giving basic confidence that the build pipeline works.  
-License &amp; Security – LICENSE.md, SECURITY.md, and CODEOF_CONDUCT.md are present, indicating an open‑source governance model.  
-Dependency hygiene – package-lock.json is checked in, locking resolved versions. No obvious vulnerable dependencies were flagged in the quick scan, but a full npm audit is recommended before production use.  
-Configuration exposure – The default admin credentials are documented in the README; teams should rotate these and bind the container to a trusted network only.  
-Missing secrets handling – No .env or secret management is committed; any API keys or tokens for external services (e.g., Slack webhooks) must be injected at runtime or via external secret stores.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>CheckCle delivers a functional, self‑hosted monitoring stack with a modern React front‑end, Docker‑based deployment, and built‑in incident/notification workflows. It is well‑suited for small‑to‑medium teams that need real‑time uptime and infrastructure visibility without surrendering data to a SaaS vendor. The main trade‑off is the need to manage</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>CheckCle solves the operational gap between uptime monitoring and infrastructure visibility. Most monitoring tools give you either service uptime or server metrics, rarely both in one place. Teams end up stitching together multiple tools and still lack a unified view of incidents, maintenance windows, and status pages.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>CheckCle is a self-hosted monitoring platform combining uptime checks (HTTP, DNS, Ping, TCP), infrastructure server monitoring (CPU, RAM, disk), and incident management. The <code>application/</code> directory holds a React/TypeScript frontend (290 TSX files, 265 TS files) with dashboards, Docker container views, and public status pages. The <code>server/</code> directory contains Go backends, including <code>core_backend-server</code> (598 code files) and <code>service-operation</code>, handling check execution and data persistence.</p>
+<p>The platform supports distributed regional monitoring via agents, scheduled maintenance windows, and notifications through email, Telegram, Discord, Slack, and Matrix. The <code>application/public/upload/notification/</code> directory shows the supported channels. Docker deployment is first-class, with <code>docker-compose.yml</code> at the root and separate Dockerfiles for frontend and backend.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The call graph shows 618 internal modules with 670 import edges and zero circular dependencies—a clean structure. The frontend entry point is <code>application/index.html</code> → <code>application/src/App.tsx</code>, which routes through <code>application/src/api/index.ts</code> for API calls and <code>application/src/api/realtime/index.ts</code> for real-time updates. The <code>application/src/App</code> component has the highest instability (0.95), importing 19 modules—it's the composition root but changes there ripple outward.</p>
+<p>The backend's effect surface lives in the Go modules. The <code>server/core_backend-server/apis/</code> directory handles HTTP endpoints, with the largest files being test suites (<code>collection_test.go</code> at 1532 lines, <code>record_auth_with_oauth2_test.go</code>, <code>record_crud_test.go</code>). The <code>service-operation</code> module handles background check execution and notification dispatch.</p>
+<p>The highest-blast-radius module is <code>application/src/services/types/maintenance.types.ts</code>—12 modules depend on it (Ca=12, Ce=0). It's a leaf type definition, so its stability is good, but any breaking change to those types forces updates across a dozen consumers.</p>
+<p>One notable wiring gap: the <code>server/service-operation/.env</code> file exists in the repo, flagged as a potential committed secret. This is a security concern worth verifying immediately.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/checkcle
+cd checkcle
+
+# Docker Compose (recommended)
+docker compose up -d
+# Access http://localhost:8090
+# Default: admin@example.com / Admin123456
+
+# Or build the frontend separately
+cd application
+npm install
+npm run dev</code></pre>
+<p>Configuration lives in environment variables and the <code>server/service-operation/.env</code> file. The <code>docker-compose.yml</code> maps host port 8090 to the container and mounts <code>/opt/pb_data</code> for persistent storage. The frontend uses Vite (<code>application/vite.config.ts</code>) and Tailwind for styling.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A DevOps team running a SaaS product deploys CheckCle on a single VM via Docker. They configure HTTP checks for their API endpoints, install the agent script on Linux servers for CPU/memory metrics, and set up a public status page at <code>status.company.com</code>. When a server's disk fills, CheckCle triggers a Discord notification, creates an incident record, and updates the status page—all without a separate incident management tool.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 228 issues: 28 high, 200 medium, across 5 kinds. The most significant:</p>
+<ul><li><strong>High - Deep nesting (48 instances)</strong> - <code>application/src/components/dashboard/StatusCards.tsx</code>, <code>EditServerDialog.tsx</code>, <code>ResponseTimeChart.tsx</code> reach indentation depth 8. Control flow is hard to follow; early returns would help.</li><li><strong>High - Duplicated code (1543 repeated 6-line blocks across 284 files)</strong> - <code>sendTestEmail.ts</code> and <code>testEmail.ts</code> are near-identical. DRY refactoring is overdue.</li><li><strong>High - Oversized files (7)</strong> - The three Go test files exceed 1500 lines each. These are hard to maintain and slow to run.</li><li><strong>Medium - Hub module</strong> - <code>maintenance.types.ts</code> has 12 dependents; keep it stable.</li><li><strong>Medium - High branching density (3 files)</strong> - <code>IncidentDetailDialog.tsx</code> has 16 branch points over 46 lines.</li></ul>
+<p>The repo has CI (GitHub Actions), tests (264 files), and a license. The committed <code>.env</code> file in <code>server/service-operation/</code> is the most urgent concern—rotate any secrets in it and add it to <code>.gitignore</code>.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>CheckCle is a functional, full-featured monitoring platform with a clean module graph and zero circular dependencies—a solid foundation. The duplicated code and oversized test files suggest the codebase grew quickly, but nothing here is blocking adoption. Teams wanting a self-hosted alternative to UptimeRobot or HetrixTools with built-in incident management should evaluate it; the committed <code>.env</code> file needs immediate attention before production use.</p>
             </div>
 
             
@@ -114,18 +122,18 @@ Missing secrets handling – No .env or secret management is committed; any API 
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">7<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,316<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TSX</span><i style="width:100%"></i><b>100</b></li><li><span>TypeScript</span><i style="width:37%"></i><b>37</b></li><li><span>YAML</span><i style="width:8%"></i><b>8</b></li><li><span>Markdown</span><i style="width:5%"></i><b>5</b></li><li><span>JSON</span><i style="width:4%"></i><b>4</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>529</b></li><li><span>TSX</span><i style="width:55%"></i><b>290</b></li><li><span>TypeScript</span><i style="width:50%"></i><b>265</b></li><li><span>JavaScript</span><i style="width:12%"></i><b>64</b></li><li><span>YAML</span><i style="width:3%"></i><b>17</b></li><li><span>Markdown</span><i style="width:3%"></i><b>15</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span><span>Docker</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -136,6 +144,12 @@ Missing secrets handling – No .env or secret management is committed; any API 
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>server/service-operation/.env</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1218214266">Open in Code Brain &rarr;</a>

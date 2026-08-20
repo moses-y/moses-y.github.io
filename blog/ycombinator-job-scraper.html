@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">original</span>
                 </div>
@@ -80,10 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#configuration">Configuration</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tech professionals often miss timely Y Combinator job postings because the board updates once daily and manual checking is inefficient. This repo solves that by automating the scrape, persisting listings, and delivering WhatsApp alerts without requiring a constant browser session.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The core scraping logic lives in src/scraper.py, which extracts listings from Y Combinator’s job board. Results are persisted via src/database.py, and new matches trigger WhatsApp messages through src/messaging.py, which integrates Twilio’s API. The entry point src/main.py orchestrates the pipeline. Scheduled runs are configured in .github/workflows/scraper.yml, and the Windows-specific Chromedriver binaries in assets/chromedriver-win64 indicate the current implementation relies on Selenium for rendering.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup  
-pip install -r requirements.txt</p><h3 class="post-h" id="configuration">Configuration</h3><p>Set the following environment variables (as documented in README.md):  
-TWILIOACCOUNTSID, TWILIOAUTHTOKEN, TWILIOPHONENUMBER, YOURPHONENUMBER. No .env</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Manually checking Y Combinator's job board is tedious and easy to forget. This scraper automates the daily check and pushes new listings to WhatsApp, so a job seeker gets notified without opening the browser.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo is a small Python project that scrapes Y Combinator job listings, stores them in a local SQLite database, and sends a WhatsApp alert for new jobs. It runs on a schedule via GitHub Actions.</p>
+<p>The code is split into four modules under <code>src/</code>: <code>scraper.py</code> handles fetching and parsing job pages, <code>database.py</code> manages SQLite storage, <code>messaging.py</code> sends WhatsApp messages through Twilio, and <code>main.py</code> is the entry point that orchestrates the flow. Tests live in <code>tests/</code> and cover the scraper, database, and messaging logic.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>src/main.py:9</code>. It calls <code>init_db</code> to create the database, <code>get_existing_job_urls</code> to load already-seen jobs, <code>scrape_jobs</code> to fetch new listings, <code>insert_job</code> for each new one, and <code>send_whatsapp_message</code> to alert the user. The path from entry point to external effect is short: <code>main</code> -&gt; <code>scrape_jobs</code> -&gt; <code>fetch_page_content</code> -&gt; <code>setup_driver</code> (Selenium), then <code>main</code> -&gt; <code>insert_job</code> -&gt; <code>get_db_connection</code> (SQLite), and <code>main</code> -&gt; <code>send_whatsapp_message</code> (Twilio API).</p>
+<p>The most connected modules are <code>src/database.py</code>, <code>src/messaging.py</code>, and <code>src/scraper.py</code>, each with one importer and no imports of their own — they are leaf modules with zero instability. <code>get_db_connection</code> is called from 3 places, making it the highest-blast-radius function; changing its signature breaks <code>init_db</code>, <code>insert_job</code>, and <code>get_existing_job_urls</code>. <code>parse_jobs</code> calls <code>clean_text</code> three times per run, so any change to text normalization affects every parsed listing. <code>src/sandbox_reminder.py</code> is a separate script with its own <code>main</code> and <code>setup_driver</code>, not wired into the primary flow.</p>
+<p>The module graph shows no circular dependencies. The main risk for a contributor is the tight coupling between <code>scraper.py</code> and <code>database.py</code> — both must change together if the job schema evolves.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/ycombinator-job-scraper
+cd ycombinator-job-scraper
+pip install -r requirements.txt</code></pre>
+<p><strong>Configuration</strong>: Set four environment variables: <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, <code>TWILIO_PHONE_NUMBER</code>, and <code>YOUR_PHONE_NUMBER</code>. The README documents these; there is no <code>.env</code> file or config loader, so export them in your shell or CI environment.</p>
+<p><strong>Running it</strong>:</p>
+<pre data-lang="bash"><code>python src/main.py</code></pre>
+<p>The GitHub Actions workflow at <code>.github/workflows/scraper.yml</code> schedules this daily. Note there is no lockfile (<code>requirements.txt</code> only), so builds are not fully reproducible.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A job seeker sets up the scraper once, configures Twilio, and lets the daily cron job run. Each morning, new YC job postings arrive as WhatsApp messages. The SQLite database prevents duplicate alerts across runs by storing seen URLs in <code>get_existing_job_urls</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found:</p>
+<ul><li><strong>Low - Dependencies declared without a lockfile</strong> - <code>requirements.txt</code> - non-reproducible builds; pin exact versions or add a lockfile.</li></ul>
+<p>SDLC observations from the file structure:</p>
+<ul><li><strong>Med - No Dockerfile</strong> - setup requires a local Python environment with ChromeDriver; the <code>assets/chromedriver-win64/</code> binary is Windows-only, so the scraper will not run on Linux CI without a separate driver install.</li><li><strong>Low - Committed binary</strong> - <code>assets/chromedriver-win64/chromedriver.exe</code> is checked into the repo, which bloats the repository and risks platform mismatch.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a focused, working scraper that solves a real problem for a single user. The code is small and readable, with tests and CI in place. The main weaknesses are the missing lockfile and the Windows-only ChromeDriver, which will bite anyone trying to run it on a different platform. It is suitable for personal use or as a template for a notification-driven scraper.</p>
             </div>
 
             

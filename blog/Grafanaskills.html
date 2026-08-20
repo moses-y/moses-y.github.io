@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,33 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents assisting with Grafana often lack standardized, context-aware knowledge of the stack’s components, query patterns, and configuration conventions. This forces teams to hunt through disparate docs or contend with inconsistent agent output when generating alerts, dashboards, or telemetry pipelines.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo publishes 95 skill files organized under skills/&lt;plugin-name&gt;/, covering grafana-core (dashboarding, promql, alerting-irm, alloy, beyla, opentelemetry), grafana-cloud (admin, send-data, fleet-management, cloud-integrations, cost</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams using Grafana's observability stack (Prometheus, Loki, Tempo, k6, Alloy) face a knowledge gap: the operational expertise for each tool lives scattered across docs, runbooks, and tribal knowledge. AI coding agents (Claude Code, Cursor, Codex) need that context in a machine-readable form to give accurate answers, but no standardized packaging existed. This repo solves that by publishing Grafana's operational knowledge as reusable "skills" that agents can load on demand.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is a fork of <code>grafana/skills</code> (225 stars upstream) containing 95 files: 78 Markdown skill definitions, 8 shell scripts, and 4 JSON marketplace manifests. Skills are organized into six plugin groups under <code>skills/</code>: <code>grafana-core</code> (dashboards, PromQL, alerting), <code>grafana-cloud</code> (fleet management, integrations), <code>grafana-lgtm</code> (Loki, Mimir, Tempo, Pyroscope), <code>grafana-k6</code>, <code>grafana-app-sdk</code>, and <code>grafana-plugins</code>.</p>
+<p>Each skill is a <code>SKILL.md</code> file with optional <code>references/</code> subdirectories containing deeper documentation. The k6 skills have the richest structure, including <code>scripts/</code> with 8 shell helpers for fetch, validation, and formatting workflows. The <code>template/SKILL.md</code> file defines the structure for new skills.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>This is a content distribution repository, not an application. There is no runtime entry point, no import graph (0 internal modules, 0 import edges — only 8 shell files analyzed), and no code that executes on a server. The wiring is entirely declarative:</p>
+<ul><li><strong>Entry point</strong>: <code>.agents-plugin/marketplace.json</code> (and <code>.claude-plugin/</code>, <code>.cursor-plugin/</code> equivalents) — these manifests tell agent tools which skills exist and where they live.</li><li><strong>Distribution</strong>: <code>skill-registry.json</code> at the root indexes all available skills for tooling that reads it.</li><li><strong>Validation</strong>: <code>.github/workflows/lint-skills.yml</code> and <code>.github/workflows/validate.yml</code> run <code>scripts/lint-skills.sh</code> in CI to check skill structure and content.</li><li><strong>Installation</strong>: agents fetch skills via <code>npx skills add grafana/skills</code>, which reads the manifests and copies <code>SKILL.md</code> files into the agent's local skills directory.</li></ul>
+<p>The blast radius is the <code>SKILL.md</code> files themselves — a malformed frontmatter or broken reference breaks agent loading for everyone who installed the marketplace. The CI workflows are the only guard against that.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> — no build step; this is content. For any Agent Skills-compatible tool:</p>
+<pre data-lang="bash"><code>npx skills add grafana/skills</code></pre>
+<p>For Claude Code specifically:</p>
+<pre data-lang="bash"><code>claude plugin marketplace add grafana/skills
+claude plugin install grafana-core@grafana-skills
+claude plugin install grafana-cloud@grafana-skills</code></pre>
+<p><strong>Configuration</strong> — none required. No environment variables, no API keys, no config files. The <code>.agents-plugin/marketplace.json</code> manifest handles discovery automatically.</p>
+<p><strong>Running it</strong> — invoke your agent with a task like "write a PromQL query for p99 latency" and the agent loads the relevant <code>SKILL.md</code> from <code>skills/grafana-core/promql/</code> automatically.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer asks Cursor: "Why is my Grafana dashboard showing empty panels after upgrading to v11?" The agent loads <code>skills/grafana-core/dashboarding/SKILL.md</code>, checks <code>references/panels.md</code> for version-specific issues, and answers with migration steps. A k6 contributor runs <code>scripts/test_typescript.sh</code> from <code>skills/grafana-k6/k6-docs/scripts/</code> to validate their TypeScript changes before submitting a PR.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found no structural red flags: tests present (5 test files), CI configured (GitHub Actions), license present, no committed secrets, no circular dependencies. The measured import graph shows 0 internal modules across 8 shell files — this is a documentation repo, so that's expected, not a concern.</p>
+<ul><li><strong>Med</strong> — No lockfile or dependency manifest at root; the shell scripts in <code>skills/grafana-k6/k6-docs/scripts/</code> depend on system tools (curl, jq, node) that aren't pinned. Reproducibility depends on the environment.</li><li><strong>Low</strong> — The <code>.gitkeep</code> files in <code>grafana-cloud/</code> and <code>grafana-core/</code> suggest placeholder directories that may confuse contributors about intended structure.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A well-organized, standards-compliant skills marketplace for Grafana's observability stack, already validated by upstream CI and used by the broader Agent Skills ecosystem. It's content, not code — you won't debug it, you'll extend it by adding <code>SKILL.md</code> files. Worth adopting if your team runs Grafana tools and uses AI agents; the k6 skill set is the most mature and shows the pattern done right.</p>
             </div>
 
             

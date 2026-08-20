@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,9 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Android application security reviews often require scanning APKs for embedded URIs, endpoints, and hardcoded secrets such as API keys. Manual inspection is time-consuming, and many teams need an automated tool that can disassemble the APK and pattern-match against known credential formats across decompiled smali and assets.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>APKLeaks is a Python-based CLI tool that disassembles APK files using jadx and scans the output against configurable regex patterns. The core logic lives in apkleaks/cli.py, which serves as the entry point; supporting modules include apkleaks/utils.py and apkleaks/colors.py. Pattern definitions are stored in config/regexes.json and config/notkeyhacks.json, and custom rules can be passed via the -p flag. A Dockerfile exists at the repo root for containerized execution, and build configuration is handled through pyproject.toml, Makefile, and requirements.txt. The tool outputs results as plain text or JSON (--json), with a default random filename if -o is omitted.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install from PyPI with pip3 install apkleaks, or from source by cloning the repo and running pip3 install -r requirements.txt. For containerized workflows, docker pull dwisiswant0/apkleaks:latest pulls the prebuilt image.</p><p>Configuration: Default search rules are in config/regexes.json. Custom patterns follow the JSON structure demonstrated in the README (e.g., {&quot;Amazon AWS Access Key ID&quot;: &quot;AKIA[0-9A-Z]{16}&quot;}) and are supplied with -p /path/to/custom-rules.json.</p><p>Running it: Invoke the CLI with apkleaks -f /path/to/file.apk. From source, use python3 apkleaks.py -f /path/to/file.apk. To pass jadx disassembler arguments, use -a/--args, example: apkleaks -f file.apk -a &quot;--deobf --log-level DEBUG&quot;. JSON output: apkleaks -f file.apk -o results.json --json.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A security engineer integrating mobile scanning into a CI pipeline can run apkleaks -f app-debug.apk -o findings.json --json as a build step. The JSON output is pipeline-friendly, and the -a flag allows tuning jadx decompilation options. Results are reviewed for false positives; if critical secrets (e.g., AWS keys matching the AKIA pattern) are detected, the build can be flagged or blocked.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium / SDLC: No test files detected — repository-wide untested code paths. No evidence of a test suite in the directory structure or CI configuration beyond CodeQL and publish workflows.
-**Low /</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>APK files bundle compiled bytecode, resources, and metadata that often contain hardcoded endpoints, API keys, and other secrets. Manually decompiling and grepping for these patterns is slow and error-prone. APKLeaks automates the discovery of URIs, endpoints, and secrets inside an APK by decompiling it and scanning the result against a set of regex patterns.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>APKLeaks is a Python CLI tool that takes an APK file, decompiles it using <code>jadx</code>, and scans the decompiled source for sensitive patterns. The default patterns live in <code>config/regexes.json</code>; users can supply their own via a <code>--pattern</code> argument. Results can be written to a text or JSON file.</p>
+<p>The codebase is small: 6 Python files, with the core logic in <code>apkleaks/apkleaks.py</code> and helper functions in <code>apkleaks/utils.py</code>. It ships with a <code>Dockerfile</code>, a <code>Makefile</code>, and GitHub Actions workflows for CI and publishing.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>apkleaks/cli.py:32</code>. That function reaches 11 other functions, making it the single entry point through which all control flows. The call graph shows the main path: <code>main</code> calls <code>APKLeaks</code>, <code>integrity</code>, and <code>decompile</code>; <code>integrity</code> calls <code>dependencies</code> and <code>apk_info</code>; and <code>decompile</code> calls <code>extract</code> and <code>cleanup</code>.</p>
+<p>The two most-connected modules are <code>apkleaks/apkleaks.py</code> (8 functions, 1 class) and <code>apkleaks/utils.py</code> (3 functions, 1 class). Both have an instability score of 0.67, meaning they are relatively volatile. The function <code>writeln</code> in <code>utils.py</code> is called from 6 different places — the widest blast radius in the repo. Changing its signature or behavior will ripple through most of the tool's output handling.</p>
+<p>A full run does the following: <code>main</code> → <code>APKLeaks</code> → <code>integrity</code> (checks <code>jadx</code> availability) → <code>decompile</code> → <code>extract</code> → <code>scanning</code> → <code>writeln</code> (writes results to disk). The tool touches the filesystem for the APK, the decompiled output, and the results file; it invokes an external process (<code>jadx</code>) for decompilation. No network calls or database writes are present.</p>
+<p>File-by-file map:</p>
+<ul><li><code>apkleaks/cli.py</code> — argument parsing, header, <code>main</code></li><li><code>apkleaks/apkleaks.py</code> — core orchestration: <code>apk_info</code>, <code>dependencies</code>, <code>integrity</code>, <code>decompile</code>, <code>extract</code>, <code>scanning</code>, <code>cleanup</code></li><li><code>apkleaks/utils.py</code> — <code>write</code>, <code>writeln</code>, <code>finder</code> (regex matching), utility class</li><li><code>apkleaks/colors.py</code> — ANSI color output</li><li><code>config/regexes.json</code> — default secret patterns</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> — Install from PyPI or clone and install requirements:</p>
+<pre data-lang="bash"><code>pip3 install apkleaks
+# or from source
+git clone https://github.com/moses-y/apkleaks
+cd apkleaks/
+pip3 install -r requirements.txt</code></pre>
+<p><strong>Running it</strong> — The CLI entry point is <code>apkleaks</code>, or <code>python3 apkleaks.py</code> from source:</p>
+<pre data-lang="bash"><code>apkleaks -f /path/to/file.apk -o results.txt
+apkleaks -f /path/to/file.apk -p custom-rules.json --json</code></pre>
+<p><strong>Configuration</strong> — No environment variables are required. Custom patterns go in a JSON file passed via <code>-p</code>. The <code>jadx</code> disassembler must be installed or available for download.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A security engineer auditing a mobile app before release would run:</p>
+<pre data-lang="bash"><code>apkleaks -f app-release.apk -o audit-results.txt --json</code></pre>
+<p>The output file lists all matched endpoints and secrets, which can then be triaged — hardcoded API keys get revoked, exposed internal endpoints get reviewed. The custom pattern file lets the team add org-specific patterns (e.g., internal hostnames) without modifying the tool.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 6 issues: 1 high, 5 medium.</p>
+<ul><li><strong>High - Deep nesting</strong> — <code>apkleaks/utils.py</code> and <code>apkleaks/apkleaks.py</code> have max indentation depth of 8, making control flow hard to follow. Fix with guard clauses and early returns.</li><li><strong>Medium - File opened without context manager</strong> — <code>apkleaks/cli.py</code> uses <code>open(...)</code> without <code>with</code>, risking a leaked handle on error.</li><li><strong>Medium - Broad exception handling</strong> — <code>except</code> clauses in <code>apkleaks/apkleaks.py</code>, <code>apkleaks/cli.py</code>, and <code>apkleaks/utils.py</code> swallow errors indiscriminately.</li></ul>
+<p>SDLC observations: no test files exist, and dependencies are declared without a lockfile (<code>pyproject.toml</code>), so builds are not reproducible. CI exists via GitHub Actions, and no committed secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A functional, focused tool that does one job well. The lack of tests and lockfile makes it risky to modify, but the small codebase is easy to read and the core logic is straightforward. Suitable for security engineers who need a quick APK secret scanner and are willing to accept the maintenance risk.</p>
             </div>
 
             

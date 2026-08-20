@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Standard multi-agent frameworks produce long textual reasoning traces, generating token overhead that scales poorly with reasoning depth and agent count. This inflates cost, latency, and context-window pressure, especially for long-horizon tasks. LatentMAS addresses this by moving collaboration into the model&#39;s latent space, where agents pass latent thoughts through working memory instead of generating text at every step.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The framework lives primarily in methods/latentmas.py, with a text-based baseline in methods/textmas.py and comparative logic in methods/baseline.py. Core model definitions and prompt templates are in models.py and prompts.py, while data loading and preprocessing are handled by data.py and the benchmark file data/medqa.json. The README reports that LatentMAS achieves superior performance, lower token usage, and wall-clock speedups by communicating in latent space rather than token space. The approach is training-free and designed to be compatible with any Hugging Face model, with optional vLLM backend support. A Science-LatentMAS branch is referenced for scientific discovery extensions.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: requirements.txt lists project dependencies; no lockfile is present, so reproducible builds require external version pinning. The repository contains 23 files across assets/, methods/, data/, example_logs/, and the root.</p><p>Configuration: No environment variables or config files are named in the</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Multi‑agent reasoning often explodes token usage because each agent writes full textual traces. This makes inference slow and costly, especially when large language models are used as back‑ends.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>LatentMAS</code> moves the collaboration into the model’s latent space. Agents keep a <strong>working‑memory tensor</strong> and exchange “latent thoughts” instead of strings. The core implementation lives in:</p>
+<ul><li><code>methods/latent_mas.py</code> – latent‑space MAS logic.</li><li><code>methods/text_mas.py</code> – text‑based baseline for comparison.</li><li><code>methods/baseline.py</code> – simple non‑latent baseline.</li><li><code>models.py</code> – model wrappers, token‑level utilities, and rendering.</li><li><code>utils.py</code> – data‑loading, seeding, and answer normalisation helpers.</li></ul>
+<p>The repository ships with data loaders (<code>data.py</code>), prompt builders (<code>prompts.py</code>), and a small CLI driver (<code>run.py</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>run.py</code> → <code>main</code> (line 84)</strong>. <code>main</code> parses a command‑line batch (the parser is not shown but <code>process_batch</code> is the next entry point) and then calls <code>process_batch</code>, which:</p>
+<ol><li><strong>Loads data</strong> via <code>load_gsm8k</code>, <code>load_aime2025</code>, etc. in <code>data.py</code>.</li><li><strong>Builds agent messages</strong> using <code>prompts.build_agent_message_*</code> functions.</li><li><strong>Selects a method</strong> (<code>default_agents</code> from <code>methods/__init__.py</code> returns a list of <code>Agent</code> objects).</li><li><strong>Runs the batch</strong> by invoking <code>run_batch</code> (or <code>run_batch_vllm</code>) in the selected method class (<code>methods/latent_mas.py</code> or <code>methods/text_mas.py</code>).</li></ol>
+<p><code>run_batch</code> is the most connected function (6 outgoing imports, instability 1). It repeatedly calls:</p>
+<ul><li><code>normalize_answer</code> (10 call sites) – central to evaluation.</li><li><code>_past_length</code> (5 call sites) – computes latent memory size.</li><li><code>prepare_chat_batch</code>, <code>generate_text_batch</code>, <code>run_with_timeout</code> – handle token‑level interaction and safety timeouts.</li></ul>
+<p><code>run_batch</code> also calls <code>extract_gsm8k_answer</code> (used in 2 places) and <code>render_chat</code> (in <code>models.py</code>).</p>
+<p>The <strong>utility hub</strong> is <code>utils.py</code> (instability 0, Ca 5). It provides <code>set_seed</code>, <code>auto_device</code>, and answer‑extraction helpers used across all methods.</p>
+<p><code>models.py</code> supplies the model wrapper (<code>_ensure_pad_token</code>, <code>_past_length</code>, <code>render_chat</code>, <code>prepare_chat_input</code>) and is called from three other files.</p>
+<p>Because <code>run</code> reaches 42 functions and <code>process_batch</code> reaches 23, the call graph is relatively shallow: the bulk of work stays inside <code>run_batch</code> → helper utilities → model wrapper. No circular imports are present, simplifying future refactors.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/LatentMAS.git
+cd LatentMAS
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run a benchmark batch (example uses the default data loader)
+python run.py</code></pre>
+<p><em>No additional configuration files, environment variables, or secret keys are required.</em> The CLI reads the batch definition from the script itself (the README does not specify external config).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A service that needs fast multi‑step reasoning (e.g., code‑generation assistants) can replace a token‑heavy chain of LLM calls with a single latent‑memory pass:</p>
+<pre data-lang="python"><code>from run import process_batch
+process_batch()   # loads GSM8K, runs latent agents, returns answers</code></pre>
+<p>The returned answers are already normalised by <code>utils.normalize_answer</code>, ready for downstream scoring or user display.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Duplicated code</strong> – identical 6‑line blocks appear in <code>methods/baseline.py</code>, <code>methods/latent_mas.py</code>, <code>methods/text_mas.py</code>. Consolidate into shared helpers.</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>utils.py</code> catches generic <code>except:</code> statements, risking silent failures. Replace with specific exception types and proper logging.</li><li><strong>MEDIUM – Deep nesting</strong> – nesting depth of 7 in <code>methods/latent_mas.py</code>, <code>methods/text_mas.py</code>, and <code>run.py</code> makes the control flow hard to follow; refactor with early returns or helper extraction.</li><li><strong>MEDIUM – No test suite</strong> – repository contains no <code>tests/</code> directory; untested paths increase regression risk.</li><li><strong>MEDIUM – No CI/CD</strong> – absence of <code>.github/</code> workflows or other automation means builds are not automatically validated.</li><li><strong>LOW – No lockfile</strong> – <code>requirements.txt</code> is present but no <code>requirements.lock</code>; reproducible builds depend on external version resolution.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>LatentMAS</code> delivers a functional prototype for latent‑space multi‑agent reasoning with a clear entry point and modest dependency footprint. The code base is small enough to understand quickly, but duplicated logic, broad exception catches, and deep nesting increase maintenance overhead. Teams that need a research‑grade baseline can adopt it now, but should add tests, CI, and refactor shared code before extending it in production.</p>
             </div>
 
             

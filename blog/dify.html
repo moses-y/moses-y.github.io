@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>April 20, 2026</span>
                     <span>3 min read</span>
-                    <span class="post-language">Python</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>dify</h1>
@@ -80,23 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#create-a-virtual-environment-and-install-python-">Create a virtual environment and install Python dependencies</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams building agentic AI workflows often need a production‑ready platform that handles prompt orchestration, storage, and multiple vector‑database back‑ends without gluing together disparate open‑source components.  The repo provides an out‑of‑the‑box framework that already wires together Flask, Celery, and a catalogue of storage and vector‑DB connectors, but the sheer number of configuration files can be intimidating for a new contributor.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Dify is a Python‑Flask service (api/app.py) augmented by Celery workers (api/celeryentrypoint.py) for background task processing.  Configuration lives under api/configs/:  
- Storage adapters – S3, GCS, Azure Blob, OCI, and many regional OSS options are defined in api/configs/middleware/storage/.py.  
- Vector‑DB middle‑wares – Over 30 connectors (Milvus, Chroma, Qdrant, pgvector, etc.) reside in api/configs/middleware/vdb/.py, each exposing a consistent config object.  
-Feature flags and remote settings – api/configs/feature/ and api/configs/remotesettingssources/ let you toggle hosted services or pull settings from Apollo/Nacos at runtime.</p><p>The entry point api/app.py registers Flask blueprints, initialises the Celery app, and mounts API routes for workflow creation, file upload, and health checks.  A .env.example file at the root lists the required environment variables (e.g., DIFYAPIKEY, database URLs, and LLM provider keys).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone the repo
-git clone https://github.com/langgenius/dify.git
-cd dify</p><h3 class="post-h" id="create-a-virtual-environment-and-install-python-">Create a virtual environment and install Python dependencies</h3><p>python -m venv .venv
-source .venv/bin/activate
-pip install -r api/requirements.txt   # (or use uv pip install -r api/requirements.txt)</p><p>Copy the example env file and fill in your keys
-cp api/.env.example .env
-Edit .env with your OpenAI/Anthropic key, database connection strings, and chosen vector‑DB settings</p><p>Build the Docker image (the repo includes api/Dockerfile and .devcontainer/Dockerfile)
-docker build -t dify .
-Or start via Docker Compose if you have a compose file (not present in the extracted structure)</p><h3 class="post-h" id="configuration">Configuration</h3><p>Required env vars are documented in api/.env.example.  To add a new vector store, copy an existing file under api/configs/middleware/vdb/ (e.g., milvusconfig.py) and adjust the connection parameters; the platform auto‑discovers configs via the vdb middleware registry.</p><h3 class="post-h" id="running-it">Running it</h3><p>Start the Flask API server:
-python api/app.py          # development mode
-or, for production‑like gunicorn:
-gunicorn -w 4 -b 0.0.0.0:8000 api.app:app</p><p>Celery workers can be launched with:
-celery -A api.celeryentrypoint worker --loglevel=info</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A machine‑learning team wants to expose a RAG pipeline via a REST endpoint.  They define a workflow in Dify’s UI, which stores the configuration as JSON.  The backend reads the selected vector‑DB config (e.g., qdrantconfig.py) from api/configs/middleware/vdb/qdrant_config.py and initialises the Qdrant client at startup.  When a user submits a query,</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building production-grade agentic workflows requires orchestrating LLMs, retrieval, tool execution, and observability across a distributed system. Most teams hand-roll this glue code, which fragments into inconsistent patterns across frontend, backend, and evaluation layers.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is a fork of <code>langgenius/dify</code> (153k stars upstream), a full platform for agentic workflow development. It's not a single codebase but a collection of 9 self-contained projects. The two substantial ones are <code>web/</code> (7,414 files, React/Next.js frontend) and <code>api/</code> (3,001 files, Python backend). The <code>api/</code> side handles workflow orchestration, dataset management, plugin systems, and tracing integrations (Langfuse, MLflow, Arize Phoenix). The <code>web/</code> side is the console UI.</p>
+<p>Supporting projects include <code>packages/</code> (shared components), <code>sdks/</code> (client libraries), <code>e2e/</code> (Playwright/Cucumber tests), and <code>.agents/</code> (31 files of agent skill definitions for code review and testing workflows).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>api/app.py</code>, which calls <code>create_flask_app_with_configs</code> and <code>initialize_extensions</code>. From there, requests route through Flask controllers under <code>api/controllers/console/</code>. The two highest-traffic files are <code>workspace/tool_providers.py</code> (50 functions, 64 classes) and <code>core/app/entities/task_entities.py</code> (65 classes defining task state). The <code>app/workflow.py</code> controller (33 functions, 43 classes) is the main workflow execution path — it validates UUIDs, parses uploaded files, and dispatches to the workflow engine.</p>
+<p>The blast radius is concentrated in <code>api/configs/feature/__init__.py</code> (9 functions, 41 classes) — it defines global feature flags and CORS policies that every controller reads. Changing it affects all routes. The <code>core/app/entities/queue_entities.py</code> (39 classes) defines the queue event model that every async workflow run depends on.</p>
+<p>A notable pattern: the repo ships <code>.agents/skills/</code> with structured skill definitions (backend-code-review, frontend-testing, e2e-cucumber-playwright) — these are agent instructions, not runtime code, but they show the team's testing discipline.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and run with Docker Compose
+git clone https://github.com/moses-y/dify
+cd dify
+cp .env.example .env
+docker compose up -d</code></pre>
+<p>Configuration lives in <code>api/.env.example</code> — set <code>SECRET_KEY</code>, database credentials, and LLM provider keys there. The <code>Makefile</code> and <code>.devcontainer/Dockerfile</code> support local development. For production, the <code>docker/</code> directory contains the compose orchestration. The API entry point is <code>api/app.py</code>; the web UI builds from <code>web/</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team deploys this as their internal AI operations platform. They define agentic workflows in the console UI, which persists to PostgreSQL. The <code>api/controllers/console/datasets/</code> endpoints handle document ingestion and RAG pipeline configuration. Trace data flows to Langfuse via <code>api/providers/trace/trace-langfuse/pyproject.toml</code>. The <code>e2e/</code> suite (Playwright + Cucumber) validates the full workflow before each release.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found no structural red flags: 3,777 test files, GitHub Actions CI, Dockerfile, license, lockfile present, no committed secrets.</p>
+<ul><li><strong>Low — Fork drift risk</strong> — This is a fork with 0 stars; upstream <code>langgenius/dify</code> moves fast. Merging upstream changes will be ongoing work, especially in <code>api/controllers/</code> where upstream refactors frequently.</li><li><strong>Low — Large surface area</strong> — 11,246 files across 9 projects means onboarding requires understanding which project owns what. The <code>.agents/skills/</code> files partially mitigate this by codifying review rules.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a serious, production-grade platform with real engineering discipline — tests, CI, structured agent skills, and clean separation between web, API, and SDKs. The trade-off is operational complexity: 9 projects to maintain and a fork that must track upstream. Use it if you need a self-hosted agentic workflow platform and can commit to upstream merge maintenance.</p>
             </div>
 
             
@@ -106,18 +113,18 @@ celery -A api.celeryentrypoint worker --loglevel=info</p><h3 class="post-h" id="
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">11,246<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>82</b></li><li><span>YAML</span><i style="width:49%"></i><b>40</b></li><li><span>Markdown</span><i style="width:44%"></i><b>36</b></li><li><span>JSON</span><i style="width:5%"></i><b>4</b></li><li><span>Shell</span><i style="width:5%"></i><b>4</b></li><li><span>TypeScript</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>4427</b></li><li><span>Python</span><i style="width:64%"></i><b>2814</b></li><li><span>TypeScript</span><i style="width:35%"></i><b>1554</b></li><li><span>JSON</span><i style="width:26%"></i><b>1173</b></li><li><span>JavaScript</span><i style="width:3%"></i><b>123</b></li><li><span>YAML</span><i style="width:2%"></i><b>96</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Flask</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Django</span><span>Flask</span><span>Express</span><span>Laravel</span><span>Tailwind</span><span>Docker</span><span>Transformers</span><span>Vector store</span><span>Spark</span><span>MLflow</span><span>Neo4j</span></p>
                     </div>
                 </div>
 

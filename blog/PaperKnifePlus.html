@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 7, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Kotlin</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,14 +79,24 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Mobile PDF workflows frequently require uploading documents to cloud services, creating compliance and privacy risks for users handling sensitive files. This repo addresses that by providing a fully offline PDF utility for Android, keeping all processing on-device.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PaperKnifePlus is a privacy-first Android app for merging, splitting, rotating, rearranging, and password-protecting PDFs. It also converts images to PDF and exports PDF pages as ZIP-packaged images.  
-Core UI components live under app/src/main/java/com/paperknifeplus/app/ui/components/ (e.g., MergeView.kt, SplitView.kt, ProtectView.kt, RotateView.kt).  
-PDF data handling is centralized in app/src/main/java/com/paperknifeplus/app/data/image/PdfPageFetcher.kt.  
-Theme and typography are defined in app/src/main/java/com/paperknifeplus/app/ui/theme/Color.kt and Theme.kt.  
-Build configuration uses Gradle: app/build.gradle.kts and root build.gradle.kts, with version catalog at gradle/libs.versions.toml.  
-CI/CD is configured via GitHub Actions at .github/workflows</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Privacy‑first PDF utilities are rare, and this repo attempts an offline‑only solution, but the codebase shows signs of maintainability debt that can slow feature work and increase risk of bugs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>PaperKnifePlus is an Android PDF utility (merge, split, rotate, protect, image‑to‑PDF, rearrange, etc.) that processes files <strong>100 % offline</strong> – no network calls, no telemetry.</p>
+<ul><li><strong>Entry point:</strong> <code>app/src/main/java/com/paperknifeplus/app/MainActivity.kt</code> – the main Android activity that bootstraps the navigation graph and instantiates the UI component suite.</li><li><strong>UI layer:</strong> 61 Kotlin files under <code>app/src/main/java/com/paperknifeplus/app/ui/components/</code> each own a single function (e.g., <code>MergeView.kt</code>, <code>SplitView.kt</code>, <code>ProtectView.kt</code>, <code>AboutView.kt</code>). These composable‑style screens handle user interaction, invoke the data layer, and render the result.</li><li><strong>Data layer:</strong> <code>app/src/main/java/com/paperknifeplus/app/data/image/PdfPageFetcher.kt</code> – fetches and manipulates PDF pages; it is called by multiple view components.</li><li><strong>Theme &amp; resources:</strong> <code>app/src/main/java/com/paperknifeplus/app/ui/theme/Color.kt</code>, <code>Theme.kt</code>, <code>Type.kt</code> plus font assets in <code>res/font/</code>.</li><li><strong>Build:</strong> Gradle‑based (<code>build.gradle.kts</code> at root and <code>app/build.gradle.kts</code>). CI runs via GitHub Actions (<code>.github/workflows/build.yml</code>).</li><li><strong>No backend:</strong> All PDF work occurs on the device; the repository contains no network‑related modules or API keys.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution flows from <code>MainActivity.kt</code> into the component stack. The activity sets up a navigation graph that directs touch events to the relevant view component. Each component calls <code>PdfPageFetcher.kt</code> for page‑level operations (extract, rotate, merge, split) and then updates its own UI (e.g., <code>SuccessView.kt</code>, <code>LockedFilePrompt.kt</code>).</p>
+<ul><li><strong>Call graph:</strong> 45 Kotlin files analysed; 0 internal modules, 0 circular dependencies. The widest blast radius resides in <code>MainActivity.kt</code> – any change to the navigation graph ripples to every component that registers a destination.</li><li><strong>Duplication:</strong> 598 repeated 6‑line blocks appear across 37 files, most notably in <code>MainActivity.kt</code>, <code>SettingsView.kt</code>, <code>AboutView.kt</code>, <code>ProtectView.kt</code>. The pattern is a copy‑paste of permission‑granting and file‑selection logic.</li><li><strong>Oversized files:</strong> <code>AboutView.kt</code>, <code>SignView.kt</code>, <code>WatermarkView.kt</code> each exceed 600 lines, making local changes ripple widely.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ul><li><strong>Clone:</strong> <code>git clone https://github.com/moses-y/PaperKnifePlus</code> (verbatim URL).</li><li><strong>Build:</strong> The repository uses Gradle but does not document a build command in the README. Typical invocation would be <code>./gradlew assembleDebug</code> (run from the repo root), but this is not guaranteed to succeed without the Android SDK configured.</li><li><strong>Run:</strong> No CLI or server start‑up is provided; the intended usage is to install the generated APK on an Android device or emulator. The README only lists a download link to the latest release APK.</li><li><strong>Configuration:</strong> No environment variables, keys, or config files are required – the app runs offline by design.</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A user opens the app, selects <strong>Merge</strong>, picks two PDFs from local storage, and taps “Merge”. <code>MergeView.kt</code> invokes <code>PdfPageFetcher.kt</code> to read the files, concatenates pages in memory, and returns a single PDF that is saved back to the device. No internet traffic occurs; the whole pipeline stays on‑device.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High cognitive load – deep nesting:</strong> Max indentation depth 14 in <code>MainActivity.kt</code>, <code>PdfPageFetcher.kt</code>, <code>AboutView.kt</code>. Control flow is hard to follow; guard‑clause refactoring is recommended.</li><li><strong>High clarity – duplicated code blocks:</strong> 598 repeated 6‑line blocks across 37 files. Extract shared helpers for permission handling, file selection, and PDF‑operation scaffolding.</li><li><strong>Medium oversized files:</strong> <code>AboutView.kt</code>, <code>SignView.kt</code>, <code>WatermarkView.kt</code> each &gt;600 lines; split into smaller, responsibility‑focused units.</li><li><strong>SDLC observations:</strong> No test files detected; CI (GitHub Actions) present; licence <code>GPL‑3.0‑or‑later</code> included; no Dockerfile; no lockfile (Gradle version catalog present but <code>lockfile</code> not committed).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>PaperKnifePlus delivers a solid offline PDF toolkit with a clear privacy stance, but the codebase suffers from nesting depth, copy‑paste duplication, and a few oversized files that raise maintenance risk. Teams looking for a quick, privacy‑first PDF utility can adopt the released APK immediately; those planning to extend or refactor the UI should budget time for nesting flattening and duplication removal.</p>
             </div>
 
             

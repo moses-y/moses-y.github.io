@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#this-dataset-supports-studies-of-risk-preference">This dataset supports studies of risk preferences</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Prediction market researchers need structured trading data without building blockchain indexing infrastructure. Existing third-party sources lack on-chain fields like block numbers, fee breakdowns, and order hashes, while raw blockchain data requires significant engineering to normalize and analyze at scale.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo provides a complete pipeline from raw blockchain data to analysis-ready datasets. The polymarket/fetchers/ directory pulls data from both the Gamma API and Polygon RPC (gamma.py, rpc.py), while polymarket/processors/ transforms it through cleaning (cleaner.py), decoding (decoder.py), and trade linkage (trades.py). Five parquet datasets reside in the root: orderfilled.parquet (31GB, raw OrderFilled events), trades.parquet (32GB, processed with market metadata), markets.parquet (68MB, 268K market records), quant.parquet (21GB, unified YES-perspective data), and users.parquet (23GB, 340.6M user behavior records split by maker/taker roles). The scripts/ folder orchestrates batch operations via shell scripts, and polymarket/cli/main.py serves as the primary entry point.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install dependencies from requirements.txt and the package in editable mode:
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Researchers and analysts need a raw, continuously‑updated record of Polymarket trades, but the blockchain data is large, fragmented, and requires custom cleaning (e.g., unifying token perspectives, filling missing token IDs). Pulling, normalising, and storing this volume manually is error‑prone and time‑consuming.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships a 107 GB, 1.1 billion‑record dataset and a Python toolkit that can <strong>fetch</strong> on‑chain <code>OrderFilled</code> events, <strong>process</strong> them into several Parquet tables, and <strong>maintain</strong> a live sync mode. Core logic lives in <code>polymarket/fetchers/</code> (RPC calls to Polygon and Gamma API) and <code>polymarket/processors/</code> (cleaning, token mapping, trade extraction). The CLI in <code>polymarket/cli/main.py</code> exposes commands such as <code>fetch_onchain</code>, <code>process_historical</code>, and <code>update_markets</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the console entry point <code>python -m polymarket.cli</code> which runs <code>polymarket/cli/__main__.py</code> → <code>polymarket/cli/main.py</code>. The most used command is <code>cmd_fetch_onchain</code> (line 137) which:</p>
+<ol><li>Calls <code>get_latest_block</code> → <code>polymarket/fetchers/rpc.py:get_latest_block</code> (uses RPC endpoint from <code>polymarket/config.py:get_rpc_url</code>).</li><li>Retrieves logs via <code>rpc.get_logs</code> and timestamps via <code>batch_get_timestamps</code>.</li><li>Writes raw logs with <code>write_batch</code> (defined in <code>polymarket/tools/continuous_fetch.py</code>).</li></ol>
+<p>After fetching, <code>cmd_process_historical</code> (line 703) orchestrates the processing pipeline:</p>
+<ul><li><code>extract_trades</code> (in <code>polymarket/processors/trades.py</code>) parses raw logs, calling <code>load_token_mapping</code> (used 5 times across the repo) and <code>_parse_order_filled</code>.</li><li>Cleaners <code>clean_trades</code> and <code>clean_users</code> (in <code>polymarket/processors/cleaner.py</code>) are invoked, each routing through shared helpers like <code>_process_trades_batch</code>.</li><li>Results are written with <code>write_batch</code> again and progress saved via <code>save_progress</code>.</li></ul>
+<p>The most connected modules are <code>polymarket/config</code> (imported by 6 others) and <code>polymarket/fetchers/rpc</code> (imported by 4). Functions with the widest blast radius include <code>extract_trades</code> (6 callers) and <code>load_token_mapping</code> (5 callers). No circular imports are present, so changes in a hub module affect many downstream files but do not create feedback loops.</p>
+<p>File‑by‑file responsibility (high‑level):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core Role</th></tr></thead><tbody><tr><td><code>polymarket/cli/main.py</code></td><td>CLI parsing, command dispatch, logging setup</td></tr><tr><td><code>polymarket/fetchers/rpc.py</code></td><td>Low‑level Polygon RPC calls</td></tr><tr><td><code>polymarket/fetchers/gamma.py</code></td><td>Gamma API market list retrieval</td></tr><tr><td><code>polymarket/processors/trades.py</code></td><td>Trade extraction, token mapping, preview CSV</td></tr><tr><td><code>polymarket/processors/cleaner.py</code></td><td>Data‑frame sanitisation for users &amp; trades</td></tr><tr><td><code>polymarket/tools/continuous_fetch.py</code></td><td>Batch writer, CSV preview, graceful shutdown</td></tr><tr><td><code>polymarket/tools/sort_parquet.py</code></td><td>External sort of large Parquet files</td></tr><tr><td><code>polymarket/tools/merge_*.py</code></td><td>Schema conversion &amp; file merging utilities</td></tr></tbody></table></div>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Polymarket_data.git
+cd Polymarket_data
+
+# Install Python dependencies
 pip install -r requirements.txt
-pip install -e .</p><p>Configuration: The polymarket/config.py file contains configuration settings. API credentials for Gamma and Polygon RPC endpoints will be required — check the fetcher files for expected variable names and environment variable conventions. No .env template is present in the repository; configure endpoints and keys per the fetcher implementations.</p><p>Running it: Invoke the CLI to fetch or process data:
-python -m polymarket.cli.main --help</p><p>Alternatively, use polymarket/cli/main.py as the entry point. Scripts in scripts/ support batch operations: fetchmarkets.sh, fetchonchain.sh, and continuousstart.sh for real-time sync (default 2-second intervals).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A quantitative researcher loading user trading patterns for behavioral analysis:
-import pandas as pd</p><p>users = pd.readparquet(&quot;data/users.parquet&quot;)
-Analyze maker/taker role distribution, position sizes, or trade frequency
-per user address — 340.6M records across 268K+ markets</p><h3 class="post-h" id="this-dataset-supports-studies-of-risk-preference">This dataset supports studies of risk preferences</h3>
+
+# Optional: set RPC endpoint (default in config falls back to env var POLYMARKET_RPC_URL)
+export POLYMARKET_RPC_URL="https://polygon-rpc.com"
+
+# Fetch the latest on‑chain logs (writes to data/ folder)
+python -m polymarket.cli fetch_onchain
+
+# Process fetched logs into analysis‑ready Parquet tables
+python -m polymarket.cli process_historical --start-block 0 --end-block latest
+
+# For continuous sync (runs until stopped)
+python -m polymarket.tools.continuous_fetch</code></pre>
+<p>The README lists equivalent shell wrappers in <code>scripts/</code> (e.g., <code>scripts/fetch_onchain.sh</code>), but the Python commands above are the canonical entry points.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team could schedule <code>python -m polymarket.cli fetch_onchain</code> every 2 seconds via a cron job, then run <code>process_historical</code> nightly to update <code>trades.parquet</code> and <code>users.parquet</code>. Downstream notebooks would load the Parquet files directly with <code>pandas.read_parquet</code> for factor‑model construction or behavioural clustering.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Cognitive Load</strong> – Deep nesting (max depth 8) in <code>fetchers/rpc.py</code>, <code>cli/main.py</code>, <code>processors/cleaner.py</code>. Refactor with early returns or helper functions.</li><li><strong>High – Clarity</strong> – Repeated 6‑line blocks across four <code>tools/*</code> scripts. Extract shared helpers to reduce duplication.</li><li><strong>Medium – Resilience</strong> – Broad <code>except:</code> clauses in <code>fetchers/rpc.py</code>, <code>cli/main.py</code>, <code>tools/continuous_fetch.py</code>. Replace with specific exception handling.</li><li><strong>Medium – Cognitive Load</strong> – <code>cli/main.py</code> is 958 lines; split into sub‑modules (e.g., <code>commands_fetch.py</code>, <code>commands_process.py</code>).</li><li><strong>Medium – SDLC</strong> – No test suite present. Adding unit tests for fetchers and processors would catch regressions.</li><li><strong>Medium – CI/CD</strong> – No CI configuration; integrating GitHub Actions for linting and testing is advisable.</li><li><strong>Low – Dependency Management</strong> – Only <code>requirements.txt</code>, no lockfile; builds may be non‑reproducible across environments.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a ready‑to‑use, large‑scale Polymarket dataset and a functional fetch‑process pipeline, but the codebase is tightly coupled, deeply nested, and lacks automated testing or CI. It is suitable for data‑science teams comfortable with Python and willing to invest in refactoring for maintainability.</p>
             </div>
 
             

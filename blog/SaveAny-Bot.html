@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,42 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Telegram imposes “restrict saving content” on many media types, and users often need to forward those files to personal storage – Alist, S3, WebDAV, local disk, or re‑upload to another chat.  A bot that can bypass that restriction, choose a backend, and optionally pull from external URLs is therefore a practical gap for power users and small teams.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SaveAny‑Bot is a Go‑based Telegram bot that saves incoming files to arbitrary back‑ends.  Key capabilities, mapped to the source tree, include:
-Media type support – documents, videos, photos, stickers, and even Telegraph pages.  The bot’s handlers live in client/bot/handlers/: media.go, mediagroup.go, telegraph.go, and save.go process incoming updates.  
-Bypass “restrict saving content” – logic in client/bot/handlers/utils/ruleutil/rule.go and client/bot/handlers/utils/filters/url.go evaluates and overrides Telegram’s saving restrictions.  
-yt‑dlp integration – download from 1 000+ websites.  Tasks and format definitions reside in core/tasks/ytdlp/.  A Go wrapper (common/utils/tgutil/media.go) forwards URLs to the yt‑dlp binary.  
-Aria2 download engine – core/tasks/aria2dl/ executes metalink/magnet downloads and streams them to storage.  
-Storage back‑ends – configured via config/storage/ (local.go, s3.go, alist.go, webdav.go, rclone.go, minio.go).  A factory in config/storage/factory.go selects the appropriate backend at runtime.  
-Watch &amp; filter – client/bot/handlers/watch.go and client/bot/handlers/config.go let users monitor specific chats with custom rules.  
-Transfer between storages – core/tasks/transfer/ moves files from one backend to another without client‑side re‑download.  
-Multi‑user isolation – config/user.go defines per‑user storage whitelists/blacklists; the middleware client/middleware/default.go enforces these limits.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install – The repo ships three minimal Dockerfiles (Dockerfile, Dockerfile.micro, Dockerfile.pico) and a full docker-compose.yml.  Pull the image:</p><p>docker pull ghcr.io/krau/saveany-bot:latest
-Configuration – Create config.toml at the project root (the README provides a minimal example).  Essential sections:</p><p>lang = &quot;en&quot;
-   [telegram]
-   token = &quot;&quot;                # from @BotFather
-   [telegram.proxy]
-   enable = false
-   url = &quot;socks5://127.0.0.1:7890&quot;</p><p>[[storages]]
-   name = &quot;Local Disk&quot;
-   type = &quot;local&quot;
-   enable = true
-   basepath = &quot;./downloads&quot;</p><p>[[users]]
-   id = 114514
-   storages = []
-   blacklist = true</p><p>The file is read by config/viper.go and validated against config/storage/types.go.  
-Run – Using Docker (as documented):</p><p>docker run -d --name saveany-bot \
-       -v ./config.toml:/app/config.toml \
-       -v ./downloads:/app/downloads \
-       ghcr.io/krau/saveany-bot:latest</p><p>Alternatively, build from source with go build ./cmd/run.go (the entry point is cmd/run.go) or use docker-compose up -d for local dev stack.
-Interaction – Send any Telegram file to the bot; it will store it according to the user’s storage config.  Use /help (handler help.go) for command list, and /config (handler config.go) to adjust per‑user rules.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A marketing team wants to archive every video posted in a public channel to an S3 bucket for later analysis.  They set type = &quot;s3&quot; in config.toml, provide AWS keys via environment variables (AWSACCESSKEYID, AWSSECRETACCESSKEY), and add the storage entry:</p><p>[[storages]]
-name = &quot;S3 Archive&quot;
-type = &quot;s3&quot;
-enable = true
-bucket = &quot;my‑archive&quot;
-region = &quot;us-east-1&quot;</p><p>When a new video arrives, the yt‑dlp task (core/tasks/ytdlp/execute.go) downloads the source if the URL is from a supported site, then core/tasks/transfer/execute.go streams the file directly to the S3 bucket, avoiding local disk overhead.  The watch handler ensures only videos from the target channel are processed.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests &amp; CI – 11 test files exist (e.g., api/handlerstest.go, core/tasks/ytdlp/tasktest.go).  GitHub Actions workflows (build-release.yml, build-docker.yml, docs.yml) run on every push, providing baseline coverage.  
-License – LICENSE is present and MIT‑compatible.  
-Dependency hygiene – The project uses Go modules (go.mod/go.sum are present); no obvious vulnerable third‑party binaries are embedded, though the yt‑dlp and aria2 binaries must be available on the host/container (not vendored).  
-Potential risk – Storage credentials are read from env‑vars or the TOML file; if committed to version control they become exposed.  The repo does not ship a .env</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p>Here's a concise, professional technical briefing for the SaveAny-Bot repository, written in the style of a senior AI engineer consultant report.</p>
+<hr>
+<h3 id="the-problem">The Problem</h3>
+<p>Telegram users frequently encounter "restrict saving content" media that blocks downloads, and there is no single tool that flexibly routes files across diverse storage backends (Alist, S3, WebDAV, local, Rclone) while supporting yt-dlp integration, batch downloads, and transfer between backends. The ecosystem is fragmented: users need a unified bot that handles restrictive media, enforces per-user storage rules, and streams or transfers files without manual re-upload.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SaveAny-Bot is a Telegram file-saving bot that persists incoming media to arbitrary backends. It supports yt-dlp for 1000+ website downloads, Aria2 for magnet/URL downloads, and custom JS parser plugins. Restrict-saving media is bypassed via the <code>client/bot/handlers/</code> layer. Files are routed through <code>api/tgfiles.go</code> and <code>api/handlers.go</code> to storage backends defined in <code>config.toml</code>. User access is controlled through <code>client/bot/handlers/config.go</code> and <code>client/bot/handlers/utils/ruleutil/rule.go</code>. The project comprises 11 semi-independent sub-projects (client, core, pkg, storage, common, parsers, api, cmd, database) sharing a Go module structure but lacking a unified architecture.</p>
+<p><strong>Entry points:</strong> <code>api/server.go</code> starts the HTTP/server layer; <code>cmd/run.go</code> is the primary CLI launchpad. The <code>api/factory.go</code> and <code>api/types.go</code> files mediate backend and user configuration. <code>storage/</code> implements backend handlers (local, S3, WebDAV, Alist, Rclone). <code>client/bot/bot.go</code> wires the Telegram client using <code>gotd/td</code>. yt-dlp integration lives in <code>client/bot/handlers/dl.go</code> and <code>client/bot/handlers/media.go</code>.</p>
+<p><strong>What it touches outside itself:</strong> Outbound network calls to Telegram API, S3/Alist/WebDAV endpoints, yt-dlp subprocess, Aria2 RPC. No external database is used; state is in-memory or configured via <code>config.toml</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>cmd/run.go</code> → initializes the bot via <code>client/bot/bot.go</code> → registers handlers from <code>client/bot/handlers/</code>. Incoming updates flow through <code>client/bot/handlers/add_task.go</code>, <code>parse.go</code>, and <code>media.go</code>, which decide whether to queue, transform, or skip based on user rules in <code>client/bot/handlers/config.go</code>. The <code>api/tgfiles.go</code> struct mediates file metadata and storage routing. <code>api/handlers.go</code> dispatches to backend-specific writers in <code>storage/</code>. yt-dlp subprocesses are spawned from <code>client/bot/handlers/dl.go</code>. <code>api/progress.go</code> relays download progress back to Telegram.</p>
+<p><strong>Call graph:</strong> <code>cmd/run.go</code> → <code>client/bot/bot.go</code> (start) → <code>client/bot/handlers/*.go</code> (dispatch) → <code>api/tgfiles.go</code> (routing) → <code>api/handlers.go</code> (backend dispatch) → <code>storage/*.go</code> (write). The deepest nesting is 8 levels in <code>client/bot/handlers/ytdlp_test.go</code>, <code>api/handlers_test.go</code>, and <code>api/tgfiles.go</code> — control flow is hard to follow.</p>
+<p><strong>Hubs &amp; blast radius:</strong> <code>api/tgfiles.go</code> and <code>api/handlers.go</code> are the primary coupling points. Any change to storage format or user rule evaluation ripples through both. <code>common/utils/tgutil/resolve.go</code> and <code>api/tgfiles.go</code> contain 236 repeated 6-line blocks across 60 files — duplicated logic for Telegram file ID resolution and path construction.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code># Clone verbatim
+git clone https://github.com/moses-y/SaveAny-Bot
+
+# Copy config
+cp config.toml.example config.toml
+
+# Edit config.toml with your Telegram bot token and storage definitions
+# Define storages under [[storages]]: type (local/s3/webdav/alist/rclone), enable, base_path
+# Define users under [[users]]: id, storages allocation, blacklist
+
+# Build &amp; run via Docker (recommended)
+docker run -d --name saveany-bot \
+    -v ./config.toml:/app/config.toml \
+    -v ./downloads:/app/downloads \
+    ghcr.io/krau/saveany-bot:latest</code></pre>
+<p><strong>Configuration:</strong> <code>config.toml</code> is the single config file. Required: Telegram <code>token</code>. Optional: proxy URL, storage entries, user whitelist/blacklist. See the README for the full schema.</p>
+<p><strong>Running it:</strong> The entry point is the Docker command above, or <code>go run cmd/run.go</code> locally. The bot listens on Telegram; all file routing is internal.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A power user runs SaveAny-Bot to archive every IT channel video to an S3 bucket, while forwarding restricted-media files to a local NAS. They configure two storages — <code>S3</code> and <code>Local</code> — and assign user IDs via <code>[[users]]</code>. When a video arrives, <code>client/bot/handlers/media.go</code> detects the type, <code>api/tgfiles.go</code> resolves the storage mapping, and <code>storage/s3.go</code> streams the object directly to S3 without local intermediate storage. For yt-dlp links, <code>client/bot/handlers/dl.go</code> invokes the subprocess, and the resulting file is routed through the same pipeline. The user never touches the filesystem; transfers are streaming where possible.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Deep nesting (max indent 8) in <code>client/bot/handlers/ytdlp_test.go</code>, <code>api/handlers_test.go</code>, <code>api/tgfiles.go</code> — control flow is hard to follow. Fix: flatten with early returns/guard clauses.</li><li><strong>[HIGH/clarity]</strong> Duplicated code blocks: 236 repeated 6-line patterns across 60 files including <code>api/tgfiles.go</code>, <code>common/utils/tgutil/resolve.go</code>, <code>client/bot/handlers/add_task.go</code>, <code>client/bot/handlers/parse.go</code> — extract shared helpers; DRY the repeated logic.</li><li><strong>[MEDIUM/cognitive_load]</strong> High branching density in <code>core/tasks/directlinks/util.go</code> — 59 branch points over 153 lines. Decompose decision-heavy logic; consider table/strategy dispatch.</li></ul>
+<p>SDLC observations: Tests present (22 files), CI (GitHub Actions) present, Dockerfile present, license present, lockfile present, no committed secrets. Documentation is thorough (54 doc files). The repo is a portfolio of 11 independent projects rather than a single cohesive codebase — expect inconsistent patterns and duplicated logic across sub-projects.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a capable, well-structured Telegram file-saver that hits the niche of restrictive-media bypass and multi-backend routing better than most alternatives. The Go code is functional and the Docker setup is solid. However, the 11-project split means you’ll encounter duplicated helpers, inconsistent naming, and nesting that slows comprehension. If you need a single, opinionated workflow — pick one storage and stick to it. If you need to extend or modify the routing logic, budget time to flatten control flow and extract the duplicated 6-line blocks scattered across the <code>api/</code> and <code>client/bot/handlers/</code> trees. Good for self-hosters who want yt-dlp + Aria2 + flexible storage in one bot; less ideal for teams requiring strict codebase cohesion.</p>
+<hr>
+<p><em>Static analysis summary: 245/245 code files analyzed (Go 242, Shell 1, JavaScript 2). 18 measured findings: 2 high, 16 medium. No structural red flags beyond the above.</em></p>
             </div>
 
             
@@ -125,16 +130,16 @@ Potential risk – Storage credentials are read from env‑vars or the TOML file
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">320<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>164</b></li><li><span>Markdown</span><i style="width:9%"></i><b>14</b></li><li><span>YAML</span><i style="width:7%"></i><b>11</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li><li><span>SCSS</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>242</b></li><li><span>Markdown</span><i style="width:18%"></i><b>43</b></li><li><span>YAML</span><i style="width:5%"></i><b>11</b></li><li><span>TOML</span><i style="width:1%"></i><b>2</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>2</b></li><li><span>SCSS</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Docker</span></p>
                     </div>

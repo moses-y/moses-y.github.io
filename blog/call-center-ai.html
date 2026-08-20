@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 6, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,36 +80,28 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#or-launch-the-fastapi-app-manually">Or launch the FastAPI app manually</a><a href="#real-world-use">Real‑World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Many organizations need to embed AI‑driven voice interactions into existing telephony workflows but lack a ready‑to‑deploy, containerized solution that ties together phone provisioning, LLM orchestration, and persistent storage. The pain point is the absence of a single API surface that can both initiate an outbound call and stream the conversation back to a client, while handling authentication, caching, and fallback to a human agent without custom glue code.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository provides a Python‑based AI call‑center platform that orchestrates outbound and inbound calls through Azure Communication Services, routes each conversation through an OpenAI LLM (gpt‑4.1 or gpt‑4.1‑nano), and persists transcript data in Cosmos DB or Redis. Key components include:
-app/main.py – entry point that exposes a /call endpoint accepting JSON payloads to trigger a call.  
-app/helpers/config.py and app/helpers/configmodels/ – read configuration from config-local-example.yaml / config-remote-example.yaml and validate required keys (Azure connection strings, OpenAI deployment names, phone numbers).  
-app/helpers/llmworker.py – thin wrapper around the OpenAI chat completions API, supporting streaming responses and prompt injection of feature‑flag controlled system messages.  
-app/persistence/cosmosdb.py, app/persistence/redis.py, app/persistence/twilio.py – concrete implementations for storing call metadata, caching recent transcripts, and handling Twilio webhook events.  
-app/models/call.py – Pydantic‑based data model for a call request, including claim schema fields (hardwareinfo, firstseen, buildinglocation).</p><p>The system streams conversation text in real time, supports resuming after disconnections, and records calls for later analysis. Feature flags stored in the config allow experimentation with different LLM models or prompt variants without code changes.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Python dependencies (uv is used for lockfile‑driven installs)
-uv sync --frozen   # or pip install -e . if you prefer pip</p><p>(Optional) Build the Docker image defined in cicd/Dockerfile
-docker build -t call-center-ai -f cicd/Dockerfile .</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy the example files and fill in your Azure and OpenAI credentials:  
-cp .env.example .env
-Edit .env with values for AZURECOMMUNICATIONCONNECTIONSTRING,
-OPENAIAPIKEY, OPENAIDEPLOYMENTNAME, and phone numbers.
-Additional per‑environment settings live in config-local-example.yaml.</p><h3 class="post-h" id="running-it">Running it</h3><p>Start the built container or run the Python module directly:  
-Using Makefile target (if available)
-make run</p><h3 class="post-h" id="or-launch-the-fastapi-app-manually">Or launch the FastAPI app manually</h3><p>uvicorn app.main:app --host 0.0.0.0 --port 8000</p><p>The README demonstrates a curl call to trigger a call:</p><p>curl \
-  --header &#39;Content-Type: application/json&#39; \
-  --request POST \
-  --url https://&lt;host&gt;/call \
-  --data &#39;{
-    &quot;botcompany&quot;: &quot;Contoso&quot;,
-    &quot;botname&quot;: &quot;Amélie&quot;,
-    &quot;phonenumber&quot;: &quot;+11234567890&quot;,
-    &quot;task&quot;: &quot;Help the customer with their digital workplace.&quot;,
-    &quot;agentphonenumber&quot;: &quot;+33612345678&quot;,
-    &quot;claim&quot;: [
-      {&quot;name&quot;:&quot;hardwareinfo&quot;,&quot;type&quot;:&quot;text&quot;},
-      {&quot;name&quot;:&quot;firstseen&quot;,&quot;type&quot;:&quot;datetime&quot;},
-      {&quot;name&quot;:&quot;buildinglocation&quot;,&quot;type&quot;:&quot;text&quot;}
-    ]
-  }&#39;</p><p>The service will return a call SID and begin streaming transcript events to the client endpoint configured in the payload.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A mid‑size insurance firm can use this repo to field 24/7 first‑line triage calls. A customer reports a lost policy document; the AI agent calls the claimant, gathers the required hardwareinfo, firstseen, and buildinglocation fields, and logs the interaction in Cosmos DB. If the conversation exceeds a confidence threshold, the agent</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Call centers need AI agents that can make and receive phone calls programmatically. Building this from scratch requires integrating telephony, speech recognition, LLM orchestration, and persistence—weeks of work. This repo packages that integration into a deployable service with a single HTTP endpoint that triggers a call.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>call-center-ai</code> is a Python/FastAPI service that places outbound calls or receives inbound calls through an AI agent. It uses Azure Communication Services for telephony, OpenAI GPT models for conversation, and supports Azure Cosmos DB, Redis, or in-memory storage. The bot handles multi-turn conversations, real-time streaming, SMS fallback, and can be customized via YAML config files.</p>
+<p>The core logic lives in <code>app/main.py</code> (29 functions) with helpers in <code>app/helpers/</code>. The <code>app/models/</code> directory defines the data structures (<code>call.py</code>, <code>message.py</code>, <code>claim.py</code>). Persistence is abstracted behind interfaces in <code>app/persistence/</code> with implementations for Cosmos DB, Azure Queue Storage, Redis, and Twilio.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>app/main.py</code>'s <code>lifespan</code> handler, which initializes configuration and resources. The <code>/call</code> POST endpoint (defined in <code>main.py</code>) accepts a JSON payload and triggers <code>call_events.on_new_call</code>. That function routes through <code>call_utils.py</code> (42 functions, the largest helper) which handles media streaming, TTS sentence splitting, and call state transitions.</p>
+<p>The critical path is short: HTTP request → <code>on_new_call</code> → <code>call_llm.load_llm_chat</code> → LLM inference → <code>call_events.on_audio_connected</code> → telephony provider. External effects touch Azure Communication Services, OpenAI, Cosmos DB, and Redis—usually within 3-4 function hops from the entry point.</p>
+<p>The module graph shows three hub modules with high blast radius: <code>app/helpers/config.py</code> and <code>app/helpers/logging.py</code> (each imported by 20 modules) and <code>app/helpers/cache.py</code> (17 importers). Changes to these ripple widely. There are also 25 modules involved in circular imports, which will make refactoring these hubs painful.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: This is a Python project with <code>pyproject.toml</code> and a <code>uv.lock</code> file. Install with <code>uv sync</code> or <code>pip install -e .</code>. A <code>Makefile</code> provides common targets. Container deployment uses <code>cicd/Dockerfile</code>.</p>
+<p><strong>Configuration</strong>: Copy <code>.env.example</code> to <code>.env</code> and fill in Azure credentials. The <code>config-local-example.yaml</code> and <code>config-remote-example.yaml</code> files define bot behavior, prompts, and feature flags.</p>
+<p><strong>Running it</strong>: Start the FastAPI server with <code>uvicorn app.main:app</code> from the repo root. The README documents a <code>curl</code> POST to <code>/call</code> with a JSON payload specifying the phone number, task, and claim schema.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>An IT helpdesk deploys this as an Azure Container App. A ticket system calls the <code>/call</code> endpoint with a customer's phone number and a task description. The AI agent calls the customer, gathers hardware and location details into structured claims, and stores them in Cosmos DB. The agent can escalate to a human if the customer requests it.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found 54 issues: 30 high, 21 medium, 3 low.</p>
+<ul><li><strong>High</strong> - Circular imports - 25 modules participate in mutually reachable import cycles, including <code>app/helpers/config.py</code>, <code>app/helpers/logging.py</code>, and <code>app/models/call.py</code>. Refactoring these requires breaking the cycles.</li><li><strong>High</strong> - Deep nesting - 12 instances of indentation depth 6+, concentrated in <code>app/models/call.py</code>, <code>app/models/message.py</code>, and <code>app/persistence/azure_queue_storage.py</code>.</li><li><strong>High</strong> - Duplicated code - 40 repeated 6-line blocks across 12 files, notably in <code>call_events.py</code>, <code>call_utils.py</code>, and the search persistence layer.</li><li><strong>Medium</strong> - Oversized files - <code>call_events.py</code>, <code>call_utils.py</code>, and <code>main.py</code> each exceed 670 lines.</li><li><strong>Medium</strong> - Hub modules - <code>config.py</code> and <code>logging.py</code> each have 20 dependents; changes are high-blast-radius.</li><li><strong>Medium</strong> - Broad exception handling - 5 instances of bare <code>except</code> in <code>call_llm.py</code>, <code>ai_search.py</code>, and <code>cosmos_db.py</code>.</li><li><strong>Low</strong> - TODO/FIXME markers - 17 across <code>call_llm.py</code>, <code>call_utils.py</code>, and <code>main.py</code>.</li></ul>
+<p>The repo has tests (8 files), CI via GitHub Actions, a Dockerfile, and a license. No lockfile is present for Python dependencies, so builds are not fully reproducible.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a production-grade reference implementation for AI call centers, well-structured despite its complexity. The circular imports and hub modules will make significant changes expensive. Teams wanting a working Azure-based AI calling system should start here; teams needing custom telephony or storage backends will find the persistence abstractions useful but will need to break the import cycles first.</p>
             </div>
 
             
@@ -128,7 +120,7 @@ make run</p><h3 class="post-h" id="or-launch-the-fastapi-app-manually">Or launch
                         <span class="an-lab">Composition</span>
                         <div class="an-score">102<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>64</b></li><li><span>YAML</span><i style="width:11%"></i><b>7</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li><li><span>Markdown</span><i style="width:3%"></i><b>2</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>64</b></li><li><span>YAML</span><i style="width:11%"></i><b>7</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li><li><span>Markdown</span><i style="width:3%"></i><b>2</b></li><li><span>Jupyter Notebook</span><i style="width:2%"></i><b>1</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Docker</span></p>
                     </div>

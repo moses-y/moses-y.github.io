@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 14, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations deploying multiple LLM providers face operational fragmentation: separate authentication schemes, inconsistent rate-limiting, no unified caching, and guardrail policies that must be replicated across each integration. Teams end up maintaining custom proxy logic for routing, observability, and security at every layer, increasing operational overhead and introducing divergence in how traffic is governed across models.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>aisix provides a single, OpenAI-compatible API gateway written in Rust that sits in front of dozens of LLM providers. The codebase organizes functionality across focused crates: aisix-core defines the model schemas, routing logic, and policy structures (crates/aisix-core/src/models/); aisix-gateway implements the request pipeline, credential handling, and SSE streaming (crates/aisix-gateway/src/); and aisix-admin provides the administration handlers for API keys, guardrails, and OpenAPI dumping (crates/aisix-admin/src/). Caching is handled by aisix-cache with both in-memory and Redis-backed semantic cache support (crates/aisix-cache/src/), while guardrails span keyword filtering, PII redaction, and integrations with Presidio and Lakera (crates/aisix-guardrails/src/). Configuration is declarative — a single resources.yaml file drives provider keys, model routing, and cache policies, with optional etcd integration for multi-replica clusters (crates/aisix-etcd/). The gateway ships as one static binary with hot-reload on SIGHUP and lock-free config reads.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repo and build with cargo build --release from the root, which produces a single binary. Docker builds are configured via the Dockerfile at the project root.</p><p>Configuration: The gateway reads two files: config.yaml for runtime settings (proxy address, observability endpoints) and resources.yaml for declarative resource definitions. Provider keys are defined in resources.yaml with interpolated environment variables — the README example shows apikey: ${OPENAIAPIKEY}. No database or control plane is required for the open-source edition.</p><p>Running it: Start the gateway with ./target/release/aisix -c config.yaml. The Quickstart in the README demonstrates a minimal resources.yaml format that lists providerkeys and models with provider references. For clustered deployments, point the gateway at an etcd endpoint via the aisix-etcd crate configuration.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A platform team wants to expose a unified /v1/chat/completions endpoint in front of OpenAI, Anthropic, and Gemini while enforcing token-level rate limits, caching repeated requests, and running guardrails against PII and prompt injection. They define three models in resources.yaml, each pointing to a different provider key. The aisix-core models (model.rs, ratelimitpolicy.rs, cache_policy.rs) express the desired policies. The aisix-guardrails pipeline (</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p><strong>Repository</strong>: <code>aisix</code> <strong>Clone</strong>:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/aisix</code></pre>
+<hr>
+<h3 id="the-problem">The Problem</h3>
+<p>Teams that expose multiple LLM providers (OpenAI, Anthropic, Gemini, Bedrock, Azure OpenAI, etc.) must run separate adapters, duplicate auth, and stitch together rate‑limit, caching and observability logic. Maintaining that plumbing in each service creates operational drift and hidden cost.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>aisix</code> provides a single, OpenAI‑compatible HTTP API that fronts all supported providers. The gateway is a static Rust binary (<code>cargo build --release</code>) that reads declarative resources from <code>resources.yaml</code> or an etcd cluster and enforces:</p>
+<ul><li>routing &amp; fail‑over (<code>crates/aisix-gateway/src/bridge.rs</code>)</li><li>API‑key auth &amp; provider‑key mapping (<code>crates/aisix-admin/src/provider_keys_handlers.rs</code>)</li><li>guardrails such as moderation, PII redaction (<code>crates/aisix-guardrails/src/*.rs</code>)</li><li>per‑model caching (<code>crates/aisix-cache/src/*.rs</code>) and rate limits (<code>crates/aisix-core/src/models/rate_limit.rs</code>)</li><li>Prometheus / OTLP observability (<code>crates/aisix-obs/src/*.rs</code>)</li></ul>
+<p>The admin REST interface lives in <code>crates/aisix-admin</code>, the core data model in <code>crates/aisix-core</code>, and each provider implementation under <code>crates/aisix-provider‑*</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<div class="table-scroll"><table><thead><tr><th>Layer</th><th>Entry point</th><th>Primary responsibilities</th><th>Blast‑radius</th></tr></thead><tbody><tr><td><strong>Binary</strong></td><td><code>crates/aisix-gateway/src/lib.rs</code> (invoked from <code>bench/pgo-training/trainer/src/main.rs</code> for benchmarks)</td><td>Parses CLI args, loads config (<code>crates/aisix-core/src/config.rs</code>), starts HTTP server (<code>crates/aisix-gateway/src/hub.rs</code>)</td><td>Medium – changes affect all request handling</td></tr><tr><td><strong>Routing hub</strong></td><td><code>crates/aisix-gateway/src/hub.rs</code> → <code>crates/aisix-gateway/src/bridge.rs</code></td><td>Selects provider based on request, builds upstream HTTP (<code>crates/aisix-gateway/src/upstream_http.rs</code>)</td><td>High – 197 modules import <code>tests/e2e/src/harness/index.ts</code> which mirrors hub behavior; churn here propagates widely</td></tr><tr><td><strong>Provider bridge</strong></td><td><code>crates/aisix-provider-*/src/bridge.rs</code> (e.g., <code>aisix-provider-openai</code>)</td><td>Translates OpenAI‑compatible payloads to provider‑specific wire format (<code>src/wire.rs</code>) and back</td><td>Medium – each provider isolated</td></tr><tr><td><strong>Cache layer</strong></td><td><code>crates/aisix-cache/src/cache.rs</code> → <code>semantic_redis.rs</code></td><td>In‑memory + Redis backing; key generation in <code>crates/aisix-cache/src/key.rs</code> (deep nesting, 8‑level indent)</td><td>Low – limited to cache calls</td></tr><tr><td><strong>Guardrails</strong></td><td><code>crates/aisix-guardrails/src/index.rs</code></td><td>Calls moderation APIs (e.g., OpenAI, Presidio) before upstream request</td><td>Medium – invoked for every request when enabled</td></tr><tr><td><strong>Observability</strong></td><td><code>crates/aisix-obs/src/lib.rs</code> → <code>metrics.rs</code>, <code>otlp.rs</code></td><td>Emits Prometheus counters, OTLP spans</td><td>Low – side‑effect only</td></tr></tbody></table></div>
+<p>The import graph contains 215 internal modules and 233 edges, with <strong>no circular dependencies</strong>. The most connected module is the test harness <code>tests/e2e/src/harness/index.ts</code> (197 dependents), indicating that the test harness mirrors core routing logic and should stay stable.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ol><li><strong>Build</strong> the binary (requires Rust 1.70+):</li></ol>
+<pre data-lang="bash"><code>   cd aisix
+   cargo build --release</code></pre>
+<ol><li><strong>Configure</strong> a minimal <code>config.yaml</code> (see <code>config.example.yaml</code>). Example excerpt:</li></ol>
+<pre data-lang="yaml"><code>   resources_file: /etc/aisix/resources.yaml
+   proxy:
+     addr: "0.0.0.0:3000"
+   admin:
+     enabled: false
+   observability:
+     metrics:
+       prometheus:
+         enabled: true
+         addr: "0.0.0.0:9090"</code></pre>
+<p>Provider keys and models are declared in <code>resources.yaml</code> (see <code>assets/aisix-architecture.svg</code> for the schema).</p>
+<ol><li><strong>Run</strong> the gateway:</li></ol>
+<pre data-lang="bash"><code>   ./target/release/aisix-gateway --config config.yaml</code></pre>
+<p>The process listens on the address in <code>proxy.addr</code> and serves the OpenAI‑compatible API.</p>
+<ol><li><strong>Optional Docker</strong> – a ready‑to‑run image can be built with the provided <code>Dockerfile</code>:</li></ol>
+<pre data-lang="bash"><code>   docker build -t aisix .
+   docker run -p 3000:3000 -v $(pwd)/resources.yaml:/etc/aisix/resources.yaml aisix</code></pre>
+<p>No additional scripts are required; the repository supplies a complete CI pipeline (<code>.github/workflows/ci.yml</code>) and a benchmark harness for performance testing.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform that needs to expose both OpenAI GPT‑4 and Anthropic Claude‑3 can point its existing client SDKs at the AISIX endpoint. The gateway handles provider‑specific auth, enforces a per‑user token budget, caches repeated completions, and streams results via SSE—all without code changes in the service layer.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (154 total)</strong></p>
+<ul><li><strong>High – Hub module</strong>: <code>tests/e2e/src/harness/index.ts</code> is depended on by 197 modules. Keep it minimal; volatile logic should be moved elsewhere.</li><li><strong>High – Deep nesting</strong>: <code>crates/aisix-admin/src/openapi.rs</code>, <code>crates/aisix-cache/src/key.rs</code>, <code>crates/aisix-guardrails/src/aliyun_ai_guardrail.rs</code> have indentation depth 8, reducing readability. Refactor with early returns or extracted helpers.</li><li><strong>High – Duplicated blocks</strong>: Six‑line shell snippets repeated in 304 files (e.g., <code>bench/onthebench/run‑*.sh</code>). Consolidate into a shared script.</li><li><strong>High – Oversized files</strong>: <code>crates/aisix-admin/src/lib.rs</code>, <code>crates/aisix-admin/src/openapi.rs</code>, <code>crates/aisix-core/src/config.rs</code> each exceed 1 250 lines. Split by logical concern.</li></ul>
+<p><strong>Code‑health audit (8 findings)</strong></p>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – Remove <code>continue-on-error</code> from correctness steps (<code>.github/workflows/ci.yml</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code>.</li><li><strong>Medium</strong> – Add Dependabot (<code>.github/dependabot.yml</code>).</li><li><strong>Medium</strong> – Pin Docker base images by digest.</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout.</li><li><strong>Low</strong> – Define <code>timeout-minutes</code> for workflow jobs.</li></ul>
+<p><strong>Other hygiene</strong></p>
+<ul><li>Test suite present (241 test files) and executed via GitHub Actions.</li><li>License (<code>LICENSE</code>) and lockfile (<code>Cargo.lock</code>) are included.</li><li>Secret‑shaped PEM files exist under <code>crates/aisix-provider-vertex/test-fixtures/</code>; they are test fixtures, not production secrets, but should be reviewed for accidental commit.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>aisix</code> delivers a production‑grade, Rust‑native gateway that consolidates LLM provider access, guardrails, caching and observability behind a single OpenAI‑compatible API. The codebase is functional and well‑tested but suffers from a few high‑impact hotspots—particularly the central test harness and several deeply nested, oversized modules. Addressing those, together with the straightforward CI hardening recommendations, will improve maintainability and security. The project is a solid foundation for teams that need a unified LLM ingress point and are comfortable working in Rust or container environments.</p>
             </div>
 
             
@@ -91,18 +136,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">7<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">526<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>145</b></li><li><span>TOML</span><i style="width:10%"></i><b>15</b></li><li><span>YAML</span><i style="width:6%"></i><b>9</b></li><li><span>Markdown</span><i style="width:6%"></i><b>8</b></li><li><span>Shell</span><i style="width:5%"></i><b>7</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>220</b></li><li><span>TypeScript</span><i style="width:98%"></i><b>215</b></li><li><span>TOML</span><i style="width:10%"></i><b>22</b></li><li><span>JSON</span><i style="width:9%"></i><b>20</b></li><li><span>Markdown</span><i style="width:5%"></i><b>11</b></li><li><span>YAML</span><i style="width:5%"></i><b>10</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -142,6 +187,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>crates/aisix-provider-vertex/test-fixtures/test_sa_private.pem, crates/aisix-provider-vertex/test-fixtures/test_sa_private_rotated.pem, crates/aisix-provider-vertex/test-fixtures/test_sa_public.pem</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1333666286">Open in Code Brain &rarr;</a>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">PHP</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,41 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations often face vendor lock-in with cloud PaaS providers like Vercel or Heroku, coupled with rising operational costs and limited control over underlying infrastructure. Teams seeking to reduce dependency on external vendors while maintaining a streamlined deployment workflow often turn to self-hosted alternatives, though many require significant DevOps overhead to manage.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Coolify is a self-hostable PaaS alternative that enables deployment of static sites, databases, and full-stack applications on own hardware via an SSH connection. The codebase is structured around a PHP Laravel application, with core logic residing in the app/ directory. Specific application lifecycle actions are handled by classes within app/Actions/, such as GenerateConfig.php for deployment setup and StopApplication.php for resource teardown. Database management is handled via dedicated action classes in app/Actions/Database/ (e.g., StartDatabase.php, StartPostgresql.php), while proxy configuration and Docker container status are managed by app/Actions/Proxy/ and app/Actions/Server/ respectively. CI/CD pipelines are configured through GitHub Actions, with workflow definitions located in .github/workflows/</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that want the convenience of services such as Vercel, Heroku or Netlify often cannot host those platforms on‑premise. They need a self‑contained control plane that can spin up static sites, databases and full‑stack apps on their own servers while keeping the same “one‑click” experience.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>Coolify</strong> is an open‑source PaaS that runs on a single (or clustered) Docker host. The core Laravel application lives under <code>app/</code> (≈1 650 PHP files) and drives the UI (<code>resources/js/app.js</code>, <code>public/vendor/*/app.js</code>). Docker orchestration files (<code>docker-compose.dev.yml</code>, <code>docker-compose.prod.yml</code>, etc.) describe how the platform launches containers for user applications, databases, and auxiliary services (e.g., Horizon, Telescope). The <code>docker/</code> folder contains helper images (<code>coolify-helper</code>, <code>coolify-realtime</code>) built from the Dockerfiles there.</p>
+<p>Key files:</p>
+<ul><li><code>app/Actions/Application/GenerateConfig.php</code> – builds Docker‑Compose files for a new app.</li><li><code>app/Actions/Database/StartPostgresql.php</code> – starts a PostgreSQL container.</li><li><code>resources/js/terminal.js</code> – provides the in‑browser terminal UI used by the real‑time service.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when a user accesses the web UI, which loads <code>public/vendor/horizon/app.js</code> (or <code>telescope/app.js</code>) and <code>resources/js/app.js</code>. These bundles initialize a Vue/React front‑end that talks to the Laravel backend via HTTP routes defined in <code>routes/web.php</code> (not listed but typical for a Laravel project).</p>
+<p>A typical “deploy application” flow:</p>
+<ol><li><strong>UI → Backend</strong> – The front‑end calls the <code>GenerateConfig</code> action (<code>app/Actions/Application/GenerateConfig.php</code>).</li><li><strong>GenerateConfig</strong> reads the user’s settings (stored in the database) and writes a service definition into one of the <code>docker-compose.*.yml</code> files.</li><li><strong>Backend → Docker</strong> – <code>app/Actions/Docker/GetContainersStatus.php</code> runs Docker CLI commands (via Symfony Process) to spin up or inspect containers.</li><li><strong>Docker‑Compose</strong> – The helper image (<code>docker/coolify-helper/Dockerfile</code>) provides a tiny runtime that executes <code>docker compose up -d</code> using the generated compose file.</li><li><strong>Realtime Terminal</strong> – If the user opens a terminal, the front‑end loads <code>resources/js/terminal.js</code>, which opens a WebSocket to <code>docker/coolify-realtime/terminal-server</code>. That server imports <code>docker/coolify-realtime/terminal-utils</code> (the most‑connected module, Ca = 2) and streams container I/O back to the UI.</li></ol>
+<p>The import graph shows only three cross‑module edges, meaning most code is isolated; there are no circular dependencies. The hub modules (<code>terminal-utils</code>, <code>terminal-server</code>, <code>resources/js/app</code>) own the widest blast radius because many other files import them or they import external services.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/coolify.git
+cd coolify
+
+# 2. Copy example env (the repo ships .env.production; replace with your values)
+cp .env.development.example .env
+
+# 3. Build helper and realtime images
+docker compose -f docker-compose.dev.yml build
+
+# 4. Start the platform (development stack)
+docker compose -f docker-compose.dev.yml up -d</code></pre>
+<p><em>Configuration</em> – Environment variables are read from <code>.env</code> (the repository includes a production example). Database credentials, SMTP settings, and API keys must be supplied there before the Laravel app can start.</p>
+<p><em>Running</em> – The Laravel HTTP server is started inside the <code>coolify-helper</code> container; the UI is reachable at <code>http://localhost:3000</code> (port defined in <code>docker-compose.dev.yml</code>). The realtime terminal runs in the <code>coolify-realtime</code> container, exposing a WebSocket on the same host.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider can deploy a private Coolify instance on a VPS, then hand each tenant a dedicated Docker network. When a developer pushes a Git repo, Coolify’s <code>GenerateConfig</code> creates a compose file that pulls the repo, builds the Docker image, and launches it alongside a PostgreSQL container—all without leaving the provider’s infrastructure.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Cognitive Load</strong> – 60 files contain deep nesting (max indentation depth = 8). Examples: <code>resources/js/terminal.js</code>, <code>app/Actions/Application/CleanupPreviewDeployment.php</code>, <code>app/Actions/Application/StopApplicationOneServer.php</code>. Refactoring to early returns or extracting inner blocks will improve readability.</li><li><strong>Medium – Secret Files</strong> – <code>.env.production</code>, <code>database/migrations/2026_04_19_000000_backfill_and_encrypt_webhook_secrets.php</code>, and <code>other/nightly/.env.production</code> are committed. These should be removed or encrypted to avoid credential leakage.</li><li><strong>Medium – Test Coverage</strong> – 345 test files exist, but the import graph shows only three import edges, suggesting many tests are isolated and may not exercise critical paths. Consider increasing integration test depth.</li></ul>
+<p>The repository includes a full CI pipeline (<code>.github/workflows/*.yml</code>) and a Dockerfile for each service, confirming automated builds and tests. License (<code>LICENSE</code>) and contribution guidelines are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Coolify delivers a functional self‑hosted PaaS with a clear Laravel + Docker architecture, backed by CI and extensive test suites. Code readability suffers from deep nesting in several core actions, and committed secret files pose a security risk. Teams comfortable with Laravel and Docker can adopt it for on‑premise app hosting, but they should address the nesting and secret‑management issues before production rollout.</p>
             </div>
 
             
@@ -91,18 +123,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,803<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>134</b></li><li><span>PHP</span><i style="width:25%"></i><b>33</b></li><li><span>YAML</span><i style="width:13%"></i><b>17</b></li><li><span>JSON</span><i style="width:2%"></i><b>3</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>PHP</span><i style="width:100%"></i><b>1651</b></li><li><span>YAML</span><i style="width:23%"></i><b>382</b></li><li><span>Markdown</span><i style="width:9%"></i><b>143</b></li><li><span>JavaScript</span><i style="width:7%"></i><b>114</b></li><li><span>JSON</span><i style="width:2%"></i><b>40</b></li><li><span>Shell</span><i style="width:1%"></i><b>9</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Laravel</span><span>Docker</span><span>Vector store</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -134,7 +166,7 @@
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>.env.production</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>.env.production, database/migrations/2026_04_19_000000_backfill_and_encrypt_webhook_secrets.php, other/nightly/.env.production</code></span></li>
                     </ul>
                 </div>
 

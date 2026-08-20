@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 25, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#windows">Windows</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Drone photogrammetry traditionally requires expensive proprietary suites or complex manual pipelines to convert overlapping images into georeferenced point clouds, meshes, and elevation models. This repo provides an open command-line toolkit that automates that transformation, making it scriptable, containerizable, and integrable into larger geospatial workflows.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The core processing lives in opendm/, a Python package of ~116 files implementing the photogrammetric pipeline: photo.py, pointcloud.py, mesh.py, orthophoto.py, and dem/ for elevation product generation. Processing stages are orchestrated through stages/ (stages/odmapp.py, stages/odmdem.py, stages/mvstex.py), which wire together image alignment, meshing, texturing, and DEM generation. A native build path exists via SuperBuild/CMakeLists.txt, which compiles C++ dependencies (GDAL, OpenCV, OpenMVS, Ceres, etc.) — useful for local installations without Docker. The contrib/ directory adds extensions for NDVI, orthorectification, Blender integration, and point-cloud-to-DEM conversion (contrib/pc2dem/pc2dem.py, contrib/ndvi/ndvi.py). Docker entry points are defined in Dockerfile and gpu.Dockerfile, and the CLI is invoked via run.py.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The fastest path is Docker. From the README:
-Pull the official image
-docker pull opendronemap/odm</p><p>Place images (JPEGs, TIFFs, or DNGs) in a folder named images. Then run:
-Linux/macOS
-docker run -ti --rm -v /home/youruser/datasets:/datasets opendronemap/odm --project-path /datasets project</p><h3 class="post-h" id="windows">Windows</h3><p>docker run -ti --rm -v c:/Users/youruser/datasets:/datasets opendronemap/odm --project-path /datasets project</p><p>Add flags after project, e.g.:
-docker run -ti --rm -v /datasets:/datasets opendronemap/odm --project-path /datasets project --dsm --orthophoto-resolution 2</p><p>For local Python use, run.py serves as the entry point; for custom pipelines, the opendm/ API functions (e.g., opendm.photo, opendm.pointcloud) can be imported and sequenced.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A mapping consultancy needs to process 200 aerial JPEG surveys into classified LAZ point clouds and GeoTIFF orthophotos for a client QGIS review. They place the images in /data/project/images, run the Docker command above with --classified and --orthophoto-resolution 2, and after ~30–90 minutes (depending on overlap and hardware), the output directory contains odmgeoreferencedmodel.laz, odmorthophoto.tif, and odmtextured_model.obj. The LAZ files are opened in CloudCompare for quality checks, and the GeoTIFF is draped in QGIS. The same workflow can be scripted via run.py for batch processing across datasets.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Dependencies without lockfile – contrib/resize/requirements.txt lists Python packages without a requirements.lock or  Pipfile, risking non-reproducible builds across environments.
-Limited test coverage – only 3 test files found; no evidence of CI test execution beyond build workflows.
-C++ build complexity – SuperBuild/CMakeLists.txt and external CMake modules indicate a heavy native dependency chain; building</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Processing raw aerial imagery into georeferenced point clouds, DEMs and textured 3‑D models requires stitching thousands of photos, handling camera metadata, and running heavy‑weight photogrammetry pipelines. Manually orchestrating those steps is error‑prone and hard to reproduce across OSes.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a CLI tool that drives the OpenDroneMap (ODM) workflow. The top‑level scripts <code>run.py</code>, <code>run.sh</code> and the Dockerfile (<code>Dockerfile</code>) invoke the core engine located in the <code>opendm/</code> package.</p>
+<ul><li><code>opendm/remote.py</code> defines the <code>Remote</code> class that coordinates the overall reconstruction, parsing CLI arguments, launching external tools (OpenSfM, OpenMVS, GDAL) and writing the final directory layout described in the README.</li><li><code>opendm/osfm.py</code> wraps the OpenSfM reconstruction steps (track creation, bundle adjustment, dense point cloud).</li><li><code>opendm/point_cloud.py</code>, <code>opendm/mesh.py</code>, <code>opendm/orthophoto.py</code> and <code>opendm/dem/</code> contain the post‑processing stages that generate LAS/LAZ clouds, textured meshes and DEMs.</li></ul>
+<p>Support utilities (<code>opendm/utils.py</code>, <code>opendm/arghelpers.py</code>, <code>opendm/concurrency.py</code>) provide logging, argument parsing and parallel execution. The <code>contrib/</code> folder ships optional helpers such as NDVI calculation and image resizing.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>run.py</code> (or the Docker entrypoint) which parses command‑line options and builds an <code>opendm.remote.Remote</code> instance.</p>
+<ol><li><strong>Entry point</strong> – <code>run.py</code> → <code>Remote.__init__</code> (file <code>opendm/remote.py</code>).</li><li><strong>Argument handling</strong> – <code>Remote</code> consumes <code>opendm/arghelpers.py</code> (high branching density) to turn flags into a <code>settings.yaml</code> configuration.</li><li><strong>Workflow orchestration</strong> – <code>Remote.run()</code> sequentially calls:   <em> <code>opendm/osfm.py.run()</code> – creates tracks, runs bundle adjustment, triggers dense reconstruction. </em> <code>opendm/dem/commands.py</code> – builds DEMs via GDAL and PDAL. <em> <code>opendm/mesh.py</code> – runs Poisson or MVS meshing. </em> <code>opendm/orthophoto.py</code> – produces orthorectified GeoTIFFs.</li><li><strong>External tool calls</strong> – each stage shells out to binaries packaged in <code>docker/</code> or installed via the SuperBuild CMake scripts (e.g., OpenCV, GDAL, OpenSfM).</li></ol>
+<p>The import graph shows <code>opendm/__init__.py</code> as a hub (65 inbound imports) and <code>opendm/utils.py</code> as the second hub (19 inbound, 3 outbound). Their high “instability” scores mean changes here ripple widely. No circular dependencies were detected, simplifying static analysis.</p>
+<p>File‑level responsibilities (selected):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core symbols</th><th>Primary effect</th></tr></thead><tbody><tr><td><code>opendm/remote.py</code></td><td><code>Remote</code> class, <code>run()</code></td><td>Orchestrates end‑to‑end pipeline, writes output layout</td></tr><tr><td><code>opendm/osfm.py</code></td><td><code>run()</code>, <code>reconstruct()</code></td><td>Drives OpenSfM photogrammetry</td></tr><tr><td><code>opendm/dem/ground_rectification/rectify.py</code></td><td><code>rectify()</code></td><td>Applies DEM ground‑control alignment</td></tr><tr><td><code>opendm/tiles/gdal2tiles.py</code></td><td>tiling helpers</td><td>Generates raster tiles for web viewers</td></tr><tr><td><code>opendm/utils.py</code></td><td>logging, helper functions</td><td>Shared utilities used by 65 modules</td></tr></tbody></table></div>
+<p>Because the hub modules expose most functions, they are the safest places to add new flags or logging without breaking downstream code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ODM
+cd ODM
+
+# Build the Docker image (recommended)
+docker build -t odm-local -f Dockerfile .
+
+# Run the CLI on a folder of images
+docker run -ti --rm \
+  -v /path/to/dataset:/datasets \
+  odm-local \
+  --project-path /datasets project \
+  --dsm --orthophoto-resolution 2</code></pre>
+<ul><li>The CLI expects an <code>images/</code> sub‑directory inside the project path (see README).</li><li>Configuration lives in <code>settings.yaml</code> generated by the argument parser; additional flags follow the ODM documentation linked in the README.</li><li>For a native Python run (no Docker), install the requirements: <code>pip install -r requirements.txt</code> then execute <code>python run.py --project-path /mydata project</code>.</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A GIS team can embed ODM in an automated ingest pipeline: after a UAV lands, a watchdog script moves the new <code>images/</code> folder into a shared volume, triggers the Docker command above, and copies the resulting <code>odm_orthophoto/</code>, <code>odm_georeferenced_model.laz</code> and <code>odm_textured_model.obj</code> into the organization’s data lake for downstream analysis in QGIS or CloudCompare.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Hub modules</strong> – <code>opendm/__init__.py</code> (65 dependents) and <code>opendm/utils.py</code> (19 dependents) carry a large blast radius; keep changes minimal.</li><li><strong>Medium – Broad exception handling</strong> – generic <code>except:</code> blocks in <code>opendm/utils.py</code>, <code>opendm/concurrency.py</code>, <code>opendm/osfm.py</code> swallow errors, reducing observability.</li><li><strong>High – Deep nesting</strong> – up to 7‑level indentation in <code>opendm/utils.py</code>, <code>opendm/osfm.py</code>, <code>opendm/multispectral.py</code> hampers readability.</li><li><strong>Medium – Oversized files</strong> – <code>opendm/osfm.py</code> (621 lines) and <code>opendm/photo.py</code> are monolithic; consider refactoring by responsibility.</li><li><strong>Medium – File handles without context</strong> – <code>open(...)</code> used without <code>with</code> in <code>opendm/cutline.py</code>, <code>opendm/dem/merge.py</code>, <code>opendm/video/video2dataset.py</code>.</li><li><strong>High – Duplicated code</strong> – repeated 6‑line blocks across 23 files (e.g., <code>configure.sh</code>, <code>configure_macos.sh</code>, NDVI scripts). Consolidate into shared helpers.</li><li><strong>Low – Missing lockfile</strong> – <code>contrib/resize/requirements.txt</code> lacks a <code>requirements.lock</code>; builds are non‑reproducible.</li></ul>
+<p>The repository includes a test suite (<code>tests/</code>), CI pipelines (<code>.github/workflows/</code>), and a Dockerfile, but no <code>requirements.lock</code> for the main environment.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>ODM provides a fully scripted, Docker‑ready pipeline for turning raw UAV imagery into geospatial products. The codebase is functional but concentrates critical logic in a few hub modules and contains several maintainability concerns (deep nesting, broad exception catches, duplicated scripts). Teams comfortable with Python and container workflows can adopt it quickly; however, expect to invest in refactoring the utility layer if you plan extensive custom extensions.</p>
             </div>
 
             
@@ -105,9 +132,9 @@ C++ build complexity – SuperBuild/CMakeLists.txt and external CMake modules in
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">233<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>116</b></li><li><span>Markdown</span><i style="width:16%"></i><b>18</b></li><li><span>YAML</span><i style="width:9%"></i><b>10</b></li><li><span>Shell</span><i style="width:4%"></i><b>5</b></li><li><span>Docker</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>131</b></li><li><span>Markdown</span><i style="width:14%"></i><b>18</b></li><li><span>YAML</span><i style="width:8%"></i><b>11</b></li><li><span>Shell</span><i style="width:5%"></i><b>7</b></li><li><span>JSON</span><i style="width:2%"></i><b>3</b></li><li><span>Docker</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
                         <p class="an-fw"><span>Flask</span><span>Docker</span><span>OpenCV</span></p>
                     </div>

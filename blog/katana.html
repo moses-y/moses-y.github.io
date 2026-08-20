@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 3, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#overview">Overview</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a></nav>
-                <h3 class="post-h" id="overview">Overview</h3><p>The repository contains 165 files, 125 of which are Go source. It is a crawling and spidering framework forked from projectdiscovery/katana, designed for automation pipelines with both standard and headless execution paths. The codebase is organized under pkg/, cmd/, and internal/, with a clear separation between engine logic, parsing, output formatting, and navigation.</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations needing automated web discovery often require a tool that supports JavaScript rendering, configurable scope filtering, and structured output without the overhead of heavier frameworks. The README positions katana as a fast, configurable alternative focused on pipeline execution, with input from STDIN/URL/list and output to STDOUT/file/JSON.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Modes: Standard and headless crawling (cmd/katana/main.go is the primary entry point). Headless mode relies on system Chrome (Dockerfile and Ubuntu install notes confirm this dependency).
-JavaScript support: Handled via pkg/engine/headless/browser/ and pkg/engine/headless/captcha/ (capsolver integration, JS injection files under pkg/engine/headless/captcha/js/).
-Form filling: pkg/utils/formfill/ and pkg/utils/formfields/ provide customizable automatic form population.
-Scope control: pkg/utils/scope/ and pkg/types/options.go enable preconfigured field/regex filtering.
-Output: pkg/output/formatjson.go, formatscreen.go, format_template.go support markdown/JSON/screen formats. Custom fields are defined in pkg/output/fields.go.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install: go install github.com/projectdiscovery/katana/cmd/katana@latest (go.mod and go.sum are present at root). Docker available as projectdiscovery/katana:latest (Dockerfile present at root).
-Configuration: Resolvers via -r flag; exclude filters (-e) for host matching (cdn, private-ips, cidr, regex). Output format configurable through CLI flags documented in katana -h.
-Running: katana -u https://example.com or katana -list urls.txt. Resume scans supported via -resume string flag. Entry point is cmd/katana/main.go.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>In a reconnaissance</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>Katana Technical Briefing</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>Web crawling at scale breaks down when targets rely on JavaScript rendering, CAPTCHAs, and complex form flows. Traditional HTTP-only crawlers miss dynamic content, while headless browsers are slow and hard to configure. Katana addresses this by unifying both approaches in one framework.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Katana is a Go-based crawling and spidering framework with three execution engines: <code>pkg/engine/standard/</code> for HTTP-only crawling, <code>pkg/engine/headless/</code> for browser automation, and <code>pkg/engine/hybrid/</code> that combines both. The headless engine includes CAPTCHA solving (<code>pkg/engine/headless/captcha/</code>) with support for hCaptcha, reCAPTCHA, and Turnstile, plus automatic form filling (<code>pkg/engine/headless/crawler/formfill.go</code>).</p>
+<p>The framework provides output formatting (<code>pkg/output/</code>), scope control (<code>pkg/utils/scope/</code>), and filtering (<code>pkg/utils/filters/</code>). It supports JSON, template, and screen output formats. The <code>cmd/katana/main.go</code> entry point exposes a CLI with flags for input, configuration, and output control.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>cmd/katana/main.go</code>, which delegates to <code>internal/runner/runner.go</code>. The runner parses options via <code>internal/runner/options.go</code>, then selects an engine through <code>pkg/engine/engine.go</code>. The standard engine (<code>pkg/engine/standard/crawl.go</code>) performs HTTP requests, while the headless engine (<code>pkg/engine/headless/headless.go</code>) drives a browser via <code>pkg/engine/headless/browser/browser.go</code>.</p>
+<p>The headless crawler (<code>pkg/engine/headless/crawler/crawler.go</code>) handles page navigation, form filling, and state management (<code>state.go</code>). Captcha detection flows through <code>pkg/engine/headless/captcha/identify.go</code> into solver implementations under <code>pkg/engine/headless/captcha/capsolver/</code>. Parsed results route through <code>pkg/engine/parser/parser.go</code> into <code>pkg/output/output.go</code> for formatting and writing.</p>
+<p>The widest blast radius is <code>pkg/engine/parser/parser.go</code> at 635 lines—changes there affect all engines. The import graph shows 6 internal modules with 0 edges, meaning the codebase is functionally modular with no circular dependencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="sh"><code>CGO_ENABLED=1 go install github.com/projectdiscovery/katana/cmd/katana@latest</code></pre>
+<p><strong>Docker:</strong></p>
+<pre data-lang="sh"><code>docker pull projectdiscovery/katana:latest
+docker run projectdiscovery/katana:latest -u https://tesla.com</code></pre>
+<p><strong>Basic crawl:</strong></p>
+<pre data-lang="sh"><code>katana -u https://example.com</code></pre>
+<p><strong>Headless mode with CAPTCHA solving:</strong></p>
+<pre data-lang="sh"><code>katana -u https://example.com -headless -system-chrome</code></pre>
+<p>Configuration is flag-based; no config file is required. The <code>Makefile</code> provides build targets, and <code>go.mod</code> declares 120 dependencies.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>For security testing, Katana fits into a pipeline where you need to discover endpoints from a JavaScript-heavy SPA:</p>
+<pre data-lang="sh"><code>katana -u https://app.example.com -headless -jc -d 3 -o endpoints.txt</code></pre>
+<p>This crawls three levels deep, parses JavaScript (<code>-jc</code>), and outputs discovered URLs to a file for subsequent testing with tools like <code>nuclei</code> or <code>ffuf</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 25 issues (4 high, 20 medium, 1 low). Key findings:</p>
+<ul><li><strong>High - Deep nesting</strong> - <code>pkg/engine/headless/crawler/formfill.go</code>, <code>headless.go</code>, <code>parser_test.go</code> hit indentation depth 8; control flow is hard to follow. Flatten with early returns.</li><li><strong>High - Duplicated code</strong> - 26 repeated 6-line blocks across 16 files including <code>pkg/engine/common/base.go</code>, <code>hybrid/hybrid.go</code>, <code>browser/browser.go</code>. Extract shared helpers.</li><li><strong>Medium - Empty catch blocks</strong> - <code>pkg/engine/headless/captcha/js/inject-recaptcha.js</code> and <code>page-init.js</code> silently discard errors.</li><li><strong>Medium - Oversized file</strong> - <code>pkg/engine/parser/parser.go</code> at 635 lines.</li><li><strong>Medium - High branching</strong> - <code>internal/runner/options.go</code> has 58 branch points over 161 lines.</li><li><strong>Low - TODO markers</strong> - 3 unresolved in <code>pkg/engine/headless/crawler/crawler.go</code>.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Katana is a capable crawler with solid architecture—no circular dependencies, good test coverage (51 test files), and CI. The main maintenance burden is the duplicated logic and deep nesting in the headless engine. Teams needing JavaScript-rendered crawling with CAPTCHA bypass should evaluate it; teams with simple static-site needs may find the standard engine sufficient but heavier than alternatives.</p>
             </div>
 
             
