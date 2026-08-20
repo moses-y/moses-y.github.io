@@ -15,6 +15,10 @@ const { CONFIG, LLM_API_KEY, LLM_TIMEOUT_MS, modelRateLimits, getNextModel } = r
 const { factsFor } = require('./lib-facts.js');
 const { formatKnowledgeGraph } = require('./lib-knowledge-graph.js');
 const { isCollection } = require('./lib-subprojects.js');
+// The fallback path needs it, and the fallback path is the one that runs when a
+// model times out - so a missing import here fails only in the situation the code
+// exists to handle. It failed exactly that way in CI.
+const { generateFallbackSummary } = require('./lib-github.js');
 
 async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
   if (!LLM_API_KEY) {
