@@ -51,6 +51,7 @@ while IFS= read -r f; do
     echo "BLOCKED  $f contains something key-shaped:"
     git show ":$f" 2>/dev/null | grep -nE "$secret_patterns" | head -3 | sed 's/^/           /'
     fail=1
+    secret_fail=1
   fi
 done <<< "$staged"
 
@@ -64,6 +65,21 @@ if echo "$staged" | grep -qE '^(scripts|assets/js)/.*\.js$'; then
     node scripts/test-imports.js 2>&1 | grep FAIL | sed 's/^/         /'
     fail=1
   fi
+fi
+
+# ---- unit tests -------------------------------------------------------------
+# These existed but nothing ran them, so a fixture could go red and stay red
+# without anyone finding out - which makes them documentation, not guardrails.
+# The whole suite is under half a second, so there is no reason to be selective.
+if echo "$staged" | grep -qE '^scripts/.*\.js$'; then
+  for t in scripts/test-*.js; do
+    [ -f "$t" ] || continue
+    if ! node "$t" >/dev/null 2>&1; then
+      echo "BLOCKED  $t fails:"
+      node "$t" 2>&1 | grep -E 'FAIL|failures' | head -6 | sed 's/^/         /'
+      fail=1
+    fi
+  done
 fi
 
 # ---- generated stylesheet freshness ---------------------------------------
@@ -80,9 +96,13 @@ if echo "$staged" | grep -qE '^assets/(css|js)/site/|^assets/partials/'; then
 fi
 
 if [ "$fail" -eq 1 ]; then
-  echo
-  echo "This repo is public and served by GitHub Pages. Keys belong in"
-  echo "~/.nvidia-api-key and the repository Actions secrets, never here."
+  # Only for an actual key match. This advice used to print for every block above
+  # it, so a failing unit test was answered with a lecture about API keys.
+  if [ "${secret_fail:-0}" -eq 1 ]; then
+    echo
+    echo "This repo is public and served by GitHub Pages. Keys belong in"
+    echo "~/.nvidia-api-key and the repository Actions secrets, never here."
+  fi
   exit 1
 fi
 

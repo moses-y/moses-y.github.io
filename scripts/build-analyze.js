@@ -352,6 +352,14 @@ function runWorker(f) {
     // The page treats a nodeless deep file as "fall back to the file tree".
     if (/too large|no source|no url/.test(e.message)) {
       fs.writeFileSync(outFile, JSON.stringify({ id: f.id, name: f.displayName || f.name, deep: false, skipped: e.message, nodes: [], links: [], findings: [] }));
+      /*
+       * Exit 4, not 3. This is a handled outcome - the stub is written and the page
+       * has its fallback - but exiting 3 made the parent tally it under `failed`
+       * and print a bare "worker error", so a repo with no parseable source read
+       * in CI exactly like a crash. Distinguishing them costs one exit code.
+       */
+      console.log('  ⊘ ' + f.name + ': ' + e.message + ' - no deep graph, page falls back to the file tree');
+      process.exit(4);
     }
     console.log('  ✗ ' + f.name + ': ' + e.message); process.exit(3);
   }
@@ -368,19 +376,34 @@ function runWorker(f) {
   // single pathological repo (giant tarball, weird source) can ever stall the batch.
   const repos = select(data.forks || []);
   console.log('analyzing ' + repos.length + ' repos (deterministic, no LLM; isolated workers)…');
-  let done = 0, failed = 0, skipped = 0;
+  let done = 0, failed = 0, skipped = 0, terminal = 0;
   for (const f of repos) {
     if (done >= BUDGET) { console.log('  … budget reached (' + BUDGET + '); remaining repos will fill on the next run'); break; }
     const outFile = path.join(OUT, f.id + '.deep.json');
     if (!FORCE && fs.existsSync(outFile)) { skipped++; continue; }
     try {
+      // stderr was 'ignore', so a worker that threw outside its own handler lost
+      // its stack entirely. Piped and reported below instead.
       const out = execFileSync('node', [__filename, '--only', String(f.id), '--force'],
-        { encoding: 'utf8', timeout: 90 * 1000, stdio: ['ignore', 'pipe', 'ignore'] });
+        { encoding: 'utf8', timeout: 90 * 1000, stdio: ['ignore', 'pipe', 'pipe'] });
       process.stdout.write(out); done++;
     } catch (e) {
+      /*
+       * The child prints why it failed and the reason arrives here in e.stdout.
+       * This used to print the constant 'worker error' and throw that away, so
+       * diagnosing threejs-skills meant re-running the worker by hand to learn one
+       * word ('no source'). Whatever the child said is what gets logged.
+       */
+      const said = String(e.stdout || '').trim();
+      const err = String(e.stderr || '').trim();
+      if (e.status === 4) { if (said) console.log(said); terminal++; continue; }
       failed++;
-      console.log('  ✗ ' + f.name + ': ' + (e.killed ? 'timed out (90s) - skipped' : 'worker error'));
+      if (e.killed) { console.log('  ✗ ' + f.name + ': timed out (90s) - skipped'); continue; }
+      console.log(said || ('  ✗ ' + f.name + ': exited ' + e.status));
+      // A thrown worker says nothing on stdout, so the stack is the only evidence.
+      if (!said && err) console.log('      ' + err.split('\n').slice(0, 3).join('\n      '));
     }
   }
-  console.log('analyze: ok=' + done + ' failed=' + failed + ' skipped(existing)=' + skipped + ' -> ' + OUT + '/<id>.deep.json');
+  console.log('analyze: ok=' + done + ' failed=' + failed + ' no-source=' + terminal
+    + ' skipped(existing)=' + skipped + ' -> ' + OUT + '/<id>.deep.json');
 })();

@@ -32,34 +32,9 @@ function loadExistingArticles() {
   return new Map();
 }
 
-// Check if article needs regeneration (fallback or AI-sounding)
-function isFallbackArticle(article) {
-  if (!article || article.length < 400) return true;
-
-  const badPhrases = [
-    // Fallback phrases
-    'demonstrates thoughtful software design',
-    'caught my attention for its practical approach',
-    'Worth investigating if you\'re working with',
-    'patterns and implementations that could accelerate',
-    // AI-sounding phrases to regenerate
-    'In the rapidly evolving',
-    'In the world of',
-    'In today\'s landscape',
-    'is paramount',
-    'aims to streamline',
-    'comprehensive solution',
-    'It\'s worth noting',
-    'leveraging the power',
-    'game-changer',
-    'cutting-edge'
-  ];
-
-  return badPhrases.some(phrase => article.toLowerCase().includes(phrase.toLowerCase()));
-}
 
 // Strip markdown formatting from text for clean display
-const { looksLikeReasoning } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js'), { detectSubProjects, isCollection } = require('./lib-subprojects.js'), { ARTICLE_VERSION, articleIsCurrent, versionReport } = require('./lib-article-version.js');
+const { looksLikeReasoning, isFallbackArticle } = require('./lib-quality.js'), { factsFor } = require('./lib-facts.js'), { detectSubProjects, isCollection } = require('./lib-subprojects.js'), { ARTICLE_VERSION, articleIsCurrent, versionReport } = require('./lib-article-version.js');
 // Extracted at the 450-line limit. This file was 1,466 lines and had become the
 // one every change was squeezed into: three edits this week were paid for by
 // folding unrelated logging together, which is a bad reason to change code.

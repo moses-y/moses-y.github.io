@@ -30,7 +30,18 @@ const CONFIG = {
   models: {
     endpoint: LLM_ENDPOINT,
     available: LLM_MODELS,
-    maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '2000', 10),
+    /*
+     * 2000 put the ceiling exactly on the length the prompt asks for. The prompt
+     * says "under 550 words", the median stored article is 3,503 characters, and
+     * 66 of 1,350 ended mid-sentence because a briefing that ran slightly long, or
+     * a reasoning model that spent part of the same budget thinking, hit the cap
+     * and was guillotined. Nothing read finish_reason, so it published silently.
+     *
+     * Headroom rather than a longer target: the word limit in the prompt is what
+     * governs length, and this only stops the limit being enforced by truncation.
+     * Billing is on tokens produced, so the raise costs nothing on its own.
+     */
+    maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '4096', 10),
     temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.7')
   }
 };

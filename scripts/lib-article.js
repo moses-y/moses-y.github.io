@@ -19,8 +19,16 @@ const { isCollection } = require('./lib-subprojects.js');
 // model times out - so a missing import here fails only in the situation the code
 // exists to handle. It failed exactly that way in CI.
 const { generateFallbackSummary } = require('./lib-github.js');
+const { looksTruncated, MIN_ARTICLE_CHARS } = require('./lib-quality.js');
 
-async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
+/*
+ * `attempt` bounds the retry recursion. The rate-limit path could recurse freely
+ * because it marks the model dead first, so getNextModel eventually starves. The
+ * faults added here - a timeout, a truncated response - are transient and say
+ * nothing bad about the model, so marking it would be wrong and the recursion
+ * needs its own bound: one pass over the rotation.
+ */
+async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph, attempt = 0) {
   if (!LLM_API_KEY) {
     return generateFallbackSummary(repo);
   }
@@ -30,6 +38,15 @@ async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph) {
     console.log(`  All models rate limited`);
     return null;
   }
+
+  const retry = (why) => {
+    if (attempt + 1 >= CONFIG.models.available.length) {
+      console.log(`  ${why}; every model in the rotation has been tried, giving up on ${repo.name}`);
+      return null;
+    }
+    console.log(`  ${why}; trying the next model`);
+    return generateBlogArticle(repo, readme, fileTree, knowledgeGraph, attempt + 1);
+  };
 
   try {
     const graphContext = knowledgeGraph ? formatKnowledgeGraph(knowledgeGraph) : '', measured = factsFor(repo, knowledgeGraph);
@@ -128,19 +145,72 @@ Keep it under 550 words. Precision over volume.`;
         console.log(unavailable
           ? `  Model ${model} is ${response.status === 410 ? 'retired' : 'not available on this account'} - update LLM_MODELS. Trying next...`
           : `  Model ${model} unavailable (${response.status}), trying next...`);
-        return generateBlogArticle(repo, readme, fileTree, knowledgeGraph);
+        // Bounded by the same counter as the transient retries. This path marks the
+        // model dead first so it terminated on its own, but sharing one bound means
+        // no future edit can reintroduce an unbounded recursion here.
+        return generateBlogArticle(repo, readme, fileTree, knowledgeGraph, attempt + 1);
       }
       return null;
     }
 
     const data = await response.json();
-    const article = data.choices?.[0]?.message?.content?.trim();
+    const choice = data.choices?.[0] || {};
+    const article = choice.message?.content?.trim();
+    const stopped = choice.finish_reason;
 
-    if (article && article.length > 400) {
-      return article;
+    /*
+     * finish_reason is the field that would have caught 66 truncated briefings,
+     * and nothing read it. The API says "length" when it hits max_tokens and the
+     * response is a sentence cut in half; retrying is right, because the next
+     * model may be terser or may not spend the budget on reasoning first.
+     */
+    if (stopped && stopped !== 'stop') {
+      return retry(`${model} stopped early (finish_reason=${stopped}) after ${article ? article.length : 0} chars`);
     }
-    return null;
+    if (!article) {
+      return retry(`${model} returned an empty article`);
+    }
+    /*
+     * The floor is tested before the shape, so the log names the more fundamental
+     * fault: almost anything too short also ends mid-word, and reporting that as a
+     * truncation buries the fact that there was barely any article at all.
+     *
+     * This used to be a bare `return null`, which is why two repos in one run
+     * logged "fallback" with nothing above them saying what went wrong.
+     */
+    if (article.length < MIN_ARTICLE_CHARS) {
+      return retry(`${model} returned only ${article.length} chars, under the ${MIN_ARTICLE_CHARS} floor`);
+    }
+    // Belt to that braces: some providers report "stop" on a response that plainly
+    // is not finished, and the stored corpus is the evidence that this happens.
+    if (looksTruncated(article)) {
+      return retry(`${model} returned ${article.length} chars ending mid-sentence (${JSON.stringify(article.slice(-32))})`);
+    }
+    return article;
   } catch (error) {
+    /*
+     * A timeout landed here and returned null, so the one failure a retry fixes
+     * most reliably was the only one that did not retry. In a real run all five
+     * timeouts were the same model in a degraded window while another model in the
+     * rotation answered every single time, one line away.
+     */
+    const msg = error.message || '';
+    const transient = error.name === 'TimeoutError' ||
+      /abort|timeout|fetch failed|socket hang up|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND/i.test(msg);
+    /*
+     * A ReferenceError here is our bug, not the network's, and retrying it three
+     * times and returning null would bury it in a fallback article. That is
+     * exactly how two missing imports survived a split and only surfaced in CI
+     * days later, on the branch that runs when a model times out. Code faults stay
+     * loud even when their message happens to contain one of the words above.
+     */
+    const codeFault = error instanceof ReferenceError || error instanceof SyntaxError;
+    if (transient && !codeFault) {
+      const why = error.name === 'TimeoutError' || /abort|timeout/i.test(msg)
+        ? `timed out after ${Math.round(LLM_TIMEOUT_MS / 1000)}s`
+        : `could not be reached (${msg})`;
+      return retry(`${model} ${why}`);
+    }
     console.log(`AI generation failed for ${repo.name}:`, error.message);
     return null;
   }
