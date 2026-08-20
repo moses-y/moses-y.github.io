@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,14 +79,31 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h2>Technical Briefing: OpenWolf</h2>
-<h3 id="the-problem">The Problem</h3>
-<p>AI coding agents operate blindly. Without prior knowledge of a codebase, an agent rereads a file it already encountered in the same session (~2,000 tokens) or reads whole files to find a single function. Between sessions, corrections are forgotten, and context compaction erases prior work. This results in redundant token consumption and duplicated effort as agents effectively "rediscover" the project structure each time they start.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Coding agents operate blind. They reread files they already saw, read whole files to find a single function, and lose session state when context compacts. Each wasted read costs tokens directly, and there is no visibility into where the budget went.</p>
 <h3 id="what-this-does">What This Does</h3>
-<p>OpenWolf acts as middleware that provides a "second brain" for AI agents, inserting itself into the coding workflow via seven invisible lifecycle hooks. It addresses three core friction points:</p>
-<ul><li><strong>Context Management:</strong> A budget-capped digest of project state—current goals, known mistakes, fixed bugs, and the project map—injects at every session start. A <code>precompact</code> hook plus a compaction-aware restart ensures context is snapshotted and restored, preventing erasure of session work.</li><li><strong>Architecture Scaffolding:</strong> A durable, self-healing project index maps every file with a description, a token estimate, and, for large files, its functions and classes with exact line ranges. Agents navigate via symbol-level hints using <code>offset</code>/<code>limit</code> reads rather than whole-file reads.</li><li><strong>Token Utilization:</strong> Repeated reads are caught and replaced with targeted slices. Real usage is measured from harness transcripts, providing verifiable savings data rather than estimates. The tracker resides in `src/tracker</li></ul>
+<p>OpenWolf is middleware that gives coding agents a persistent "second brain." It maintains a project index (<code>src/scanner/anatomy-scanner.ts</code>) with descriptions and token estimates per file, plus symbol-level line ranges so agents can do targeted slice reads instead of whole-file reads. Seven lifecycle hooks (<code>src/hooks/</code>) inject a budget-capped digest at session start, snapshot before compaction, and restore after.</p>
+<p>A local dashboard (<code>src/dashboard/app/App.tsx</code>) visualizes token usage measured from harness transcripts, not estimates. The system supports six agents: Claude Code, Codex, Cursor, Gemini, OpenCode, and Antigravity (<code>src/agents/</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/cli/index.ts</code>. The <code>init</code> command (<code>src/cli/init.ts</code>) auto-detects the agent, writes hooks into the project, and creates a <code>.wolf/</code> directory. The daemon (<code>src/daemon/wolf-daemon.ts</code>) watches files via <code>src/daemon/file-watcher.ts</code> and updates the anatomy index. The <code>scan</code> command (<code>src/cli/scan.ts</code>) rebuilds the index on demand.</p>
+<p>The hook lifecycle is the core: <code>pre-read.ts</code> and <code>post-read.ts</code> catch repeated reads, <code>pre-write.ts</code> and <code>post-write.ts</code> track changes, <code>precompact.ts</code> snapshots state, and <code>session-start.ts</code> injects the digest. All hooks route through <code>src/hooks/shared.ts</code>, which has 421 branch points over 538 lines — the highest complexity in the repo.</p>
+<p>The module graph shows two hubs: <code>src/utils/fs-safe.ts</code> (16 modules depend on it) and <code>src/hooks/anatomy-store.ts</code> (12 dependents). Both are leaf modules with zero imports, so they are stable but high-blast-radius. A cycle exists in <code>src/agents/index.ts</code> (7 importers, 6 imports, in a 6-module circular dependency) — changing agent registration logic risks subtle init-order bugs.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>npm install -g openwolf
+cd your-project
+openwolf init</code></pre>
+<p><code>init</code> auto-detects the agent and writes the hook configuration. No environment variables are required. The daemon starts via <code>openwolf daemon</code>, the dashboard via <code>openwolf dashboard</code>. Configuration lives in <code>.wolf/config.json</code> (template at <code>src/templates/config.json</code>).</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A Claude Code session working on a 2,000-line module. Without OpenWolf, the agent reads the whole file three times in one session (~6,000 tokens). With it, the first read is a 50-token description from the index, subsequent reads target exact line ranges via <code>offset</code>/<code>limit</code>. When context compacts, the <code>precompact</code> hook saves the session summary, and <code>session-start</code> restores it — the agent continues without re-discovering state.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 32 findings (7 high, 25 medium). High severity:</p>
+<ul><li><strong>Import cycle</strong> — <code>src/agents/index.ts</code>, <code>src/agents/antigravity.ts</code>, <code>src/agents/codex.ts</code> participate in a circular dependency. Extract shared types or defer imports.</li><li><strong>Duplicated code blocks</strong> — 112 repeated 6-line blocks across 26 files. DRY the logic.</li></ul>
+<p>Medium findings include high branching density (421 branch points in <code>src/hooks/shared.ts</code>), deep nesting in two dashboard components (<code>DotBar.tsx</code>, <code>MemoryViewer.tsx</code>), and oversized files (<code>src/scanner/description-extractor.ts</code> at 752 lines).</p>
+<p>SDLC observations: CI exists but never runs the 6 test files — the green check is cosmetic. No dependency update bot, and <code>npm install</code> runs in CI instead of <code>npm ci</code>, so the tested dependency set is not the locked one. The <code>demo.gif</code> is 6.4MB and should move to LFS. Checkout in <code>docs.yml</code> keeps credentials for later steps.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>OpenWolf solves a real, measurable cost problem for agent-based development. The architecture is sound — hooks are invisible, the index is self-healing, and the dashboard gives actual usage data. The duplication and cycle in the agent layer will slow contributors, and the CI gap is a credibility issue. Worth using for teams running Claude Code or Codex on large codebases; the payoff scales with project size.</p>
             </div>
 
             

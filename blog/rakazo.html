@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,36 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Enterprises that want “AI teammates” must either rely on proprietary SaaS control planes or build a custom stack from scratch. Both options add cost, lock‑in, and operational overhead for managing sandboxed execution, model selection, and persistence.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>rakazo delivers a self‑hosted, modular platform that lets you run AI agents (bots) with a dedicated Linux desktop sandbox. The core services live under apps/:</p><p>API – apps/api/src/app.ts (Express/Hono) + Graphile Worker (apps/worker/src/index.ts).  
- Web client – Vite‑powered React (apps/web/src/main.tsx, apps/web/src/App.tsx).  
- Desktop client – Electron entry apps/desktop/src/main.ts.  
- Mobile client – Expo app (apps/mobile/app/*/.tsx).</p><p>Infrastructure lives in infra/compose/ (Dockerfiles, docker‑compose.yml) and infra/sandboxes/ (Docker‑based computer sandbox and a supervisor service). The repository includes a static site (apps/www/) built with Astro.</p><p>Configuration defaults are defined in .env.example; the README walks through copying it to .env and setting secrets such as BETTERAUTHSECRET, ENCRYPTIONKEY, and an OpenRouter key.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>From repo root
-cp .env.example .env                     # create runtime config
-pnpm install                             # install workspace deps (pnpm 9 required)
-pnpm db:generate                         # Prisma client generation
-pnpm db:migrate                          # apply migrations to local Postgres
-pnpm sandbox:build                       # build Docker‑based sandbox images
-pnpm dev                                 # start API, worker, web UI, sandbox supervisor</p><p>The pnpm dev script (see package.json in the root) launches:
- API on :3100 (apps/api/src/index.ts)  
- Graphile Worker (via apps/worker)  
- Vite dev server on :5173 (apps/web)  
- Sandbox supervisor on :7091 (infra/sandboxes/supervisor/src/index.ts)</p><h3 class="post-h" id="configuration">Configuration</h3><p>Edit .env to provide:
- BETTERAUTHSECRET – long random string for JWT signing.  
- ENCRYPTIONKEY – AES key for server‑side encrypted storage.  
- OPENROUTERAPIKEY (or rely on UI sign‑in flow).  
- Optional COMPOSIOAPIKEY for plugin integration.</p><p>All services read these variables via apps/api/src/env.ts.</p><h3 class="post-h" id="running">Running</h3><p>Web UI: open &lt;http://127.0.0.1:5173&gt;.  
- API health check: curl http://127.0.0.1:3100/health. Expected JSON includes &quot;runtime&quot;:&quot;pi&quot;, &quot;sandbox&quot;:&quot;docker&quot;.</p><p>Desktop and mobile clients are built with their respective package scripts (pnpm desktop, pnpm mobile – defined in each package.json).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A SaaS product can embed rakazo as an on‑premise “AI assistant” for each tenant. After provisioning a Postgres instance and a Docker host, the tenant runs the same pnpm dev (or a Docker‑Compose production variant in infra/compose/docker-compose.prod.yml). The tenant’s backend then calls the API (/api/v1/bots) to create bots, which run isolated Docker desktops, ensuring no cross‑tenant data leakage while still allowing the tenant to choose any LLM provider via the UI.</p><p>// Example: create a bot from a backend service
-await fetch(${API_URL}/bots, {
-  method: &#39;POST&#39;,
-  headers: { Authorization: Bearer ${token} },
-  body: JSON.stringify({ name: &#39;SalesBot&#39;, model: &#39;gpt-4o&#39; })
-});</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – apps/api/package.json (and other packages) have no pnpm-lock.yaml or package-lock.json; reproducible builds depend on the root lockfile only.  
- Low – Test coverage gaps – Tests exist for core modules, but UI components (apps/web/src/pages/) lack unit tests.  
- Medium – Secrets in docs – README references placeholder keys; no .env.example encryption, risk of accidental commit of real keys.  
- Low – CI configuration – GitHub Actions (.github/workflows/.yml) run lint, typecheck, and Playwright e2e, indicating a functional CI pipeline.  
- Low – License present – LICENSE file exists, compliance is clear.  
- Low – Dependency hygiene – No automated Dependabot or Renovate config; security updates must be tracked manually.</p><p>Overall the repo builds cleanly, includes type‑checked TypeScript, and ships with end‑to‑end Playwright tests.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>rakazo provides a complete, self‑hosted stack for AI agents with sandboxed desktop execution, making it suitable for organizations that need full control over data and runtime environments. The codebase is reasonably healthy—typed, tested, and CI‑enabled—but the lack of per‑package lockfiles and limited UI test coverage are modest risks. It is a good fit for teams comfortable with Docker and TypeScript who want an open‑source alternative to hosted AI‑agent platforms.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that want an “own‑your‑model” AI assistant need a self‑hosted stack that can run a language model, a sandboxed desktop, and persistent state without locking them into a proprietary control plane. Existing “Grok Bot”‑style products either require a cloud service or expose secret keys in the client.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>rakazo</code> delivers a full‑stack, open‑source alternative. The core API lives in <strong><code>apps/api/src/</code></strong> (<code>app.ts</code>, <code>router.ts</code>, <code>index.ts</code>) and exposes HTTP endpoints that the web, desktop, and mobile front‑ends consume. The sandbox layer lives under <strong><code>packages/adapters/</code></strong>, where <code>src/computer-support.ts</code> and <code>src/sandbox-factory.ts</code> create the Docker‑based or E2B‑based sandbox instances. UI code is split across <strong><code>apps/web/</code></strong> (React 19/Vite), <strong><code>apps/desktop/</code></strong> (Electron) and <strong><code>apps/mobile/</code></strong> (Expo). Persistence is handled by Postgres via Prisma and Graphile Worker (see <code>apps/api/src/thread-message-pages.ts</code> and the worker package).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>apps/api/src/app.ts</code></strong>, which builds a Hono server, registers routes from <code>router.ts</code>, and starts listening on port 3100. The request flow is:</p>
+<ol><li><strong>HTTP request</strong> → Hono router (<code>apps/api/src/router.ts</code>).</li><li>Route handler calls <strong>service layer</strong> in <code>apps/api/src/thread-message-pages.ts</code>, which interacts with the database (Prisma client) and enqueues background jobs via Graphile Worker.</li><li>When a bot needs to run code, the service invokes <strong><code>packages/adapters/src/index.ts</code></strong> (the hub module). This file imports 34 other adapters but does not import back, giving it an instability of 1.</li><li>The sandbox request is delegated to <strong><code>packages/adapters/src/sandbox-factory.ts</code></strong>, which selects a provider (<code>docker</code> or <code>e2b</code>) and constructs a <strong>sandbox instance</strong> (<code>packages/adapters/src/e2b-sandbox.ts</code> or <code>.../docker-sandbox.ts</code>).</li><li>The sandbox runs the command through <strong><code>packages/adapters/src/executor.ts</code></strong>, the most line‑dense file (≈1 269 lines). Its output is streamed back to the API, stored in Postgres, and pushed to the client via oRPC (<code>apps/web/src/lib/rpc.ts</code>).</li></ol>
+<p>Key blast‑radius modules:</p>
+<ul><li><code>packages/adapters/src/index</code> (34 outgoing imports) – any change ripples to most adapters.</li><li><code>apps/mobile/lib/api.ts</code> (11 inbound imports) – central for mobile client‑API calls.</li><li><code>packages/adapters/src/computer-support.ts</code> (13 inbound imports) – a hub for computer‑related logic.</li></ul>
+<p>No circular dependencies were detected, and the import graph contains 231 modules with 295 edges.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/rakazo
+cd rakazo
+
+# Prepare environment
+cp .env.example .env
+# Edit .env: set BETTER_AUTH_SECRET, ENCRYPTION_KEY, OPENROUTER_API_KEY, optional COMPOSIO_API_KEY
+
+# Start required services
+docker compose -f infra/compose/docker-compose.yml up postgres -d
+
+# Install, generate DB artefacts, and run
+pnpm install
+pnpm db:generate
+pnpm db:migrate
+pnpm sandbox:build
+pnpm dev          # launches API, Graphile Worker, Vite web app, and sandbox supervisor</code></pre>
+<p>The API is reachable at <code>http://127.0.0.1:3100/health</code>, which should return <code>"runtime":"pi"</code>, <code>"sandbox":"docker"</code>, <code>"jobs":"graphile"</code>, <code>"realtime":"postgres"</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS product that needs a controllable AI “assistant” can embed the web client (<code>apps/web/src/App.tsx</code>) and point it at a self‑hosted API instance. When a user triggers a bot action, the request travels through the Hono router, hits <code>thread-message-pages.ts</code>, spawns a sandbox via the adapter hub, runs the model in Pi, and streams screen updates back to the client via oRPC. The same backend powers the Electron desktop and Expo mobile apps without code duplication.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>HIGH – Oversized files</strong>: <code>packages/adapters/src/executor.ts</code>, <code>e2b-sandbox.ts</code>, <code>pi-runtime.ts</code> (≈1 269 lines each).</li><li><strong>MEDIUM – Hub module</strong>: <code>packages/adapters/src/computer-support.ts</code> (13 inbound imports).</li><li><strong>HIGH – Duplicated code</strong>: repeated 6‑line blocks across <code>apps/api/src/app.ts</code>, <code>apps/worker/src/index.ts</code>, <code>apps/api/src/router.ts</code>, <code>packages/adapters/src/child-bots.ts</code>.</li><li><strong>MEDIUM – High branching density</strong>: <code>pi-runtime.ts</code>, <code>computer-tools.ts</code>, <code>pi-credentials.ts</code>.</li><li><strong>HIGH – Deep nesting</strong>: <code>apps/www/src/components/ProductDemo.tsx</code>, <code>apps/web/src/pages/Onboarding.tsx</code>, <code>apps/web/src/pages/Shell.tsx</code>.</li></ul>
+<p><strong>Repository health audit</strong></p>
+<ul><li><strong>CRITICAL</strong> – Secrets in workflow (<code>.github/workflows/publish-playwright-report.yml</code>).</li><li><strong>HIGH</strong> – Unpinned third‑party actions (<code>pnpm/action-setup@v4</code>).</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate config.</li><li><strong>MEDIUM</strong> – Docker base image not pinned by digest (<code>infra/compose/Dockerfile</code>).</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – <code>actions/checkout</code> runs with persisted token; should set <code>persist-credentials: false</code>.</li><li><strong>LOW</strong> – Missing convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Additional observations: test suite present (94 files) and CI via GitHub Actions, but the repository commits secrets and lacks automated dependency updates.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>rakazo</code> provides a complete, self‑hostable AI‑assistant stack with clear separation between API, sandbox adapters, and multi‑platform clients. The codebase is functional but suffers from very large, branching‑heavy files and a few security hygiene gaps that should be fixed before production use. It is suitable for teams comfortable managing Docker, Postgres, and TypeScript monorepos and willing to address the identified health issues.</p>
             </div>
 
             

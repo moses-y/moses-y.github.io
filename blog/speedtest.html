@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">original</span>
                 </div>
@@ -80,27 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Network administrators and remote workers need a lightweight way to record broadband performance over days or weeks. Manual speed‑test websites are cumbersome and do not produce a historical data set that can be visualized or analysed programmatically.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository ships a single script, speedtest.py, that invokes the external speedtest-cli binary via subprocess, parses the JSON output, and appends a timestamped record to speedtestresults.txt. The same file is read back, converted to numeric series, and plotted with matplotlib to show trends for download, upload, and latency.</p><p>Key functions live in speedtest.py:</p><p>performspeedtest() – runs speedtest-cli --format=json and returns a dict.  
- parsespeedtestresult() – extracts download, upload, and ping values.  
- savespeedtestresult() – appends a CSV line (date,download,upload,ping) to the results file.  
- loadspeedtestresults() – reads the results file into a list of rows.  
- plotspeedtestresults() – builds a time‑series chart and displays it.</p><p>The repository includes a minimal CI workflow (.github/workflows/python-package.yml) that installs the dependencies and runs the single test file, but no packaging or distribution artifacts.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install dependencies – the project lists its runtime requirements in requirements.txt.  
-   pip install -r requirements.txt</p><p>(requirements.txt currently pins speedtest-cli and matplotlib.)
-Run the script – the entry point is the module itself.  
-   python speedtest.py</p><p>The command performs a test, prints the JSON summary to stdout, appends a line to speedtestresults.txt, and opens a Matplotlib window with the historical plot.
-Inspect data – the results file (speedtestresults.txt) is plain‑text CSV; it can be opened in a spreadsheet or processed by other tools.</p><p>No environment variables, configuration files, or command‑line flags are defined in the source tree. If you need a custom results path you must edit the hard‑coded filename in speedtest.py.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A small office could schedule the script with cron (e.g., 0    * /usr/bin/python /path/to/speedtest.py) to capture hourly metrics. The generated PNGs or the CSV can be fed into a Grafana dashboard or a simple Jupyter notebook for longer‑term capacity planning.</p><p>Example: ingest the CSV into pandas for extended analysis
-import pandas as pd
-df = pd.readcsv(&#39;speedtestresults.txt&#39;, header=None,
-                 names=[&#39;date&#39;,&#39;download&#39;,&#39;upload&#39;,&#39;ping&#39;])
-df[&#39;date&#39;] = pd.todatetime(df[&#39;date&#39;])
-df.setindex(&#39;date&#39;).plot(subplots=True, figsize=(10,6))</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – requirements.txt is used without a requirements-lock.txt or pipfile.lock; reproducible builds are not guaranteed.  
-Low – Hard‑coded file name – speedtest_results.txt is embedded in the script; changing the location requires code modification.  
-Low – Minimal error handling – subprocess.run is called without checking returncode; a failed speedtest-cli execution will raise an uncaught exception.  
-Low – No input validation – JSON parsing assumes the expected keys exist; a future speedtest-cli schema change could break the script.  
-Low – Sparse testing – The repository includes a single test file, but the CI workflow does not enforce coverage or linting; test depth is unclear.  
-Low – No type hints or documentation strings – Functions lack annotations, making static analysis harder for larger teams.  
-Low – No configurable logging – Output is printed directly; integrating into monitoring pipelines would require code changes.</p><p>Overall, the code is functional but deliberately simple; it does not exhibit high‑risk vulnerabilities.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>speedtest.py provides a quick, dependency‑light method to record and plot broadband performance on a single machine. It is suitable for personal use or small‑scale monitoring where formal CI/CD, configurability, and rigorous testing are not required. Teams that need reproducible builds, richer reporting, or robust error handling should extend the script or adopt a more feature‑complete monitoring solution.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Internet speed tests give you a single snapshot. If you want to know whether your connection degrades at peak hours or after a router change, you need to run tests repeatedly and compare results over time. This repo automates that: it runs <code>speedtest-cli</code>, appends results to a text file, and plots the trend.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>speedtest.py</code> is a single-file script with five functions. It shells out to <code>speedtest-cli</code>, parses the JSON output, appends the result to <code>speed_test_results.txt</code>, and uses <code>matplotlib</code> to render download speed, upload speed, and latency over time.</p>
+<p>The repo is minimal: one Python file, a <code>requirements.txt</code> for dependencies, a GitHub Actions workflow, and a README. There are no tests in the repo despite the pipeline detecting two test files—verify that against the actual tree before relying on it.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the bottom of <code>speedtest.py</code> when run directly. The flow is:</p>
+<ol><li><code>perform_speed_test()</code> invokes <code>speedtest-cli --json</code> via <code>subprocess</code> and parses the output.</li><li><code>parse_speed_test_result()</code> extracts download speed, upload speed, and latency from the returned dict.</li><li><code>save_speed_test_result()</code> appends those values to <code>speed_test_results.txt</code> in append mode.</li><li><code>load_speed_test_results()</code> reads that file back as a list of lists.</li><li><code>plot_speed_test_results()</code> feeds that list to <code>matplotlib</code> and displays a chart.</li></ol>
+<p>The script touches exactly two things outside itself: the <code>speedtest-cli</code> binary (via subprocess) and the local results file. There are no databases, no network calls beyond the speed test itself, and no internal module imports—the module graph shows one module with zero edges.</p>
+<p>File responsibilities:</p>
+<ul><li><code>speedtest.py</code> — all logic, from subprocess call to plotting.</li><li><code>requirements.txt</code> — declares <code>speedtest-cli</code> and <code>matplotlib</code>.</li><li><code>.github/workflows/python-package.yml</code> — CI that runs the script on push.</li><li><code>speed_test_results.txt</code> — the append-only data store; this is the state that accumulates over time.</li></ul>
+<p>The GitHub Actions workflow is the only automation. It runs the script, but since the script only appends to a local file, CI runs don't persist results anywhere—the file is ephemeral in the runner.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code>pip install -r requirements.txt
+git clone https://github.com/moses-y/speedtest
+cd speedtest</code></pre>
+<p><strong>Running it:</strong></p>
+<pre data-lang="bash"><code>python speed_test.py</code></pre>
+<p>The README names <code>speed_test.py</code> but the actual file is <code>speedtest.py</code>. Use the latter. The script takes no arguments, needs no environment variables, and writes results to <code>speed_test_results.txt</code> in the working directory.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>Schedule it with <code>cron</code> on a home server:</p>
+<pre data-lang="bash"><code>0 * * * * cd /path/to/speedtest &amp;&amp; python speedtest.py</code></pre>
+<p>Run it hourly for a week, then open the plot to see whether your ISP's "up to" speed holds at peak hours. The append-mode file design means you can run it indefinitely without data loss, and the plot function gives you a visual trend without any external dashboard.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 5 issues (0 critical, 0 high, 4 medium, 1 low), all in the GitHub Actions workflow:</p>
+<ul><li><strong>Medium</strong> — No least-privilege permissions on <code>GITHUB_TOKEN</code> in <code>.github/workflows/python-package.yml</code>. Add <code>permissions: contents: read</code>.</li><li><strong>Medium</strong> — No Dependabot or Renovate configured. Add <code>.github/dependabot.yml</code>.</li><li><strong>Medium</strong> — No dependency vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> — <code>checkout</code> keeps the token in <code>.git/config</code>. Add <code>persist-credentials: false</code>.</li><li><strong>Low</strong> — No <code>timeout-minutes</code> on jobs. A wedged step runs to the six-hour platform default.</li></ul>
+<p>Beyond that: the repo has a license and no committed secrets, but no lockfile, so <code>pip install -r requirements.txt</code> is not reproducible across time.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A straightforward, working script for personal speed-test tracking. The code is simple and does what it says. The CI workflow is the weakest part—it adds moving parts without real value, and its security posture needs the fixes above. Use it if you want a zero-dependency-other-than-pip way to log and plot your connection over time; skip it if you need something production-grade or multi-user.</p>
             </div>
 
             

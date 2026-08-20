@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#containerise">Containerise</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations need a single UI that can surface metrics, logs, traces and custom dashboards without wiring together multiple tools. Existing stacks often require separate front‑ends and manual integration, leading to gaps (“X factors”) that surface only after an incident.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>deepops (distributed as the XO UI) delivers a self‑contained React front‑end that renders observability data from any source. The entry points are datav/frontend/index.html, datav/frontend/src/App.tsx and datav/frontend/src/index.tsx. UI components live under datav/frontend/src/components/, while static assets such as charts, maps and sample dashboards are in datav/frontend/public/. The Docker build definition in datav/frontend/Dockerfile packages the UI into a container ready for deployment behind an NGINX reverse‑proxy (datav/frontend/nginx.template).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>From the repository root
-cd datav/frontend
-npm install          # installs deps defined in datav/frontend/package.json
-npm run build        # creates a production build (output path defined in the Dockerfile)</p><h3 class="post-h" id="containerise">Containerise</h3><p>Build the UI image
-docker build -t xobserve/ui ./datav/frontend
-(Optional) Build the overall service image
-docker build -t xobserve/app ./datav</p><h3 class="post-h" id="configuration">Configuration</h3><p>Runtime configuration is read from the .env file located at datav/frontend/.env. Typical variables include the backend API endpoint and authentication tokens; the exact keys are referenced in the source (e.g., src/hooks/use-fetch.ts). Replace placeholder values before starting the container.</p><h3 class="post-h" id="running">Running</h3><p>docker run -d -p 8080:80 \
-  --env-file datav/frontend/.env \
-  xobserve/ui</p><p>The UI becomes reachable at http://localhost:8080, loading index.html which bootstraps the React app via src/index.tsx.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A SaaS provider can embed XO as the observability portal for each tenant. The back‑end (not shipped in this repo) exposes OpenTelemetry‑compatible endpoints; the front‑end consumes them through the fetch hooks (src/hooks/use-fetch.ts) and renders dashboards defined in JSON files under src/data/theme/. Switching tenants is handled by src/components/user/SelectUserTenant.tsx, which reads the tenant ID from a query parameter and updates the global store.</p><p>// Example: load a tenant‑specific dashboard
-useEffect(() =&gt; {
-  const tenant = getTenantFromUrl();
-  fetch(/api/${tenant}/dashboard).then(setDashboard);
-}, []);</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No test suite – No .test. files found; code paths are unverified.  
-Medium – Missing CI/CD – No .github/workflows or other pipeline definitions.  
-Low – No lockfile – package.json lacks a corresponding package-lock.json or yarn.lock, risking nondeterministic installs.  
-High – Potential secrets – .env is tracked in the repo; it may contain API keys or tokens.  
-Low – License present – LICENSE file exists (Apache‑2.0), satisfying legal requirements.  
-Low – Linting configured – ESLint (.eslintrc) and Prettier (.prettierrc) are present, indicating style enforcement.  
-Low – Documentation – README provides a high‑level overview but lacks step‑by‑step deployment instructions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repository ships a polished, component‑rich React front‑end for observability dashboards, ready to be containerised via the provided Dockerfiles. It lacks automated testing, CI pipelines, and a lockfile, and it inadvertently includes an .env file that may expose credentials. Teams with mature DevOps practices can adopt it quickly for UI needs, but they should add tests, secure secret handling, and a reproducible build process before production use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Businesses need a single pane that can ingest metrics, logs, and traces from any source, surface them in real‑time dashboards, and alert before an issue escalates. Existing tools often require multiple products or heavyweight agents, creating operational overhead and blind spots.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>deepops</code> is a portfolio of four loosely coupled projects that together form “XO”, an observability platform aimed at developers:</p>
+<ul><li><strong>datav</strong> – the UI and API server (≈ 1 072 files). It renders dashboards, panels, and large‑screen views. Core entry points are <code>datav/frontend/src/index.tsx</code> and <code>datav/frontend/src/App.tsx</code>. The UI is built with React/TypeScript, bundled by Vite (<code>datav/frontend/vite.config.js</code>).</li><li><strong>otel-collector</strong> – a Go‑based OpenTelemetry collector (≈ 187 files) that receives spans, metrics and logs, then forwards them to the datav backend.</li><li><strong>examples</strong> – sample Go applications (e.g., <code>examples/hotrod</code>) that emit OTLP data for quick validation.</li><li><strong>deploy</strong> – minimal Helm‑style manifests and scripts for deploying the stack in Kubernetes.</li></ul>
+<p>Common techniques across the suite are Go modules (<code>go.mod</code>), Docker multi‑stage builds (<code>datav/Dockerfile</code>, <code>datav/frontend/Dockerfile</code>), and a shared TypeScript type layer for dashboard definitions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with the <strong>frontend</strong> Docker image built from <code>datav/frontend/Dockerfile</code>. The image runs Vite’s production build (<code>npm run build</code>) and serves <code>index.html</code> via an Nginx template (<code>datav/frontend/nginx.template</code>). The compiled bundle calls <code>src/index.tsx</code>, which mounts the React app onto the DOM and registers routes such as <code>/dashboard/:id</code> (handled in <code>src/pages/dashboard/index.tsx</code>).</p>
+<p>When a dashboard loads, the UI contacts the <strong>backend API</strong> (served by the same Go binary in <code>datav/Dockerfile</code>). The API reads configuration from <code>datav/.env</code> (currently committed) and opens a gRPC server that the <strong>otel‑collector</strong> talks to. The collector (<code>otel-collector/main.go</code>) subscribes to OTLP over gRPC, normalizes data, and writes it into the internal time‑series store used by the UI.</p>
+<p>Key wiring points:</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th>Responsibility</th><th>Blast‑radius</th></tr></thead><tbody><tr><td><code>datav/frontend/src/views/dashboard/plugins/built-in/plugins</code></td><td>Registers all built‑in panel plugins (imports 27 other modules)</td><td>High – any change ripples through most dashboards</td></tr><tr><td><code>datav/frontend/src/components/largescreen/autoResize</code></td><td>Provides responsive layout utilities (imported by 24 modules)</td><td>Low – stable helper</td></tr><tr><td><code>datav/frontend/src/views/dashboard/edit-panel/EditPanel</code></td><td>Handles panel edit UI (imports 15 modules, only 1 inbound)</td><td>Very high instability (0.94) – prone to breakage</td></tr></tbody></table></div>
+<p>The static import graph shows <strong>27 import cycles</strong> (e.g., <code>plugins.ts ↔ query_runner.ts ↔ PanelGrid.tsx</code>). These cycles inflate compile time and hinder refactoring because a change forces recompilation of many unrelated modules.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/deepops
+cd deepops
+
+# Build the UI container
+docker build -t datav-frontend -f datav/frontend/Dockerfile .
+
+# Build the backend/API container
+docker build -t datav-backend -f datav/Dockerfile .
+
+# (Optional) Run the OpenTelemetry collector
+docker build -t otel-collector -f otel-collector/Dockerfile .
+docker run -p 4317:4317 otel-collector</code></pre>
+<p>The UI expects environment variables defined in <code>datav/frontend/.env</code> (e.g., <code>VITE_API_URL</code>). Remove this file from the repository, replace it with a template (<code>.env.example</code>), and supply the variables at container start:</p>
+<pre data-lang="bash"><code>docker run -e VITE_API_URL=http://localhost:8080 -p 80:80 datav-frontend</code></pre>
+<p>The backend API runs on port 8080 by default; start it with:</p>
+<pre data-lang="bash"><code>docker run -p 8080:8080 datav-backend</code></pre>
+<p>The example applications can be built with Go modules:</p>
+<pre data-lang="bash"><code>cd examples/hotrod
+go build -o hotrod .
+./hotrod</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider can deploy the three containers (frontend, backend, collector) into a Kubernetes namespace using the manifests in <code>deploy/</code>. The collector receives OTLP data from microservices, the backend stores it, and the UI lets operators assemble custom dashboards without leaving the platform.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No CI/CD</strong> – 1069 source files lack any GitHub Actions or other pipeline.</li><li><strong>High – No build gate for <code>datav/Dockerfile</code></strong> – Docker image is never validated automatically.</li><li><strong>High – Committed <code>.env</code></strong> – Secrets are tracked in source history; must be removed and rotated.</li><li><strong>Medium – Dependabot missing</strong> – No automated dependency updates for <code>package.json</code>, <code>go.mod</code>, or Docker images.</li><li><strong>Medium – Base images not pinned</strong> – <code>golang:1.21.4-alpine3.18</code>, <code>node:16</code>, <code>alpine:3.18</code> are mutable tags.</li><li><strong>Medium – No pre‑commit secret scan</strong> – Increases risk of future leaks.</li><li><strong>Medium – Container runs as root</strong> – <code>datav/Dockerfile</code> lacks a non‑root <code>USER</code>.</li><li><strong>Low – Missing repo conventions</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or shared formatter config.</li></ul>
+<p>Additional static findings (192 total) include 27 import cycles, several hub modules with &gt; 20 inbound imports, deep nesting (up to 8 levels), and a 611‑line <code>PanelGrid.tsx</code> file that should be split.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>deepops</code> offers a functional, UI‑rich observability stack that can be containerised and deployed with minimal effort, but the codebase suffers from architectural debt (import cycles, oversized modules) and a lack of production‑grade hygiene (no CI, secret leakage, root containers). It is suitable for teams that need a quick, customizable dashboard layer and are prepared to invest in refactoring and adding CI/security gates.</p>
             </div>
 
             

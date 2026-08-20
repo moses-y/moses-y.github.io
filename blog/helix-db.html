@@ -80,32 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Applications that need both graph relationships and dense vector search (e.g., RAG‑style AI agents) currently stitch together separate DBMSs, sync data pipelines, and write custom adapters. That adds latency, operational overhead, and consistency risk.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>HelixDB is a single‑process OLTP engine that stores graph edges, vectors, KV, and relational rows on top of object storage. The core engine lives in crates/db (see crates/db/src/ for storage primitives and query execution) and is orchestrated by a thin CLI (crates/cli/src/main.rs).</p><p>The repository ships language bindings generated with uniffi (bindings/uniffi/src/) for Rust, Python, Go, and TypeScript, exposing a JSON‑based AST defined in crates/ast/src/. The CLI (helix) uses these bindings to start a local container (Dockerfile pulls ghcr.io/helixdb/helixdb:v0.0.4) and to issue queries over HTTP (POST /v2/query).</p><p>All build artefacts are managed by Cargo workspaces (Cargo.toml at the repo root) and Docker (Dockerfile). CI pipelines in .github/workflows/ run unit tests, fuzz targets, and coverage checks.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install the CLI (downloads a pre‑built binary that wraps the Cargo workspace)
-curl -sSL &quot;https://install.helix-db.com&quot; | bash
-Initialise a project – creates helix.toml and a .helix workspace
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building AI applications typically requires stitching together separate databases—relational, vector, and graph—each with its own query language, operational model, and data duplication. HelixDB addresses this by unifying these data models into a single storage engine, reducing the operational complexity of managing multiple systems for knowledge graphs, AI memory, and application data.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>HelixDB is a graph-vector database built from scratch in Rust, designed to serve as a unified platform for AI applications. It supports graph, vector, KV, document, and relational data models within one engine. The repository includes a CLI (<code>crates/cli/src/main.rs</code>), SDKs for Rust, TypeScript, Python, and Go (<code>sdks/</code>), and a query AST shared across all clients (<code>crates/ast/src/lib.rs</code>).</p>
+<p>The project provides a <code>helix chef</code> command that bootstraps a full application—scaffolding, local instance, seed data, and optional handoff to coding agents like Claude Code or Codex. The core storage layer runs on object storage (S3-compatible), with an in-memory mode for development.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>This is a collection of six self-contained projects, not a single codebase. The main components are:</p>
+<ul><li><code>crates/</code> (1532 files): Core database engine, planner, and CLI</li><li><code>sdks/</code> (76 files): TypeScript, Python, Go client libraries</li><li><code>bindings/</code> (18 files): UniFFI bindings for cross-language support</li><li><code>tools/</code>, <code>scripts/</code>, <code>docker-image/</code>: Supporting utilities and containerization</li></ul>
+<p>The CLI entry point is <code>crates/cli/src/main.rs</code>, which routes to <code>helix init</code>, <code>helix start</code>, and <code>helix query</code> commands. Queries are authored as DSLs in each SDK, serialized to a shared JSON AST, and sent to a running instance via <code>POST /v2/query</code>. The Python SDK (<code>sdks/python/src/helixdb/client.py</code>) shows a circular import cycle with <code>helixdb/__init__</code> and <code>async_client</code>, making changes to those modules riskier.</p>
+<p>The TypeScript SDK (<code>sdks/typescript/src/index</code>) is the most-connected module (10 importers), meaning changes there have the widest blast radius across SDK consumers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install CLI
+curl -sSL "https://install.helix-db.com" | bash
+
+# Quick start
+helix chef
+
+# Manual setup
 helix init
-Start a local dev instance (runs the Docker image defined in Dockerfile)
-helix start dev      # in‑memory mode
-or persist to MinIO:
-helix start dev --disk
-or use external S3 bucket:
-helix start dev --storage-uri s3://my-bucket/prefix --persist</p><p>The CLI binary is built from crates/cli/src/main.rs and packaged in crates/cli.  
-If you prefer to compile locally:</p><p>cargo build --workspace        # produces ./target/debug/helix
-./target/debug/helix start dev</p><p>Queries are sent as JSON AST files (e.g., examples/request.json) via the CLI:</p><p>helix query dev --file examples/request.json</p><p>For programmatic access, import the generated bindings. In Python:</p><p>from helixdb import HelixDB</p><p>db = HelixDB(&quot;http://localhost:6969&quot;)
-response = db.query(json.load(open(&quot;examples/request.json&quot;)))
-print(response)</p><p>The binding source lives in bindings/uniffi/src/helixdb.rs and is compiled by bindings/uniffi/Cargo.toml.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A microservice that answers knowledge‑base questions can embed the Python binding:</p><p>from helixdb import HelixDB
-import json, requests</p><p>db = HelixDB(&quot;http://localhost:6969&quot;)
-def answer(question: str) -&gt; str:
-    ast = {&quot;type&quot;:&quot;query&quot;,&quot;graph&quot;:{&quot;match&quot;:{&quot;node&quot;:{&quot;type&quot;:&quot;Document&quot;,&quot;text&quot;:question}}}}
-    resp = db.query(ast)
-    return resp[&quot;results&quot;][0][&quot;text&quot;]</p><p>Deploy the service alongside the HelixDB Docker container; the service only needs the endpoint URL and optional S3 credentials (HELIxSTORAGEURI, HELIxAWSACCESSKEY_ID, etc.) if persistence is required.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Comprehensive test suite – 48 test files across crates//tests/ and fuzz targets (crates/db/fuzz/).  
-Low – CI coverage – GitHub Actions run unit, integration, and coverage jobs (.github/workflows/).  
-Low – License present – LICENSE file included.  
-Medium – Limited public documentation for internal crates – crates/ast and crates/db lack top‑level READMEs; developers must read source.  
-Medium – Binding generation step not automated in CI – bindings/uniffi rely on manual uniffi-bindgen runs; CI does not verify generated language packages.  
-Low – Platform‑specific scripts – crates/cli/build.sh and install.sh assume Unix‑like shells; Windows support is unclear.  
-Low – No explicit secret handling – S3 credentials are expected via environment variables; no .env template provided.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>HelixDB provides a tightly integrated graph‑vector store with first‑class Rust and multi‑language bindings, backed by a solid Cargo/Docker build pipeline and automated testing. It is ready for teams that want a single datastore for AI‑augmented applications and are comfortable with Rust tooling or container deployment. Missing pieces are richer developer docs for internal crates and automated binding generation in CI; otherwise the codebase is clean and production‑grade.</p>
+helix start dev
+helix query dev --file examples/request.json
+helix stop dev</code></pre>
+<p>Default storage is in-memory (data wiped on stop). Use <code>--disk</code> or <code>--storage-uri s3://...</code> for persistence. SDKs connect to <code>http://localhost:6969</code> by default.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A company building an AI assistant with company knowledge could use HelixDB to store employee records (relational), document embeddings (vector), and organizational relationships (graph) in one system. The assistant queries across all models in a single request, eliminating data synchronization between separate stores.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis identified 392 findings (72 high, 320 medium) across four categories:</p>
+<ul><li><strong>High</strong> - Import cycle in Python SDK: <code>sdks/python/src/helixdb/client.py</code> participates in circular imports with <code>__init__</code> and <code>async_client</code>. Fix: extract shared types or defer imports.</li><li><strong>High</strong> - Deep nesting (57 instances): <code>crates/planner/src/planning/selected/native/scoped/control_flow/tests.rs</code> reaches indentation depth 10. Fix: use early returns and guard clauses.</li><li><strong>High</strong> - Duplicated code: 127 repeated 6-line blocks across 78 files in <code>crates/db/fuzz/fuzz_targets/</code>. Fix: extract shared helpers.</li><li><strong>Medium</strong> - File handles without context managers: <code>sdks/python/src/helixdb/client.py</code> uses bare <code>open()</code> calls.</li></ul>
+<p>SDLC observations:</p>
+<ul><li><strong>High</strong> - Third-party GitHub Actions pinned to tags, not commit SHAs (supply-chain risk)</li><li><strong>Medium</strong> - No dependency update bot configured</li><li><strong>Medium</strong> - No vulnerability scan gate in CI</li><li><strong>Medium</strong> - <code>persist-credentials: false</code> not set on checkout</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>HelixDB is a serious, well-structured database project with real engineering depth—the Rust core, unified query AST, and multi-SDK support are substantial. It's early-stage (no stars, in-memory default) but the architecture is sound. Teams building AI applications that need unified graph+vector storage should evaluate it; those needing production stability should wait for maturity.</p>
             </div>
 
             

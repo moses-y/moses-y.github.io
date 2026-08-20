@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,40 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>Open-source task management for the agentic era. The command center for solo entrepreneurs who delegate work to AI agents.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Solo founders increasingly rely on autonomous AI agents to execute ideas, but there is no lightweight, agent‑first task hub. Existing tools assume human‑only workflow, leaving founders to chase logs, manage credentials, and manually intervene when agents misbehave.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>mission-control</code> supplies a Next.js front‑end plus a daemon that mediates every agent interaction. The UI lives under <code>mission‑control/src/app/…</code> (e.g., <code>src/app/dashboard/page.tsx</code>, <code>src/app/inbox/page.tsx</code>) and renders the Eisenhower matrix, inbox, and field‑ops panels. The background daemon starts at <code>mission‑control/scripts/daemon/index.ts</code>, reads <code>daemon-config.json</code>, and dispatches work through the pipeline in <code>scripts/daemon/runner.ts</code>, <code>scheduler.ts</code>, and <code>dispatcher.ts</code>. Shared adapters such as <code>src/lib/adapters/registry.ts</code> expose a token‑optimized API that agents use to read/write tasks, decisions, and approvals.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins with the <strong>daemon entry point</strong> <code>scripts/daemon/index.ts</code>. It loads configuration (<code>scripts/daemon/config.ts</code>), creates a logger (<code>scripts/daemon/logger.ts</code>), and instantiates the core loop:</p>
+<ol><li><code>index.ts</code> → <code>config.load()</code> reads <code>mission‑control/data/daemon-config.json</code>.</li><li><code>index.ts</code> creates a <code>Runner</code> (<code>scripts/daemon/runner.ts</code>). The runner imports the <strong>most connected modules</strong>: <em> <code>logger</code> (Ca 11, Ce 2) – centralised log output. </em> <code>types</code> (Ca 11, Ce 0) – shared type definitions. * <code>dispatcher</code> (Ca 2, Ce 5) – decides which task handler to invoke (e.g., <code>run-task.ts</code>, <code>run-inbox-respond.ts</code>).</li><li>The runner schedules work via <code>scheduler.ts</code>, which polls the task queue in <code>data/tasks.json</code> and triggers the appropriate handler.</li><li>Handlers (<code>run-task.ts</code>, <code>run-brain-dump-triage.ts</code>, etc.) call the <strong>adapter layer</strong> (<code>src/lib/adapters/registry.ts</code>, <code>src/lib/adapters/types.ts</code>) to read/write JSON data and to invoke external APIs defined in the Next.js API routes (<code>src/app/api/*</code>).</li><li>Responses flow back through the dispatcher to the logger and finally update the UI via the same JSON files that the front‑end reads (<code>data/inbox.json</code>, <code>data/decisions.json</code>).</li></ol>
+<p>The <strong>hub</strong> of this graph is <code>scripts/daemon/logger.ts</code> (11 inbound imports, 2 outbound) and <code>scripts/daemon/types.ts</code> (pure type hub, 7 inbound). No circular dependencies were detected, so changes to a hub module have a predictable blast radius limited to the modules that import it.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/mission-control
+cd mission-control
+
+# Install dependencies (pnpm is declared in the repo)
+pnpm install
+
+# Copy example env and adjust if needed
+cp mission-control/.env.example mission-control/.env   # edit .env as required
+
+# Start the daemon (background worker)
+pnpm run daemon   # script defined in mission-control/package.json
+
+# Launch the Next.js UI
+pnpm dev          # runs Next.js dev server (script defined in package.json)</code></pre>
+<p>The UI is reachable at <code>http://localhost:3000</code>. The daemon reads <code>mission-control/data/daemon-config.json</code>; any custom settings must be added there.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A founder adds a new idea via the “Brain Dump” page (<code>src/app/brain-dump/page.tsx</code>). The UI writes to <code>data/brain-dump.json</code>. The daemon picks up the entry, triggers <code>run-brain-dump-triage.ts</code>, which spawns a research agent through the adapter layer. The agent’s report lands in <code>data/decisions.json</code>; the founder reviews it in the “Decisions” view and approves the next step, which the daemon then translates into a task in <code>data/tasks.json</code> for the build agent.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Duplicated code blocks</strong> – 1,557 repeated 6‑line fragments across 130 files (e.g., <code>__tests__/daemon.test.ts</code>, <code>security.test.ts</code>, <code>scripts/daemon/config.ts</code>).</li><li><strong>High – Deep nesting</strong> – Max indentation depth 8 in <code>src/app/autopilot/page.tsx</code> and several field‑ops pages; makes control flow hard to follow.</li><li><strong>High – Oversized files</strong> – <code>src/lib/data.ts</code> (733 lines) and <code>scripts/seed-infant-feeding.ts</code> (733 lines) exceed typical maintainability thresholds.</li><li><strong>Medium – High branching density</strong> – <code>scripts/daemon/config.ts</code>, <code>security.ts</code>, <code>dispatcher.ts</code> contain 61 branch points over 144 lines each; consider strategy tables.</li><li><strong>Medium – Out‑of‑date dependencies</strong> – 9 packages lag behind the latest major releases (e.g., <code>next</code> ^15.3.3 vs current 16.3.1, <code>typescript</code> ^5.8.0 vs 7.0.2).</li></ul>
+<p>CI is present (<code>.github/workflows/ci.yml</code>), tests exist (<code>__tests__/*.test.ts</code>), a license file is included, and no secrets are committed. No Dockerfile is provided, so container builds must be added if required.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>mission-control</code> delivers a functional, agent‑first task console with a clear separation between UI and daemon orchestration. The codebase is usable but suffers from duplicated logic, deep nesting, and several large files, which will increase maintenance cost. It is suitable for teams comfortable refactoring TypeScript and who need a customizable, open‑source hub for AI‑agent workflows, provided they allocate effort to clean up the identified hotspots.</p>
             </div>
 
             
@@ -109,8 +140,62 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 243, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_ontrol_scripts_daemon_logger[&quot;logger&quot;]
+  n1_control_scripts_daemon_types[&quot;types&quot;]
+  n2_ntrol_src_lib_adapters_types[&quot;types&quot;]
+  n3_ontrol_scripts_daemon_config[&quot;config&quot;]
+  n4_ol_src_lib_adapters_registry[&quot;registry&quot;]
+  n5_trol_scripts_daemon_security[&quot;security&quot;]
+  n6_ontrol_scripts_daemon_runner[&quot;runner&quot;]
+  n7_ission_control_src_lib_types[&quot;types&quot;]
+  n8_ontrol_scripts_daemon_health[&quot;health&quot;]
+  n9_cripts_daemon_prompt_builder[&quot;prompt-builder&quot;]
+  n3_ontrol_scripts_daemon_config --&gt; n0_ontrol_scripts_daemon_logger
+  n3_ontrol_scripts_daemon_config --&gt; n1_control_scripts_daemon_types
+  n8_ontrol_scripts_daemon_health --&gt; n0_ontrol_scripts_daemon_logger
+  n8_ontrol_scripts_daemon_health --&gt; n5_trol_scripts_daemon_security
+  n8_ontrol_scripts_daemon_health --&gt; n1_control_scripts_daemon_types
+  n0_ontrol_scripts_daemon_logger --&gt; n5_trol_scripts_daemon_security
+  n0_ontrol_scripts_daemon_logger --&gt; n1_control_scripts_daemon_types
+  n9_cripts_daemon_prompt_builder --&gt; n0_ontrol_scripts_daemon_logger
+  n9_cripts_daemon_prompt_builder --&gt; n5_trol_scripts_daemon_security
+  n9_cripts_daemon_prompt_builder --&gt; n1_control_scripts_daemon_types
+  n6_ontrol_scripts_daemon_runner --&gt; n0_ontrol_scripts_daemon_logger
+  n6_ontrol_scripts_daemon_runner --&gt; n3_ontrol_scripts_daemon_config
+  n6_ontrol_scripts_daemon_runner --&gt; n5_trol_scripts_daemon_security
+  n6_ontrol_scripts_daemon_runner --&gt; n1_control_scripts_daemon_types
+  n4_ol_src_lib_adapters_registry --&gt; n2_ntrol_src_lib_adapters_types</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>9</strong> of 45 declared dependencies are a major version behind. Resolved 45 of 45 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@types/node</code></td>
+                            <td>^22.15.0</td><td>26.2.0</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>typescript</code></td>
+                            <td>^5.8.0</td><td>7.0.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>lucide-react</code></td>
+                            <td>^0.525.0</td><td>1.31.0</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>nanoid</code></td>
+                            <td>^5.1.6</td><td>6.0.1</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>next</code></td>
+                            <td>^15.3.3</td><td>16.3.1</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>@vitejs/plugin-react</code></td>
+                            <td>^5.1.4</td><td>6.0.5</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>eslint</code></td>
+                            <td>^9.0.0</td><td>10.8.1</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>eslint-config-next</code></td>
+                            <td>^15.3.3</td><td>16.3.1</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
 

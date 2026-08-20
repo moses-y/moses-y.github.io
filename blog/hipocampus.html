@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents lose context between sessions. Search-based retrieval (BM25, vector) only works when you know what to look for—it fails on implicit context where the user never mentions the relevant topic. The repo&#39;s own benchmark shows search alone scores 2.8% on implicit recall tasks versus 0.8% with no memory at all.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>hipocampus is a file-based memory layer that maintains a 3-tier hierarchy: templates/WORKING.md for active state, templates/MEMORY.md for consolidated knowledge, and a ROOT.md that holds a compacted topic tree. A compaction process (cli/compact.mjs) periodically summarizes older context into higher-level topics, so the agent retains a holistic view without keeping full history in context.</p><p>The system hooks into agent sessions via hooks/session-start.sh and platform-specific skill files under platforms/ (Claude Code, OpenCode, OpenClaw). Five skills in skills/ define the agent&#39;s memory behaviors: recall, search, compaction, flush, and a core skill that ties them together.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup — Install via the Claude Code plugin marketplace or standalone npm:</p><p>npx hipocampus init</p><p>Options include --no-vector (BM25 only, saves ~2GB) and --no-search (compaction tree only).</p><p>Configuration — No environment variables required. The system is file-based; templates in templates/ define the memory structure. The ROOT.md budget (3K vs 10K tokens) is a key tuning parameter—the benchmark shows larger budgets improve recall on easy/medium questions.</p><p>Running it — After init, the session-start hook loads memory into agent context automatically. The compaction CLI (cli/compact.mjs) runs to consolidate older entries. Platform-specific skills tell the agent when and how to use each memory layer.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer works with an agent across weeks on an API. Session logs contain a decision about token-bucket rate limiting, but the user never mentions it again. When the user later asks to &quot;refactor the payment endpoint,&quot; the compaction tree in ROOT.md surfaces the rate-limiting topic as related context—something search cannot do because no query connects &quot;payment flow&quot; to &quot;rate limiting.&quot;</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med — No CI/CD pipeline — no .github/ or CI config exists, so there&#39;s no automated test gate. Five test files exist (cli/compact.test.mjs and others), but nothing runs them automatically.
-Low — No lockfile — package.json exists without a lockfile, making builds non-reproducible.
-Low — Mostly documentation — 19 of 31 files are Markdown. The actual implementation is thin: one JavaScript CLI file, one shell hook, one plugin JS file. The core logic lives in prompts and skill definitions rather than code.
-Low — Single maintainer — forked from a 177-star repo; no contributor signals.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The core idea is sound: a compaction tree that maintains a holistic topic map is genuinely better than search for implicit recall, and the benchmark numbers support it. The implementation is lightweight—mostly Markdown prompts and a small CLI—which makes it easy to audit but means the &quot;memory&quot; is only as good as the agent&#39;s adherence to the skill definitions. Worth trying for teams running Claude Code or OpenCode on long-lived projects where context persistence matters, but treat the benchmark numbers as indicative rather than definitive until independently reproduced.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents lose context between sessions and cannot surface relevant prior discussion unless the user explicitly asks for it. Existing solutions (RAG, huge context windows, plain BM25/Vector search) only work when the query hints at the missing knowledge. Hipocampus attempts to give agents a proactive “memory” that surfaces implicit context without a user query.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Hipocampus provides a three‑tier memory stack (compaction tree + BM25 + vector) stored as plain files. The CLI (<code>npx hipocampus …</code>) builds the index, compacts history, and writes the artifacts under the repository root. Platform‑specific adapters live in <code>platforms/</code>, e.g. <code>platforms/opencode/plugin/hipocampus.js</code> for OpenCode and the <code>.claude-plugin/</code> folder for Claude Code. The <code>skills/</code> directory contains markdown specifications for the high‑level operations (compaction, flush, recall, search) that the CLI invokes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – <code>npx hipocampus init</code> runs the <code>hipocampus</code> binary defined in <code>package.json</code>. The binary points to <code>cli/init.mjs</code>.</p>
+<p><strong><code>cli/init.mjs</code> (732 lines)</strong> – parses CLI flags, decides which sub‑commands to run (<code>compact</code>, <code>uninstall</code>, etc.), and writes configuration files (<code>templates/*.md</code>). It is the sole orchestrator; no other module imports it.</p>
+<p><strong><code>cli/compact.mjs</code></strong> – reads the raw session logs, builds the compaction tree, and optionally generates BM25/vector indexes. The file contains an <code>eval</code> over a runtime‑constructed string (security risk).</p>
+<p><strong><code>cli/uninstall.mjs</code></strong> – removes generated indexes and template files; its logic mirrors <code>compact.mjs</code> with a similarly dense branch structure.</p>
+<p><strong><code>platforms/opencode/plugin/hipocampus.js</code></strong> – exports a plugin object that the OpenCode platform consumes; it calls the CLI scripts indirectly via <code>child_process.exec</code> to keep the memory up‑to‑date.</p>
+<p><strong><code>hooks/session-start.sh</code></strong> – a shell helper invoked by the platform when a new session begins; it contains duplicated 6‑line blocks also present in the CLI scripts.</p>
+<p><strong>Import graph</strong> – 5 internal modules, 0 import edges, 0 circular dependencies. Each CLI file is self‑contained, so a change in one script can affect the whole command flow (high blast radius).</p>
+<p><strong>Responsibility map</strong></p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Primary responsibility</th></tr></thead><tbody><tr><td><code>cli/init.mjs</code></td><td>CLI entry, flag handling, orchestration</td></tr><tr><td><code>cli/compact.mjs</code></td><td>Build compaction tree, generate indexes</td></tr><tr><td><code>cli/uninstall.mjs</code></td><td>Clean up generated artifacts</td></tr><tr><td><code>platforms/opencode/plugin/hipocampus.js</code></td><td>Platform adapter, invokes CLI</td></tr><tr><td><code>hooks/session-start.sh</code></td><td>Session‑start hook, duplicates shared logic</td></tr></tbody></table></div>
+<p>No hub or cycle appears; the cost is the lack of shared libraries, forcing duplicated code and large monolithic files.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/hipocampus
+cd hipocampus
+
+# 2. Install Node dependencies (no lockfile currently)
+npm install
+
+# 3. Initialise the memory stack (default builds all three tiers)
+npx hipocampus init
+
+# Optional flags (from README)
+npx hipocampus init --no-vector      # BM25 only
+npx hipocampus init --no-search      # Compaction tree only
+npx hipocampus init --platform claude-code</code></pre>
+<p>No environment variables or external services are required; all data lives in the repository’s <code>templates/</code> and generated index files. For Claude Code or OpenCode, install the plugin via the platform’s marketplace as described in the README, then the platform will call the same CLI under the hood.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer integrates the plugin into Claude Code:</p>
+<pre data-lang="json"><code>// .claude-plugin/plugin.json
+{
+  "name": "hipocampus",
+  "entry": "npx hipocampus init"
+}</code></pre>
+<p>When a new chat session starts, the platform runs <code>hooks/session-start.sh</code>, which triggers <code>cli/compact.mjs</code> to update the compaction tree. Subsequent agent responses can query the tree via the <code>skills/recall</code> spec, allowing the agent to surface a rate‑limiting decision made weeks earlier without any explicit user prompt.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing lockfile</strong> – <code>package.json</code> present, no <code>package-lock.json</code> or <code>pnpm-lock.yaml</code>. Fix: run the package manager once and commit the generated lockfile.</li><li><strong>High – Unsafe eval</strong> – <code>cli/compact.mjs</code> executes <code>eval()</code> on a computed string. Fix: replace with safe parsing (e.g., <code>JSON.parse</code>).</li><li><strong>Medium – Dependabot not configured</strong> – No <code>.github/dependabot.yml</code>. Fix: add a Dependabot config covering npm.</li><li><strong>Medium – Duplicated code blocks</strong> – Same 6‑line snippet appears in <code>cli/compact.mjs</code>, <code>cli/compact.test.mjs</code>, <code>cli/init.mjs</code>, <code>hooks/session-start.sh</code>. Fix: extract to a shared helper module.</li><li><strong>Medium – Oversized file</strong> – <code>cli/init.mjs</code> is 732 lines, making reasoning and testing difficult. Fix: split by logical responsibilities (arg parsing, file generation, cleanup).</li><li><strong>Medium – High branching density</strong> – <code>cli/compact.mjs</code> and <code>cli/uninstall.mjs</code> each contain &gt;100 branch points over ~300 lines. Fix: refactor into strategy tables or separate functions.</li></ul>
+<p>No CI pipeline, Dockerfile, or committed secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Hipocampus delivers a lightweight, file‑based proactive memory layer that demonstrably improves implicit‑context recall for AI agents. The implementation is functional but suffers from monolithic CLI scripts, duplicated logic, and security‑related eval usage. It is suitable for teams comfortable with Node.js who need a quick, no‑infrastructure memory add‑on, but they should address the highlighted health issues before production deployment.</p>
             </div>
 
             

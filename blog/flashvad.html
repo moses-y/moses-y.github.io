@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 18, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,61 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Voice‑call systems need a voice‑activity detector that emits a speech probability at sub‑10 ms granularity while remaining lightweight enough to run on embedded or browser contexts. Existing solutions either add latency, require heavyweight frameworks, or lack easy cross‑platform integration (Python, JavaScript, macOS native).</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>FlashVAD is a causal VAD that produces one speech probability every 10 ms. The code base is organized around a small streaming model (46 k parameters) stored in models/flashvad-v0.1/flashvad-v0.1.pt and a corresponding ONNX graph flashvad-stream.onnx.</p><p>Python runtime – src/flashvad/ provides OnnxStreamingVadModel.loadbundled(threads=1) (src/flashvad/runtime.py) and a telephony adapter that decodes 8 kHz G.711 µ-law/A-law to the model’s 16 kHz stream (src/flashvad/telephony.py).  
- macOS native path – an Apple‑Accelerate implementation lives under native/macos/: CMakeLists.txt, flashvadnative.c/h, and pre‑generated weights flashvad_weights.c/h.  
- Browser integration – the npm package packages/web/ ships a feature extractor (packages/web/src/features.mjs), detector (packages/web/src/detector.mjs), and an ONNX‑Runtime‑Web wrapper (packages/web/src/index.mjs).  
- Integration adapters – LiveKit (src/flashvad/integrations/livekit.py) and Pipecat (src/flashvad/integrations/pipecat.py) hook the detector into agent frameworks.  
- Telephony ingress – flashvad.telephony.TelephonyVadStream handles PCMU, PCMA and PCM16 conversion, referenced in the README’s telephone-audio snippet.</p><p>Configuration is minimal: the model metadata lives in models/flashvad-v0.1/config.json and calibration data in detector-calibration.json. The CLI entry point src/flashvad/cli.py exposes benchmark commands that read these artifacts.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Python‑only workflow:</p><p>pip install flashvad               # pre‑release</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Real‑time voice‑activity detection (VAD) for low‑latency calls needs a tiny, causal model that can run on CPUs, GPUs, browsers, and even macOS‑native Accelerate without pulling in heavyweight frameworks. Existing solutions are either too large, block on batch inference, or require complex deployment pipelines, making it hard to embed VAD in telephony or AI‑agent stacks.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>FlashVAD delivers a 46 k‑parameter streaming model that emits a speech‑probability every 10 ms. The repository contains four self‑contained projects:</p>
+<div class="table-scroll"><table><thead><tr><th>Project</th><th>Core purpose</th><th>Key files</th></tr></thead><tbody><tr><td><code>src/flashvad</code></td><td>Python library, CLI, runtime adapters</td><td><code>__main__.py</code>, <code>cli.py</code>, <code>runtime.py</code>, <code>detector.py</code>, <code>native_runtime.py</code></td></tr><tr><td><code>native/macos</code></td><td>C implementation of the model using Apple Accelerate</td><td><code>flashvad_native.c</code>, <code>flashvad_weights.c</code></td></tr><tr><td><code>packages/web</code></td><td>Browser‑side ONNX Runtime Web wrapper</td><td><code>src/detector.mjs</code>, <code>src/vad.mjs</code></td></tr><tr><td><code>report-site</code></td><td>Demo UI and benchmark visualisation</td><td><code>src/pages/index.astro</code>, <code>src/components/VadPlayground.tsx</code></td></tr></tbody></table></div>
+<p>The library can be installed from PyPI (<code>pip install flashvad</code>) or npm (<code>npm install flashvad onnxruntime-web</code>). It ships a bundled ONNX graph (<code>models/flashvad‑v0.1/flashvad‑stream.onnx</code>) and a pre‑compiled macOS native binary. Integration adapters for LiveKit Agents, Pipecat, and G.711 telephony are provided.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/flashvad/__main__.py</code>, which parses CLI arguments and dispatches to <code>src/flashvad/cli.py</code>. The CLI builds a <code>OnnxStreamingVadModel</code> via <code>src/flashvad/runtime.py::_require_active_provider</code> and <code>OnnxStreamingVadModel.load_bundled</code>. The model creates a per‑call stream (<code>new_stream</code>) whose <code>push</code> method runs the ONNX session (or the native macOS runtime via <code>src/flashvad/native_runtime.py</code>) and returns a probability array.</p>
+<p>The import graph shows 88 internal modules and 78 edges, with <strong>no cycles</strong>. The most‑connected hub is <code>src/flashvad/config.py</code> (imported by 14 other modules). Changes here have the widest blast radius. <code>src/flashvad/detector.py</code> imports only one other module and is therefore a low‑risk leaf. The native path (<code>native/macos/flashvad_native.c</code>) is called only from <code>src/flashvad/native_runtime.py</code>, keeping the C‑side impact isolated.</p>
+<p>Key call chain for a typical inference:</p>
+<pre><code>__main__ → cli.main → runtime.OnnxStreamingVadModel.load_bundled
+    → runtime._provider_name / _resolved_shape
+    → native_runtime.__init__ (if macOS) or ONNX Session init
+    → stream.push → detector.forward (Python) → ONNX runtime exec / native C call</code></pre>
+<p>Modules with high instability (e.g., <code>src/flashvad/evaluation</code> and <code>src/flashvad/train</code>) import many others but are not in the hot path for inference, limiting their impact on production callers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/flashvad
+cd flashvad
+
+# Install the Python package with all extras needed for data prep and training
+uv sync --all-extras          # uv reads pyproject.toml
+uv run pytest                 # run the test suite</code></pre>
+<p><strong>CLI usage</strong> (see <code>src/flashvad/cli.py</code>):</p>
+<pre data-lang="bash"><code>uv run flashvad benchmark \
+    --checkpoint models/flashvad-v0.1/flashvad-v0.1.pt
+
+uv run flashvad benchmark-onnx \
+    --model models/flashvad-v0.1/flashvad-stream.onnx</code></pre>
+<p><strong>Programmatic usage</strong> (from <code>src/flashvad/runtime.py</code>):</p>
+<pre data-lang="python"><code>from flashvad.runtime import OnnxStreamingVadModel
+
+model = OnnxStreamingVadModel.load_bundled(threads=1)
+stream = model.new_stream()
+prob, events = stream.push(audio_float32_16khz)   # 10 ms slices
+stream.reset()</code></pre>
+<p>For browser integration, import the bundled ES module <code>packages/web/src/vad.mjs</code> and feed PCM‑16kHz audio to <code>detect</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A telephony gateway can replace its current VAD by:</p>
+<pre data-lang="python"><code>from flashvad.telephony import TelephonyVadStream
+
+vad = TelephonyVadStream()          # decodes G.711 8 kHz → 16 kHz
+for chunk in incoming_pcm8k_chunks:
+    prob, _ = vad.push(chunk)       # called per 10 ms packet
+    if prob &gt; 0.5:
+        forward_to_asr(chunk)</code></pre>
+<p>The per‑call stream holds minimal state, enabling thousands of concurrent calls on a single CPU core with sub‑millisecond latency, as demonstrated in the benchmark JSON files under <code>benchmarks/</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHA (<code>.github/workflows/ci.yml</code>).</li><li><strong>Medium</strong> – Add Dependabot/Renovate (<code>.github/dependabot.yml</code>).</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout step.</li><li><strong>Low</strong> – Define job timeouts (<code>timeout-minutes</code>) in CI workflow.</li><li><strong>Low</strong> – Add repository convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Measured static findings (19 total):</p>
+<ul><li><strong>Medium – Cognitive load</strong>: Deep nesting (max depth 6) in <code>src/flashvad/detector.py</code>, <code>src/flashvad/manifest.py</code>, <code>report-site/src/pages/index.astro</code>.</li><li><strong>Medium – Resilience</strong>: Broad <code>except:</code> blocks in <code>src/flashvad/native_runtime.py</code>, <code>scripts/prepare_ami_vad.py</code>, <code>scripts/prepare_fleurs_vad.py</code>.</li><li><strong>Medium – Clarity</strong>: <code>src/flashvad/config.py</code> is a hub (imported by 14 modules).</li><li><strong>High – Clarity</strong>: Duplicated 6‑line blocks across native C headers (<code>flashvad_native.c/h</code>, <code>flashvad_weights.h</code>, <code>src/flashvad/native_export.py</code>).</li><li><strong>Medium – Resource safety</strong>: Files opened without context manager in <code>scripts/convert_scv_manifest.py</code> and its test.</li><li><strong>Medium – Cognitive load</strong>: Oversized UI files (<code>report-site/src/pages/index.astro</code>, <code>VadPlayground.tsx</code>).</li></ul>
+<p>All findings include concrete fix suggestions in the analysis output.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>FlashVAD offers a lightweight, multi‑runtime VAD suitable for real‑time voice pipelines, with clear Python and JavaScript entry points and solid test coverage. The codebase is generally healthy but suffers from duplicated native helpers, deep nesting, and a few CI hygiene gaps that should be addressed before production hardening. It is best suited for engineers needing an embeddable VAD with optional macOS native acceleration or browser ONNX support.</p>
             </div>
 
             

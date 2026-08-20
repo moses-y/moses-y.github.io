@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,40 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>One local API call gives your agent the entire live state of the planet — every major world event at once, plus forecasts. 40+ free keyless feeds, runs entirely on Ollama. No cloud, no cost.  Keyless live feeds into one global view and forecasts what’s likely next. No cloud, no keys, no cost.  1d,1w,1m,1y predictions by Mirofish.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that need a single, local source of real‑time global events must stitch together dozens of APIs, each with its own keys, rate limits and data model. Maintaining that pipeline consumes engineering time and introduces latency, making it hard to feed up‑to‑date world context into downstream agents or decision systems.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>PYTHIA</code> fuses the open‑source <strong>Osiris</strong> live‑feed engine with the <strong>MiroFish</strong> swarm‑intelligence predictor. The Python back‑end (<code>engine/</code>) pulls &gt;40 keyless feeds, normalises them into a unified world‑state, runs the MiroFish model to produce 24‑hour, 1‑week, 1‑month and 1‑year forecasts, and serves the results via a FastAPI server (<code>engine/server.py</code>). The React front‑end (<code>integrations/osiris/</code>) visualises feeds, forecasts and interactive panels such as <code>PythiaPanel.tsx</code> and <code>BriefPanel.tsx</code>.</p>
+<p>Key files:</p>
+<ul><li><code>engine/server.py</code> – launches the HTTP API, configures CORS, mounts route modules.</li><li><code>engine/config.py</code> – central configuration hub imported by 12 other modules.</li><li><code>engine/pipeline.py</code> – orchestrates ingestion of Osiris feeds and feeds the model.</li><li><code>engine/models.py</code> – data‑class definitions shared by the pipeline and the API.</li><li><code>integrations/osiris/routes/*.ts</code> – TypeScript route definitions that proxy API calls to the front‑end.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>engine/server.py</code></strong>. The file creates a FastAPI <code>app</code>, loads settings from <strong><code>engine/config.py</code></strong>, and registers CORS with <code>allow_origins=["*"]</code>. It then includes the route modules found under <code>integrations/osiris/routes/</code>, each exposing a path that ultimately calls back into the Python engine.</p>
+<ul><li><code>engine/server.py</code> → imports <strong><code>engine/config.py</code></strong> (hub, 12 inbound imports).</li><li>Request handlers import <strong><code>engine/state.py</code></strong> (holds the live world‑state) and <strong><code>engine/runtime.py</code></strong> (runs the prediction loop).</li><li>The runtime invokes <strong><code>engine/pipeline.py</code></strong>, which pulls raw feed data via the Osiris integration (<code>integrations/osiris/*</code>) and populates <code>engine/state.py</code>.</li><li><code>engine/pipeline.py</code> calls into <strong><code>engine/models.py</code></strong> to validate and store feed objects, then triggers <strong><code>engine/mcp.py</code></strong> (MiroFish controller) to generate forecasts.</li><li>Forecast results flow back through <code>engine/brief.py</code> (produces human‑readable briefs) and are returned as JSON by the API.</li></ul>
+<p>The most‑connected modules are <code>engine/config.py</code> (12 dependents) and <code>engine/models.py</code> (10 dependents), giving them the largest blast radius: changes here ripple through the entire ingestion, modelling, and API layers. <code>engine/pipeline.py</code> has an instability score of 0.78 (imports 7 modules, is imported by 2), indicating moderate coupling that should be monitored when refactoring.</p>
+<p>No circular imports were detected, so the call graph is acyclic and safe for incremental changes.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Pythia
+cd Pythia
+
+# Install Python dependencies (uv is bundled via uv.lock)
+uv sync          # creates a virtualenv and installs exact versions
+
+# Copy example environment file and adjust if needed
+cp .env.example .env
+
+# Start the API server
+python -m engine.server   # runs FastAPI on the default host/port</code></pre>
+<p>The front‑end can be launched with a standard React toolchain (e.g., <code>npm install &amp;&amp; npm start</code>) inside the <code>integrations/osiris/</code> folder, although the repository does not include a <code>package.json</code>; developers must add one if they wish to build the UI.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A logistics platform can run <code>PYTHIA</code> on a local edge server, call <code>http://localhost:8000/forecast?horizon=24h</code> to obtain a probability‑weighted list of upcoming disruptions (storms, port closures, market swings), and feed that into its routing optimizer. The same endpoint can be queried by an LLM‑based assistant to enrich conversational responses with current world context.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 92 source files, no <code>tests/</code> directory.</li><li><strong>HIGH – No CI workflow</strong> – repository lacks any GitHub Actions or other pipeline.</li><li><strong>HIGH – Wildcard CORS</strong> – <code>engine/server.py</code> sets <code>allow_origins=["*"]</code>, exposing the API to any origin.</li><li><strong>MEDIUM – Dependabot missing</strong> – only <code>pyproject.toml</code> is present; no automated dependency updates.</li><li><strong>MEDIUM – Large binary in repo</strong> – <code>screenshots/demo.mp4</code> (7.3 MiB) inflates clone size.</li><li><strong>LOW – Convention files absent</strong> – no <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<p>Additional static findings (not in the health audit): deep nesting in several engine modules, duplicated UI snippets across many <code>integrations/osiris/*.tsx</code> files, and several file‑open calls without context managers in <code>scripts/</code>.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>PYTHIA</code> delivers a locally hosted, key‑free aggregation of global events and forecasts, which is valuable for privacy‑sensitive or offline deployments. The codebase is functional but under‑engineered: it lacks automated testing, CI, and proper security defaults, and the UI contains considerable duplication. Teams should prioritize adding tests, tightening CORS, and refactoring the most‑connected modules before extending the platform.</p>
             </div>
 
             

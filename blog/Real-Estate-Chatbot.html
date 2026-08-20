@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">HTML</span>
                     <span class="post-type">original</span>
                 </div>
@@ -80,33 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#example-integration-snippet">Example integration snippet</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Real‑estate websites often field repetitive, factual queries (e.g., “What is the deposit amount?”). Answering each manually strains support staff and leads to inconsistent information.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository implements a Flask‑based chatbot that matches a user’s question to a pre‑populated Q&amp;A set using TF‑IDF vectorisation and cosine similarity.</p><p>app.py creates the Flask app, loads the data from data/qadata.py, and exposes two routes – / (rendered by templates/index.html) and /get (JSON API called by static/js/script.js).  
- The knowledge base lives in data/qadata.py (a list of dictionaries) and is persisted in feedbackdata.json/querylogs.json for later analysis.  
- Front‑end assets (templates/.html, static/css/style.css, static/js/script.js, and image files) provide a responsive chat UI with suggestion buttons defined in the HTML templates.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone and enter the repo
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Real‑estate agents often receive repetitive property queries that waste staff time. A lightweight web‑based chatbot that can instantly match a user’s question to a curated FAQ reduces manual effort and improves response consistency.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a Flask server (<code>app.py</code>) that exposes a single web UI (HTML in <code>templates/</code> and static assets). User input is posted to the backend, where the question is vectorised with TF‑IDF (see <code>data/qa_data.py</code>) and matched via cosine similarity against a hard‑coded list of 50+ Q&amp;A pairs (<code>feedback_data.json</code>). The matched answer is returned and rendered in the chat window (<code>static/js/script.js</code>).</p>
+<p>Key files:</p>
+<ul><li><code>app.py</code> – creates the Flask app, loads the QA data, defines the <code>/</code> and <code>/get</code> routes.</li><li><code>data/qa_data.py</code> – builds the TF‑IDF matrix and provides <code>find_best_match(question)</code>.</li><li><code>templates/index.html</code> and <code>static/js/script.js</code> – UI and client‑side request handling.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with <strong><code>python app.py</code></strong>. The script:</p>
+<ol><li>Imports <code>qa_data</code> (<code>from data import qa_data</code>) and <code>app_secrets</code> (holds placeholder secrets).</li><li>Instantiates a Flask app and calls <code>qa_data.load_data()</code> to read <code>feedback_data.json</code> and compute the TF‑IDF matrix.</li><li>Registers the root route (<code>/</code>) that renders <code>templates/index.html</code>.</li><li>Registers the AJAX route (<code>/get</code>) which extracts the posted question, calls <code>qa_data.find_best_match(question)</code>, and returns the answer as JSON.</li></ol>
+<p>The only outward effect is the HTTP response; the code never writes to a database or external service. The <strong>widest blast radius</strong> is <code>app.py</code> because it is the sole module importing <code>qa_data</code>; any change to the matching logic propagates through the single request handler. No circular imports are present, and the internal call graph shows a single edge (<code>app.py → data/qa_data.py</code>).</p>
+<p>Static assets (<code>static/js/script.js</code>) fetch the answer via <code>fetch('/get', …)</code> and inject it into the DOM. The script contains deep nesting (max indentation depth 7), making future UI tweaks harder to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
 git clone https://github.com/moses-y/Real-Estate-Chatbot.git
 cd Real-Estate-Chatbot
-Create a virtual environment
+
+# Create a virtual environment
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
-Install Python dependencies
+
+# Install Python dependencies
 pip install -r requirements.txt
-Provide required secret (NGROK token) – the repo includes a placeholder file
-Create a local config file as described in the README:
-echo &quot;NGROKAUTHTOKEN = \&quot;yourngrokauthtokenhere\&quot;&quot; &gt; config.py
-Start the Flask server
-python app.py</p><p>The server listens on http://127.0.0.1:5000; opening that URL loads templates/index.html which pulls the JavaScript from static/js/script.js to drive the chat.</p><p>If you intend to run the static demo on GitHub Pages, simply push the index.html and static/ folder to the gh-pages branch; no server is required for that view.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A property‑listing portal can embed the chatbot widget by copying the templates/index.html markup into its own page and pointing the AJAX call in script.js to the portal’s Flask instance (e.g., https://myportal.com/chat/get). The backend can replace the static qadata.py with a database query to keep answers up‑to‑date.</p><h3 class="post-h" id="example-integration-snippet">Example integration snippet</h3><p>from flask import Flask, request, jsonify
-from mydb import fetchfaq   # custom DB layer</p><p>app = Flask(name)</p><p>@app.route(&quot;/get&quot;, methods=[&quot;POST&quot;])
-def getanswer():
-    query = request.json[&quot;msg&quot;]
-    answer = fetchfaq(query)          # replace TF‑IDF lookup
-    return jsonify({&quot;answer&quot;: answer})</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Secrets in repo – app_secrets.py contains credentials; should be removed or encrypted.  
-Medium – No test suite – No tests/ folder or pytest configuration; core matching logic is unverified.  
-Medium – No CI/CD – No GitHub Actions, Travis, or similar pipelines; builds are not automatically validated.  
-Medium – Missing LICENSE file – README claims MIT, but the repository lacks a LICENSE file, creating legal ambiguity.  
-Low – No lockfile – requirements.txt is present without a requirements.lock/pipfile.lock; reproducibility may vary across environments.  
-Low – Incomplete config – README references config.py and .env, but these files are absent; running the app fails without manual creation.  
-Low – Limited error handling – app.py assumes successful vectorisation and index lookup; malformed JSON or empty queries will raise uncaught exceptions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The project delivers a functional, Flask‑based real‑estate chatbot with a clear data flow and minimal front‑end code, suitable for quick prototyping or small‑scale deployments. However, the presence of hard‑coded secrets, lack of tests, CI, and a proper license make it risky for production use without remediation. Teams needing a ready‑made demo can adopt it quickly; production teams should first address security, testing, and deployment hygiene.</p>
+
+# (Optional) Create a config file if you need ngrok tunnelling
+#   The README mentions a config.py with NGROK_AUTH_TOKEN, but the repo
+#   does not contain or import this file. It can be added if external
+#   tunnelling is required.
+
+# Run the Flask server
+python app.py</code></pre>
+<p>The server starts on <code>http://127.0.0.1:5000</code>. Open that URL in a browser to interact with the chatbot.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A property portal can embed the chatbot widget on its listings page. When a visitor asks “What is the deposit for a 2‑bedroom apartment?” the client script sends the query to <code>/get</code>; the Flask backend returns the pre‑matched answer, eliminating the need for a live agent to handle that query.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No LICENSE</strong> – repository root lacks any licence file; reuse is legally blocked.</li><li><strong>High – Debug mode enabled</strong> – <code>app.run(debug=True)</code> in <code>app.py</code> exposes full tracebacks and a remote shell in production.</li><li><strong>Medium – Dependabot missing</strong> – only one manifest (<code>requirements.txt</code>) and no automated dependency updater configured.</li><li><strong>Medium – Large binary in repo</strong> – <code>images/user.png</code> (6 MB) inflates clone size; should be moved to Git LFS or external storage.</li><li><strong>Medium – Deep nesting</strong> – observed in <code>app.py</code> and <code>static/js/script.js</code> (max indent 7), reducing readability.</li><li><strong>Medium – High branching density</strong> – <code>data/qa_data.py</code> contains 155 branch points in 220 lines, suggesting the matching logic could be refactored into a clearer dispatch table.</li></ul>
+<p>Additional observations: no test suite, no CI/CD pipeline, no lockfile for pip dependencies, and <code>app_secrets.py</code> contains placeholder secret paths.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The chatbot provides a functional, Flask‑based Q&amp;A front‑end with minimal setup, suitable for quick demos or internal tools. However, production use is hampered by security (debug mode), licensing uncertainty, and code‑maintainability concerns (deep nesting, branching). Adding tests, a CI pipeline, and cleaning up secrets would make the project far more robust for client deployments.</p>
             </div>
 
             

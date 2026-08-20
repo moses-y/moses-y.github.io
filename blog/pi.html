@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,27 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>pi is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams building AI agents face two recurring problems: every LLM provider has its own API shape, and every agent loop reinvents tool calling, session state, and prompt management. Pi consolidates both into a single TypeScript monorepo—one unified provider layer, one agent runtime, and one coding-agent CLI that is itself extensible via plugins.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo is a monorepo of five npm packages under <code>packages/</code>. <code>packages/ai</code> is a multi-provider LLM client (OpenAI, Anthropic, Google, Bedrock, Mistral, OpenRouter, and others) with OAuth flows, credential storage, and model catalogs. <code>packages/agent</code> provides the agent runtime: a session harness, tool-calling loop, compaction, and JSONL session persistence. <code>packages/coding-agent</code> is the interactive TUI/CLI that ties it together, with <code>packages/tui</code> handling terminal rendering and <code>packages/telemetry</code> providing vendor-neutral event schemas.</p>
+<p>The README is explicit that Pi has no built-in permission system—it runs with the launching user's privileges. The repo documents three containerization patterns (Gondolin micro-VM, plain Docker, OpenShell sandbox) rather than baking sandboxing into the core.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the CLI entry point in <code>packages/coding-agent/src/index.ts</code>, which routes through <code>packages/coding-agent/src/modes/interactive/interactive-mode.ts</code> (the main loop). That mode delegates to <code>packages/coding-agent/src/core/session-manager.ts</code> for session lifecycle and <code>packages/coding-agent/src/core/settings-manager.ts</code> for configuration. The agent loop itself lives in <code>packages/agent/src/agent-loop.ts</code>, which calls the <code>packages/ai</code> provider layer. Network effects are concentrated in <code>packages/ai/src/api/*.ts</code> (one file per provider) and <code>packages/ai/src/auth/oauth/*.ts</code> for credential flows; filesystem effects go through <code>packages/agent/src/harness/tools/{read,write,edit,bash}.ts</code>.</p>
+<p>The import graph is healthy overall: 1,180 internal modules, 3,191 edges, and only 75 modules inside circular dependencies. The hub is <code>packages/ai/src/types.ts</code> (167 modules depend on it), followed by <code>packages/coding-agent/src/modes/interactive/theme/theme.ts</code> (97 dependents). The critical cycle is <code>packages/ai/src/types.ts</code> ↔ <code>packages/ai/src/models.ts</code>; breaking it requires extracting shared types. The <code>interactive-mode.ts</code> file is in a cycle too and has high instability (0.76), meaning changes there ripple widely.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: <code>npm install --ignore-scripts</code> then <code>npm run build</code> (per the README). The repo uses npm workspaces; there is no Dockerfile.</p>
+<p><strong>Configuration</strong>: Provider keys go through the OAuth flows in <code>packages/ai/src/auth/</code> or environment variables handled by <code>packages/ai/src/env-api-keys.ts</code>. No central config file is present; settings are managed at runtime by <code>settings-manager.ts</code>.</p>
+<p><strong>Running it</strong>: <code>./pi-test.sh</code> runs from source. For standalone binaries, extract the release source archive and run <code>./scripts/build-binaries.sh --offline-model-data --platform linux-x64 --out "$PWD/out"</code> (both commands verbatim from the README).</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team standardizing on Pi can write one agent loop and swap providers per environment: <code>packages/ai/src/api/openai-responses.ts</code> for OpenAI in CI, <code>packages/ai/src/api/bedrock-converse-stream.ts</code> for Bedrock in production, and <code>packages/ai/src/api/google-vertex.ts</code> for GCP. The coding agent's extension mechanism (see <code>packages/coding-agent/examples/extensions/</code>) lets a team add a custom provider or sandbox without forking the core.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 603 findings (205 high, 396 medium). The high-severity clusters: 14 import-cycle members (notably <code>packages/ai/src/types.ts</code>, <code>packages/ai/src/models.ts</code>), 13 oversized files (largest is <code>packages/ai/src/types.ts</code> at 611 lines), 17 deep-nesting cases (max depth 9 in <code>packages/ai/src/models.ts</code>), and 13 hub modules with high blast radius. These are real maintenance costs, not style nits.</p>
+<p>The security audit found one critical issue: <code>.github/workflows/publish-model-catalog.yml</code> has R2 credentials in a workflow that can be triggered by fork PRs—move secret-using steps into a <code>workflow_run</code> job. Medium issues: no <code>permissions:</code> declaration in <code>ci.yml</code>, no Dependabot/Renovate, and <code>persist-credentials: false</code> missing on checkout. Low: no job timeouts in <code>build-binaries.yml</code>. The repo has 552 test files, CI, a license, and a lockfile; no committed secrets found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Pi is a serious, well-structured agent toolkit with real breadth—five packages, 27 dependencies, and 552 tests. The provider abstraction and agent runtime are production-grade, but the hub modules and cycles in <code>packages/ai</code> will make deep changes expensive. Teams wanting a multi-provider agent foundation should evaluate it; teams needing sandboxing out of the box should look elsewhere or adopt the documented containerization patterns.</p>
             </div>
 
             

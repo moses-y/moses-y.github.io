@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,54 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>Project Eyes On is a high-speed, multi-threaded surveillance tool by Y0oshi (@rde0) for locating open IP cameras worldwide. Unifies Google Dorking and Directory Scraping into a single OSINT engine.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Open‑source IP cameras are often left unsecured, creating privacy and security risks for owners. Security auditors and researchers need a fast way to locate such cameras at scale without manually combing through directories or search results.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>eyes.py</code> implements the core OSINT engine. It launches multiple threads that (1) scrape public directories like Insecam and (2) issue Google/Yahoo dork queries, then de‑duplicates and enriches results with GeoIP data. The repository supplies two installer wrappers (<code>install.sh</code> for *nix, <code>install.bat</code> for Windows) that copy the script to a system location and expose a <code>eyeson</code> command that simply runs <code>python eyes.py</code>. The <code>requirements.txt</code> lists the three third‑party packages needed at runtime.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Responsibility</th><th>Key Functions / Flow</th></tr></thead><tbody><tr><td><strong>install.sh / install.bat</strong></td><td>Installs the Python runtime dependencies (<code>pip install -r requirements.txt</code>) and creates a system‑wide shortcut (<code>eyeson</code> / <code>eyeson.bat</code>) that invokes <code>eyes.py</code>.</td><td>No internal Python calls; just OS‑level copy and permission steps.</td></tr><tr><td><strong>eyes.py</strong></td><td>Single‑module engine; owns all network I/O, threading, parsing, and output.</td><td><em>Entry point</em>: <code>if __name__ == "__main__": main()</code> → <code>main()</code> parses CLI commands (<code>/scrape</code>, <code>/scan</code>, <code>/country</code>, <code>/mode</code>, <code>/exit</code>).&lt;br&gt; • Thread pool created via <code>threading.Thread</code> for parallel queries.&lt;br&gt; • Functions <code>scrape_insecam()</code>, <code>search_dorks()</code>, <code>geoip_lookup()</code>, and <code>deduplicate()</code> are called directly from the command handlers.&lt;br&gt; • Results are printed to stdout; no external database or file writes.</td></tr><tr><td><strong>requirements.txt</strong></td><td>Declares runtime libraries (e.g., <code>requests</code>, <code>geocoder</code>, <code>beautifulsoup4</code>).</td><td>Imported in <code>eyes.py</code> at top‑level; no dynamic loading.</td></tr><tr><td><strong>README.md</strong></td><td>Documents usage; defines the command syntax that <code>eyes.py</code> expects.</td><td>Mirrors the CLI strings parsed in <code>eyes.py</code>.</td></tr></tbody></table></div>
+<p>There is <strong>one internal module</strong> (<code>eyes.py</code>) and <strong>zero import cycles</strong>. All external effects are limited to HTTP requests and console output, keeping the blast radius small—only changes to <code>eyes.py</code> affect the whole tool.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/Project-Eyes-On.git
+cd Project-Eyes-On
+
+# Linux / macOS install
+chmod +x install.sh
+sudo ./install.sh   # installs deps and creates `eyeson` command
+
+# Windows install (run in a CMD with admin rights)
+install.bat          # same effect as the shell script
+
+# Run the scanner
+sudo eyeson          # or `eyeson` on Windows</code></pre>
+<p>The tool then accepts the documented slash commands, e.g.:</p>
+<pre><code>/scrape 3          # scrape first 3 Insecam pages
+/scan 50           # perform 50 Google/Yahoo dork queries
+/country US        # limit results to United States IPs
+/mode STREAM       # show only live stream URLs
+/exit</code></pre>
+<p>No additional configuration files or environment variables are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security consulting firm could schedule the scanner on a hardened VM:</p>
+<pre data-lang="bash"><code>#!/bin/bash
+sudo eyeson &lt;&lt;EOF
+/country DE
+/scrape 10
+/scan 100
+/mode ALL
+/exit
+EOF &gt; /tmp/open_cams_de.txt</code></pre>
+<p>The output file feeds directly into a reporting pipeline that flags any public cameras found in the German IP range.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH (cognitive_load)</strong> – <em>Deep nesting</em> in <code>eyes.py</code> (max indentation depth 9).   <em>Fix</em>: Refactor with early returns and guard clauses.</li><li><strong>MEDIUM (resilience)</strong> – <em>Broad exception handling</em> (<code>except:</code> without specifying type) in <code>eyes.py</code>.   <em>Fix</em>: Catch specific exceptions; log or re‑raise unexpected errors.</li><li><strong>MEDIUM (cognitive_load)</strong> – <em>Oversized file</em> (<code>eyes.py</code> ≈ 649 lines).   <em>Fix</em>: Split by responsibility (scraper, dork engine, GeoIP, CLI).</li></ul>
+<p>Additional SDLC observations (not part of measured findings):</p>
+<ul><li>No test suite present.</li><li>No CI/CD configuration (no <code>.github/</code> workflows).</li><li>No lockfile; <code>requirements.txt</code> alone may lead to non‑reproducible builds.</li><li>License file exists (MIT).</li><li>No secrets detected in the repository.</li></ul>
+<p><strong>Code Health Audit</strong> – <em>Medium</em>: Enable Dependabot or Renovate. Evidence: single manifest (<code>requirements.txt</code>) without an update bot. Why it matters: advisory fixes would otherwise require manual review across many forks. Fix: add <code>.github/dependabot.yml</code> covering the Python ecosystem.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Project‑Eyes‑On</code> delivers a fast, single‑file OSINT scanner that works out‑of‑the‑box for locating unsecured cameras. Its monolithic design and lack of tests make maintenance risky; refactoring the core script and adding automated testing/CI would greatly improve reliability. Suitable for security researchers comfortable with Python and willing to extend the codebase.</p>
             </div>
 
             

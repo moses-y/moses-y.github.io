@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 17, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Social‑media platforms enforce a single‑link constraint, forcing users to choose which destination to promote. LinkStack solves this by providing a self‑hosted profile page where any number of links can be collected, customised, and shared under the owner’s domain.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>LinkStack is a Laravel‑based application that delivers a Linktree‑style dashboard. The app/ folder contains MVC controllers (app/Http/Controllers/Auth/, app/Http/Controllers/Admin/), Eloquent models such as app/Models/Link.php and app/Models/LinkType.php, and Livewire components like app/Http/Livewire/UserTable.php that power the interactive UI. Asset bundles under assets/ include Bootstrap, FontAwesome, and a customizer UI; the .env file (and its example .env.example) stores database credentials, mail settings, and authentication keys. A GitHub Actions workflow at .github/workflows/release.yml automates releases.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone the repository and copy .env.example to .env.  
-Configure environment variables in .env – database connection, mail host, and any API keys required for social login.  
-Generate the application key with php artisan key:generate (the presence of the artisan script confirms a Laravel installation).  
-Run migrations (php artisan migrate) to create the schema defined by the models; migration files are not listed but</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need a self‑hosted “link‑in‑bio” page must cobble together static pages, third‑party widgets, or pay SaaS services. Maintaining a consistent look, handling user accounts, and adding new links quickly becomes a manual, error‑prone process.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>LinkStack</code> is a Laravel‑based web app that delivers a multi‑link profile page with a built‑in admin UI. Core PHP logic lives under <code>app/</code> – e.g. <code>app/Http/Controllers/HomeController.php</code> renders the public page, while <code>app/Http/Controllers/AdminController.php</code> and <code>app/Http/Controllers/InstallerController.php</code> manage site configuration and user onboarding.</p>
+<p>Static assets (styles, scripts, icons) are stored in <code>assets/</code>. The main JavaScript bundle is <code>assets/js/app.js</code>; it pulls in the button editor (<code>assets/button-editor/js/*.js</code>) and FullCalendar plugins (<code>assets/vendor/fullcalendar/*/package.json</code>). Blade templates in <code>resources/views/</code> drive the HTML, with <code>resources/views/layouts/installing.blade.php</code> showing the installer UI.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>artisan</code> boots Laravel. The HTTP request enters <code>app/Http/Kernel.php</code>, which registers the middleware stack (<code>app/Http/Middleware/*</code>).</li><li><strong>Routing</strong> – routes are defined in <code>routes/web.php</code> (not listed but standard). Requests to <code>/</code> hit <code>HomeController@show</code>, which loads data via the <code>Link</code> model (<code>app/Models/Link.php</code>) and returns <code>resources/views/home.blade.php</code>.</li><li><strong>Admin flow</strong> – Authenticated admin routes invoke <code>AdminController</code> methods that call <code>LinkTypeController</code>, <code>UserController</code>, etc., each persisting changes through Eloquent models (<code>app/Models/*</code>).</li><li><strong>Asset pipeline</strong> – The Blade layout includes <code>assets/js/app.js</code> and the compiled CSS under <code>assets/css/</code>. <code>app/js/app.js</code> imports a single module (<code>resources/js/app</code>) and then loads the FullCalendar core (<code>assets/vendor/fullcalendar/core/main.js</code>). The import graph shows 289 internal modules with only one edge, so the JavaScript side is shallowly coupled.</li><li><strong>Database interaction</strong> – All persistence goes through Laravel’s Eloquent ORM; the only database files are in <code>database/</code> (migrations, seeds). No raw SQL appears.</li><li><strong>Key hotspots</strong> – <code>app/Http/Livewire/UserTable.php</code> and the installer view have the deepest nesting (8 levels) and therefore the highest cognitive load. The JavaScript button editor (<code>assets/button-editor/js/jquery.js</code> and <code>jquery-1.7.js</code>) are oversized (≈6.5 k lines each) and contain duplicated blocks, making any change risky.</li></ol>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/LinkStack.git
+cd LinkStack
+
+# Install PHP dependencies (composer.json is present in the upstream but omitted here)
+composer install
+
+# Install front‑end packages that have their own package.json
+cd assets/vendor/fullcalendar/bootstrap &amp;&amp; npm ci &amp;&amp; cd - &gt;/dev/null
+# repeat for core, daygrid, google-calendar, interaction, list, luxon if needed
+
+# Copy environment template and generate an app key
+cp .env.example .env
+php artisan key:generate
+
+# Run migrations
+php artisan migrate --seed
+
+# Start the development server
+php artisan serve</code></pre>
+<p>The application expects a MySQL (or compatible) database; connection details are read from <code>.env</code> (<code>DB_HOST</code>, <code>DB_DATABASE</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code>). No Dockerfile is provided, so containerisation must be added manually.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A marketing team deploys the app on a cheap VPS, points the domain <code>links.mybrand.com</code> to it, and creates individual user accounts for each brand ambassador. Each ambassador logs in, adds their social URLs via the admin UI, and the public page (<code>https://links.mybrand.com/username</code>) automatically pulls the data from the <code>links</code> table and renders it with the selected theme from <code>themes/</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – .env tracked</strong> – <code>.env</code> is version‑controlled despite being listed in <code>.gitignore</code>. Remove it (<code>git rm --cached .env</code>) and rotate all credentials.</li><li><strong>High – GitHub Action not pinned</strong> – Workflow uses <code>shivammathur/setup-php@v2</code>; replace with a SHA to avoid supply‑chain drift.</li><li><strong>High – No test suite</strong> – 547 source files have zero automated tests; add at least one PHPUnit test per controller and a CI step.</li><li><strong>High – Duplicate code</strong> – 944 identical 6‑line blocks spread across 93 files (e.g., <code>app/Http/Controllers/AdminController.php</code>, <code>assets/button-editor/js/jquery.js</code>). Extract to shared helpers.</li><li><strong>High – Oversized JS files</strong> – <code>assets/button-editor/js/jquery.js</code> and <code>jquery-1.7.js</code> exceed 6 k lines; split by responsibility.</li><li><strong>Medium – Empty catch blocks</strong> – Silent <code>catch {}</code> in the same oversized JS files; log or rethrow errors.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>release.yml</code> lacks explicit permissions; add <code>contents: read</code>.</li><li><strong>Medium – No dependency vulnerability scan</strong> – Add <code>dependency-review-action</code> or <code>osv-scanner</code> to the CI.</li><li><strong>Medium – No pre‑commit secret gate</strong> – Install a pre‑commit hook that scans for secrets.</li><li><strong>Low – Missing job timeouts</strong> – Add <code>timeout-minutes</code> to each workflow job.</li></ul>
+<p>Additional observations: the repo ships a full set of front‑end assets but lacks a central <code>package.json</code>; asset builds are therefore manual. No Dockerfile means container builds must be custom. The licence file is present, satisfying open‑source compliance.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>LinkStack</code> provides a functional self‑hosted link‑tree replacement with a Laravel back‑end and a rich set of front‑end assets. However, the codebase suffers from duplicated, oversized JavaScript, deep nesting in key PHP files, and serious hygiene issues (tracked <code>.env</code>, missing tests, unpinned CI actions). It is usable for small teams that can allocate time to refactor and add proper testing, but larger organizations should consider addressing the health findings before relying on it in production.</p>
             </div>
 
             
@@ -130,6 +162,16 @@ Run migrations (php artisan migrate) to create the schema defined by the models;
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>1</strong> of 1 declared dependencies are a major version behind. Resolved 1 of 1 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@fullcalendar/core</code></td>
+                            <td>~4.3.0</td><td>7.0.2</td>
+                            <td class="beh">3 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">

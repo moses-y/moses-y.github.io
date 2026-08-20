@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 18, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>When a single Oh My Pi (OMP) run fails to produce a correct fix, developers must manually iterate, which is time‑consuming and error‑prone. Selecting the best solution from multiple candidate agents adds further friction because there is no built‑in ranking or safe patch application.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>omp‑best‑of runs N independent OMP agents in isolated copy‑on‑write workspaces, captures each full execution trajectory (exit code, usage, generated patch), and ranks the results with an LLM‑as‑a‑Verifier backend or a sampled OMP judge. The CLI (src/cli.ts) outputs the winning patch and, when --apply is supplied, applies only that patch to the original HEAD if the working tree remains clean.</p><p>Key files:</p><p>src/cli.ts – entry point that parses --n, --apply, and verifier options.  
- bench/run.ts – orchestrates workspace creation, parallel OMP sessions, and artifact collection.  
- bench/tasks//repo/.js – concrete candidate implementations (e.g., memoize.js, circuit-breaker.js).  
- bench/tasks//oracle/.test.js – reference oracle tests used by the verifier.</p><p>The plugin is deliberately modular: each benchmark task ships its own package.json, allowing per‑task npm dependencies while the core runner stays language‑agnostic.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone the repo
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>When a single LLM‑driven “Oh My Pi” (OMP) agent fails, developers must manually iterate to find a fix. Running several candidate agents in parallel raises the chance of a correct solution, but selecting the best trajectory and applying its patch safely is non‑trivial, especially in a clean Git state.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>omp-best-of</code> orchestrates <strong>N</strong> OMP agents in isolated copy‑on‑write workspaces, captures each full transcript and generated patch, and ranks the results with an LLM‑as‑a‑Verifier or a sampled pairwise judge. The winner can be applied to the original HEAD with <code>--apply</code>.</p>
+<p>Key locations:</p>
+<ul><li><strong>CLI</strong> – <code>src/cli.ts</code> parses flags (<code>--n</code>, <code>--apply</code>, <code>--verifier-thinking</code>) and launches the runner.</li><li><strong>Runner</strong> – <code>src/runner.ts</code> creates the baseline worktree, fans out candidate sessions via <code>src/extension.ts</code>, and collects artifacts.</li><li><strong>Verifier</strong> – <code>src/verifier.ts</code> (continuous‑logprob) and <code>src/sampled-verifier.ts</code> (pairwise) score trajectories.</li><li><strong>Benchmarks</strong> – <code>bench/</code> holds four independent task suites (e.g., <code>async-memoize</code>, <code>circuit-breaker</code>) each with its own <code>repo/package.json</code>, reference implementation, oracle tests, and result JSON files.</li></ul>
+<p>The repository is a <strong>portfolio</strong> of four self‑contained benchmark projects plus the core OMP orchestration (<code>src/</code>) and supporting scripts (<code>scripts/</code>, <code>python/</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>src/cli.ts</code> invokes <code>runBestOf</code> (exported from <code>src/runner.ts</code>).</li><li><strong>Preflight</strong> – <code>src/runner.ts</code> calls <code>ensureCleanTree()</code> (checks <code>git status</code>) and records <code>HEAD</code>.</li><li><strong>Workspace creation</strong> – <code>src/extension.ts</code> uses OMP’s <code>omp.workspaces.create()</code> to spin up isolated copy‑on‑write workspaces; fallback is a Git worktree (see <code>bench/run.ts</code> for the low‑level loop).</li><li><strong>Candidate execution</strong> – each workspace runs <code>omp run --json</code> (headless OMP session) and streams JSON events to <code>src/process.ts</code>, which extracts exit code, usage, and raw transcript.</li><li><strong>Patch capture</strong> – <code>src/model.ts</code> computes a binary‑safe diff via OMP’s baseline‑aware delta logic.</li><li><strong>Verification</strong> – <code>src/verifier.ts</code> (logprob) or <code>src/sampled-verifier.ts</code> (sampled) receives the trajectory objects, calls the external verifier endpoint (default DeepSeek V4 Flash) and returns a score.</li><li><strong>Selection &amp; Apply</strong> – <code>src/runner.ts</code> picks the highest‑scoring candidate; if <code>--apply</code> is set and the repository is still clean, it runs <code>git apply</code> with the stored patch.</li><li><strong>Cleanup</strong> – all workspaces are torn down, artifacts are written under <code>bench/results/</code>.</li></ol>
+<p>The internal call graph shows <code>src/runner</code> as a hub (5 inbound, 6 outbound imports, instability 0.55). No circular dependencies were detected, simplifying future refactors. Deep nesting (max depth 6) and high branching density (e.g., 51 branches in <code>src/args.ts</code>) increase cognitive load, and duplicated 6‑line blocks appear across multiple files (bench/run, src/args, etc.).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
 git clone https://github.com/moses-y/omp-best-of
 cd omp-best-of
-Install Bun (required runtime)
-curl -fsSL https://bun.sh/install | bash
-export PATH=&quot;$HOME/.bun/bin:$PATH&quot;
-(Optional) Install per‑task npm deps – the runner will npm install lazily.
-No root package.json, so no global install step is needed.
-Ensure OMP 17+, a clean git tree, and uv (for the logprob verifier) are available.
-Example: omp --version and uv --version.
-Run the CLI
-bun run src/cli.ts --n 5 --apply &quot;Fix the failing authentication test&quot;</p><p>Configuration – The CLI reads OMP model/thinking flags from the current session; you can override them with --model and --thinking. The logprob verifier defaults to the deepseek/deepseek-v4-flash model and requires a reachable OMP model‑registry endpoint. No additional config files are required; all defaults are hard‑coded in src/cli.ts and bench/run.ts.</p><p>Running tests – The repository ships 57 test files (e.g., bench/tasks/async-memoize/repo/memoize.test.js). Execute them with the bundled CI workflow (.github/workflows/ci.yml) or manually via bun test inside each task directory.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI pipeline for a microservice can invoke omp-best-of on failing integration tests. The pipeline checks out the repository, runs bun run src/cli.ts --n 3 to generate three candidate patches, lets the logprob verifier rank them, and automatically applies the winning patch if the repository remains clean. This reduces mean‑time‑to‑repair from hours (manual debugging) to minutes, while preserving auditability through the generated trajectory artifacts.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfiles – Each bench/tasks/*/repo/package.json lacks a corresponding package-lock.json or pnpm-lock.yaml, making builds non‑reproducible. (bench/tasks/async-memoize/repo/package.json is representative).  
-Medium – No root package manager config – The top‑level directory has no package.json or lockfile, so dependency management relies on per‑task files; this can cause version drift across tasks.  
-Low – No test coverage for CLI – Tests exist for individual task implementations but none target src/cli.ts, leaving the orchestration layer unvalidated.  
-Info – CI present – GitHub Actions workflow (.github/workflows/ci.yml) runs the test suite on push, indicating an automated quality gate.  
-Info – Documentation – README provides usage examples and high‑level architecture; additional docs are limited to task‑specific markdown files.</p><p>No critical security issues (e.g., exposed secrets) are evident from the file list.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>omp-best-of delivers a practical “run‑many‑candidates‑and‑pick‑the‑best” workflow for Oh My Pi users, with a clear CLI and automated ranking. It is well‑structured for extension but suffers from inconsistent dependency lock management and limited test coverage of the core orchestrator. Teams that already use OMP and need faster patch selection will find it useful; small or security‑sensitive projects should address the lockfile and test gaps before adopting.</p>
+
+# Install Bun (required runtime) and dependencies
+bun install   # reads the many bench/*/repo/package.json files
+
+# Verify a clean working tree, then run 5 candidates and apply the best patch
+bun src/cli.ts --n 5 --apply "Fix the failing authentication test"</code></pre>
+<p><em>No</em> <code>.env</code> file is required; the verifier endpoint is resolved from OMP’s model registry. To switch verifier backends, add <code>--verifier logprob|sampled</code> (default logprob). The benchmark suites can be exercised directly, e.g.:</p>
+<pre data-lang="bash"><code>bun bench/run.ts async-memoize</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI job that runs nightly can invoke <code>src/cli.ts</code> with <code>--n 3</code> on a failing test suite. The selected patch is automatically committed if the repository remains unchanged, providing a “self‑healing” feedback loop without human intervention.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – GitHub Actions not pinned: <code>.github/workflows/ci.yml</code> uses <code>oven-sh/setup-bun@v2</code>. Pin to a commit SHA.</li><li><strong>Medium</strong> – No dependency‑vulnerability gate: add <code>dependency-review-action</code> or <code>osv-scanner</code> to the CI workflow.</li><li><strong>Low</strong> – Missing repository conventions: add <code>.editorconfig</code>, <code>.gitattributes</code>, and a formatter config to enforce consistent style.</li><li><strong>Low/Risk</strong> – No lockfile for bench task packages (e.g., <code>bench/tasks/async-memoize/repo/package.json</code>), leading to non‑reproducible installs.</li><li>Tests exist (57 files) and CI runs on push; license (MIT) is present; no secrets detected.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>omp-best-of</code> delivers a concrete pipeline for parallel OMP candidate generation and verifier‑driven selection, with a clear CLI and isolated workspace handling. The codebase is functional but suffers from deep nesting, branching density, and duplicated snippets that make maintenance harder. Pinning CI actions, adding a vulnerability scan, and introducing lockfiles would raise production readiness. Suitable for teams already using OMP who need automated “best‑of‑N” patch generation, but expect to invest in refactoring for long‑term stability.</p>
             </div>
 
             
