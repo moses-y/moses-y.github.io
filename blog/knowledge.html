@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 25, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#1-clone-your-fork">1️⃣ Clone your fork</a><a href="#2-install-python-dependencies-uv-lockfile-is-pre">2️⃣ Install Python dependencies (uv lockfile is present)</a><a href="#3-install-node-dependencies-for-the-frontend">3️⃣ Install Node dependencies for the frontend</a><a href="#4-add-required-secrets-as-repository-secrets">4️⃣ Add required secrets as repository secrets</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Many researchers and developers accumulate saved items across GitHub, HackerNews, Zotero, and HuggingFace but lack a single searchable interface. Manually exporting and indexing these records is time‑consuming and quickly becomes outdated.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repo provides a personal knowledge‑base that automatically pulls content from those platforms and stores it in a searchable graph. Key components include:  
-knowledgedatabase/ – Python modules (github/github.py, hackernews/hackernews.py, zotero/zotero.py, huggingface/huggingface.py) that fetch and normalize records.  
-database/ – database.json holds raw records; triples.json encodes the knowledge‑graph of topics and relationships; pipeline.pkl serializes the search pipeline.  
-Backend – FastAPI defined in api/api.py, containerized by Dockerfile and deployed via Fly.io using GitHub Actions workflows (.github/workflows/flyio.yml, .github/workflows/database.yml).  
-Frontend – Static site in docs/ built with React (entry point docs/index.html), dependencies listed in docs/pkg/package.json, and a pylate‑rs model compiled to WASM (docs/pkg/pylaters.wasm) for client‑side search.</p><p>The daily GitHub Actions workflow extracts, processes, and redeploys both the API and the static site, keeping the knowledge graph up‑to‑date without manual intervention.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><h3 class="post-h" id="1-clone-your-fork">1️⃣ Clone your fork</h3><p>git clone https://github.com/your‑name/knowledge.git
-cd knowledge</p><h3 class="post-h" id="2-install-python-dependencies-uv-lockfile-is-pre">2️⃣ Install Python dependencies (uv lockfile is present)</h3><p>uv sync</p><h3 class="post-h" id="3-install-node-dependencies-for-the-frontend">3️⃣ Install Node dependencies for the frontend</h3><p>cd docs/pkg &amp;&amp; npm install</p><h3 class="post-h" id="4-add-required-secrets-as-repository-secrets">4️⃣ Add required secrets as repository secrets</h3><p>– FL</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users who consume content across many platforms (GitHub, HackerNews, Zotero, HuggingFace, etc.) end up with a scattered set of bookmarks that are hard to search later. Maintaining a personal knowledge base that stays up‑to‑date and offers fast, semantic lookup requires custom crawling, indexing, and a UI, which most developers would have to build from scratch.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>knowledge</code> automates the whole pipeline. A daily GitHub Actions workflow pulls data from the supported services, stores the raw records in <code>database/database.json</code>, builds a topic graph in <code>knowledge_database/graph/graph.py</code>, and serialises the search pipeline to <code>database/pipeline.pkl</code>. The static front‑end (<code>docs/index.html</code>) loads a WebAssembly version of the <code>pylate-rs</code> model (bundled in <code>docs/pkg/</code>) to run queries entirely in the browser. The backend API lives in <code>api/api.py</code> and is launched by <code>run.py</code> (FastAPI) inside the Docker container defined by <code>Dockerfile</code>.</p>
+<p>Key files:</p>
+<ul><li><code>knowledge_database/pipeline/pipeline.py</code> – orchestrates loading the graph, indexing, and exposing <code>search</code> and <code>plot</code>.</li><li><code>knowledge_database/graph/graph.py</code> – builds the knowledge graph, provides <code>__call__</code> for traversal and <code>yens</code> for shortest‑path queries.</li><li><code>api/api.py</code> – FastAPI routes that call <code>pipeline.get_latest_documents</code>, <code>pipeline.search</code>, and <code>pipeline.plot</code>.</li><li><code>docs/pkg/pylate_rs.*</code> – compiled Rust/WASM model used by the browser UI for lexical similarity.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with the Docker entrypoint defined in <code>Dockerfile</code> which runs <code>python run.py</code>. <code>run.py</code> creates a FastAPI app and mounts the routes from <code>api/api.py</code>.</p>
+<ol><li><strong>API request</strong> → <code>api/api.py</code> → calls <code>pipeline.search</code> (or <code>pipeline.get_latest_documents</code>).</li><li><code>pipeline.search</code> (in <code>knowledge_database/pipeline/pipeline.py</code>) loads the serialized graph (<code>database/pipeline.pkl</code>) and forwards the query to <code>knowledge_database/graph/graph.py.__call__</code>.</li><li><code>graph.__call__</code> performs a lexical lookup using the <code>pylate-rs</code> model (imported via the generated JS/WASM bundle when the front‑end runs) and returns matching document IDs.</li><li>Results travel back through <code>pipeline.search</code> → API response → front‑end JavaScript, which renders them in the UI.</li></ol>
+<p>The most‑connected module is <code>knowledge_database/pipeline/pipeline.py</code> (imports 2 modules, imported by 1). It has an instability of 0.67, meaning changes there affect downstream code (<code>api/api.py</code>) but it does not depend on many others. The graph module (<code>knowledge_database/graph/__init__</code>) is also a hub with equal inbound/outbound counts (instability 0.5). No circular imports were detected, so the call chain is linear and easy to trace.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo (use the exact URL)
+git clone https://github.com/moses-y/knowledge
+cd knowledge
+
+# 2. Build the container
+docker build -t knowledge .
+
+# 3. Run the service (exposes port 8000 by default)
+docker run -p 8000:8000 knowledge</code></pre>
+<p><em>Python dependencies</em> are declared in <code>pyproject.toml</code>; the lockfile <code>uv.lock</code> is present, so install locally with <code>uv sync</code> if you prefer a native environment.</p>
+<p><em>Front‑end assets</em> are static; open <code>docs/index.html</code> in a browser after the container is running (the UI fetches data from <code>http://localhost:8000</code>).</p>
+<p><em>Secrets</em> (API keys for Fly.io, Zotero, etc.) must be added as repository secrets for the GitHub Actions workflows (<code>.github/workflows/*.yml</code>). The back‑end reads them via the standard <code>os.getenv</code> pattern (see <code>run.py</code> for the FastAPI start‑up).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer who wants a searchable “second brain” can fork this repo, supply their own GitHub token, Zotero key, and Fly.io token, and let the nightly workflow keep the graph current. An internal tool could then query <code>GET /search?q=transformer</code> against the FastAPI endpoint, receiving a JSON payload of matching bookmarks without any additional indexing infrastructure.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – resilience</strong> – Broad <code>except:</code> blocks in <code>knowledge_database/graph/graph.py</code> and <code>knowledge_database/huggingface/huggingface.py</code> swallow errors.</li><li><strong>Medium – cognitive_load</strong> – Deep nesting (6 levels) in <code>knowledge_database/graph/graph.py</code> makes the logic hard to follow.</li><li><strong>Medium – clarity</strong> – Nearly identical 6‑line snippets appear in <code>api/api.py</code>, <code>knowledge_database/pipeline/pipeline.py</code>, <code>knowledge_database/hackernews/hackernews.py</code>, and <code>knowledge_database/huggingface/huggingface.py</code>; extracting a shared helper would reduce duplication.</li><li><strong>Low – hygiene</strong> – No lockfile for <code>docs/pkg/package.json</code>; builds that depend on npm may be non‑reproducible.</li><li><strong>Low – security</strong> – Image <code>img/secrets.png</code> suggests a secret‑shaped path was committed; audit required.</li></ul>
+<p>The repo includes a single test file (<code>pytest.ini</code> indicates pytest usage) and CI pipelines (<code>.github/workflows/*.yml</code>). License is present, but the committed secret‑shaped image is a red flag.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>knowledge</code> delivers a functional, end‑to‑end personal bookmark search engine with a clear separation between data ingestion, graph construction, and UI rendering. It is usable out‑of‑the box for developers comfortable with Docker and FastAPI, but the codebase suffers from generic exception handling, deep nesting, and duplicated snippets that will increase maintenance effort. Ideal for hobbyists or small teams needing a self‑hosted knowledge graph; less suited for production‑grade deployments without refactoring the highlighted hotspots.</p>
             </div>
 
             
@@ -107,7 +131,7 @@ cd knowledge</p><h3 class="post-h" id="2-install-python-dependencies-uv-lockfile
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>25</b></li><li><span>YAML</span><i style="width:20%"></i><b>5</b></li><li><span>JSON</span><i style="width:12%"></i><b>3</b></li><li><span>JavaScript</span><i style="width:8%"></i><b>2</b></li><li><span>Markdown</span><i style="width:8%"></i><b>2</b></li><li><span>TypeScript</span><i style="width:8%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Docker</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -144,7 +168,7 @@ cd knowledge</p><h3 class="post-h" id="2-install-python-dependencies-uv-lockfile
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>docs/pkg/package.json</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>img/secrets.png</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>docs/pkg/package.json</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>img/secrets.png</code></span></li>
                     </ul>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 3, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Video production pipelines that require external uploads force creators to share media and API keys with third‑party services, raising privacy concerns and adding latency.  This repo tackles that by bringing AI model access entirely into the browser, keeping projects and credentials on the user’s device.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The codebase is a Next.js 14 application (.next.config.mjs, package.json) that bundles over 100 AI models from fal.ai and Runware.ai for text‑to‑video, image‑to‑video, text‑to‑image, and image‑editing tasks.  Core UI lives under src/components/ – components such as video-controls.tsx, bottom-bar.tsx, and media-gallery.tsx compose the editor interface, while src/app/api/ provides API routes for uploads and downloads (src/app/api/uploadthing/core.ts, src/app/api/uploadthing/route.ts).  Client‑side rendering is handled by Remotion and FFmpeg.wasm, enabling video export without server uploads (public/screenshot-app.png shows the editor).  Documentation is extensive (87 markdown files under docs/) covering model endpoints, authentication, and provider integration; the docs/fal/pages/ and docs/runware/pages/ trees detail each model’s parameters and usage.  A Makefile and docker-compose.yml support containerised deployment, and a .env.example file lists required environment variables (API keys for fal and runware).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Run npm install to install the dependencies listed in package.json.  The repo includes a docker-compose.yml for a full container start‑up and a docker/node/Dockerfile for custom builds.  
-Configuration: Copy .env.example to .env and add your FALAPIKEY and RUNWAREAPIKEY.  These keys are referenced in the documentation under docs/fal/pages/authentication.md and docs/runware/pages/getting-started/how-to-connect.md.  
-Running it: Start the development server with npm run dev (the typical Next.js entry point; verify the exact script in package.json).  For a production‑ready container, use docker compose up -d as defined in docker-compose.yml.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A developer building a private video‑creation workflow can import the editor component (src/components/video-controls.tsx) into an existing React app, select a model from the searchable UI, and generate a clip entirely in the browser.  Example workflow (TypeScript):</p><p>import { generateVideo } from &quot;@/lib/falClient&quot;; // hypothetical wrapper</p><p>const clip = await generateVideo({
-  model: &quot;google/veo3.1&quot;,
-  prompt: &quot;a sunset over the ocean&quot;,
-  aspectRatio: &quot;16:9&quot;,
-});
-// clip is a Blob that can be immediately exported via Remotion</p><p>The generated media never leaves the user’s device, satisfying compliance‑driven use cases.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High (Security) – Credentials appear to be documented in docs/fal/pages/real-time/secrets.md; verify that no actual keys are committed beyond the example file.  
-Medium – Only a single test file is present; CI (.github/workflows/lint.yml) runs linting but lacks unit‑test coverage for the core generation logic.  
-Low – The repo contains many markdown docs (87 files) but no explicit license file in the root beyond the MIT header in</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Web‑based video editors normally rely on server‑side rendering or proprietary SaaS APIs, exposing user media and API keys to third‑party services. Teams that need full privacy, offline capability, or fine‑grained cost tracking lack an open‑source, client‑only alternative that can still tap modern text‑to‑video, image‑to‑image and audio models.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>videosos</code> delivers a full‑featured video editor that runs completely in the browser. The UI lives under <code>src/app/</code> and <code>src/components/</code>, while model‑selection, pricing, and cost aggregation are implemented in <code>src/lib/</code> (e.g., <code>src/lib/fal.ts</code>). Model metadata lives in <code>data/fal_models_schemas.json</code>. The project bundles FFmpeg‑wasm and Remotion for client‑side rendering, and stores everything in IndexedDB (<code>src/app/api/uploadthing/</code> utilities).</p>
+<p>Key files:</p>
+<ul><li><code>src/app/[locale]/page.tsx</code> – entry page rendered by Next.js.</li><li><code>src/components/right-panel.tsx</code> – UI hub that pulls pricing (<code>src/lib/pricing.ts</code>) and model lists.</li><li><code>src/lib/fal.ts</code> – central façade for the fal.ai API; the largest source file (≈2 k lines).</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Startup</strong> – <code>npm run dev</code> (or <code>docker compose up</code>) launches the Next.js server defined by <code>next.config.mjs</code>. The first request hits <code>src/app/layout.tsx</code>, which injects global CSS (<code>src/app/globals.css</code>) and loads locale data from <code>messages/*.json</code>.</li><li><strong>Model Loading</strong> – <code>src/components/right-panel.tsx</code> imports <code>src/lib/fal.ts</code>. That module reads <code>data/fal_models_schemas.json</code> and exposes <code>fetchModels()</code> which calls the fal.ai endpoint (API key read from <code>process.env.FAL_API_KEY</code>).</li><li><strong>Cost Calculation</strong> – UI components (<code>src/components/ui/*</code>) pull pricing via <code>src/lib/pricing.ts</code>. This module is imported by only a handful of components (instability 0.9) but performs HTTP calls to the provider’s pricing API, then caches results in IndexedDB.</li><li><strong>Media Generation</strong> – When a user triggers generation, <code>src/components/media-panel.tsx</code> invokes <code>src/lib/fal.ts</code>’s <code>generateMedia()</code> which returns a streaming URL. The response is stored via the <code>uploadthing</code> helpers (<code>src/app/api/uploadthing/core.ts</code>) and displayed in the timeline (<code>src/components/video-frame-selector.tsx</code>).</li><li><strong>Export</strong> – The “Export” button calls <code>src/components/export-dialog.tsx</code>, which uses Remotion (<code>remotion</code> dependency) to compose the final video. Rendering happens in the browser via FFmpeg.wasm; the only external effect is a Blob download.</li></ol>
+<p>The import graph shows <strong>no circular dependencies</strong> and 95 internal modules with 82 edges. The most‑connected node is <code>src/components/ui/button</code> (10 inbound imports, 0 outbound), indicating a stable, low‑risk UI primitive. Conversely, <code>src/components/right-panel</code> imports 16 modules but is not imported elsewhere, giving it an instability of 1 – changes here have the widest blast radius.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/videosos
+cd videosos
+
+# Install Node dependencies
+npm ci           # uses package-lock.json
+
+# Copy example env and add your API keys
+cp .env.example .env
+# edit .env → set FAL_API_KEY, RUNWARE_API_KEY, etc.
+
+# Run locally (Docker optional)
+npm run dev      # starts Next.js on http://localhost:3000
+
+# Or containerised build
+docker compose up --build   # builds docker/node/Dockerfile</code></pre>
+<p>The <code>Makefile</code> provides shortcuts (<code>make lint</code>, <code>make test</code>) that run the GitHub Actions lint workflow locally.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A marketing team can spin up the app on an internal workstation, load their private fal.ai key, and produce short promotional videos without any data leaving the device. The UI lets them select a model, preview cost (<code>src/lib/pricing.ts</code>), generate assets, arrange them on the timeline, and export a final MP4—all client‑side.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Oversized files</strong> – <code>src/lib/fal.ts</code>, <code>src/components/media-panel.tsx</code>, <code>src/components/right-panel.tsx</code> each exceed 2 k lines; refactor into focused modules.</li><li><strong>HIGH – Duplicated code</strong> – Repeated 6‑line blocks across 22 script files (<code>scripts/*.ts</code>); extract shared helpers.</li><li><strong>HIGH – Deep nesting</strong> – Max indentation depth 11 in <code>src/components/right-panel.tsx</code>, <code>tools/docs-scraper/scrape_models.py</code>, <code>src/components/left-panel.tsx</code>; flatten with guard clauses.</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>scripts/parse_fal_models.py</code> uses bare <code>except</code>; replace with specific catches.</li><li><strong>MEDIUM – High branching density</strong> – <code>src/lib/pricing.ts</code> and related scripts contain &gt;70 branches; consider strategy tables.</li></ul>
+<p>Additional observations: CI is defined in <code>.github/workflows/lint.yml</code>, but only linting runs; no test suite execution despite a single test file present. The repository contains committed secrets (<code>docs/fal/pages/real-time/secrets.md</code>). License (MIT) and lockfiles are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>videosos</code> offers a functional, privacy‑first browser editor with a rich model catalog, but the codebase suffers from large monolithic files and duplicated script logic that will increase maintenance cost. It is suitable for teams comfortable with Next.js and willing to invest in refactoring for long‑term stability.</p>
             </div>
 
             
@@ -107,11 +131,11 @@ Low – The repo contains many markdown docs (87 files) but no explicit license 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">234<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>92</b></li><li><span>TSX</span><i style="width:61%"></i><b>56</b></li><li><span>TypeScript</span><i style="width:13%"></i><b>12</b></li><li><span>JSON</span><i style="width:9%"></i><b>8</b></li><li><span>YAML</span><i style="width:8%"></i><b>7</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>92</b></li><li><span>TSX</span><i style="width:64%"></i><b>59</b></li><li><span>TypeScript</span><i style="width:34%"></i><b>31</b></li><li><span>JSON</span><i style="width:12%"></i><b>11</b></li><li><span>YAML</span><i style="width:10%"></i><b>9</b></li><li><span>Python</span><i style="width:3%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -142,7 +166,7 @@ Low – The repo contains many markdown docs (87 files) but no explicit license 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>docs/fal/pages/real-time/secrets.md</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>docs/fal/pages/real-time/secrets.md</code></span></li>
                     </ul>
                 </div>
 

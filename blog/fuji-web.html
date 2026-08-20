@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 25, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The core pain point this addresses is the friction between natural language intent and autonomous browser execution. Users often require repetitive web workflows—such as form filling, data extraction, or navigation—but lack the coding proficiency to implement these via traditional automation frameworks like Puppeteer or Selenium. Fuji-Web bridges this gap by embedding an AI agent directly into the browser interface, allowing task execution through conversation rather than code.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Fuji-Web functions as a browser sidepanel AI partner built with React and Tailwind. The frontend is centralized in src/common/App.tsx and rendered within src/pages/sidepanel/index.tsx, src/pages/popup/index.tsx, and src/pages/panel/index.tsx. Task execution is handled by two distinct agents: a DOM agent (src/helpers/dom-agent/determineNextAction.ts, src/helpers/dom-agent/parseResponse.ts) that interacts with the page structure, and a vision agent (src/helpers/vision-agent/determineNextAction.ts) that processes visual context. Communication between the UI and the browser context is managed via an RPC layer in src/helpers/rpc/pageRPC.ts and src/helpers/rpc/domActions.ts, while API key configuration is handled by src/common/settings/SetAPIKey.tsx, which stores keys in browser local storage.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repository and run pnpm install. The project uses pnpm as the package manager, confirmed by package.json and pnpm-lock.yaml.</p><p>Configuration: Obtain an OpenAI or Anthropic API key. The application requires this key to function; it is configured via the src/common/settings/SetAPIKey.tsx interface and stored in the browser&#39;s local storage, as defined in src/state/settings.ts.</p><p>Running it: To develop, execute pnpm dev to start the Vite server. To produce a loadable extension</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Web users must repeatedly click, copy, and navigate to accomplish repetitive tasks. Doing this manually wastes time and is error‑prone, especially when the same sequence must be run across many pages or tabs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>fuji-web</code> ships as a Chrome/Edge side‑panel extension that receives a single natural‑language command, calls an LLM, and drives the page via Chrome extension APIs. The UI lives under <code>src/pages/sidepanel/*</code> and <code>src/pages/popup/*</code>, while the core automation logic is in <code>src/helpers/</code> (e.g., <code>dom-agent/</code>, <code>vision-agent/</code>, <code>aiSdkUtils.ts</code>). Settings such as the OpenAI/Anthropic key are stored by <code>src/common/Settings.tsx</code> and persisted through <code>src/shared/hooks/useStorage.tsx</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Extension bootstrap</strong> – <code>manifest.js</code> loads <code>src/pages/background/index.ts</code> as the background service worker.</li><li><strong>Side‑panel UI</strong> – <code>src/pages/sidepanel/index.tsx</code> renders <code>&lt;App /&gt;</code> from <code>src/common/App.tsx</code>. This component pulls the current task from the Redux‑style store (<code>src/state/store.ts</code>).</li><li><strong>Task flow</strong> – When the user submits a prompt, <code>src/common/RunTaskButton.tsx</code> dispatches an action to <code>src/state/currentTask.ts</code>. The task handler calls <code>src/helpers/aiSdkUtils.ts</code> → <code>fetch</code> the LLM response, then routes the response to the appropriate agent (<code>dom-agent/determineNextAction.ts</code> or <code>vision-agent/determineNextAction.ts</code>).</li><li><strong>Page interaction</strong> – Agent modules use the RPC layer (<code>src/helpers/rpc/pageRPC.ts</code>) to invoke content‑script functions defined in <code>src/pages/content/*</code> (e.g., <code>domOperations.ts</code>, <code>drawLabels.ts</code>). These scripts run in the page context and manipulate the DOM, capture screenshots, or read text.</li><li><strong>State hub</strong> – <code>src/state/store.ts</code> is the most connected module (21 inbound imports, 4 outbound). It holds UI state, task queue, and settings, and is imported by most UI components and helpers.</li><li><strong>Circular dependencies</strong> – A cycle involves <code>src/state/store.ts</code>, <code>src/helpers/aiSdkUtils.ts</code>, and <code>src/helpers/vision-agent/determineNextAction.ts</code>. The cycle arises because the agents import the store to read settings while the store imports the agents for side‑effects. Breaking this cycle (e.g., extracting shared types into <code>src/helpers/utils.ts</code>) would reduce coupling.</li></ol>
+<p><strong>Effect ownership</strong></p>
+<ul><li>UI rendering → files under <code>src/common/</code> and <code>src/pages/*</code>.</li><li>LLM calls → <code>src/helpers/aiSdkUtils.ts</code>.</li><li>DOM decision logic → <code>src/helpers/dom-agent/*</code> and <code>src/helpers/vision-agent/*</code>.</li><li>Persistence → <code>src/shared/hooks/useStorage.tsx</code> and <code>src/shared/storages/*</code>.</li></ul>
+<p>Only the background script and content scripts touch Chrome extension APIs; all other modules are pure TypeScript/React.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/fuji-web
+cd fuji-web
+
+# Install pnpm globally if needed
+npm install -g pnpm
+
+# Install dependencies
+pnpm install
+
+# Run a development server (hot‑reloads the extension)
+pnpm dev
+# Build a production zip (output in dist/)
+pnpm build</code></pre>
+<p>Load the generated <code>dist/</code> folder in Chrome via <strong>chrome://extensions → Load unpacked</strong>. The extension expects an environment variable <code>VITE_OPENAI_KEY</code> or <code>VITE_ANTHROPIC_KEY</code> when building; otherwise the UI prompts for the key and stores it locally via <code>useStorage</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform that needs to extract order numbers from vendor portals can embed the built extension in a controlled Chrome instance. The platform’s backend triggers a task by sending a prompt like “Collect all pending orders from <a href="https://vendor.example.com”." rel="noopener">https://vendor.example.com”.</a> Fuji‑Web’s LLM parses the page, navigates pagination via <code>determineNextAction</code>, and returns a JSON payload that the backend ingests via a custom RPC endpoint.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Import cycles (9 modules)</strong> – e.g., <code>src/state/store.ts</code>, <code>src/helpers/aiSdkUtils.ts</code>, <code>src/helpers/vision-agent/determineNextAction.ts</code>. Break cycles to simplify future changes.</li><li><strong>Medium – Hub module</strong> – <code>src/state/store.ts</code> has 21 dependents; any change has wide blast radius. Keep it stable, move volatile logic elsewhere.</li><li><strong>High – Deep nesting</strong> – <code>src/common/CustomKnowledgeBase/NewKnowledgeForm.tsx</code> reaches 10 levels of indentation; refactor into smaller components.</li><li><strong>High – Duplicated code</strong> – Similar 6‑line blocks appear in multiple knowledge‑base and agent files; extract shared helpers.</li><li><strong>Medium – High branching density</strong> – <code>src/helpers/dom-agent/parseResponse.ts</code> and <code>src/helpers/simplifyDom.ts</code> contain &gt;30 branches in ~100 lines; consider strategy pattern to improve readability.</li></ul>
+<p>The repo includes unit tests (<code>test-utils/jest.setup.js</code>), CI via GitHub Actions, a LICENSE, and a lockfile (<code>pnpm-lock.yaml</code>). No Dockerfile or secret leakage detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Fuji‑Web provides a functional, extensible browser‑side AI automation framework with a clear separation between UI, state, and agent logic. However, the central store and several circular imports create maintenance risk, and some files suffer from deep nesting and duplicated snippets. It is suitable for teams comfortable with React/TypeScript who need a customizable in‑browser automation layer and are prepared to refactor the identified hotspots.</p>
             </div>
 
             

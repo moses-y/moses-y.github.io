@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 28, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Svelte</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>open webui</h1>
@@ -79,12 +79,37 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations that need a self‑hosted AI chat interface often must stitch together multiple LLM runners (Ollama, OpenAI‑compatible APIs), implement retrieval‑augmented generation, and enforce fine‑grained user permissions. Building that glue from scratch is time‑consuming and typically requires custom integration of vector stores, document loaders, and authentication flows.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Open WebUI provides a ready‑made web interface (Django‑based) that wraps Ollama, OpenAI‑compatible APIs, and an internal inference engine for RAG. The code base is organized around a clear separation of concerns:
-Routers (backend/openwebui/routers/) expose REST endpoints for chats, files, models, and more.  
-Retrieval (backend/openwebui/retrieval/) bundles loaders (backend/openwebui/retrieval/loaders/main.py) and vector back‑ends (backend/openwebui/retrieval/vector/main.py, backend/openwebui/retrieval/vector/dbs/chroma.py).  
-Models (backend/openwebui/models/) define SQLAl</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need a self‑hosted AI platform often must stitch together separate services for model inference, retrieval‑augmented generation, and user management, resulting in fragmented deployments, duplicated configuration, and limited offline capability. Open WebUI consolidates these pieces into a single interface that supports Ollama, OpenAI‑compatible APIs, and built‑in RAG while providing fine‑grained user‑group permissions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Open WebUI is a feature‑rich web UI (Svelte front‑end, Django/ Python back‑end) that lets users converse with LLMs running via Ollama or any OpenAI‑compatible endpoint, perform retrieval from vector stores, and manage channels, knowledge bases, and feedback. The back‑end entry point <code>backend/open_webui/main.py</code> defines <code>get_response</code> and a <code>lifespan</code> handler that starts a FastAPI server; incoming requests are routed through <code>backend/open_webui/routers/ollama.py</code> (35 functions, 17 classes) for Ollama calls or <code>backend/open_webui/routers/openai.py</code> for external APIs. Retrieval pipelines live in <code>backend/open_webui/retrieval/vector/main.py</code> and loaders such as <code>backend/open_webui/retrieval/loaders/main.py</code>, supporting Chroma, Pinecone, Qdrant, and other vector dbs. Chat persistence and user handling are modeled in <code>backend/open_webui/models/chats.py</code> (54 functions, 20 types) and <code>backend/open_webui/models/users.py</code> (28 functions, 23 types). The front‑end lives under <code>src/</code> (498 Svelte files, 66 TypeScript) and communicates with the API via <code>src/lib/apis/openai/index</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>backend/open_webui/main.py</code> where the <code>lifespan</code> context manager launches the app and <code>dispatch</code> processes each HTTP request. Requests flow to the appropriate router (e.g., <code>ollama.py</code> or <code>openai.py</code>), which calls model‑specific functions and then interacts with the database through Alembic‑managed migrations (<code>backend/open_webui/internal/migrations/</code>). The import graph contains 233 internal modules with only 5 import edges and no circular dependencies, keeping the dependency graph acyclic. Retrieval results are stored in vector databases (Chroma, Qdrant, Pinecone, etc.) accessed through <code>backend/open_webui/retrieval/vector/dbs/</code>. Chat messages are persisted via <code>backend/open_webui/models/messages.py</code> and channel memberships through <code>backend/open_webui/models/channels.py</code>. The widest blast radius resides in <code>main.py</code> and the router files: a change there can affect every downstream model call and DB operation.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repo (as provided)
+git clone https://github.com/moses-y/open-webui
+
+# Build the Docker image (Dockerfile present)
+docker build -t open-webui -f Dockerfile .
+
+# Copy the example environment file and adjust as needed
+cp .env.example .env</code></pre>
+<p><strong>Configuration</strong> Required keys are read from <code>.env</code> (loaded by <code>backend/open_webui/env.py</code>). Typical variables include <code>OLLAMA_API_URL</code>, <code>OPENAI_API_KEY</code>, and vector‑db connection strings documented in the file.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># Start the container, exposing the default port
+docker run -d -p 8080:8080 --env-file .env open-webui</code></pre>
+<p>Alternatively, run the Python back‑end directly:</p>
+<pre data-lang="bash"><code>uvicorn backend.open_webui.main:app --host 0.0.0.0 --port 8080</code></pre>
+<p>The front‑end (<code>src/</code>) can be served with <code>npm run dev</code> (as <code>package.json</code> uses npm).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A user opens the Svelte UI and types a query about “quantum error correction”. The front‑end sends the request to <code>dispatch</code> in <code>main.py</code>, which routes to <code>ollama.py</code> <code>send_post_request</code>. That function contacts the local Ollama instance, receives a completion, and the response is returned through the same path. If the query exceeds a configured token limit, the system triggers RAG: <code>retrieval/vector/main.py</code> embeds the query, searches the Chroma vector store (<code>backend/open_webui/retrieval/vector/dbs/chroma.py</code>), fetches relevant passages, and injects them into the prompt before sending to the model. The resulting answer is displayed in the UI, and the chat session is stored via <code>models/chats.py</code> <code>insert_new_chat</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Deep nesting in Svelte components: <code>src/lib/components/AddConnectionModal.svelte</code>, <code>src/lib/components/AddToolServerModal.svelte</code>, <code>src/lib/components/ChangelogModal.svelte</code> (max indentation depth 14, control flow hard to follow). Fix: flatten with early returns/guard clauses and extract inner blocks.</li><li><strong>Medium</strong> – 240 additional findings (not individually listed) spread across the codebase; overall structure is clean with tests, CI, Dockerfile, licence, lockfile, and no committed secrets.</li><li><strong>Low</strong> – 1 isolated low‑severity item (not detailed here).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Open WebUI delivers a cohesive, self‑hosted AI platform with Ollama and OpenAI‑API support, RAG, and fine‑grained permissions out of the box. The codebase is well‑structured (import graph acyclic, migrations versioned) but contains several deeply nested Svelte files that could benefit from refactoring. It is a solid choice for teams wanting an offline‑first AI chat interface without stitching together multiple services.</p>
             </div>
 
             
@@ -94,18 +119,18 @@ Models (backend/openwebui/models/) define SQLAl</p>
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">4,832<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>149</b></li><li><span>YAML</span><i style="width:7%"></i><b>11</b></li><li><span>JSON</span><i style="width:5%"></i><b>8</b></li><li><span>Markdown</span><i style="width:3%"></i><b>5</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Svelte</span><i style="width:100%"></i><b>498</b></li><li><span>Python</span><i style="width:41%"></i><b>205</b></li><li><span>JSON</span><i style="width:15%"></i><b>75</b></li><li><span>TypeScript</span><i style="width:13%"></i><b>66</b></li><li><span>YAML</span><i style="width:4%"></i><b>19</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>11</b></li>
                         </ul>
-                        <p class="an-fw"><span>Django</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Svelte</span><span>Django</span><span>Tailwind</span><span>Docker</span><span>PyTorch</span><span>Vector store</span></p>
                     </div>
                 </div>
 

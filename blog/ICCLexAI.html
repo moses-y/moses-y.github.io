@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 18, 2025</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">original</span>
                 </div>
@@ -79,9 +79,49 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>ICC legal professionals must review large volumes of multimodal submission material—PDFs, images, audio, video—and extract metadata, timestamps, and concise evidence descriptions. Manual review is slow, error‑prone, and inconsistent across cases, particularly when submissions arrive in diverse formats and from multiple jurisdictions.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The platform pairs a FastAPI async backend (apps/backend/fastapibackend.py) with Groq‑powered AI inference (deepseek-r1-distill-llama-70b primary, llama-3.3-70b-versatile fallback) to perform automated multimodal extraction. Complementary automation</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Legal teams at the International Criminal Court must manually sift through large, multimodal evidence packages (PDFs, images, video, audio). The process is time‑consuming, error‑prone, and lacks a unified interface for AI‑assisted extraction and description.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository delivers a full‑stack platform that lets users upload evidence through a React/TypeScript UI (<code>apps/frontend/src/App.tsx</code> and associated components) and have the content processed by a FastAPI backend (<code>apps/backend/fast_api_backend.py</code>). Core AI work lives in Python agents such as <code>libs/icc-automation/evidence_analysis_agent.py</code> (comprehensive evidence analysis) and <code>libs/icc-automation/metadata_extraction_agent.py</code> (metadata extraction). The Groq API supplies LLM inference, while optional Google Vision, HuggingFace, and Roboflow services handle multimodal perception. Dockerfiles in <code>docker/</code> containerize the whole stack for production.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in the <strong>frontend</strong> entry point <code>apps/frontend/src/App.tsx</code>. The app renders <code>AgenticDashboard</code> (most‑connected UI module) which uses UI primitives (<code>ui/button</code>, <code>ui/card</code>) and the <code>ChatWidget</code> for real‑time status. User file uploads are captured by <code>FileUploadArea</code> and sent via <code>fetch</code> to the FastAPI service at <code>/analyze</code>.</p>
+<p>The <strong>backend</strong> entry point is the FastAPI app defined in <code>apps/backend/fast_api_backend.py</code>. The route <code>POST /analyze</code> calls <code>analyze_evidence</code> which instantiates <code>libs/icc-automation/evidence_analysis_agent.EvidenceAnalysisAgent</code>. That agent’s <code>analyze_evidence_comprehensive</code> orchestrates:</p>
+<ol><li><strong>Metadata extraction</strong> – calls <code>metadata_extraction_agent.MetadataExtractionAgent.extract_comprehensive_metadata</code>.</li><li><strong>Content analysis</strong> – invokes <code>_analyze_content_with_ai</code>, which builds a Groq request using the primary model (<code>deepseek‑r1‑distill‑llama‑70b</code>) and falls back to <code>llama‑3.3‑70b‑versatile</code> on failure.</li><li><strong>Result packaging</strong> – returns a JSON payload that the React dashboard displays.</li></ol>
+<p>The <strong>widest blast‑radius</strong> modules are <code>apps/frontend/src/components/AgenticDashboard.tsx</code> (imports three UI components and makes the API call) and <code>libs/icc-automation/evidence_analysis_agent.py</code> (contains 33 functions and a class; any change here can affect all downstream agents). No circular imports were detected, but deep nesting (up to 7 levels) in these modules raises cognitive load.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ICCLexAI.git
+cd ICCLexAI
+
+# Backend setup (Python 3.9+)
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt   # pulls FastAPI, Groq SDK, etc.
+
+# Set required env vars (see README)
+export GROQ_API_KEY=your_key
+export STREAMLIT_SERVER_PORT=8501   # used only by legacy Streamlit front‑end
+export STREAMLIT_SERVER_ADDRESS=0.0.0.0
+
+# Start FastAPI backend
+uvicorn apps.backend.fast_api_backend:app --host 0.0.0.0 --port 8000
+
+# Front‑end setup (Node)
+cd apps/frontend
+npm ci               # uses package-lock.json
+npm run dev          # Vite dev server, entry App.tsx</code></pre>
+<p>For containerised deployment, build the multi‑stage image:</p>
+<pre data-lang="bash"><code>docker build -f docker/Dockerfile -t icclexai .
+docker run -p 8000:8000 -p 5173:5173 -e GROQ_API_KEY=$GROQ_API_KEY icclexai</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A prosecutor uploads a zip containing PDF filings, a surveillance video, and EXIF‑rich photos. The UI shows upload progress, then streams back AI‑generated summaries and extracted GPS timestamps. The backend stores no persistent data; results are returned to the user session for immediate incorporation into ICC submission forms.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – cognitive_load</strong> – Deep nesting (max depth 7) in <code>apps/frontend/src/components/AgenticDashboard.tsx</code>, <code>apps/agentic-ui/agentic_icc_app.py</code>, <code>libs/icc-automation/evidence_analysis_agent.py</code>.</li><li><strong>Medium – resource_safety</strong> – Files opened without a context manager in <code>apps/agentic-ui/agentic_icc_app.py</code> and <code>libs/icc-automation/metadata_extraction_agent.py</code>.</li><li><strong>Medium – clarity</strong> – Repeated 6‑line code blocks across six files (e.g., similar error‑handling in agents).</li><li><strong>Medium – resilience</strong> – Broad <code>except:</code> clauses in several agents, swallowing unexpected errors.</li><li><strong>Medium – cognitive_load</strong> – Oversized files (<code>agentic_icc_app.py</code>, <code>evidence_analysis_agent.py</code> &gt; 900 LOC) hindering maintainability.</li></ul>
+<p>All findings stem from deterministic static analysis; no additional issues were inferred. The repo includes a test file, CI workflow (<code>.github/workflows/deploy.yml</code>), Dockerfiles, a LICENSE, and lockfiles, indicating basic production hygiene.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>ICCLexAI provides a functional, container‑ready stack that connects a modern React UI to a FastAPI‑backed AI pipeline for legal evidence analysis. Code quality suffers from deep nesting, oversized modules, and generic error handling, which will increase change‑impact risk. Teams comfortable with Python/FastAPI and React can adopt it quickly, but should refactor the high‑impact modules before extensive customization.</p>
             </div>
 
             

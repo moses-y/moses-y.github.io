@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 2, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,23 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#docker">Docker</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building and reproducing trading environments in TensorTrade is hampered by un‑pinned dependencies. The docs/requirements.txt file lists many of the packages the project relies on, but there is no lockfile (e.g., requirements.lock or  Pipfile.lock) to guarantee identical dependency resolution across CI, local development, and production containers. This leads to non‑reproducible builds and subtle version‑drift bugs when the framework is installed on fresh machines or deployed to Docker hosts.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>TensorTrade is a composable reinforcement‑learning framework for trading agents. The core package lives in tensortrade/ and is split into six primary component families, each exposed as a Python module:
-Exchanges – simulated and live back‑ends reside under tensortrade/exchanges/. The simulated simulatedexchange.py provides a generic SimulatedExchange that can be seeded with market data, while live adapters such as ccxtexchange.py, robinhoodexchange.py, and interactivebrokersexchange.py wrap third‑party APIs.  
-Feature pipelines – data transformation and technical indicators are defined in tensortrade/features/featurepipeline.py and tensortrade/features/indicators/. Example indicators include simplemovingaverage.py and talibindicator.py; scalers such as standardnormalizer.py and minmaxnormalizer.py normalize price streams.  
-Action strategies – decide how an agent moves in the environment. discreteactionstrategy.py, continuousactionstrategy.py, and multidiscreteactionstrategy.py implement the ActionStrategy abstract base, letting users choose position sizing, order‑type selection, or multi‑dimensional control.  
-Reward strategies – shape the learning signal. simpleprofitstrategy.py returns cumulative profit, while riskadjustedreturnstrategy.py incorporates Sharpe‑like metrics.  
-Trading environment – glues the above together. tradingenvironment.py orchestrates step loops, state observation, and termination conditions.  
-Strategies – high‑level wrappers that combine agents, environments, and training loops. stablebaselinesstrategy.py and tensorforcetradingstrategy.py integrate external RL libraries.</p><p>All modules follow a consistent API: each class inherits from a base defined in the corresponding init.py, and documentation is auto‑generated from docstrings into docs/source/api/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the exact Python version required (&gt;=3.6) and pull the unpinned requirements
-pip install -r requirements.txt</p><p>If you need the package in development mode (e.g., to edit source locally):
-pip install -e .</p><h3 class="post-h" id="docker">Docker</h3><p>The project includes a Dockerfile at the repo root. Build and run:
-docker build -t tensortrade .
-docker run -it --rm tensortrade</p><p>The Docker image bundles the base dependencies; however, because no lockfile is committed, you may need to regenerate requirements.txt inside the container after pip install -r requirements.txt to lock versions.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Live exchanges require API credentials. The live adapter files (ccxtexchange.py, robinhoodexchange.py, interactivebrokersexchange.py) read keys from environment variables named CCXTAPIKEY, ROBINHOODAPIKEY, and IBAPIKEY respectively. No secrets are stored in the repository; users must export these variables before invoking any live‑trading script.</p><h3 class="post-h" id="running-it">Running it</h3><p>The quickest way to explore the framework is through the Jupyter notebooks in examples/. For a minimal end‑to‑end run, open examples/TensorTradeTutorial.ipynb or execute the trainandevaluate.ipynb notebook, which demonstrates:
-Instantiating a SimulatedExchange with fake price data.  
-Building a FeaturePipeline that appends a 20‑period SMA and normalizes the series.  
-Wiring a DiscreteActionStrategy that selects hold, buy, or sell.  
-Using a SimpleProfitStrategy as the reward function.  
-Running a short PPO training loop via stable_bas</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Trading‑strategy research often stalls because data pipelines, environment simulation, and RL agent wiring are each built from scratch. The result is duplicated code, fragile imports, and a high cost to prototype or move from notebook to production.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>tensortrade</code> supplies a modular RL‑driven trading stack. Core pieces live under <code>tensortrade/</code> – e.g. <code>environments/trading_environment.py</code> builds a <code>TradingEnvironment</code> that glues together an <strong>exchange</strong> (<code>exchanges/*_exchange.py</code>), an <strong>action strategy</strong> (<code>actions/*_strategy.py</code>), a <strong>reward strategy</strong> (<code>rewards/*_strategy.py</code>), and a <strong>feature pipeline</strong> (<code>features/feature_pipeline.py</code>).</p>
+<p>The library is deliberately thin on runtime scaffolding; the entry point for most users is the <code>TradingEnvironment</code> class and the strategy classes in <code>strategies/</code> (e.g. <code>tensorforce_trading_strategy.py</code>). Example notebooks in <code>examples/</code> show end‑to‑end usage without needing a separate CLI.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins when a client instantiates <code>tensortrade.environments.trading_environment.TradingEnvironment</code>. Its <code>__init__</code> (17 functions total) stores references to:</p>
+<ol><li><strong>Exchange</strong> – concrete classes such as <code>exchanges/simulated/simulated_exchange.py</code> (20 functions) or <code>exchanges/live/ccxt_exchange.py</code>. They expose <code>reset</code>, <code>step</code>, and market‑data accessors.</li><li><strong>ActionStrategy</strong> – abstract base in <code>actions/action_strategy.py</code> (9 functions) with concrete <code>ContinuousActionStrategy</code>, <code>DiscreteActionStrategy</code>, etc. These expose <code>action_space</code> and <code>action_type</code>.</li><li><strong>RewardStrategy</strong> – defined in <code>rewards/reward_strategy.py</code> and specialized in <code>simple_profit_strategy.py</code> or <code>risk_adjusted_return_strategy.py</code>.</li><li><strong>FeaturePipeline</strong> – <code>features/feature_pipeline.py</code> (9 functions) orchestrates a list of <code>FeatureTransformer</code> objects from <code>features/feature_transformer.py</code>.</li></ol>
+<p>During a training episode, <code>TradingEnvironment.step()</code> calls the exchange’s <code>step()</code>, passes the observation through the <code>FeaturePipeline</code>, asks the <strong>strategy</strong> for an action, and finally computes a reward via the <strong>reward strategy</strong>. The resulting <code>Trade</code> objects are created by <code>trades/trade.py</code> (13 functions) and aggregated by the hub module <code>trades/__init__.py</code>, which is imported by 17 other modules – the largest blast radius in the import graph.</p>
+<p>The import graph contains <strong>12 circular dependencies</strong> (e.g. <code>actions/__init__.py</code>, <code>rewards/__init__.py</code>, <code>slippage/__init__.py</code>). These cycles increase cognitive load and make refactoring risky because a change in any cycle member can trigger import‑time side effects across the stack.</p>
+<p>Deep nesting (max depth 16) appears in several exchange and action‑strategy files, making the control flow hard to follow. Duplicated 6‑line blocks are scattered across <code>setup.py</code> and the three action‑strategy implementations, suggesting a missed utility layer.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/tensortrade
+cd tensortrade
+
+# Install Python deps (exact versions are pinned in requirements.txt)
+pip install -r requirements.txt</code></pre>
+<p>Optional: build the provided Docker image for an isolated environment.</p>
+<pre data-lang="bash"><code>docker build -t tensortrade .
+docker run -it --rm tensortrade /bin/bash</code></pre>
+<p>Run an example notebook, e.g. <code>examples/TensorTrade_Tutorial.ipynb</code>, which creates a <code>TradingEnvironment</code>, attaches a <code>TensorForceTradingStrategy</code>, and calls <code>environment.run()</code> inside a training loop.</p>
+<p>No additional config files are required; the examples construct all components programmatically. If you need a live broker, import the classes under <code>exchanges/live/</code> and supply API keys directly to the constructor (the code does not read environment variables).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team can replace a bespoke back‑test harness with:</p>
+<pre data-lang="python"><code>from tensortrade.environments import TradingEnvironment
+from tensortrade.exchanges import SimulatedExchange
+from tensortrade.actions import DiscreteActionStrategy
+from tensortrade.rewards import SimpleProfitStrategy
+from tensortrade.features import FeaturePipeline
+from tensortrade.strategies import TensorForceTradingStrategy
+
+exchange = SimulatedExchange(data_frame=my_prices)
+pipeline = FeaturePipeline([MyIndicator()])
+env = TradingEnvironment(exchange=exchange,
+                         action_strategy=DiscreteActionStrategy(),
+                         reward_strategy=SimpleProfitStrategy(),
+                         feature_pipeline=pipeline)
+
+agent = TensorForceTradingStrategy(environment=env)
+agent.train(episodes=500)</code></pre>
+<p>The agent can then be exported and deployed in a production service that streams live market data to the same <code>SimulatedExchange</code> subclass adapted for a real broker.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Import cycles</strong> – <code>actions/__init__.py</code>, <code>rewards/__init__.py</code>, <code>slippage/__init__.py</code> (12 circular edges).</li><li><strong>High – Duplicated code</strong> – repeated 6‑line blocks across <code>setup.py</code> and three action‑strategy files.</li><li><strong>High – Deep nesting</strong> – max indentation depth 16 in <code>exchanges/simulated/simulated_exchange.py</code> and related files.</li><li><strong>Medium – Hub module</strong> – <code>trades/__init__.py</code> is imported by 17 modules; changes here have wide impact.</li><li><strong>Medium – Broad exception handling</strong> – <code>exchanges/simulated/fbm_exchange.py</code> uses bare <code>except</code>.</li><li><strong>Low – Stale TODO/FIXME</strong> – 14 markers in live‑exchange modules.</li><li><strong>Dependency drift</strong> – <code>pandas==0.25.0</code> (current 3.x) and <code>numpy==1.16.4</code> (current 2.x) are pinned far behind upstream releases, risking incompatibility with modern tooling.</li><li>No lockfile; reproducible builds rely on <code>requirements.txt</code> alone.</li></ul>
+<p>CI runs on Travis (<code>.travis.yml</code>) and a Dockerfile are present; tests exist (<code>tests/</code>), but coverage is modest (8 test files).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>tensortrade</code> offers a well‑documented, component‑driven RL trading framework that can accelerate prototyping and provide a clear path to production. However, the import cycles, deep nesting, and outdated pinned dependencies make the codebase fragile to change and potentially hard to maintain. It is suited for teams comfortable with Python refactoring and willing to modernize the dependency stack before extending the library.</p>
             </div>
 
             
@@ -115,9 +146,9 @@ Running a short PPO training loop via stable_bas</p>
                         <span class="an-lab">Composition</span>
                         <div class="an-score">153<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>52</b></li><li><span>reStructuredText</span><i style="width:88%"></i><b>46</b></li><li><span>Markdown</span><i style="width:35%"></i><b>18</b></li><li><span>YAML</span><i style="width:8%"></i><b>4</b></li><li><span>CSS</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>52</b></li><li><span>reStructuredText</span><i style="width:88%"></i><b>46</b></li><li><span>Markdown</span><i style="width:35%"></i><b>18</b></li><li><span>Jupyter Notebook</span><i style="width:12%"></i><b>6</b></li><li><span>YAML</span><i style="width:8%"></i><b>4</b></li><li><span>CSS</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Docker</span><span>TensorFlow</span></p>
                     </div>
                 </div>
 

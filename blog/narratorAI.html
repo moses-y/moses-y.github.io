@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>November 17, 2023</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,19 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>This repo addresses the pain of integrating AI-driven voice narration into personal workflows, enabling users to have their experiences narrated in the style of David Attenborough. It combines audio capture, AI text generation, and text-to-speech synthesis into a single interactive pipeline that requires minimal setup but offers little guardrails for production use.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The system operates in two phases. capture.py handles audio/video capture, while narrator.py orchestrates the AI pipeline—likely using OpenAI for text generation and ElevenLabs for TTS—to produce an Attenborough-style narration. Supporting assets like assets/stopslouching.mp3 and assets/wonderfulposture.wav suggest sample outputs or themed triggers. The frames/ directory holds a .gitkeep, indicating potential frame capture or image processing that isn’t fully wired up yet. Configuration is handled through environment variables OPENAIAPIKEY and ELEVENLABSAPIKEY, which must be set before execution.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup:
-python3 -m pip install virtualenv
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Automated camera capture is easy; making sense of what was captured is not. This repo solves the narrow problem of turning periodic webcam snapshots into a spoken, character-voiced narration of whatever the camera sees. It is a demo of a three-stage pipeline: capture an image, describe it with a vision model, and read the description aloud with a synthetic voice.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>capture.py</code> grabs frames from a webcam and writes them to <code>frames/</code>. <code>narrator.py</code> is the core: it encodes a frame to base64, sends it to GPT-4's vision endpoint, gets a descriptive line, and plays it back as audio using ElevenLabs. Four pre-recorded MP3/WAV files in <code>assets/</code> act as fallback or intro audio.</p>
+<p>The repo is a fork of <code>cbh123/narrator</code> (4,427 stars) with no modifications beyond the original. It is a demo, not a library.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>narrator.py:75</code>. The call graph is linear and shallow:</p>
+<ul><li><code>main</code> → <code>encode_image</code> (reads a file from <code>frames/</code>)</li><li><code>main</code> → <code>analyze_image</code> → <code>generate_new_line</code> → <code>client.chat.completions.create</code> (the model call that leaves the process)</li><li><code>main</code> → <code>play_audio</code> (writes/plays audio)</li></ul>
+<p>There are 5 internal call edges total, and the two modules (<code>capture.py</code>, <code>narrator.py</code>) have zero imports between them—they are independent processes. <code>narrator.py</code> owns all five functions and handles every external effect: file I/O, the secret-generating operation (likely an API key or token), and the model inference. <code>capture.py</code> is a separate, standalone script.</p>
+<p>The blast radius is contained: <code>narrator.py</code> is the only file that matters for the core loop, and it is small enough to rewrite in an afternoon. No cycles, no hubs, no hidden coupling.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>The README documents the full flow. Setup is standard pip:</p>
+<pre data-lang="bash"><code>python3 -m pip install virtualenv
 python3 -m virtualenv venv
 source venv/bin/activate
-pip install -r requirements.txt</p><p>Configure by exporting the required keys:
-export OPENAIAPIKEY=&lt;token&gt;
-export ELEVENLABSAPIKEY=&lt;eleven-token&gt;</p><p>Run capture first, then narration:
-python capture.py
-python narrator.py</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>In a personal productivity context, this could serve as a “daily recap” tool: after capturing a meeting or reflection via capture.py, the system feeds the transcript into OpenAI, generates a narratively styled script, and outputs audio via ElevenLabs’ TTS. The workflow demonstrates how disparate AI APIs—text generation and TTS—can be chained without a framework, though it requires manual env-var management and lacks idempotency guarantees.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium/SDLC - No test files detected: repository-wide execution paths are unvalidated, increasing risk of silent failures in the capture-orchestration loop.
-Medium/SDLC - No CI/CD pipeline: no automated build or test gate exists in .github/ or equivalent, so every deployment is effectively manual.
-Medium/SDLC - No LICENSE file: usage and redistribution rights are unclear, which may restrict organizational adoption.
-Low/Risk - Depend</p>
+pip install -r requirements.txt</code></pre>
+<p>Configuration requires three environment variables: <code>OPENAI_API_KEY</code>, <code>ELEVENLABS_API_KEY</code>, and a voice ID obtained from ElevenLabs' API. Run it in two terminals:</p>
+<pre data-lang="bash"><code>python capture.py
+python narrator.py</code></pre>
+<p><code>capture.py</code> writes frames to <code>frames/</code>; <code>narrator.py</code> picks them up and narrates.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>This is a demo, not a production system. A realistic use is a personal ambient monitor: point a webcam at a workspace, run <code>capture.py</code> every few seconds, and have <code>narrator.py</code> give a spoken status update ("You appear to be slouching"). The <code>assets/</code> files (<code>stop_slouching.mp3</code>, <code>wonderful_posture.wav</code>) suggest exactly that use case. For anything beyond a toy, you would replace the file-based handoff with a queue and add error handling.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (deterministic, from the pipeline) found the following:</p>
+<ul><li><strong>Med/SDLC</strong> - No test files detected; untested code paths across the entire repo.</li><li><strong>Med/SDLC</strong> - No CI/CD pipeline; no automated build or test gate.</li><li><strong>Med/SDLC</strong> - No LICENSE file; unclear usage and redistribution rights.</li><li><strong>Low/Risk</strong> - Dependencies declared without a lockfile; non-reproducible builds from <code>requirements.txt</code>.</li></ul>
+<p>Beyond the measured findings, the structure shows no Dockerfile, no committed secrets, and no documentation beyond the README. For a demo, this is acceptable; for anything long-lived, add tests and a lockfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A clean, minimal demo that does exactly one thing and does it in ~75 lines of Python. The code is readable and the architecture is trivially extensible, but it has no tests, no license, and no CI. Use it as a reference for a vision-to-speech pipeline, not as a foundation for production work.</p>
             </div>
 
             
