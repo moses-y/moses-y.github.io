@@ -380,11 +380,19 @@ async function main() {
       .slice(0, 6000);
     // Fan-in per symbol: how many distinct callers reach it. This is blast radius
     // at function level, which the module graph cannot express.
-    const callers = {};
+    /*
+     * A Map, not an object literal, because symbol names come from source and
+     * some of them are Object.prototype keys. A JS class declares constructor,
+     * so callers['constructor'] read back the inherited Function, the || saw a
+     * truthy value, and .add was undefined - which is how this crashed the first
+     * run after the non-Python languages landed. Python never produced the name.
+     */
+    const callers = new Map();
     for (const [from, to] of calls) {
-      (callers[to] || (callers[to] = new Set())).add(from);
+      if (!callers.has(to)) callers.set(to, new Set());
+      callers.get(to).add(from);
     }
-    const fanIn = Object.fromEntries(Object.entries(callers)
+    const fanIn = Object.fromEntries([...callers.entries()]
       .map(([k, v]) => [k, v.size]).filter(([, v]) => v > 1)
       .sort((a, b) => b[1] - a[1]).slice(0, 300));
 

@@ -98,6 +98,28 @@ check('no call edges yields no paths', noEdges && noEdges.paths.length === 0);
 check('no call edges still yields file roles', noEdges && noEdges.roles.length > 0);
 check('empty input yields nothing', flowFor({ symbols: [] }) === null);
 
+/*
+ * Symbol names come from source, and some of them are Object.prototype keys. A JS
+ * class declares constructor, which crashed build-symbols outright the first run
+ * after the non-Python languages landed - callers['constructor'] read back the
+ * inherited Function, so the || short-circuited and .add was undefined. The same
+ * root cause is silent here: effects['constructor'] was truthy, so the trace
+ * reported a route to a sink with no effects on it.
+ */
+const proto = flowFor({
+  symbols: [{ n: 'main', k: 'function', f: 'cli.js', l: 1 },
+            { n: 'constructor', k: 'function', f: 'a.js', l: 2 },
+            { n: 'toString', k: 'function', f: 'a.js', l: 9 }],
+  calls: [['main', 'constructor', 3], ['main', 'toString', 1]],
+  effects: {}
+});
+check('a symbol named constructor yields no fabricated path',
+  proto && proto.paths.length === 0, proto && JSON.stringify(proto.paths));
+check('a symbol named toString still appears in file roles',
+  proto && proto.roles.some(r => r.file === 'a.js'));
+check('prototype-named symbols carry no effects',
+  proto && !Object.keys(proto.effectTotals).length, proto && JSON.stringify(proto.effectTotals));
+
 // The effect classifier underneath it, on the receivers this fixture uses.
 check('cursor.executemany is a database effect', effectOf('cursor.executemany') === 'db');
 check('a bare get is not an effect', effectOf('x.get') === null);

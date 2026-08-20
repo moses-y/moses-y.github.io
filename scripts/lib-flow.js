@@ -233,7 +233,15 @@ function fileRoles(symbols, calls, effects) {
 function flowFor(sym) {
   if (!sym || !Array.isArray(sym.symbols) || !sym.symbols.length) return null;
   const calls = sym.calls || [];
-  const effects = sym.effects || {};
+  /*
+   * Null-prototype, because the keys are function names read out of source and
+   * pathToEffect tests them with effects[name]. A JS class declares constructor,
+   * so effects['constructor'] would return the inherited Function and the trace
+   * would report an effect the repository does not have. Same root cause as the
+   * fanIn crash in build-symbols, but silent: a fabricated path rather than a
+   * throw. Object.keys/values/entries behave identically on a null prototype.
+   */
+  const effects = Object.assign(Object.create(null), sym.effects || {});
   const graph = buildGraph(calls);
   const entries = findEntryPoints(sym.symbols, graph);
   const paths = calls.length ? tracePaths(entries, graph, effects) : [];
