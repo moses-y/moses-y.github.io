@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,18 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Generating PDFs programmatically usually means pulling in a heavy dependency like jsPDF (229 KB, 2 dependencies) or pdf-lib. For the common case—putting text, shapes, and JPEG images on a page—that&#39;s a lot of overhead. tinypdf targets that 95% use case with zero dependencies and a 3.3 KB footprint.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>tinypdf is a minimal PDF creation library written in TypeScript. The core implementation lives in src/index.ts (under 400 LOC) and exports three functions: pdf() for document creation, measureText() for width calculation, and markdown() for converting markdown to PDF. A test suite in src/index.test.ts covers the main API.</p><p>The library supports text (Helvetica, hex colors, alignment), rectangles, lines, JPEG images, clickable links, multi-page documents, and custom page sizes. It deliberately excludes custom fonts, PNG/SVG, forms, encryption, and compression. The buildStream() method emits a ReadableStream&lt;Uint8Array&gt; for documents too large to hold in memory.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via npm. The package.json declares no runtime dependencies; bun.lock is present for the Bun package manager.</p><p>npm install tinypdf</p><p>Running it: Import the pdf function from src/index.ts and build a document. The README documents the full API:</p><p>import { pdf } from &#39;tinypdf&#39;
-import { writeFileSync } from &#39;fs&#39;</p><p>const doc = pdf()
-doc.page((ctx) =&gt; {
-  ctx.rect(50, 700, 200, 40, &#39;#2563eb&#39;)
-  ctx.text(&#39;Hello PDF!&#39;, 60, 712, 24, { color: &#39;#ffffff&#39; })
-  ctx.line(50, 680, 250, 680, &#39;#000000&#39;, 1)
-})
-writeFileSync(&#39;output.pdf&#39;, doc.build())</p><p>There is no CLI or server component; this is a library consumed programmatically. The examples/invoice.ts and examples/showcase.ts files show realistic usage.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>This fits server-side document generation: invoices, receipts, shipping labels, tickets, certificates, and reports. A typical workflow is an API endpoint that receives order data, builds a PDF with tinypdf, and returns it as an HTTP response via buildStream(). The markdown-to-PDF function covers quick formatting with headers, lists, and rules.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD pipeline - No .github/ or CI config exists, so there&#39;s no automated build/test gate. The test suite in src/index.test.ts runs only when a developer invokes it locally.
-Low - No lockfile for npm - bun.lock is present, but no package-lock.json or pnpm-lock.yaml. Since there are zero runtime dependencies, this is a minor concern.
-Low - No input validation - The API accepts raw coordinates, colors, and JPEG bytes without visible validation. Malformed input (e.g., non-hex color strings, out-of-bounds coordinates) could produce corrupt PDFs rather than clear errors.
-Low - Narrow image support - JPEG only. PNG, a common format for logos and screenshots, is unsupported and will fail silently or produce a broken document.</p><p>The codebase is small and focused, which mitigates several structural risks. The test file exists and the README documents behavior clearly.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>tinypdf is a well-scoped, zero-dependency library that solves the common PDF generation case with a fraction of the footprint of alternatives. It is not a general-purpose PDF tool—no custom fonts, PNG, or forms—so evaluate whether your requirements fit before adopting it. For straightforward text-and-image documents, it is a solid, lightweight choice.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Generating PDFs from JavaScript often pulls in heavyweight libraries (e.g., jsPDF) that add megabytes of code and multiple runtime dependencies. In low‑memory environments—edge functions, serverless workers, or embedded devices—those bundles are impractical, yet many applications only need to place text, simple shapes, and JPEG images on a page.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>tinypdf</code> provides a <strong>&lt; 400 LOC</strong> PDF generator with <strong>zero external dependencies</strong>. The core implementation lives in <code>src/index.ts</code>, exposing functions such as <code>pdf()</code>, <code>measureText()</code>, <code>markdown()</code>, and drawing helpers (<code>text</code>, <code>rect</code>, <code>line</code>, <code>image</code>). Example code in <code>examples/invoice.ts</code> and <code>examples/showcase.ts</code> shows how a few dozen lines produce a valid PDF (<code>examples/invoice.pdf</code>). The library’s API surface is defined in TypeScript, with the entry point <code>src/index.ts</code> exporting the public symbols.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the exported <code>pdf()</code> function in <strong><code>src/index.ts</code></strong> (line ~120). <code>pdf()</code> creates a <code>PDFBuilder</code> instance, then callers invoke <code>doc.page(cb)</code> or <code>doc.page(width, height, cb)</code>. The page callback receives a context (<code>ctx</code>) that calls drawing primitives:</p>
+<ul><li><code>ctx.text</code> → <code>text()</code> → <code>measureText()</code> and <code>colorOp()</code> → <code>addObject()</code>.</li><li><code>ctx.rect</code> / <code>ctx.line</code> → shape helpers → <code>colorOp()</code> → <code>addObject()</code>.</li><li><code>ctx.image</code> → <code>parseJpeg()</code> → <code>addObject()</code>.</li></ul>
+<p>All drawing helpers funnel through <strong><code>addObject</code></strong>, the most‑connected internal function (called from 4 places). After page construction, <code>doc.build()</code> calls <code>build()</code> → <code>emitChunks()</code> → <code>serialize()</code> → <code>pdfString()</code>, which assembles the final byte stream. For streaming output, <code>buildStream()</code> follows the same path but yields a <code>ReadableStream</code> from <code>emitChunks</code>.</p>
+<p>The test suite in <strong><code>src/index.test.ts</code></strong> exercises these paths, particularly <code>collectStream</code>, which reads the streamed output back into a buffer. The internal call graph contains 38 resolved edges; there are no circular dependencies, and <code>src/index.ts</code> is the sole hub (22 functions, 8 types/classes). The markdown converter (<code>markdown()</code> in <code>src/index.ts</code>) wraps text handling and reuses <code>wrap()</code>, <code>measureText()</code>, and <code>colorOp()</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and install
+git clone https://github.com/moses-y/tinypdf
+cd tinypdf
+npm install          # package.json defines runtime deps (none)
+
+# Build the example PDF
+npm run build        # compiles TypeScript (tsconfig.json)
+node examples/invoice.ts   # writes examples/invoice.pdf</code></pre>
+<p><em>No additional configuration files or environment variables are required.</em> The library is imported as shown in the README (<code>import { pdf } from 'tinypdf'</code>). For streaming large documents, call <code>doc.buildStream()</code> and pipe the resulting <code>ReadableStream</code> to a file or HTTP response.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS invoice service can embed <code>tinypdf</code> in a serverless function to generate a one‑page receipt on‑the‑fly:</p>
+<pre data-lang="ts"><code>import { pdf } from 'tinypdf';
+export async function handler(event) {
+  const doc = pdf();
+  doc.page(ctx =&gt; {
+    ctx.text(`Invoice #${event.id}`, 50, 750, 18);
+    ctx.rect(45, 730, 200, 30, '#0044aa');
+  });
+  return new Response(doc.build(), { headers: { 'Content-Type': 'application/pdf' } });
+}</code></pre>
+<p>The bundle stays under 5 KB, fitting comfortably within typical Lambda size limits.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – High branching density</strong> – <code>src/index.ts</code> has 94 branch points across 324 lines. Refactor decision‑heavy logic into smaller, strategy‑style helpers.</li><li><strong>MEDIUM – Oversized test file</strong> – <code>src/index.test.ts</code> spans 1 093 lines, making local changes high‑risk. Split tests by feature (text, shapes, images, markdown).</li><li><strong>MEDIUM – Enable Dependabot or Renovate</strong> – No update bot configured; a vulnerable advisory would remain unpatched. Add <code>.github/dependabot.yml</code> covering the repository’s ecosystem.</li><li><strong>Low – Missing CI/CD</strong> – No <code>.github/workflows</code> or other CI configuration; automated testing is not enforced.</li><li><strong>Low – No lockfile</strong> – <code>package.json</code> is present without a lockfile, risking non‑reproducible installs.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>tinypdf</code> delivers a functional, ultra‑light PDF generator that meets the core need of placing text, shapes, and JPEGs on a page without pulling in external code. The codebase is small but densely branched, and the test suite is monolithic, so maintainers should modularize both logic and tests. It is ideal for edge‑oriented services or any project where bundle size and dependency minimization are paramount.</p>
             </div>
 
             
@@ -148,7 +172,7 @@ Low - Narrow image support - JPEG only. PNG, a common format for logos and scree
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

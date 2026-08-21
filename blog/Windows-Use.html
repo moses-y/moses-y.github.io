@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>August 11, 2026</span>
                     <span>4 min read</span>
-                    
+                    <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>Windows Use</h1>
@@ -80,35 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Users who need to automate Windows GUI tasks typically resort to screen‑scraping, OCR, or brittle macro tools. Those approaches require visual models, constant UI maintenance, and provide little feedback about the underlying accessibility tree, making reliable automation costly and error‑prone.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>windows-use wraps the Windows UI Automation API and exposes every element, pattern, and property as Python callables (see the extensive docs/functions/.md and docs/enumerations/.md). The package ships a high‑level Agent class (windowsuse/agent.py – inferred from the import path used in the README) that orchestrates a chosen LLM provider (windowsuse/providers/.py) to decide which UI actions to take.</p><p>The Agent consumes plain‑English tasks, queries the accessibility tree via functions like GetClickablePoint or FindFirst, and issues actions such as Click, SetValue, or Invoke.  
- Provider modules (providers/anthropic.py, providers/openai.py, etc.) implement a common ChatModel interface, allowing the same agent code to run against Claude, GPT‑4o, Gemini, or local Ollama models.  
- A thin CLI entry point (windowsuse/main.py) registers the windows-use console command, parsing flags defined in windowsuse/cli.py (referenced in the README).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup – The project is a pure‑Python package published on PyPI. Install with the command shown in the README:</p><p>pip install windows-use          # or: uv add windows-use</p><p>Configuration – No explicit config files are required. LLM credentials are read from the standard environment variables expected by each provider (e.g., ANTHROPICAPIKEY, OPENAIAPIKEY). The README’s CLI options (--model, --provider, --max-steps, --debug) are parsed in windowsuse/cli.py.</p><p>Running – There are three primary entry points:
-Programmatic use – Import the Agent and a provider, then call invoke or ainvoke:</p><p>from windowsuse.providers.openai import ChatOpenAI
-   from windowsuse import Agent, Browser</p><p>llm = ChatOpenAI(model=&quot;gpt-4o&quot;)
-   agent = Agent(llm=llm, browser=Browser.CHROME)
-   result = agent.invoke(task=&quot;Open Notepad and type a greeting&quot;)
-   print(result.content)</p><p>The Agent class lives in windowsuse/agent.py; the Browser enum is defined in windowsuse/browser.py.
-Async usage – Same pattern with await agent.ainvoke(...) as demonstrated in the README.
-CLI – Execute the installed command:</p><p>windows-use --provider openai --model gpt-4o &quot;Search weather in New York&quot;</p><p>The CLI forwards the string to Agent.invoke internally.</p><p>If any of the above files are missing, the repository currently does not expose them; you would need to locate the source package in the installed site‑packages directory after pip install.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A help‑desk automation script could watch a ticket queue, launch the appropriate corporate application, and fill out a form without any OCR:</p><p>from windowsuse.providers.anthropic import ChatAnthropic
-from windowsuse import Agent, Browser</p><p>agent = Agent(
-    llm=ChatAnthropic(model=&quot;claude-sonnet-4-5&quot;),
-    browser=Browser.EDGE,
-    maxsteps=150,
-)</p><p>agent.invoke(
-    task=&quot;&quot;&quot;
-    Open the internal ticketing web app,
-    locate ticket #4521,
-    copy the description field,
-    open Outlook, create a new email to the requester,
-    paste the description, and send.
-    &quot;&quot;&quot;
-)</p><p>The agent navigates the web page using the accessibility tree, interacts with the Outlook window, and completes the workflow without pixel‑based image recognition.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing source files – The repository listing contains only documentation and CI configs; core implementation files (windows_use/agent.py, provider modules, CLI) are not visible, making a direct security or quality audit impossible.  
-Medium – Limited test coverage – Only three test files are present (tests/). Without seeing test scope, confidence in edge‑case handling (e.g., permission errors, UI element not found) is limited.  
-Low – CI present – GitHub Actions (.github/workflows/ci.yml, publish.yml) run on push, indicating automated linting/build, but the CI scripts are not shown, so exact checks are unclear.  
-Low – License – MIT license is provided (LICENSE), satisfying open‑source compliance.  
-Low – Documentation depth – Over 190 Markdown files describe every UI Automation function, which is thorough, but there is no high‑level architecture diagram or contribution guide for extending the agent logic.  
-Medium – Platform constraint – The package only supports Windows 7–11; attempting import on other OS will raise ImportError, which should be documented in setup.cfg or runtime checks.</p><p>Overall, the visible repo shows good documentation and CI scaffolding, but the absence of the actual codebase prevents a full quality assessment.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>windows-use offers a pragmatic bridge between LLM reasoning and the Windows UI Automation API, eliminating the need for visual models in GUI automation. It is well‑documented and packaged for Python 3.10+, but the source code is not included in the repository snapshot, so reviewers must fetch the installed package to verify implementation quality. Suitable for teams that already use LLMs and need reliable Windows interaction; less appropriate for environments that require in‑repo code audits or extensive automated testing.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Automation of Windows GUI tasks still relies on brittle screen‑scraping or manual scripting. Teams that need a reliable way to let a language model drive applications—click, type, switch windows, or run PowerShell—lack a reusable, API‑driven agent that works directly on the Windows UI Automation tree.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>windows-use</code> ships an AI‑driven agent that talks to the Windows UI Automation API, interprets LLM output, and performs GUI actions without any computer‑vision model. Core logic lives in <code>windows_use/agent/</code> (desktop, tree, and service layers) and in the provider package under <code>windows_use/providers/</code> (e.g., <code>openai</code>, <code>anthropic</code>, <code>google</code>, <code>ollama</code>). The CLI (<code>windows_use/cli/__main__.py</code>) exposes a single entry point (<code>windows-use</code>) that parses <code>--model</code>, <code>--provider</code>, <code>--max-steps</code>, and <code>--debug</code> flags and hands the request to <code>windows_use.Agent</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>windows_use/cli/__main__.py</code></strong> (invoked by the console script <code>windows-use</code>). The script builds a provider instance (e.g., <code>ChatOpenAI</code> from <code>windows_use/providers/openai/__init__.py</code>) and constructs an <code>Agent</code> (<code>windows_use/agent/__init__.py</code>).</p>
+<p><code>Agent.__init__</code> stores the LLM client and a <code>Browser</code> enum; <code>Agent.invoke</code> (or <code>ainvoke</code>) forwards the user task to <strong><code>windows_use/agent/desktop/service.py</code></strong>, the highest‑traffic module (24 incoming imports). That service orchestrates:</p>
+<ol><li><strong>Screen capture &amp; UI tree extraction</strong> via <code>windows_use/uia/core.py</code> (largest file, 2158 lines, 24 imports).</li><li><strong>LLM prompting</strong> through the provider’s <code>chat</code> method.</li><li><strong>Action dispatch</strong> to helper modules (<code>windows_use/agent/tools/</code>, <code>windows_use/agent/events/</code>) that call Win32 APIs or PowerShell.</li></ol>
+<p>The most‑connected hub is <code>windows_use/providers/base.py</code> (24 incoming, 4 outgoing imports, instability 0.14). It defines the abstract provider interface used by all concrete LLM clients. Circular imports involve <code>windows_use/speech/__init__.py</code>, <code>windows_use/agent/desktop/service.py</code>, and <code>windows_use/providers/openai/__init__.py</code>; breaking these cycles would reduce the 23 detected circular dependencies.</p>
+<p>File‑level responsibilities:</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Primary Role</th></tr></thead><tbody><tr><td><code>main.py</code></td><td>Legacy entry point; forwards to CLI.</td></tr><tr><td><code>windows_use/cli/setup.py</code></td><td>Handles CLI argument parsing; imports many provider modules (high outgoing degree, instability 0.95).</td></tr><tr><td><code>windows_use/agent/desktop/service.py</code></td><td>Coordinates UI reads, LLM calls, and action execution; deep nesting (max depth 10).</td></tr><tr><td><code>windows_use/uia/core.py</code></td><td>Wraps UI Automation API; oversized and contains broad <code>except:</code> blocks.</td></tr><tr><td><code>windows_use/providers/base.py</code></td><td>Abstract LLM provider contract; hub for 24 dependents.</td></tr><tr><td><code>windows_use/tools/__init__.py</code></td><td>Utility wrappers for low‑level OS calls.</td></tr></tbody></table></div>
+<p>Because the hub modules (<code>providers/base</code>, <code>messages/__init__</code>) are imported by many others, changes there have a wide blast radius. The import cycles and deep nesting increase cognitive load for future contributors.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install (Python 3.10+ on Windows)
+pip install windows-use          # or: uv add windows-use</code></pre>
+<p>Set up an LLM key in the environment as described by the provider’s README (e.g., <code>OPENAI_API_KEY</code> for OpenAI).</p>
+<p>Run the interactive CLI:</p>
+<pre data-lang="bash"><code>windows-use --provider openai --model gpt-4o --max-steps 150</code></pre>
+<p>Or embed the agent in Python code:</p>
+<pre data-lang="python"><code>from windows_use.providers.openai import ChatOpenAI
+from windows_use import Agent, Browser
+
+llm = ChatOpenAI(model="gpt-4o")
+agent = Agent(llm=llm, browser=Browser.CHROME)
+result = agent.invoke(task="Open Notepad and type a short poem")
+print(result.content)</code></pre>
+<p>Async usage follows the same pattern with <code>await agent.ainvoke(...)</code> as shown in the README.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A support desk could deploy <code>windows-use</code> on a Windows workstation to automate repetitive ticket‑resolution steps: opening the ticketing web UI, copying fields from the UI Automation tree, launching PowerShell scripts, and confirming dialogs—all driven by a single LLM prompt. The agent’s persistent memory lets it maintain context across multiple actions.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – GitHub Actions not pinned to commit SHA (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – No least‑privilege <code>GITHUB_TOKEN</code> permissions declared.</li><li><strong>Medium</strong> – No Dependabot/Renovate configuration.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>Low</strong> – Jobs lack <code>timeout-minutes</code>.</li></ul>
+<p>Static analysis also reported:</p>
+<ul><li>Deep nesting (max indentation depth 10) in <code>windows_use/agent/desktop/service.py</code>, <code>windows_use/uia/core.py</code>, <code>windows_use/agent/tree/service.py</code>.</li><li>Import cycles involving <code>windows_use/speech/__init__.py</code>, <code>windows_use/agent/desktop/service.py</code>, <code>windows_use/providers/openai/__init__.py</code>.</li><li>Oversized files (<code>windows_use/uia/core.py</code>, <code>windows_use/uia/enums.py</code>, <code>windows_use/agent/desktop/service.py</code>).</li><li>Broad <code>except:</code> clauses swallowing errors in several service modules.</li><li>Hub module (<code>windows_use/providers/base.py</code>) with 24 dependents; changes here affect many parts.</li><li>File opens without context managers in two modules.</li><li>Repeated code blocks across test and source files.</li></ul>
+<p>No lockfile is present; <code>pyproject.toml</code> declares dependencies without reproducible version pins, making builds non‑deterministic.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>windows-use</code> provides a functional, LLM‑driven Windows GUI automation layer with a clear CLI and Python API, but the codebase suffers from deep nesting, circular imports, and several CI hygiene gaps. It is suitable for teams comfortable navigating a moderately complex Python project and willing to address the highlighted health issues before production deployment.</p>
             </div>
 
             
@@ -125,11 +133,11 @@ Medium – Platform constraint – The package only supports Windows 7–11; att
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,131<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>194</b></li><li><span>YAML</span><i style="width:2%"></i><b>3</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>999</b></li><li><span>Python</span><i style="width:12%"></i><b>124</b></li><li><span>YAML</span><i style="width:0%"></i><b>3</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -166,6 +174,12 @@ Medium – Platform constraint – The package only supports Windows 7–11; att
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1330933144">Open in Code Brain &rarr;</a>
@@ -173,7 +187,7 @@ Medium – Platform constraint – The package only supports Windows 7–11; att
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:33%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:33%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span><span class="rankchip">3 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">pre-commit/action@v3.0.1, astral-sh/setup-uv@v4, pypa/gh-action-pypi-publish@release/v1</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding medium"><div class="head"><span class="ttl">Declare least-privilege permissions for GITHUB_TOKEN</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">1 workflow(s) declare no permissions</div><div class="ev">With no declaration the token inherits the repository default, so any injected step can push commits or mint releases from inside your own CI.</div><div class="rec"><b>Fix:</b> Add permissions: contents: read at the top of the workflow and widen per job only where needed.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">2 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

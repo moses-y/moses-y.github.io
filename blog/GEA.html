@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 10, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,56 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Software agents that write code typically operate in isolation. Each agent starts from the same base prompt, attempts a task, and either succeeds or fails without learning from other agents&#39; attempts. This wastes successful strategies and repeats known failures. GEA addresses this by treating a group of agents as a single evolutionary unit, allowing them to share experiences and improve collectively over time.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>GEA is a research framework for open-ended self-improvement of coding agents. The core loop is implemented in GEAouter.py, the entry point, which orchestrates a group of agents working on SWE-bench tasks. Each agent attempts to fix real GitHub issues from Django and Sphinx, producing patches stored under initial/predictions/. The codingagent.py file defines the base agent behavior—how it reads a task, generates a patch, and writes results.</p><p>The system evaluates each patch against the target repository&#39;s test suite, with results logged in initial/logs/runevaluation/. Successful patches and their associated reasoning are then shared back into the group&#39;s collective experience, which subsequent agents use to inform their own attempts. This experience-sharing mechanism is the key differentiator from single-agent self-improvement approaches. The project builds on the Darwin Gödel Machine and uses SWE-bench and Polyglot benchmarks for evaluation.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Requires Python 3, Docker, and API keys for OpenAI and Anthropic. The README documents a standard venv + pip install -r requirements.txt flow. Docker must be functional (docker run hello-world). The SWE-bench dependency is cloned and installed separately.</p><p>Configuration: Set OPENAIAPIKEY and ANTHROPICAPIKEY as environment variables in ~/.bashrc.</p><p>Running: Execute python GEAouter.py from the repo root.</p><p>export OPENAIAPIKEY=&#39;...&#39;
-export ANTHROPICAPIKEY=&#39;...&#39;
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Current open‑ended AI research lacks a reproducible framework for groups of agents to evolve together and share improvements. Teams that want to experiment with self‑improving code‑generation agents must stitch together ad‑hoc scripts, manual Docker builds, and separate benchmark suites (SWE‑bench, Polyglot). The result is fragile pipelines, duplicated logic, and a high barrier to systematic experimentation.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>Group Evolving Agents (GEA)</strong> provides a ready‑to‑run research stack that treats a <em>population</em> of coding agents as the evolutionary unit.</p>
+<ul><li>The core loop lives in <code>GEA_outer.py</code>, which orchestrates generations, loads prompts from <code>prompts/</code>, and invokes the initial agent implementation in <code>coding_agent.py</code> (or its polyglot variant <code>coding_agent_polyglot.py</code>).</li><li>Interaction with the SWE‑bench evaluation suite is encapsulated in <code>swe_bench/</code>, while cross‑language benchmarking is handled by <code>polyglot/</code>.</li><li>Shared utilities such as logging, file handling, and common data structures are in <code>utils/</code> (e.g., <code>utils/common_utils.py</code> is the most‑imported module, with seven inbound imports and no outbound dependencies).</li></ul>
+<p>The repository ships with a Dockerfile that bundles the Python environment, the SWE‑bench checkout, and the Polyglot dataset preparation script (<code>polyglot/prepare_polyglot_dataset</code>). All experimental artifacts (logs, diffs, reports) are written under <code>initial/</code> and <code>initial_polyglot/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>python GEA_outer.py</code> starts execution.</li><li><code>GEA_outer.py</code> imports the evolution driver <code>self_improve_step</code> (the module with the highest outward coupling: 10 imports, 1 inbound). This driver runs the <em>self‑improvement</em> loop, calling:   <em> <code>coding_agent.run()</code> – the primary LLM‑driven code generation routine (found in <code>coding_agent.py</code>). </em> <code>llm_withtools.py</code> – wraps OpenAI/Anthropic calls and provides tool‑use helpers; it is also a hotspot for broad <code>except:</code> clauses.</li><li>After each generation, <code>GEA_outer.py</code> writes results to the appropriate sub‑directory in <code>initial/</code> or <code>initial_polyglot/</code>.</li><li>For SWE‑bench evaluation, <code>GEA_outer.py</code> invokes the <code>swe_bench</code> package, which in turn calls the benchmark harness in <code>polyglot/harness.py</code>. The harness imports <code>utils/common_utils.py</code> (the zero‑outbound, seven‑inbound hub), making it the stability anchor of the codebase.</li><li>Docker builds are driven by <code>Dockerfile</code> → <code>polyglot/docker_build.py</code> (2 inbound, 3 outbound imports). The build script assembles the container, installs <code>requirements.txt</code>, and copies the repository source. No USER directive or image digest pinning is present (see health section).</li></ol>
+<p>The import graph contains 35 internal modules and 51 edges, with <strong>no circular dependencies</strong>, meaning a change to a leaf module (e.g., <code>prompts/self_improvement_prompt.py</code>) has limited blast radius, whereas modifications to hub modules like <code>utils/common_utils.py</code> affect many downstream components.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/GEA
+cd GEA
+
+# Create a virtualenv and install Python deps
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cd swebench &amp;&amp; git clone https://github.com/princeton-nlp/SWE-bench.git &amp;&amp; cd SWE-bench &amp;&amp; git checkout dc4c087c2b9e4cefebf2e3d201d27e36 &amp;&amp; pip install -e . &amp;&amp; cd ../../
-python GEAouter.py</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>This is a research tool, not a production service. A practical use case: an ML research team studying multi-agent coordination and self-improvement. They would run GEA on a subset of SWE-bench tasks, inspect the generated patches under initial/predictions/ to see how well agents solve real bugs, and analyze the experience-sharing dynamics to understand when group collaboration helps versus when it adds overhead. The analysis/ scripts support plotting and quantitative evaluation of these runs.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - No CI/CD pipeline: No .github/ or CI config exists. The 42 test files are evaluation scripts for SWE-bench tasks, not unit tests for the GEA framework itself. Changes to GEAouter.py or codingagent.py have no automated gate.
-Medium - Heavy Docker coupling: The entire evaluation pipeline runs inside Docker containers per task. This makes the system resource-intensive (one container per bug) and fragile if Docker is unavailable or misconfigured in a deployment environment.
-Low - Repository hygiene: The repo contains 191 files of evaluation logs and predictions under initial/, which inflates the repo size and mixes generated artifacts with source code. These should be gitignored or stored separately.
-Low - Research-stage maturity: The paper is on arXiv and the codebase is built on a prior research project (DGM). Expect rough edges in error handling and configuration, and no production hardening.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GEA is a legitimate research contribution to multi-agent self-improvement, with a clear architecture and reproducible evaluation pipeline. It is not production software—no CI, no unit tests, heavy Docker use, and research-grade code quality. Use it if you are studying agent coordination or open-ended self-improvement; skip it if you need a maintainable agent framework for real workloads.</p>
+
+# Build the Docker image (optional but recommended for reproducibility)
+docker build -t gea:latest .
+
+# Prepare the Polyglot benchmark data
+python -m polyglot.prepare_polyglot_dataset
+
+# Pull and install SWE‑bench (required for evaluation)
+cd swe_bench
+git clone https://github.com/princeton-nlp/SWE-bench.git
+cd SWE-bench
+git checkout dc4c087c2b9e4cefebf2e3d201d27e36
+pip install -e .
+cd ../../
+
+# Export required API keys (see README)
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+
+# Run the evolution loop
+python GEA_outer.py</code></pre>
+<p>The above steps follow the exact commands documented in <code>README.md</code>. No additional configuration files are required; the code reads environment variables directly.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research team can spin up the Docker image on a GPU node, point <code>OPENAI_API_KEY</code> at their own account, and run <code>GEA_outer.py</code> to generate a series of agent generations. After each run, the <code>initial/</code> directory contains JSON reports (<code>report.json</code>) and diff patches that can be fed into a CI pipeline for regression testing or further analysis.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Add CI workflow</strong> – 35 source files, no <code>.github/workflows/</code> present.</li><li><strong>High – Add Docker build gate</strong> – Dockerfile exists but is never validated automatically.</li><li><strong>Medium – Enable Dependabot</strong> – Only <code>requirements.txt</code> is present; no automated version updates.</li><li><strong>Medium – Pin base image by digest</strong> – Dockerfile uses <code>python:3.10-slim</code> without a SHA.</li><li><strong>Medium – Add non‑root USER</strong> – Container runs as root; no <code>USER</code> directive.</li></ul>
+<p>Additional static findings:</p>
+<ul><li>Broad <code>except:</code> blocks in <code>llm_withtools.py</code>, <code>polyglot/docker_build.py</code>, <code>GEA_outer.py</code>.</li><li>Deep nesting (up to 6 levels) in <code>llm.py</code>, <code>llm_withtools.py</code>, <code>prompts/self_improvement_prompt.py</code>.</li><li>Repeated code blocks across <code>coding_agent*.py</code> and many evaluation scripts.</li><li>Oversized files (<code>llm_withtools.py</code>, <code>prompts/self_improvement_prompt.py</code>, <code>polyglot/benchmark.py</code>).</li><li>File opened without a context manager in <code>prompts/tooluse_prompt.py</code>.</li></ul>
+<p>These findings are deterministic outputs of the repository‑wide static analysis; no speculative issues are added.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>GEA delivers a functional, Docker‑based research platform for group‑level self‑improving agents, with clear entry points and a modest dependency footprint. However, the codebase suffers from maintainability problems (deep nesting, duplicated logic) and lacks essential production safeguards (CI, locked dependencies, hardened container). It is suitable for experimental research groups that can tolerate manual testing but should be refactored before any production‑grade deployment.</p>
             </div>
 
             
@@ -107,9 +146,9 @@ Low - Research-stage maturity: The paper is on arXiv and the codebase is built o
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">444<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JSON</span><i style="width:100%"></i><b>51</b></li><li><span>Shell</span><i style="width:96%"></i><b>49</b></li><li><span>Markdown</span><i style="width:16%"></i><b>8</b></li><li><span>Python</span><i style="width:6%"></i><b>3</b></li>
+                            <li><span>JSON</span><i style="width:100%"></i><b>122</b></li><li><span>Shell</span><i style="width:92%"></i><b>112</b></li><li><span>Markdown</span><i style="width:66%"></i><b>81</b></li><li><span>Python</span><i style="width:29%"></i><b>35</b></li>
                         </ul>
                         <p class="an-fw"><span>Docker</span></p>
                     </div>
@@ -170,7 +209,7 @@ Low - Research-stage maturity: The paper is on arXiv and the codebase is built o
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
                     </ul>
                 </div>
 
@@ -180,7 +219,7 @@ Low - Research-stage maturity: The paper is on arXiv and the codebase is built o
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:67%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">35 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span></div><div class="loc">Dockerfile</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span></div><div class="loc">Dockerfile</div><div class="ev">python:3.10-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a non-root USER to the image</span><span class="chip">medium</span></div><div class="loc">Dockerfile</div><div class="ev">CMD or ENTRYPOINT with no USER directive</div><div class="ev">A process running as root in the container is root against every mounted volume, and it turns any container escape or writable-mount mistake from a contained problem into a host one.</div><div class="rec"><b>Fix:</b> Create an unprivileged user, chown what it needs, and end the Dockerfile with USER.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
