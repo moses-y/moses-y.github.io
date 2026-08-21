@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,23 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Starlink users need a reliable way to view real‑time dish health and network metrics without relying on cloud services that disappear during outages. Existing tools either require a paid account, expose data to external servers, or lack cross‑platform support.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Dishylink is a self‑hosted monitoring suite that talks directly to a Starlink dish and router over the local LAN. The core telemetry logic lives in core/ (e.g., core/telemetry.ts, core/dishClient.ts) and stores raw records in the collector/ module (collector/historian.mts, collector/jsonLinesFile.mts).</p><p>A desktop client is built with Electron; its entry point is electron/main.ts, which spawns the UI (electron/throughputWidget.ts, electron/menuBarThroughput.ts) and handles IPC (electron/ipc.ts).</p><p>A browser extension ships from extension/entrypoints/dashboard/index.html and its TypeScript glue (extension/entrypoints/dashboard/main.tsx).</p><p>A marketing/landing site is generated with Astro (landing/astro.config.mjs, landing/src/pages/index.astro). All UI components share a React/TSX stack (src/App.tsx, src/assets/).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Prerequisites – Node ≥ 18, npm (or npm ci‑compatible lockfile).  
-Install – From the repository root:</p><p>npm ci               # installs exact versions from package-lock.json
-Build – The root package.json defines a build script (inspect scripts field). Typical command:</p><p>npm run build        # compiles TypeScript, bundles Electron and extension
-Run Desktop – Electron’s main process is electron/main.ts. The package.json usually provides an electron script:</p><p>npm run electron     # starts the desktop app</p><p>Alternatively, launch directly with npx electron . after the build step.  
-Run Extension – Load the unpacked extension from the extension/ folder in Chrome/Edge/Firefox. The UI entry point is extension/entrypoints/dashboard/index.html.  
-Run Landing Site (optional) –</p><p>cd landing
-   npm ci
-   npm run dev        # Astro dev server, http://localhost:4321</p><p>No environment variables are required for basic monitoring; optional Starlink‑account integration prompts for credentials at runtime and stores them locally.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A home‑office router runs Dishylink on a Windows laptop. The Electron UI shows live downlink/uplink, latency spikes, and a 3‑D obstruction dome. When the ISP experiences an outage, the app continues recording locally, and the user can later review the collector/.mts logs to pinpoint the exact minute the dish lost GPS lock. A small script could ingest those logs into a home‑assistant dashboard:</p><p>import { readHistorical } from &#39;./collector/historian.mts&#39;;
-const data = await readHistorical(&#39;2024-08-01&#39;);
-console.log(Total downtime: ${data.totalOutageMinutes} min);</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Bugs / Risks  
-Med – Unvalidated network payloads – electron/ipc.ts forwards raw dish responses; missing schema checks could cause crashes on malformed data.  
-Low – Platform‑specific plist – collector/com.dishylink.historian.plist is macOS‑only; Windows/Linux builds may lack equivalent service registration.  
-SDLC / Code Violations  
-Low – Missing explicit run scripts in README – No documented npm run start or npm run electron commands; users must infer from package.json.  
-Low – No secret management – Optional Starlink credentials are stored locally without encryption; not a security flaw for a personal tool but worth noting.  
-Low – Dependency hygiene – No automated Dependabot or npm audit in CI; security updates must be applied manually.</p><p>Overall the repository includes unit tests (.test.ts, .test.mts), a CI workflow (.github/workflows/ci.yml), lockfiles, and a permissive MIT license, indicating a mature baseline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Dishylink delivers a fully offline, cross‑platform Starlink monitor with a polished Electron UI and optional browser extension. The codebase is well‑structured and test‑covered, though users must rely on standard npm conventions for building and launching. Ideal for technically inclined Starlink owners who need local, uninterrupted visibility into dish performance; less suitable for teams that require formal onboarding docs or automated security scanning.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Starlink's built-in web app only shows live telemetry, and it stops being useful exactly when the connection drops. Users who want to know what happened during an outage, track usage over months, or see per-device data have to poll the dish manually or rely on Starlink's cloud account. Dishylink solves this by reading the dish and router directly over the LAN, recording everything locally, and rendering it in a desktop or browser UI.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Dishylink is a Starlink monitoring and control suite: live stat tiles (throughput, latency, power draw, ping success, obstruction), charts with day/week/month history, a 3D sky-obstruction dome, per-device usage from router counters, and an outage/thermal event log. It also writes settings to the dish and router over the same LAN API, with optional authenticated Starlink cloud account integration.</p>
+<p>The repo is a portfolio of 7 self-contained projects, not one codebase. The substantial pieces are <code>src/</code> (261 files, the React UI), <code>core/</code> (23 files, the dish/router client and alert engine), <code>electron/</code> (11 files, the desktop shell), <code>extension/</code> (20 files, the browser extension), and <code>collector/</code> (18 files, the local historian daemon). <code>landing/</code> is the marketing site.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>electron/main.ts</code> for the desktop app, which spawns the React UI from <code>src/App.tsx</code>. <code>App</code> is the most-connected module (30 imports, instability 0.97) — everything funnels through it. From there, <code>core/dishClient.ts</code> and <code>core/routerClientUpdate.ts</code> handle the actual gRPC-web calls to the dish and router over the LAN. <code>core/alertEngine.ts</code> evaluates alert definitions from <code>core/alertDefinitions.ts</code> and emits notifications via <code>core/alertNotification.ts</code>. The <code>collector/historian.mts</code> daemon persists time-series data to local JSONL files.</p>
+<p>The import graph shows 320 internal modules with 551 edges and 5 modules in circular dependencies — <code>src/lib/statDetails.ts</code>, <code>src/components/toolbar/AppToolbar.tsx</code>, and <code>src/components/dashboard/StatDetailPanel.tsx</code> participate in cycles, which makes them harder to change in isolation. <code>src/lib/format.ts</code> is a hub (15 modules depend on it, zero outgoing imports), so churn there has wide blast radius.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/Dishylink
+cd Dishylink
+npm install
+npm run dev          # dev mode; electron main + React renderer
+npm run build        # production build</code></pre>
+<p>The <code>package.json</code> implies npm. No environment variables are documented in the README; the app discovers the dish and router on the LAN automatically. Configuration lives in <code>core/dishClient.ts</code> (endpoint defaults) and <code>electron/</code> for desktop-specific settings. The browser extension loads from <code>extension/entrypoints/dashboard/index.html</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A user with a flaky Starlink connection runs the desktop app on an always-on Mac mini. When the link drops at 3am, the app keeps recording locally because it reads the dish directly. The next morning, the user opens the outage log in <code>src/components/alerts/</code> to see the thermal event that preceded the drop, checks the obstruction time-lapse in <code>src/components/satellite/</code>, and reviews per-device usage from the router's counters to see which client saturated the uplink.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 35 findings (6 high, 29 medium) across 6 kinds:</p>
+<ul><li><strong>High - Import cycle members</strong> — <code>src/lib/statDetails.ts</code>, <code>src/components/toolbar/AppToolbar.tsx</code>, <code>src/components/dashboard/StatDetailPanel.tsx</code> participate in circular imports. Break the cycle by extracting shared types.</li><li><strong>High - Duplicated code blocks</strong> — 59 repeated 6-line blocks across 59 files, including <code>core/alertEngine.ts</code>, <code>src/hooks/useDeviceAlerts.ts</code>, and <code>electron/cloud.ts</code>. Extract shared helpers.</li><li><strong>Medium - High branching density</strong> — <code>src/lib/format.ts</code> has 33 branch points over 92 lines; consider table/strategy dispatch.</li><li><strong>Medium - Deep nesting</strong> — <code>src/hooks/useRouterNetwork.ts</code> hits indentation depth 6; use early returns.</li><li><strong>Medium - Hub modules</strong> — <code>src/lib/format.ts</code>, <code>src/lib/apiHost.ts</code>, <code>src/lib/dishMesh.ts</code> are high-blast-radius; keep them stable and small.</li><li><strong>Medium - Oversized file</strong> — <code>src/components/satellite/skyScene.ts</code> is 660 lines; split by responsibility.</li></ul>
+<p>SDLC observations from the file structure: CI is present (GitHub Actions), tests exist (67 files), and a license is committed. The workflows declare no least-privilege <code>GITHUB_TOKEN</code> permissions, no Dependabot/Renovate config, no dependency vulnerability scan, and <code>landing/public/satellite-view.mp4</code> is a 24.9MB binary that bloats every clone.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Dishylink is a genuinely useful tool for Starlink owners who want local, offline-capable monitoring — the LAN-first architecture is the right call for the use case. The codebase is TypeScript-heavy and well-tested, but the hub modules and duplicated logic will make larger changes slower than they need to be. Worth adopting if you need deep Starlink telemetry and don't want to depend on the cloud account.</p>
             </div>
 
             
@@ -113,11 +120,11 @@ Low – Dependency hygiene – No automated Dependabot or npm audit in CI; secur
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">462<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>57</b></li><li><span>JSON</span><i style="width:21%"></i><b>12</b></li><li><span>Markdown</span><i style="width:14%"></i><b>8</b></li><li><span>YAML</span><i style="width:11%"></i><b>6</b></li><li><span>HTML</span><i style="width:4%"></i><b>2</b></li><li><span>TSX</span><i style="width:4%"></i><b>2</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>177</b></li><li><span>TSX</span><i style="width:76%"></i><b>134</b></li><li><span>JSON</span><i style="width:9%"></i><b>16</b></li><li><span>Markdown</span><i style="width:5%"></i><b>8</b></li><li><span>YAML</span><i style="width:3%"></i><b>6</b></li><li><span>HTML</span><i style="width:1%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span></p>
                     </div>
                 </div>
 
