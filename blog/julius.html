@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,28 +79,31 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>During penetration testing or attack‑surface mapping it is common to discover open HTTP ports that may be serving an LLM back‑end (Ollama, vLLM, LiteLLM, etc.). Manually probing each possibility is slow, error‑prone, and requires intimate knowledge of each service’s API quirks.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>julius is a Go‑based CLI that fingerprints LLM services by sending a small set of HTTP probes and matching the responses against a library of 60+ YAML‑defined signatures.  
-Probe definitions live in probes/.yaml and are parsed by pkg/probe (probe.go, expand.go).  
-The scanning engine (pkg/scanner/scanner.go) loads the signatures, performs concurrent requests, and scores matches (see pkg/runner/validate.go).  
-Results are formatted by pkg/output (output.go) and displayed by the runner (pkg/runner/runner.go).</p><p>The entry point is cmd/julius/main.go, which wires the CLI (Cobra is used internally) to the runner and output layers.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Build / Install  
-   # Build locally
-   make build            # uses the Makefile in the repo
-   # or install directly
-   go install github.com/praetorian-inc/julius/cmd/julius@latest
-Configuration  
-   No runtime configuration is required. Service signatures are shipped in the repository under probes/. Custom signatures can be added as additional YAML files in that directory or supplied via the --probe-dir flag (documented in cmd/julius/main.go).
-Run the scanner  
-   # Single target
-   julius probe https://target.example.com</p><h2>Multiple targets (file or stdin)</h2>
-<p>cat hosts.txt | julius probe -f -</p><p>Output formats are selectable with --output json|jsonl|table (default: table). The CLI prints a table with columns TARGET, SERVICE, SPECIFICITY, CATEGORY, MODELS, and ERROR (see pkg/output/output_test.go for expected fields).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A red‑team operator discovers an open port 11434 on a host. Running:</p><p>julius probe http://10.0.5.12:11434</p><p>returns a row indicating ollama with specificity 100. The operator can then enumerate models (julius models …) or focus exploitation on that specific back‑end. The tool can be scripted into a larger asset‑discovery pipeline via its JSONL output.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Bugs / Risks  
-Low – pkg/runner/validate.go performs string matching without sanitising HTTP headers; malformed responses could cause false‑positive matches.  
-Low – Concurrency is driven by Go routines without explicit timeout handling in some probe paths; a hung endpoint could delay the whole run.
-SDLC / Hygiene  
-Low – All CI workflows (.github/workflows/.yml) run go test ./... and linting, and a license file is present.  
-Low – No secret files are checked in; go.mod/go.sum are up‑to‑date.  
-Medium – YAML probe files lack schema validation; a typo could break the scanner at runtime.</p><p>Overall the repository includes 74 test files covering core packages (pkg/probe, pkg/scanner, pkg/runner), a full CI pipeline, and a clear contribution guide.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>julius provides a well‑tested, single‑binary solution for rapid LLM‑service fingerprinting, ideal for security teams that need to enumerate AI back‑ends without external dependencies. The codebase is clean, with comprehensive tests and CI, though users should be aware that probe YAML files are not schema‑validated and malformed services could affect scan speed. Deploy where fast, offline detection of LLM infrastructure is required.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> During a penetration test or network audit you often encounter an open HTTP port and need to know which LLM back‑end is listening (Ollama, vLLM, LiteLLM, etc.). Manually probing each vendor’s API is slow and error‑prone, especially when dozens of services share similar endpoints.</p>
+<p><strong>What This Does</strong> <code>julius</code> ships as a single Go binary that sends a curated set of HTTP probes (YAML files under <code>probes/</code> and <code>pkg/scanner/testdata/fixtures/</code>) and matches the responses against signature rules in <code>pkg/rules/</code>. The core CLI lives in <code>cmd/julius/main.go</code>, which delegates to the runner package (<code>pkg/runner/runner.go</code>). The runner loads the probe definitions, builds a TLS configuration if needed, and orchestrates concurrent scanning via the scanner (<code>pkg/scanner/scanner.go</code>). Results are formatted by the output package (<code>pkg/output/output.go</code>) into table, JSON or JSONL.</p>
+<p><strong>How It Is Wired</strong></p>
+<ol><li><strong>Entry point</strong> – <code>cmd/julius/main.go</code> parses CLI arguments and invokes <code>runner.Run</code>.</li><li><strong>Runner</strong> – <code>pkg/runner/runner.go</code> (functions <code>Run</code>, <code>loadProbes</code>, <code>buildTLSConfig</code>) reads probe YAML files (file I/O, 8 functions total) and creates a <code>Scanner</code> via <code>pkg/scanner.NewScanner</code>.</li><li><strong>Scanner</strong> – <code>pkg/scanner/scanner.go</code> provides <code>NewScanner</code>, <code>ScanAll</code>, and <code>Scan</code>. <code>NewScanner</code> is the most widely used constructor (called from 38 places). It configures concurrency, timeout (<code>WithTimeout</code> – 37 callers), and delegates each target to <code>matchProbe</code>/<code>matchProbeAny</code>.</li><li><strong>Probe matching</strong> – <code>pkg/probe/probe.go</code> parses a probe definition, expands base paths (<code>expand.go</code>), and returns a <code>DoRequest</code> that performs the HTTP call (<code>doHTTPRequest</code>). The request/response handling touches the filesystem (reading embedded probe assets).</li><li><strong>Rule evaluation</strong> – Each response is fed to the rule set in <code>pkg/rules/</code>. Functions like <code>Match</code> (called from 11 places) execute the signature logic defined in <code>rule_*</code> files.</li><li><strong>Output</strong> – After all scans complete, <code>pkg/output.NewTableWriter</code> or the JSON writers serialize the <code>Result</code> structs (<code>pkg/types/result.go</code>) and write to stdout.</li></ol>
+<p>The call graph shows a hub at <code>NewScanner</code> and <code>Run</code>; changes to those functions propagate to dozens of callers, so they carry the largest blast radius. No circular dependencies were detected, and the internal graph consists of 317 call edges across 32 Go files.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Install the latest version
+go install github.com/moses-y/julius/cmd/julius@latest
+
+# Scan a single endpoint
+julius probe https://target.example.com
+
+# Scan a list of targets (one per line)
+cat hosts.txt | julius probe -f -
+
+# Choose JSON output
+julius probe https://target.example.com -o json</code></pre>
+<p>The binary compiles with the <code>Makefile</code> (<code>make build</code> produces <code>julius</code>). No external configuration files are required; probe definitions are bundled under <code>probes/</code> and can be extended by adding new YAML files following the existing schema.</p>
+<p><strong>Real‑World Use</strong> A security engineer adds <code>julius</code> to a nightly discovery job that reads CIDR ranges, runs <code>julius probe</code> against each host, and stores the JSONL output in a SIEM. The <code>Specificity</code> score from the rule engine helps prioritize follow‑up testing (e.g., a 100‑score Ollama service vs. a generic OpenAI‑compatible endpoint).</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>Medium – Dependency‑vulnerability gate missing</strong> – <code>.github/workflows/*.yml</code> contain no step that scans Go modules for known CVEs. Add <code>dependency-review-action</code> or <code>osv-scanner</code> to the CI pipeline.</li><li><strong>Low – Workflow timeout not set</strong> – <code>ci.yml</code> defines four jobs without <code>timeout-minutes</code>; long‑running or stuck jobs can overlap on the default six‑hour limit. Add a reasonable timeout (e.g., <code>timeout-minutes: 30</code>).</li></ul>
+<p><em>Measured findings</em> – the test suite contains two high‑cognitive‑load issues: deep nesting (max depth 8) and an oversized file (<code>pkg/scanner/scanner_test.go</code>, 1,204 lines). Refactor into smaller, focused test files. A medium‑severity duplication exists across four rule files; extract the repeated 6‑line block into a shared helper.</p>
+<p><strong>The Bottom Line</strong> <code>julius</code> provides a focused, Go‑native fingerprinting tool that reliably identifies dozens of LLM services with minimal external dependencies. The codebase is well‑tested but suffers from a few large, deeply nested test files and a lack of automated dependency‑vulnerability checks. It is suitable for security teams that need a fast, offline scanner and are comfortable maintaining Go binaries.</p>
             </div>
 
             
@@ -121,7 +124,7 @@ Medium – YAML probe files lack schema validation; a typo could break the scann
                         <ul class="an-bars">
                             <li><span>YAML</span><i style="width:100%"></i><b>144</b></li><li><span>Go</span><i style="width:22%"></i><b>32</b></li><li><span>Markdown</span><i style="width:8%"></i><b>11</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -144,7 +147,7 @@ Medium – YAML probe files lack schema validation; a typo could break the scann
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers need a reproducible, sandboxed filesystem that can be accessed from Cloudflare Workers while keeping a single source of truth. Existing approaches either require custom infrastructure or expose the state to external storage, making coordination, security, and migration difficult.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>cloudflare/computer implements a virtual filesystem stored in a Durable Object backed by SQLite. The Durable Object exposes three interchangeable runtimes through workspace.runtime.exec(source, { backend }):</p><p>Container backend – mounts the SQLite state into a Linux container via a FUSE daemon (computerd). See the implementation in examples/container/src/index.ts and the Docker build in examples/container/Dockerfile.  
- Isolate shell backend – runs just‑bash inside a Dynamic Worker and talks to the Durable Object over RPC (examples/worker-shell/src/index.ts).  
- Isolate JavaScript backend – evaluates an ECMAScript module in a Dynamic Worker with a virtual node:fs/promises implementation (examples/worker-javascript/src/index.ts).</p><p>The repository is a small monorepo; each example is a self‑contained Worker project with its own package.json, TypeScript config, and optional Dockerfile. Core interface definitions live in the docs/ folder (e.g., docs/04filesysteminterface.md, docs/08capnwebinterface.md).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>From the repo root
-git clone https://github.com/cloudflare/computer.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building Cloudflare Workers need a mutable, versioned filesystem that can be accessed from Durable Objects, containers, or isolated JavaScript shells. Implementing such a virtual FS from scratch requires handling SQLite state, FUSE‑style mounts, and cross‑runtime RPC, which is error‑prone and hard to test.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo delivers <strong>Cloudflare Computer</strong>, a monorepo that exposes a <code>workspace.runtime.exec(source, { backend })</code> API. Core logic lives in <code>packages/computer/src/</code> (e.g., <code>workspace.ts</code>, <code>git/index.ts</code>, <code>artifacts/cli.ts</code>). The Durable Object stores state in SQLite via the <strong>dofs</strong> layer (<code>packages/dofs/src/</code>), with <code>storage.ts</code> acting as the primary hub (54 inbound imports).</p>
+<p>Example consumers are in <code>examples/</code>:</p>
+<ul><li><code>examples/container/src/index.ts</code> – builds a container, runs <code>computerd</code>, and mounts the workspace.</li><li><code>examples/worker-shell/src/index.ts</code> – runs a Bash shell in a Dynamic Worker.</li><li><code>examples/think/src/agent.ts</code> – a chat agent that treats the workspace as its file system.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – each example’s <code>src/index.ts</code> imports <code>@cloudflare/computer</code> (via the workspace package).</li><li><code>workspace.ts</code> creates a <code>Workspace</code> object that lazily loads a backend (<code>backendFactory.ts</code>).</li><li>The backend calls into <strong>dofs</strong>: <code>packages/dofs/src/fs/writeFile.ts</code> writes through <code>storage.ts</code>, which forwards to SQLite via the Durable Object RPC layer (<code>packages/computer/src/rpc.ts</code>).</li><li><code>storage.ts</code> is the largest hub (Ca = 54, Ce = 1) – any change here propagates to most of the code base.</li><li>A circular import exists among <code>workspace.ts</code>, <code>git/index.ts</code>, and <code>stub.ts</code>; each pulls types or helpers from the others, increasing the blast‑radius for refactors.</li><li>Execution ultimately reaches the durable object’s SQLite store, then returns results over the Cap’n Proto RPC channel (<code>packages/computer/src/rpc.ts</code>).</li></ol>
+<p>The call graph shows eight modules in cycles, and the most branching logic lives in <code>packages/dofs/src/schema/index.ts</code> (24 branches over 59 lines). Deep nesting (max depth = 6) appears in <code>packages/computer/src/artifacts/cli.ts</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/computer
 cd computer
-Install dependencies for a specific example, e.g. the container demo
+
+# Install the monorepo (npm is the manager)
+npm ci
+
+# Build all packages
+npm run build   # defined in root package.json scripts
+
+# Run a concrete example – container backend
 cd examples/container
-npm ci      # lockfile missing in some examples; npm install works as fallback</p><h3 class="post-h" id="configuration">Configuration</h3><p>Durable Object – create a Cloudflare Workers KV namespace and bind a Durable Object named Computer in wrangler.toml (each example ships a wrangler.jsonc that contains the required bindings).  
- Backend selection – the runtime ID is passed to workspace.runtime.exec (see examples/think/src/agent.ts for a concrete call).</p><h3 class="post-h" id="running">Running</h3><p>Container backend – build and run the Docker image:</p><p>docker build -t computer-demo -f Dockerfile .
-docker run -p 8787:8787 computer-demo</p><p>Worker backends – publish the Worker with Wrangler:</p><p>npx wrangler deploy</p><p>The HTTP entry point is defined in each example’s src/index.ts (e.g., examples/container/src/index.ts exports a request handler that forwards /write, /read, and /exec to the runtime).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI pipeline can generate temporary build artefacts inside a workspace, run a containerized toolchain (e.g., pandoc in examples/tutorial), and store the resulting PDF back to Cloudflare Artifacts via the assets backend. Sample flow:</p><p>// inside a Worker
-await workspace.runtime.exec(
-  pandoc /workspace/input.md -o /workspace/output.pdf
-, { backend: &quot;container&quot; });</p><p>const pdf = await workspace.fs.readFile(&quot;/workspace/output.pdf&quot;);
-await fetch(&quot;https://api.cloudflare.com/client/v4/accounts/.../artifacts&quot;, {
-  method: &quot;POST&quot;,
-  body: pdf,
-});</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfiles – examples/artifacts/package.json (and several others) lack a package-lock.json/pnpm-lock.yaml, making builds non‑reproducible.  
-Low – Duplicate dependency declarations – Each example bundles its own @cloudflare/computer version; drift can occur between examples.  
-Medium – Limited test coverage for core runtime – Tests exist mainly in the think-compare-runtimes worker (examples/think-compare-runtimes/worker//.test.ts) but the container daemon (computerd) has no unit tests.  
-Low – CI configured – GitHub Actions (.github/workflows/ci.yml) runs npm test across examples, indicating basic CI health.  
-Low – Documentation – The docs/ folder provides a thorough specification; however, the README warns that the API is “preview only” and may change.  
-Low – License present – LICENSE file included, satisfying legal compliance.</p><p>No obvious secret leakage or insecure default configurations were found.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>cloudflare/computer delivers a flexible, Durable‑Object‑backed filesystem with interchangeable execution backends, suitable for prototyping complex Worker‑based pipelines. The codebase is well‑structured and documented, but missing lockfiles and limited core‑runtime tests mean production adoption should be preceded by a security and stability audit. Teams building experimental Cloudflare Worker tooling will find it immediately useful; production teams need to address the reproducibility and testing gaps first.</p>
+npm ci
+npm run dev    # starts a local worker that mounts the workspace</code></pre>
+<p>Configuration files are in each example’s root (<code>wrangler.jsonc</code>, <code>worker-configuration.d.ts</code>). No additional secrets are required for local runs; production deployments need <code>CLOUDFLARE_API_TOKEN</code> and <code>CLOUDFLARE_ACCOUNT_ID</code> as documented in <code>README.md</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform can store user‑generated scripts in a Cloudflare Computer workspace, then execute them in isolated containers for PDF generation or image processing. The platform calls <code>workspace.runtime.exec('pandoc input.md -o output.pdf', { backend: 'container' })</code>; the container backend mounts the SQLite state, runs <code>pandoc</code>, and writes the PDF back to the same workspace, all without persisting any intermediate files on the host.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Secrets in workflow allow a forked PR to exfiltrate <code>CLOUDFLARE_API_TOKEN</code> (<code>.github/workflows/release.yml</code>).</li><li><strong>High</strong> – GitHub Actions not pinned to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – <code>eval</code>/<code>exec</code> on runtime‑computed strings in <code>packages/rpc/src/server.ts</code>.</li><li><strong>High</strong> – Oversized files (<code>writeFile.ts</code>, <code>workspace.ts</code>, <code>git/index.ts</code> ≈ 917 lines each).</li><li><strong>High</strong> – Hub module (<code>packages/dofs/src/storage.ts</code>) with 54 dependents; changes have wide impact.</li><li><strong>High</strong> – Import cycle among <code>workspace.ts</code>, <code>git/index.ts</code>, <code>stub.ts</code>.</li><li><strong>High</strong> – Duplicated 6‑line blocks across many example entry points.</li><li><strong>Medium</strong> – High branching density in schema and resolve‑cache modules.</li><li><strong>Medium</strong> – Deep nesting (max depth = 6) in CLI and test files.</li><li><strong>Medium</strong> – No Dependabot/Renovate configured for 6 manifests.</li><li><strong>Medium</strong> – Dockerfiles use mutable base tags (<code>debian:stable-slim</code>).</li><li><strong>Medium</strong> – CI lacks a dependency‑vulnerability gate.</li><li><strong>Medium</strong> – Container images run as root; no <code>USER</code> directive.</li><li><strong>Low</strong> – Workflow jobs missing <code>timeout-minutes</code> (<code>close-unrequested-prs.yml</code>).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Cloudflare Computer provides a functional prototype for a durable, multi‑backend virtual filesystem, with a clear separation between workspace management and backend execution. However, the codebase suffers from large, highly coupled modules, an import cycle, and several security/maintenance gaps that must be addressed before production use. It is best suited for experimental projects or teams willing to invest in refactoring and hardening the core.</p>
             </div>
 
             
@@ -112,16 +121,16 @@ Low – License present – LICENSE file included, satisfying legal compliance.<
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">552<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>84</b></li><li><span>Markdown</span><i style="width:52%"></i><b>44</b></li><li><span>JSON</span><i style="width:23%"></i><b>19</b></li><li><span>TSX</span><i style="width:10%"></i><b>8</b></li><li><span>YAML</span><i style="width:8%"></i><b>7</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>381</b></li><li><span>Markdown</span><i style="width:13%"></i><b>50</b></li><li><span>JSON</span><i style="width:9%"></i><b>35</b></li><li><span>Shell</span><i style="width:3%"></i><b>10</b></li><li><span>TSX</span><i style="width:2%"></i><b>8</b></li><li><span>YAML</span><i style="width:2%"></i><b>7</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span></p>
                     </div>
@@ -159,12 +168,6 @@ Low – License present – LICENSE file included, satisfying legal compliance.<
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>examples/artifacts/package.json</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1327562953">Open in Code Brain &rarr;</a>
@@ -172,7 +175,7 @@ Low – License present – LICENSE file included, satisfying legal compliance.<
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">critical</span><span class="track"><span class="fill high" style="width:25%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">4</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:25%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Keep secrets out of workflows a fork can trigger</span><span class="chip">critical</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows/release.yml</div><div class="ev">CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (publish or cloud scope)</div><div class="ev">Contributor-controlled input reaches a job holding a publish token or cloud credential, so a pull request becomes credential exfiltration.</div><div class="rec"><b>Fix:</b> Move secret-using steps into a workflow_run job that never checks out pull request code, or gate on an environment with required reviewers.</div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span><span class="rankchip">3 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">docker/setup-buildx-action@v3, docker/login-action@v3, changesets/action@v1</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding high"><div class="head"><span class="ttl">Remove eval over a runtime value</span><span class="chip">high</span></div><div class="loc">packages/rpc/src/server.ts</div><div class="ev">exec() over a computed value</div><div class="ev">eval executes whatever the string contains, so wherever that string came from is now able to run code in the process, and the distance between the input and the eval is usually the only thing making it look safe.</div><div class="rec"><b>Fix:</b> Parse the value into the type you expect, with json.loads or ast.literal_eval.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">6 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span><span class="rankchip">2 occurrences</span></div><div class="loc">examples/container/Dockerfile</div><div class="ev">ghcr.io/cloudflare/computer-computerd-linux-x64:0.1.1, debian:stable-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a non-root USER to the image</span><span class="chip">medium</span></div><div class="loc">examples/container/Dockerfile</div><div class="ev">CMD or ENTRYPOINT with no USER directive</div><div class="ev">A process running as root in the container is root against every mounted volume, and it turns any container escape or writable-mount mistake from a contained problem into a host one.</div><div class="rec"><b>Fix:</b> Create an unprivileged user, chown what it needs, and end the Dockerfile with USER.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/close-unrequested-prs.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

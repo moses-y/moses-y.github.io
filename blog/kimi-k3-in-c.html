@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 7, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">Shell</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>kimi k3 in c</h1>
@@ -80,41 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running inference for a multi‑trillion‑parameter LLM typically requires GPUs, large RAM pools, or specialized frameworks. Organizations that need on‑device or low‑cost CPU‑only inference cannot deploy such models because they exceed memory limits or depend on unavailable libraries.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>kimi-k3-in-c implements a 2.78 T‑parameter Kimi K3 inference engine entirely in portable C99. The core engine lives in include/k3/k3.h and include/k3/k3cfg.h, while the reference implementation and benchmarks are in src/ (built via CMakeLists.txt / Makefile). No BLAS, CUDA, or external runtime is required; the binary (bin/k3) streams the 1.56 TB checkpoint from disk and keeps a configurable “trunk” in RAM, achieving a peak RSS of 8.24 GB on a laptop.</p><p>The repository ships a full technical report (docs/kimi-k3-tech-report.pdf) and a large set of visualizations in docs/images/, showing the memory‑budgeting strategy, quantisation pipeline, and performance numbers. All measurements are reproducible from the data files under docs/data/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone and enter the repo
-git clone https://github.com/FareedKhan-dev/kimi-k3-in-c.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running inference with a multi‑trillion‑parameter model typically requires GPUs, large memory footprints, and heavyweight frameworks. Teams that need a portable, CPU‑only deployment—e.g., on edge servers or low‑cost laptops—have no lightweight reference implementation that fits inside a few gigabytes of RAM.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>kimi-k3-in-c</code> provides a pure C99 inference engine for the 2.78‑trillion‑parameter Kimi K3 model. The binary (<code>./bin/k3</code>) streams expert weights from disk, keeps a 8 GB resident working set, and produces byte‑identical results across memory budgets. Core source lives under <code>src/</code>:</p>
+<ul><li><code>src/cli/k3_run.c</code> – the <code>main</code> entry point and CLI flag parsing.</li><li><code>src/core/k3_ops.c</code> – high‑level model operations (tokenisation, KV cache handling).</li><li><code>src/cache/k3_cache.c</code> – implements the three‑phase cache described in <code>docs/images/cache-3phase.mmd</code>.</li></ul>
+<p>Supporting headers in <code>include/k3/</code> expose the public API (<code>k3.h</code>, <code>k3_cfg.h</code>). Utilities such as <code>tools/cmp_logits.py</code> and <code>benchmarks/bench_kernels.c</code> aid validation and performance measurement.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/cli/k3_run.c</code> → <code>int main(int argc, char **argv)</code>. The CLI parses options (model path, trunk directory, preset, prompt, generation length) and builds a <code>k3_cfg_t</code> struct defined in <code>include/k3/k3_cfg.h</code>. This configuration is passed to <code>k3_run(&amp;cfg)</code> (implemented in <code>src/core/k3_ops.c</code>).</p>
+<p><code>k3_run</code> performs:</p>
+<ol><li><strong>Model loading</strong> – calls <code>k3_load_trunk()</code> (in <code>src/core/k3_ops.c</code>) which memory‑maps the compressed trunk files from <code>--trunk</code>.</li><li><strong>KV cache allocation</strong> – invokes <code>k3_cache_init()</code> from <code>src/cache/k3_cache.c</code>.</li><li><strong>Generation loop</strong> – repeatedly calls <code>k3_decode_step()</code> (core op) which fetches expert weights on‑the‑fly, runs the quantised kernels (found in <code>src/kernels/</code> – not listed but referenced), and updates the cache.</li></ol>
+<p>All I/O is confined to the binary’s own directory tree; no network or database calls occur. The Python tools (<code>tools/*.py</code>) import no internal modules (import graph shows 0 edges), so they operate independently as scripts that read model dumps or compare logits. No circular dependencies are present, keeping the C call graph shallow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo (URL must be used verbatim)
+git clone https://github.com/moses-y/kimi-k3-in-c.git
 cd kimi-k3-in-c
-Build the binary (CMake or Make both work)
-mkdir -p build &amp;&amp; cd build
-cmake .. -DCMAKEBUILDTYPE=Release
-cmake --build . -j$(nproc)   # produces ./bin/k3
-or simply: make -j$(nproc)
-Download a model checkpoint (script provided)
-./scripts/download-model.sh   # places model in $HOME/k3model by default
-Prepare a trunk directory (stores the resident part)
-mkdir -p $HOME/k3trunk
-Run a quick test (the repo includes a self‑test)
-./scripts/k3-doctor.sh        # validates build and basic inference
-Generate text (example from README)
-./bin/k3 $HOME/k3model \
-    --trunk $HOME/k3trunk \
-    --preset laptop \
-    --tok $HOME/k3model \
-    --prompt &quot;The capital of France is&quot; \
-    --gen 8 --incremental</p><p>Key flags are documented in docs/QUICKSTART.md and docs/API.md. No environment variables are required; the binary reads configuration directly from command‑line arguments.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑center service that streams large LLM checkpoints to edge nodes can embed k3 to serve low‑latency, CPU‑only completions on commodity hardware. Example integration (pseudo‑code):</p><p>#include &quot;k3/k3.h&quot;</p><p>int main() {
-    k3cfg cfg = k3cfgdefault();
-    cfg.trunkpath = &quot;/var/k3trunk&quot;;
-    cfg.modelpath = &quot;/var/k3model&quot;;
-    k3handle h = k3init(&amp;cfg);
-    const char out = k3generate(h, &quot;Explain quantum tunneling&quot;, 64);
-    printf(&quot;%s\n&quot;, out);
-    k3free(h);
-}</p><p>The handle can be incorporated into any C or C++ service without linking to external libraries.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Severity: Low – Limited test coverage – Only 2 test files (tests/ folder) exist; core inference paths are not unit‑tested.  
-Severity: Medium – Performance constraints – Inference runs at ~10 s/token on a laptop (see README.md example). Acceptable for research, but not for real‑time production.  
-Severity: Low – Platform restriction – CI (.github/workflows/ci.yml) targets Linux x86‑64 only; no Windows or ARM CI.  
-Severity: Low – Documentation depth – Extensive docs (172 files) and a PDF report provide strong guidance; however, some scripts (scripts/pack-trunk.sh) lack robust error handling.  
-Severity: Low – License – Apache‑2.0 present (LICENSE), no licensing concerns.  
-Severity: Low – Dependency hygiene – No external dependencies; build system is self‑contained (CMake, Make).</p><p>Overall the repo shows disciplined structure: CI, a clear README, and a CHANGELOG.md. No obvious security secrets are stored.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>kimi-k3-in-c delivers a functional, framework‑free CPU inference engine for a 2.78 T‑parameter model, proving that massive LLMs can run in &lt;10 GB RAM when streamed from disk. It is well‑documented and builds cleanly, but the single‑CPU throughput is modest and test coverage is thin. It is suitable for research, proof‑of‑concept deployments, or edge services where GPU resources are unavailable and latency requirements are relaxed.</p>
+
+# 2. Build the engine (Makefile target)
+make -j$(nproc)          # produces ./bin/k3
+
+# 3. (Optional) Download a model checkpoint – see scripts/download-model.sh
+./scripts/download-model.sh   # fetches ~/k3model and ~/k3trunk
+
+# 4. Run a quick inference (no model needed for a smoke test)
+./bin/k3 --help
+
+# 5. Full inference example (requires the checkpoint)
+./bin/k3 ~/k3model --trunk ~/k3trunk --preset laptop \
+      --tok ~/k3model --prompt "The capital of France is" --gen 8 --incremental</code></pre>
+<p>The <code>--preset</code> flag selects a memory budget (e.g., <code>laptop</code>, <code>server</code>) defined in <code>docs/QUICKSTART.md</code>. No environment variables are required; all configuration is supplied via CLI flags.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can embed the binary in a nightly batch job that scores large text corpora on modest VMs. The job script would:</p>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+MODEL=~/k3model
+TRUNK=~/k3trunk
+for txt in data/*.txt; do
+  prompt=$(head -n1 "$txt")
+  ./bin/k3 "$MODEL" --trunk "$TRUNK" --preset laptop \
+        --prompt "$prompt" --gen 64 &gt;&gt; results/$(basename "$txt").out
+done</code></pre>
+<p>Only the first line of each document is streamed; the rest of the model stays on disk, keeping RAM under 10 GB.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM</strong> – Large binary (<code>tests/fixtures/tiny_k3.bin</code>, 8.5 MB) stored in Git. → Move to Git LFS or external storage.</li><li><strong>MEDIUM</strong> – GitHub Actions checkout keeps the token (<code>.github/workflows/ci.yml</code>). → Add <code>persist-credentials: false</code>.</li><li><strong>LOW</strong> – No job timeout defined (<code>.github/workflows/ci.yml</code>). → Set <code>timeout-minutes</code> to bound CI runs.</li></ul>
+<p>Additional static findings:</p>
+<ul><li><strong>HIGH</strong> – Deep nesting (max depth 10) in <code>src/cache/k3_cache.c</code> and <code>src/cli/k3_run.c</code> → refactor with early returns.</li><li><strong>HIGH</strong> – Duplicated 6‑line blocks across benchmarks and tests → extract shared helpers.</li><li><strong>MEDIUM</strong> – Files opened without context manager in three Python tools → wrap with <code>with open(...)</code>.</li><li><strong>MEDIUM</strong> – Broad <code>except:</code> clauses in <code>tools/cmp_logits.py</code> → catch specific exceptions.</li><li><strong>MEDIUM</strong> – Oversized source files (<code>src/cli/k3_run.c</code>, <code>src/core/k3_ops.c</code>) → split by responsibility.</li><li><strong>MEDIUM</strong> – High branching density in several benchmark scripts → replace with table‑driven dispatch.</li></ul>
+<p>No critical or high‑severity issues were reported.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>kimi-k3-in-c</code> delivers a verifiable, CPU‑only inference path for a 2.78 T‑parameter model within 8 GB RAM, making it uniquely suited for low‑resource environments. The codebase is functional but suffers from deep nesting, duplicated snippets, and a few CI hygiene gaps that should be addressed before production use. Teams comfortable with C and willing to clean up the identified hotspots can adopt it as a lightweight alternative to GPU‑bound large‑model runtimes.</p>
             </div>
 
             
@@ -131,11 +144,11 @@ Severity: Low – Dependency hygiene – No external dependencies; build system 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">282<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>15</b></li><li><span>Shell</span><i style="width:53%"></i><b>8</b></li><li><span>YAML</span><i style="width:33%"></i><b>5</b></li><li><span>Python</span><i style="width:20%"></i><b>3</b></li><li><span>C/C++ Header</span><i style="width:13%"></i><b>2</b></li><li><span>C</span><i style="width:7%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>24</b></li><li><span>JSON</span><i style="width:96%"></i><b>23</b></li><li><span>C</span><i style="width:71%"></i><b>17</b></li><li><span>Markdown</span><i style="width:67%"></i><b>16</b></li><li><span>C/C++ Header</span><i style="width:54%"></i><b>13</b></li><li><span>Shell</span><i style="width:33%"></i><b>8</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -153,7 +166,7 @@ Severity: Low – Dependency hygiene – No external dependencies; build system 
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span></div><div class="loc">tests/fixtures/tiny_k3.bin</div><div class="ev">1 blobs over 5MB: tiny_k3.bin 8.5MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
