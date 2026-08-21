@@ -80,28 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers who want a minimal, inspectable coding‑agent often have to start from large, opinionated codebases. Those projects hide the core data‑flow of the original pi implementation, making it hard to learn, customize, or embed the agent in a constrained environment.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>pi-from-scratch supplies a 600‑line TypeScript reference implementation of a coding agent (named nano‑pi). The core runtime lives in the src/ folder:</p><p>src/cli.ts – CLI entry point that parses arguments and launches the agent.  
- src/agent.ts – orchestrates the loop: read files, generate patches via the LLM, apply changes, and repeat.  
- src/llm.ts – thin wrapper around an OpenAI‑compatible API; model name and base URL are read from NANOPIMODEL and NANOPIBASEURL.  
- src/tools.ts – implements the file‑system and command‑execution utilities used by the agent.  
- src/tui.ts – optional terminal UI for interactive debugging.</p><p>A parallel Next.js site in web/ visualizes the same logic with a trace debugger (web/app/TraceLab.tsx) and generated content (web/app/content.generated.ts). The site is static‑rendered; it does not invoke the LLM at runtime.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install root dependencies (npm is the package manager)
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building an AI coding agent from scratch is hard because production agents like <code>pi</code> are dense with engineering detail that obscures the core data flow. Most tutorials either over-simplify or drown the reader in abstractions. This project strips <code>pi</code> down to its essence—a ~600-line TypeScript agent that can read files, edit code, and run commands—and teaches it through a guided, interactive article.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is a dual-purpose repository: a minimal, runnable coding agent (<code>src/</code>) and an interactive educational website (<code>web/</code>) that walks you through building it step-by-step. The agent itself is a functional CLI tool using an OpenAI-compatible API. The website pairs the article text with a live code editor that fills in as you read, plus a trace debugger (<code>web/app/TraceLab.tsx</code>) with breakpoints to step through the agent's execution.</p>
+<p>The core agent is deliberately small. <code>src/agent.ts</code> exposes <code>runAgent</code>, <code>src/llm.ts</code> handles streaming and tool calls, <code>src/tools.ts</code> provides built-in file/command tools, and <code>src/cli.ts</code> is the entry point. The <code>web/</code> app is a Next.js site with pre-generated trace data (<code>web/app/trace-data.generated.ts</code>), so browsing the site makes no model calls.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>src/cli.ts:23</code>, which reaches 11 functions. It loads a session via <code>loadSession</code> (a <code>fs.readFile</code> call on the filesystem) and then <code>runAgent</code> enters the loop. The agent's core loop in <code>src/agent.ts</code> calls <code>stream</code> in <code>src/llm.ts</code>, which handles OpenAI-compatible streaming and tool-call flushing.</p>
+<p>The most-connected modules are <code>src/llm</code> (imported by 7 files, imports nothing) and <code>src/agent</code> (imported by 6 files, imports 1). These are the hubs—change them and the most breaks. The call graph shows <code>buildDebugFrames</code> calling <code>push</code> 107 times, making it the hottest internal path for trace generation. <code>src/tools.ts</code> is the only module that reads/writes files in the agent path.</p>
+<p>The repo has 30 internal modules with 33 import edges and zero circular dependencies—a clean, acyclic graph that's easy to reason about. The <code>web/</code> app is where complexity concentrates: <code>Reader.tsx</code> has 24 functions and <code>trace-data.generated.ts</code> is a 1,566-line generated file.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (needs Node.js 22+ and an OpenAI-compatible API):</p>
+<pre data-lang="bash"><code>npm install
+export NANOPI_API_KEY=your-api-key
+npm run dev</code></pre>
+<p><strong>Configuration</strong>: Optional env vars are <code>NANOPI_MODEL</code> and <code>NANOPI_BASE_URL</code> (defaults to <code>https://api.openai.com/v1</code>).</p>
+<p><strong>Running the teaching site</strong>:</p>
+<pre data-lang="bash"><code>cd web
 npm install
-Provide an OpenAI‑compatible key
-export NANOPIAPIKEY=your-api-key   # required for any LLM call
-Run the CLI (the documented entry point)
-npm run dev                         # starts the CLI in watch mode; see package.json scripts
-or invoke directly:
-node ./dist/src/cli.js &lt;args&gt;</p><p>Configuration – only two environment variables are required:</p><p>NANOPIAPIKEY – secret key for the LLM service.  
-Optional: NANOPIMODEL (default model) and NANOPIBASEURL (default https://api.openai.com/v1).</p><p>Running the documentation site (optional, no LLM calls):</p><p>cd web
-npm install
-npm run dev    # starts Next.js at http://localhost:3000</p><p>The test suite (vitest) can be exercised with npm test, which runs the eight files under test/ (e.g., test/agent.test.ts, test/cli.test.ts).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A small DevOps team can embed nano-pi in a CI step to automatically suggest patches for a repository:</p><p>export NANOPIAPIKEY=...
-node ./dist/src/cli.js --project ./my-codebase --dry-run</p><p>The CLI reads the project files, sends a prompt to the configured model, and prints a diff. The output can be reviewed or piped into git apply for automated updates.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No CI/CD pipeline – repository lacks .github/, GitHub Actions, or other CI configs; tests must be run manually.  
-Low – Limited input validation – src/cli.ts forwards command‑line arguments directly to Agent.run; malformed paths could cause unhandled exceptions.  
-Low – Hard‑coded environment variable names – only NANOPIAPIKEY, NANOPIMODEL, NANOPIBASE_URL are documented; missing defaults may break in non‑development environments.  
-Medium – Dependency hygiene – two package-lock.json files (root and web/) can drift; no automated audit step is defined.  
-Low – Documentation scope – README covers basic run commands but does not describe CLI flags or the expected project layout, requiring readers to infer from source.  
-Low – License present – MIT license is included, satisfying legal requirements.</p><p>Overall the codebase compiles cleanly, has unit tests for each core module, and follows a clear modular separation (LLM wrapper, tools, agent loop). The Next.js UI is isolated in web/, preventing accidental LLM calls in production deployments.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>pi-from-scratch delivers a compact, well‑structured reference implementation of a coding agent, ideal for learning, prototyping, or embedding in small automation pipelines. Its main shortcomings are the absence of automated CI and limited defensive programming; teams should add a CI step and tighten input validation before production use.</p>
+npm run dev</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>This fits as a learning tool or a minimal base for a custom agent. You can extend <code>src/tools.ts</code> with domain-specific tools and <code>src/llm.ts</code> to swap providers. The trace system (<code>web/app/trace-debugger.ts</code>) is genuinely useful for debugging agent loops—you can visualize exactly what the agent sees at each step, which is invaluable when building more complex agents.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 7 issues (1 high, 6 medium). The high finding is an oversized file: <code>web/app/trace-data.generated.ts</code> at 1,566 lines. Two medium findings flag high branching density in <code>src/llm.ts</code>, <code>web/app/NudgeCounter.tsx</code>, and <code>web/app/trace-debugger.ts</code>. Two medium findings flag deep nesting in <code>Reader.tsx</code> and <code>TraceLab.tsx</code> (max indentation depth 7).</p>
+<p>SDLC observations: tests exist (8 test files) but there's no CI pipeline, no Dependabot/Renovate config, and no <code>.editorconfig</code>/formatter config. License and lockfiles are present. No committed secrets detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A well-structured, honest educational project with a genuinely minimal agent and a clever interactive teaching site. The clean module graph and absence of circular dependencies make it easy to extend. The <code>web/</code> app has some readability debt in its largest files, but the core agent code is small and approachable. Ideal for developers wanting to understand agent internals or build a custom agent from a solid, minimal base.</p>
             </div>
 
             
