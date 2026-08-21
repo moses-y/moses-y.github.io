@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 1, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running a Nostr relay on a personal machine can be challenging due to the need for port forwarding, public DNS records, and certificate management, which can expose the relay to potential security risks.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The selfhost-buzz repository provides a solution for self-hosting a Nostr relay using Docker and Tailscale. The docker-compose.yml file defines the services required to run the relay, including the buzz relay, buzz-postgres for events and members, buzz-redis for pub/sub fan-out, and buzz-minio for media uploads. The scripts/setup.sh script generates a .env file with random secrets and guides the user through the configuration process.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>To set up the relay, users can follow the instructions in the README.md file, which includes generating a Tailscale auth key, configuring the .env file, and running the setup.sh script. For example, users can run docker-compose up -d to start the relay in detached mode.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) - No test files detected - untested code paths - repository-wide
- Medium (SDLC) - No CI/CD pipeline detected - no automated build/test gate - .github/ or CI config
-The codebase appears to be well-structured, but the lack of tests and CI/CD pipeline is a concern. The docs/ folder contains documentation on setting up Tailscale and configuring the relay, which is a positive aspect.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The selfhost-buzz repository provides a well-structured solution for self-hosting a Nostr relay using Docker and Tailscale. However, the lack of tests and CI/CD pipeline is a significant concern. Users who value ease of setup and configuration may find this repository useful, but those who prioritize code quality and reliability may want to explore other options.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Self-hosting a Nostr relay normally means exposing a port to the public internet, dealing with DNS, TLS certificates, and an attack surface you don't want. <code>selfhost-buzz</code> solves this by running the relay inside a Tailscale network, so it's reachable only by devices on your private tailnet. No port forwarding, no public DNS, no certificate management.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This repo deploys <a href="https://github.com/block/buzz" rel="noopener">Buzz</a>, a Nostr relay with AI agent support, onto a machine you own. The entire ingress story is <code>tailscale serve</code> terminating TLS and proxying to the relay container. Nothing binds a host port—the Tailscale container is the only way in.</p>
+<p>The stack is defined in <code>docker-compose.yml</code>: a <code>buzz</code> relay container, a <code>buzz-pair</code> sidecar for device pairing, plus <code>buzz-postgres</code>, <code>buzz-redis</code>, and <code>buzz-minio</code> for persistence and media. There's also <code>docker-compose.ollama.yml</code> for pointing agents at a local LLM instead of a hosted API. The <code>scripts/</code> directory holds shell scripts for setup, backup, and maintenance.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with <code>scripts/setup.sh</code>, which generates a <code>.env</code> file with random secrets. You then fill in three values: <code>TS_TAILNET</code>, <code>TS_AUTHKEY</code>, and <code>BUZZ_RELAY_OWNER_PUBKEY</code>. Everything public is derived from <code>TS_TAILNET</code>—the relay URL becomes <code>wss://buzz.&lt;tailnet&gt;.ts.net</code>, media is served at <code>https://buzz.&lt;tailnet&gt;.ts.net/media</code>, and pairing at <code>/pair</code>.</p>
+<p>The wiring for this repository has not been fully mapped—there's no internal call graph or import analysis available. What's clear from the file structure:</p>
+<ul><li><code>scripts/setup.sh</code>—writes <code>.env</code> with generated secrets</li><li><code>scripts/backup.sh</code>—backup routine for the stateful services</li><li><code>scripts/check.sh</code>—health check against the running stack</li><li><code>scripts/members.sh</code>—member management</li><li><code>scripts/reset-data.sh</code>—destructive reset of all data</li><li><code>docker-compose.yml</code>—the full stack definition, the only entry point that matters</li><li><code>docs/tailscale.md</code> and <code>docs/local-llm.md</code>—setup walkthroughs</li></ul>
+<p>The blast radius is concentrated in <code>scripts/setup.sh</code>, which has deep nesting (max indentation depth 7) and is the first thing anyone runs. <code>docker-compose.yml</code> is the deployment artifact—if it's wrong, nothing comes up.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/ciram-co/selfhost-buzz
+cd selfhost-buzz
+scripts/setup.sh</code></pre>
+<p><strong>Configuration:</strong> After setup, edit <code>.env</code> and fill in <code>TS_TAILNET</code> (your tailnet name), <code>TS_AUTHKEY</code> (a reusable auth key from the Tailscale admin console), and <code>BUZZ_RELAY_OWNER_PUBKEY</code> (your Nostr pubkey in hex, not <code>npub</code>).</p>
+<p><strong>Running it:</strong> <code>docker compose up -d</code> from the repo root. The Tailscale container joins your tailnet and <code>tailscale serve</code> proxies to the relay. Full walkthroughs are in <code>docs/tailscale.md</code> and <code>docs/local-llm.md</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A home server or spare NUC running this stack gives you a private Nostr relay for you and your family. Install Tailscale on every device, share the relay with specific people via your tailnet, and your messages and agent traffic never touch a public server. The <code>docs/local-llm.md</code> path lets you point agents at Ollama on the same machine, keeping everything local.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis of this repo found 1 issue, 0 high and 1 medium:</p>
+<ul><li><strong>Medium - deep nesting</strong> in <code>scripts/setup.sh</code> (max indentation depth 7). The control flow is hard to follow; flatten with early returns or extract inner blocks.</li></ul>
+<p>The analysis also found no test files and no CI/CD pipeline. For a deployment repo, the lack of a build gate is notable: <code>docker-compose.yml</code> is a deployment artifact with no automated validation. A workflow that at least builds the image and validates the manifests would catch problems before they reach a server. No committed secrets were found, and a license is present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a clean, well-documented way to run a private Nostr relay with minimal attack surface. The Tailscale-only ingress is a genuinely good design choice. The main risk is the unvalidated deployment path—no CI, no tests, and <code>setup.sh</code> is complex enough to hide bugs. Suitable for someone comfortable with Docker who wants a private relay without the public-internet hassle.</p>
             </div>
 
             
@@ -128,7 +150,7 @@ The codebase appears to be well-structured, but the lack of tests and CI/CD pipe
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span></div><div class="loc">docker-compose.yml</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

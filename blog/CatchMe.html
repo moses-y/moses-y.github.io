@@ -82,51 +82,42 @@
             <div class="post-content numbered" id="post-content">
                 <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Developers and power‑users need a local, privacy‑first store of their digital activity (files edited, web pages viewed, terminal commands, etc.) so that LLM‑driven agents can retrieve personal context without sending raw data to the cloud. Existing solutions either rely on external vector databases or require heavyweight agents, making them costly and difficult to audit.</p>
+<p>Developers who use large‑language‑model (LLM) agents often lose context: the agents cannot recall what the user has typed, opened, or edited outside the current session. Re‑creating that personal history requires manual logging or external services that break privacy.</p>
 <h3 id="what-this-does">What This Does</h3>
-<p><code>CatchMe</code> records a wide range of user interactions (clipboard, keyboard, mouse, window focus, file changes, URLs) into a local SQLite store (<code>catchme/store.py</code>). The data can be queried by LLM‑backed agents via a simple CLI (<code>python -m catchme</code>) or through the bundled web UI (<code>catchme/static/index.html</code>).</p>
-<p>Key modules:</p>
-<ul><li><strong><code>catchme/recorders/</code></strong> – platform‑specific listeners (<code>keyboard_*.py</code>, <code>mouse.py</code>, <code>idle.py</code>, <code>notification.py</code>). Each recorder writes events to the store via <code>catchme/recorder.py</code>.</li><li><strong><code>catchme/extractors/</code></strong> – turn raw events into structured objects (<code>file.py</code>, <code>url.py</code>).</li><li><strong><code>catchme/pipelines/</code></strong> – chain processing steps: <code>filter.py</code> (time / type filters), <code>retrieve.py</code> (search over stored events), <code>summarize.py</code> (LLM‑driven summarisation), <code>tree.py</code> (hierarchical view).</li><li><strong><code>catchme/services/</code></strong> – LLM integration (<code>llm.py</code>) and prompt templates (<code>prompts.yaml</code>).</li><li><strong><code>catchme/web.py</code></strong> – lightweight FastAPI server exposing the same endpoints over HTTP for the browser UI.</li></ul>
-<p>The CLI entry point (<code>catchme/__main__.py</code>) parses sub‑commands, loads <code>catchme/config.py</code>, starts the requested recorder(s), and optionally launches the web server.</p>
+<p><code>catchme</code> captures a user’s digital footprint locally and exposes it through a lightweight CLI skill. The core collector lives in <code>catchme/recorder.py</code> and the platform‑specific recorders under <code>catchme/recorders/</code>. Configuration lives in <code>catchme/config.py</code>, which is imported by 18 other modules – it is the primary hub for paths, storage locations, and LLM settings. The data model is defined in <code>catchme/store.py</code> and persisted as plain files, keeping the system “vectorless” and privacy‑first.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<pre><code>python -m catchme               # __main__.py
- └─ config.load()               # catchme/config.py
- └─ run.main(args)              # catchme/run.py
-     ├─ recorder.start()        # catchme/recorder.py
-     │   ├─ platform.&lt;os&gt;.py    # platform specific listener
-     │   └─ store.save(event)   # catchme/store.py (SQLite)
-     └─ pipeline.execute()      # catchme/pipelines/*.py
-         ├─ filter.apply()
-         ├─ retrieve.search()
-         └─ summarize.llm_call()   # services/llm.py → external LLM API</code></pre>
-<ul><li><strong>Data flow:</strong> raw OS events → platform listener → <code>Recorder</code> → <code>Store</code> → optional pipeline → LLM → CLI/web response.</li><li><strong>High‑impact files:</strong> <code>store.py</code> (persistent state), <code>services/llm.py</code> (external API calls), <code>run.py</code> (orchestrator). Changing any of these alters the core persistence or external dependency surface.</li><li><strong>Coupling:</strong> Recorders depend on the <code>platform</code> package; pipelines depend on <code>extractors</code>; the web UI (<code>static/*.js</code>) talks to <code>web.py</code> via <code>/api/*</code> routes. No circular imports are evident, but <code>run.py</code> acts as a hub, pulling in most sub‑modules.</li></ul>
+<p>Execution starts at <code>catchme/__main__.py</code>, which parses CLI arguments and calls <code>catchme/run.py::main()</code>. <code>run.py</code> imports a wide set of sub‑modules (<code>catchme/engine.py</code>, <code>catchme/web.py</code>, the pipeline package, etc.) and orchestrates the workflow:</p>
+<ol><li><strong>Configuration load</strong> – <code>catchme/config.py</code> reads <code>catchme/services/config.example.json</code> and environment overrides.</li><li><strong>Recorder startup</strong> – <code>catchme/recorder.py</code> instantiates platform‑specific recorders (<code>catchme/recorders/keyboard_*.py</code>, <code>mouse.py</code>, <code>clipboard.py</code>, etc.) and registers callbacks.</li><li><strong>Event capture</strong> – each recorder writes raw events to <code>catchme/store.py</code>, which provides <code>add_event()</code> and <code>query()</code> helpers.</li><li><strong>Pipeline processing</strong> – user‑triggered commands (e.g., <code>catchme retrieve</code>) invoke <code>catchme/pipelines/retrieve.py</code>. This module pulls stored events, passes them through <code>catchme/services/llm.py</code> (LLM provider defined in <code>catchme/services/providers.py</code>), and returns a synthesized answer.</li><li><strong>Web UI</strong> – <code>catchme/web.py</code> launches an Express‑based server (detected in the repo) serving the static UI in <code>catchme/static/</code>. The UI loads <code>catchme/static/js/app.js</code>, which calls the backend endpoints to fetch activity trees (<code>tree.js</code>) and chat logs.</li></ol>
+<p>The most connected modules are <code>catchme/config</code> (imported by 18 modules, no outgoing imports) and <code>catchme/run</code> (imports 10 others, instability 0.91). These act as blast‑radius points: changes to <code>config.py</code> or <code>run.py</code> propagate widely.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
 <pre data-lang="bash"><code># Clone the repo
-git clone https://github.com/moses-y/CatchMe.git
+git clone https://github.com/moses-y/CatchMe
 cd CatchMe
 
-# Install in an isolated environment (pyproject.toml defines deps)
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .   # editable install pulls in all Python deps
+# Install the package (pyproject.toml is the manifest)
+pip install -e .
 
-# Optional: copy the example service config
+# Optional: edit the example config
 cp catchme/services/config.example.json catchme/services/config.json
-# Edit catchme/services/config.json to add your LLM endpoint / API key
+# adjust paths, LLM API key, etc.
 
-# Start a recorder (e.g., keyboard + clipboard) and the web UI
-python -m catchme --record keyboard clipboard --serve
+# Start the recorder (captures keyboard, mouse, clipboard, etc.)
+python -m catchme
 
-# Or run a single query from the CLI
-python -m catchme query "What files did I edit yesterday?"</code></pre>
-<p>If the <code>--serve</code> flag is omitted, the process runs headless and writes events only. The web UI is reachable at <code>http://localhost:8000</code> (FastAPI default).</p>
+# Query the memory via CLI
+python -m catchme retrieve --query "What files did I edit yesterday?"</code></pre>
+<p>To run the optional web UI:</p>
+<pre data-lang="bash"><code># Install Node dependencies (express is listed in package.json)
+npm install   # or pnpm install if a lockfile existed
+npm start     # runs the Express server defined in catchme/web.py</code></pre>
+<p>(If the repo does not contain a <code>package.json</code>, the UI can be served directly by the Python server.)</p>
 <h3 id="real-world-use">Real‑World Use</h3>
-<p>A remote‑work developer runs <code>catchme</code> in the background on their laptop. When a code‑review LLM assistant asks “What was the last function I edited in <code>utils.py</code>?”, the assistant calls <code>catchme query "last edit utils.py"</code>; the request travels through <code>run.py → pipeline.retrieve → store.fetch</code> and returns a concise LLM‑summarised snippet, all without leaving the machine.</p>
+<p>A developer integrates <code>catchme</code> into their daily workflow. While coding, the keyboard recorder logs every keystroke and file save. Later, they ask their Claude‑based assistant: <code>catchme retrieve --query "What function did I refactor last week?"</code>. The request travels from the CLI → <code>run.py</code> → <code>pipelines/retrieve.py</code> → <code>services/llm.py</code>, which calls the configured OpenAI model and returns the relevant snippet from the locally stored event log. No external database is involved, preserving privacy.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<ul><li><strong>Low – Missing lockfile</strong> – Dependencies are declared only in <code>pyproject.toml</code>; reproducible builds would benefit from a lockfile (<code>poetry.lock</code> or <code>uv.lock</code>).</li><li><strong>Low – No explicit type hints</strong> – Only a few modules contain type annotations; adding them would improve IDE support and static analysis.</li><li><strong>Low – Minimal CI coverage</strong> – GitHub Actions (<code>.github/workflows/ci.yml</code>) runs the test suite, but there is no linting or security scanning stage.</li><li><strong>Low – No Dockerfile</strong> – Although Kubernetes is mentioned, the repo lacks containerisation artefacts, making deployment to clusters manual.</li></ul>
-<p>No critical security flaws are evident from the file list, but the LLM integration (<code>services/llm.py</code>) likely holds API keys in user‑provided config files; ensure those are excluded from version control.</p>
+<ul><li><strong>High – lockfile missing</strong> – <code>pyproject.toml</code> declares dependencies but no lockfile; reproducibility is at risk.</li><li><strong>Medium – Dependabot not configured</strong> – no <code>.github/dependabot.yml</code>; security updates are manual.</li><li><strong>Medium – No dependency scan in CI</strong> – <code>.github/workflows/ci.yml</code> lacks a vulnerability‑review step.</li><li><strong>Medium – Large binary assets</strong> – <code>assets/catchme-logo.png</code> (≈10 MB) inflates repo size; consider Git LFS.</li><li><strong>Medium – Checkout persists token</strong> – CI checkout keeps the GitHub token; set <code>persist-credentials: false</code>.</li><li><strong>Low – Workflow timeout missing</strong> – CI jobs have no <code>timeout-minutes</code>; add a reasonable bound.</li></ul>
+<p>Additional observations: the codebase relies heavily on broad <code>except:</code> clauses (e.g., in <code>recorder.py</code> and <code>services/llm.py</code>), deep nesting (up to six levels), and several files exceed 800 lines, making maintenance harder. The static assets and UI are JavaScript‑heavy, but no <code>package-lock.json</code> or similar lockfile exists.</p>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p><code>CatchMe</code> provides a well‑structured, locally‑hosted activity capture layer that can be queried by LLM agents, with clear separation between data collection, storage, and retrieval. It is ready for developers comfortable with Python environments, but it lacks reproducible dependency locking and container support, which may hinder large‑scale or production deployments. Suitable for personal workflows or research prototypes where privacy is paramount.</p>
+<p><code>CatchMe</code> provides a functional, locally‑hosted memory layer for LLM agents with clear entry points and a modest dependency surface. The architecture is understandable, but the hub module (<code>config.py</code>) and the oversized pipeline files pose a maintenance risk. Adding a lockfile, automated dependency scanning, and refactoring the large modules would improve reliability for production use. The project is suitable for teams that need privacy‑first personal context and are comfortable addressing the highlighted code‑health concerns.</p>
             </div>
 
             
@@ -154,8 +145,64 @@ python -m catchme query "What files did I edit yesterday?"</code></pre>
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 65, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_catchme_config[&quot;config&quot;]
+  n1_catchme_static_js_utils[&quot;utils&quot;]
+  n2_catchme_recorder[&quot;recorder&quot;]
+  n3_catchme_store[&quot;store&quot;]
+  n4_catchme_services___init__[&quot;__init__&quot;]
+  n5_catchme_services_llm[&quot;llm&quot;]
+  n6_catchme_pipelines_retrieve[&quot;retrieve&quot;]
+  n7_catchme_pipelines_tree[&quot;tree&quot;]
+  n8_catchme_pipelines_filter[&quot;filter&quot;]
+  n9_catchme_pipelines_summarize[&quot;summarize&quot;]
+  n8_catchme_pipelines_filter --&gt; n3_catchme_store
+  n8_catchme_pipelines_filter --&gt; n4_catchme_services___init__
+  n6_catchme_pipelines_retrieve --&gt; n5_catchme_services_llm
+  n6_catchme_pipelines_retrieve --&gt; n0_catchme_config
+  n6_catchme_pipelines_retrieve --&gt; n4_catchme_services___init__
+  n6_catchme_pipelines_retrieve --&gt; n9_catchme_pipelines_summarize
+  n9_catchme_pipelines_summarize --&gt; n5_catchme_services_llm
+  n9_catchme_pipelines_summarize --&gt; n8_catchme_pipelines_filter
+  n9_catchme_pipelines_summarize --&gt; n7_catchme_pipelines_tree
+  n9_catchme_pipelines_summarize --&gt; n0_catchme_config
+  n9_catchme_pipelines_summarize --&gt; n4_catchme_services___init__
+  n7_catchme_pipelines_tree --&gt; n3_catchme_store
+  n7_catchme_pipelines_tree --&gt; n8_catchme_pipelines_filter
+  n7_catchme_pipelines_tree --&gt; n0_catchme_config
+  n4_catchme_services___init__ --&gt; n0_catchme_config
+  n5_catchme_services_llm --&gt; n0_catchme_config
+  n5_catchme_services_llm --&gt; n4_catchme_services___init__</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>12</strong> of 19 declared dependencies are a major version behind. Resolved 19 of 19 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>pywin32</code></td>
+                            <td>&gt;=306; sys_platform ==</td><td>312</td>
+                            <td class="beh">6 major</td></tr><tr><td><code>websockets</code></td>
+                            <td>&gt;=12.0</td><td>17.0.1</td>
+                            <td class="beh">5 major</td></tr><tr><td><code>openai</code></td>
+                            <td>&gt;=1.0</td><td>3.1.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>pillow</code></td>
+                            <td>&gt;=10.0</td><td>12.3.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>psutil</code></td>
+                            <td>&gt;=5.9</td><td>7.2.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>pyobjc-framework-cocoa</code></td>
+                            <td>&gt;=10.0; sys_platform ==</td><td>12.2.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>pyobjc-framework-quartz</code></td>
+                            <td>&gt;=10.0; sys_platform ==</td><td>12.2.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>pyobjc-framework-screencapturekit</code></td>
+                            <td>&gt;=10.0; sys_platform ==</td><td>12.2.2</td>
+                            <td class="beh">2 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
@@ -171,7 +218,7 @@ python -m catchme query "What files did I edit yesterday?"</code></pre>
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:25%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">4</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:25%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Commit a lockfile beside the manifest</span><span class="chip">high</span></div><div class="loc">pyproject.toml</div><div class="ev">manifest with no lockfile in scope</div><div class="ev">An unlocked range means the artifact you tested and the artifact you ship can contain different transitive code, so a malicious patch release reaches production with no diff.</div><div class="rec"><b>Fix:</b> Run the package manager once and commit the generated lockfile.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">3 occurrences</span></div><div class="loc">assets/catchme-logo.png</div><div class="ev">3 blobs over 5MB: catchme-logo.png 10.5MB, catchme_logo.png 10.5MB, catchme_logo.png 10.5MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

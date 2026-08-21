@@ -80,12 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>iOS developers who need to write, compile, and test native code while away from a Mac have no viable option. Xcode requires macOS, cloud-based solutions need connectivity, and on-device editors can&#39;t compile native binaries. This forces developers to carry laptops or delay work until they&#39;re at a desk.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>emexDE is an iOS IDE that compiles Swift, Objective-C, C, and C++ directly on an unjailbroken iPhone or iPad using a provisioning certificate. The CoreCompiler/ directory contains the compilation pipeline: CCDriver.cpp orchestrates builds, CCSwiftCompiler.cpp and CCCompiler.cpp handle language-specific compilation, and CCLinker.cpp links object files into executables. The LiveProcess/ directory implements a kernel virtualization layer—LCMachOUtils.m handles Mach-O binary loading, and the Tweaks/ files (like Dyld.m and UIKit+GuestHooksInit.m) intercept system calls and UIKit calls for the guest process.</p><p>The MobileDevelopmentKit/ directory mirrors CoreCompiler/ with Objective-C wrappers (MDKCompiler.m, MDKLinker.m) and adds threading support via MDKThreadPool.m. Nyxian/ contains the UI layer, including Builder.swift for the build interface and Logger.m for debug output.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer on a flight could open emexDE, write a Swift utility that parses JSON data, compile it with CCSwiftCompiler, link it with CCLinker, and sign the resulting binary—all offline. The app&#39;s README confirms iOS 16 through 26.5 support, and the GitHub Actions workflow (build.yml) produces an iOS app artifact.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - No test files exist across 200 files. The compiler pipeline (CCDriver.cpp, CCLinker.cpp, CCSwiftCompiler.cpp) has zero test coverage. This is a significant risk for a tool that produces executables.
-Medium - No input validation visible in the compiler toolchain. CCDriver.cpp and CCSDK.cpp likely accept user-provided source paths and compiler flags with no sanitization shown in the headers.
-Medium - Missing error handling in CoreCompiler files. CCBase.c and CCUtils.cpp expose no error return types in their headers, suggesting unchecked operations.
-Low - No README in the forked repo. The parent repo has documentation, but this fork lacks it entirely.
-Low - Xcode user data committed (Nyxian.xcodeproj/project.xcworkspace/xcuserdata/). Three user-specific .xcuserstate files are tracked, which can cause merge conflicts and contain local UI state.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>emexDE solves a real problem—on-device native iOS development—with a genuinely impressive architecture spanning compilation, linking, signing, and process virtualization. The lack of tests and input validation makes it unsuitable for production use, but as a technical proof-of-concept or learning tool, it demonstrates what&#39;s possible on iOS. Developers comfortable with risk and eager to experiment will find value; teams needing reliability should wait for maturity.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who need to write, compile, and run native iOS code while away from a Mac face a missing toolchain on the device itself. Current solutions require a jail‑broken phone or a constant cloud connection, which breaks workflow continuity and raises security concerns.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>emexDE</code> bundles a full on‑device IDE that supports Swift, Objective‑C, Objective‑C++, C and C++. The core compiler lives in <strong><code>CoreCompiler/</code></strong> (e.g., <code>CCDriver.cpp</code>, <code>CCSwiftCompiler.cpp</code>) and is driven by the mobile‑dev kit in <strong><code>MobileDevelopmentKit/</code></strong> (e.g., <code>MDKCompiler.m</code>, <code>MDKSwiftCompiler.m</code>). UI and runtime support are in <strong><code>Nyxian/</code></strong>, where the Xcode project (<code>Nyxian.xcodeproj</code>) defines the app target and resources (<code>Assets.xcassets</code>). A small set of entry‑point templates (<code>Shared/Templates/Utility/C++/Main.cpp</code> and <code>Shared/Templates/Utility/C/Main.c</code>) illustrate how a user‑supplied program is handed to the compiler pipeline.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins with the iOS app launch defined in <code>Nyxian/main.m</code>. That file creates the UI and eventually calls <code>LiveProcess/main.m</code>, which invokes the <code>LiveContainer</code> layer (<code>LCBootstrap.m</code> → <code>LCMachOUtils.m</code>). The bootstrap loads the user source (e.g., the <code>Main.cpp</code> template) and passes it to the <strong>CoreCompiler</strong> driver (<code>CCDriver.cpp</code>).</p>
+<p><code>CCDriver</code> parses the source, selects the appropriate language backend (<code>CCSwiftCompiler</code> for Swift, <code>CCCompiler</code> for C/C++), and runs the compilation steps:</p>
+<ol><li><strong>Lexing / AST</strong> – <code>CCASTUnit.cpp</code> builds an abstract syntax tree.</li><li><strong>Dependency scanning</strong> – <code>CCDependencyScanner.cpp</code> discovers headers and modules.</li><li><strong>Code generation</strong> – <code>CCCompiler.cpp</code> produces object files.</li><li><strong>Linking</strong> – <code>CCLinker.cpp</code> creates a Mach‑O binary.</li><li><strong>Signing</strong> – the <code>ZSign</code> utilities (<code>ZSign/Utils.cpp</code>, <code>ZSign/archo.cpp</code>) apply the developer certificate.</li></ol>
+<p>The resulting binary is handed back to <code>LiveContainer</code> which loads it into the sandboxed process via <code>LCUtils.m</code>. All file system writes occur under the app’s container; no external network calls are evident in the static analysis.</p>
+<p>The import graph reports <strong>0 internal modules and 0 edges</strong>, indicating that the repository does not use a module system (e.g., Swift Packages) and that static analysis could not resolve cross‑module imports. Consequently, the call‑graph is limited to the files listed above.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (preserve submodules)
+git clone --recursive https://github.com/moses-y/emexDE
+cd emexDE
+
+# Build the app (the Makefile wraps xcodebuild)
+make        # invokes xcodebuild using Nyxian.xcodeproj
+
+# Deploy to a device (requires a signing certificate)
+# The README points to an Installation Guide; the repo itself contains
+# the entitlements file LiveProcess/LiveProcess.entitlements.</code></pre>
+<p>No environment variables or external package managers are present. The <code>Makefile</code> is the sole build orchestrator; any missing steps must be added by the integrator.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A field engineer can open the app, paste a Swift snippet into the built‑in editor, tap “Run”, and the workflow above compiles the code on the device, links it, signs it with the installed certificate, and launches it in a sandboxed container. This enables rapid prototyping of utilities without a Mac.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Add a test suite</strong> – 127 source files but no test files.</li><li><strong>MEDIUM – Least‑privilege GITHUB_TOKEN</strong> – <code>.github/workflows/build.yml</code> lacks explicit <code>permissions:</code>.</li><li><strong>MEDIUM – Large binaries in repo</strong> – <code>Shared/swift.zip</code> (16.9 MiB) and OpenSSL frameworks exceed 5 MiB, inflating clone size.</li><li><strong>HIGH – Deep nesting</strong> – Files such as <code>Nyxian/LindChain/OpenSSL.xcframework/.../rc4.h</code> have indentation depth 9, making control flow hard to follow.</li></ul>
+<p>No structural red flags beyond the items above were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>emexDE</code> delivers a functional on‑device iOS IDE with a complete compilation pipeline, but the codebase suffers from poor test coverage, excessive binary bloat, and maintainability issues (deeply nested headers). It is suitable for teams that need immediate on‑device development and are prepared to invest in improving test infrastructure and refactoring high‑complexity areas.</p>
             </div>
 
             
@@ -95,16 +119,16 @@ Low - Xcode user data committed (Nyxian.xcodeproj/project.xcworkspace/xcuserdata
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,989<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>63</b></li><li><span>JSON</span><i style="width:41%"></i><b>26</b></li><li><span>C++</span><i style="width:17%"></i><b>11</b></li><li><span>C</span><i style="width:11%"></i><b>7</b></li><li><span>Markdown</span><i style="width:5%"></i><b>3</b></li><li><span>Swift</span><i style="width:5%"></i><b>3</b></li>
+                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>1593</b></li><li><span>C</span><i style="width:3%"></i><b>55</b></li><li><span>Swift</span><i style="width:3%"></i><b>51</b></li><li><span>JSON</span><i style="width:2%"></i><b>27</b></li><li><span>C++</span><i style="width:1%"></i><b>21</b></li><li><span>Markdown</span><i style="width:0%"></i><b>4</b></li>
                         </ul>
                         
                     </div>
@@ -117,12 +141,6 @@ Low - Xcode user data committed (Nyxian.xcodeproj/project.xcworkspace/xcuserdata
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-low">Low</span><span>No README - onboarding and intent are undocumented <code>root</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1324508118">Open in Code Brain &rarr;</a>
@@ -130,7 +148,7 @@ Low - Xcode user data committed (Nyxian.xcodeproj/project.xcworkspace/xcuserdata
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a test suite; this repository has none</span><span class="chip">high</span><span class="rankchip">127 occurrences</span></div><div class="ev">127 source files, no test files</div><div class="ev">Any change ships with no signal that existing behaviour still holds, so a regression reaches production undetected.</div><div class="rec"><b>Fix:</b> Add one test per public entry point, then a CI step that runs them.</div></div><div class="finding medium"><div class="head"><span class="ttl">Declare least-privilege permissions for GITHUB_TOKEN</span><span class="chip">medium</span></div><div class="loc">.github/workflows/build.yml</div><div class="ev">1 workflow(s) declare no permissions</div><div class="ev">With no declaration the token inherits the repository default, so any injected step can push commits or mint releases from inside your own CI.</div><div class="rec"><b>Fix:</b> Add permissions: contents: read at the top of the workflow and widen per job only where needed.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">9 occurrences</span></div><div class="loc">Shared/swift.zip</div><div class="ev">9 blobs over 5MB: swift.zip 16.9MB, OpenSSL 11.7MB, OpenSSL 8.6MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

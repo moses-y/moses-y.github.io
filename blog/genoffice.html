@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 5, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#from-the-repo-root">From the repo root</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most office suites treat AI as a chat sidebar bolted onto a traditional document editor. GenOffice instead rebuilds the editing engine around AI as a first-class workflow: generating, revising, and formatting content directly in the document. The core pain point is that existing open-source office tools either corrupt .docx files on save or produce layout that breaks in Microsoft Word.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>GenOffice is an Electron-based office suite with four editors (apps/docs, apps/sheets, apps/slides, apps/pdf) and a shell (apps/shell). The flagship is apps/docs, a .docx word processor that preserves the original file byte-for-byte except for dirty paragraphs—only changed content is regenerated via a paragraph patch mechanism. Pagination is handled by a custom engine (pagination.ts, line-metrics.ts) with a test corpus of 18 .docx files comparing baseline layout against LibreOffice and Word.</p><p>The AI layer (apps/docs/src/renderer/ai/) includes a protocol, tools, and skills system for document generation, file operations, and continuation. The editor itself is custom-built with extensions for equations, ink, comments, tracked revisions, and table sizing. The spreadsheet app wraps Univer with an in-house Rust sidecar for xlsx import/export; slides and PDF use custom render engines.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README provides signed installers for macOS (Apple Silicon) and Windows x64. For development, the repo contains apps/docs/package.json and .nvmrc, implying npm/pnpm with a Node version pin. No lockfile is present, so builds are not reproducible from source.</p><h3 class="post-h" id="from-the-repo-root">From the repo root</h3><p>npm install
-npm run dev  # if a dev script exists; not verified in the repo</p><p>The renderer entry point is apps/docs/src/renderer/App.tsx; the Electron main process starts at apps/docs/src/main/index.ts. No environment variables or API keys are documented—the AI transport (transport.ts) may require a backend endpoint, but configuration details are absent from the README.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A legal firm handling contracts in .docx needs to edit documents without breaking formatting for downstream review in Word. GenOffice&#39;s byte-preserving save means only the changed paragraph is rewritten; page breaks, headers, and styles in the rest of the document remain untouched. The AI can then revise a clause in-place and the output stays compatible with Word&#39;s layout engine.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No lockfile: apps/docs/package.json declares dependencies without a lockfile, making builds non-reproducible. CI may still pass but production builds can drift.
-Med - Single-app focus: The repo structure shows 183 files under apps/docs; the other three apps (sheets, slides, pdf, shell) are referenced in the README but absent from this snapshot. Verify those directories exist before committing to the full suite.
-Low - Test depth: 62 test files exist, mostly for docs-specific features (pagination, comments, equations). No tests for the AI transport or the Rust sidecar are visible.
-Low - Font licensing: Bundled fonts (Caladea, Carlito, Liberation) include OFL licenses, which is correct. The CJK subsets (NotoSansCJKsc-Regular-subset.woff2) have no license file in the listing—verify before redistribution.
-Low - CI coverage: .github/workflows/ci.yml exists, but its contents are not visible; assume it runs tests and linting but not cross-platform packaging.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GenOffice is a serious engineering effort, particularly the .docx paragraph-patch save and pagination engine—both are technically difficult problems solved with evident care. The AI integration is architectural rather than bolted on. The main risks are the missing lockfile, unclear multi-app completeness, and the fact that this is a fork with zero stars of its own, so maintenance and community support are unproven. Suitable for teams needing Word-compatible editing with AI workflows; verify the other three apps exist before adopting the full suite.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need native‑style editing of .docx, .xlsx, .pptx and PDF files on macOS/Windows currently juggle separate desktop apps, each with its own file‑format quirks. Switching among them breaks workflows, and integrating AI‑assisted editing requires custom glue code in each product.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>genoffice</code> delivers a single Electron‑based suite (<code>apps/docs</code>, <code>apps/sheets</code>, <code>apps/slides</code>, <code>apps/pdf</code>) that share a common engine layer (see <code>packages/*‑engine</code>). The word processor (<code>apps/docs</code>) preserves the original .docx byte‑stream, only re‑generating dirty paragraphs. The spreadsheet app (<code>apps/sheets</code>) uses the open‑source Univer core plus a Rust side‑car (<code>apps/sheets/native/xlsx-engine/Cargo.toml</code>) for fast import/export. The presentation app (<code>apps/slides</code>) runs an in‑house PPTX engine (<code>packages/pptx-engine/src/index.ts</code>). PDF editing (<code>apps/pdf</code>) builds on <code>pdf.js</code> and <code>pdf-lib</code>. A lightweight shell (<code>apps/shell</code>) hosts the four editors in a tabbed UI.</p>
+<p>Key files:</p>
+<ul><li><code>apps/docs/src/main/index.ts</code> – Electron main process bootstrap.</li><li><code>apps/docs/src/renderer/App.tsx</code> – React root for the word‑processor UI.</li><li><code>packages/pptx-engine/src/index.ts</code> – Hub for PPTX parsing/rendering (56 inbound imports).</li><li><code>apps/sheets/native/xlsx-engine/Cargo.toml</code> – Rust crate that powers XLSX I/O.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in the Electron main script (<code>apps/docs/src/main/index.ts</code> for Docs, analogous files exist for Sheets, Slides, PDF). The main process creates a BrowserWindow that loads <code>apps/docs/src/renderer/index.html</code>. React mounts <code>App.tsx</code>, which composes the ribbon, editor, and preview components.</p>
+<ul><li><strong>Editor pipeline (Docs)</strong> – <code>apps/docs/src/renderer/editor/convert.ts</code> parses the incoming DOCX model, then hands the document tree to <code>doc-state.ts</code> and <code>doc-style-css.ts</code>. Changes flow back through <code>editor/active-editor.ts</code> → <code>editor/ink.ts</code> → IPC (<code>apps/docs/src/shared/ipc.ts</code>) → the main process for file writes (<code>apps/docs/src/main/index.ts</code>).</li><li><strong>Spreadsheet I/O</strong> – UI actions call <code>apps/sheets/src/gateway/xlsx-gateway.ts</code>, which invokes the Rust side‑car via <code>npm run build</code> of the Cargo crate. The resulting binary is spawned from the Electron main process (<code>apps/sheets/src/main/index.ts</code>).</li><li><strong>Presentation engine</strong> – Most modules import <code>packages/pptx-engine/src/index.ts</code>; this hub re‑exports parsers, renderers, and type definitions. The cycle count (56 inbound, 30 outbound) makes it a blast‑radius hotspot.</li><li><strong>PDF handling</strong> – <code>apps/pdf/src/main/index.ts</code> loads <code>pdf.js</code> in a renderer process and routes annotation commands through <code>apps/pdf/src/renderer</code> components.</li></ul>
+<p>Circular import members (<code>packages/pptx-engine/src/index.ts</code>, <code>apps/docs/src/renderer/editor/extensions.ts</code>, <code>apps/docs/src/renderer/editor/convert.ts</code>) increase coupling; any change risks breakage across the suite. The most connected modules (e.g., <code>packages/pptx-engine/src/index.ts</code>) should be kept stable and minimal.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/genoffice
+cd genoffice
+
+# Install Node dependencies (npm is declared in package.json)
+npm ci
+
+# Build the Rust XLSX engine (required for Sheets)
+cd apps/sheets/native/xlsx-engine
+cargo build --release
+cd ../../../..
+
+# Run a specific app, e.g., Docs
+npm run dev:docs   # defined in apps/docs/package.json (starts Electron)
+
+# To launch the full suite shell
+npm run dev:shell   # starts the tabbed host</code></pre>
+<p><em>No additional environment variables are required; the apps read configuration from their own <code>package.json</code> and bundled assets.</em> If a script name differs, inspect <code>apps/*/package.json</code> for the exact npm command.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A publishing house can replace Microsoft Word and Excel with <code>genoffice</code> to edit contracts while preserving exact layout on save. An AI assistant (see <code>apps/docs/src/renderer/ai/*</code>) can suggest clause rewrites; the changes flow through <code>editor/convert.ts</code> and are written back to the original <code>.docx</code> without breaking existing formatting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – cognitive_load</strong> – Oversized files (e.g., <code>packages/pptx-engine/src/index.ts</code>, <code>apps/slides/src/shared/ipc.ts</code>, <code>apps/docs/src/renderer/editor/extensions.ts</code>) contain &gt;2 600 lines each.</li><li><strong>HIGH – soundness</strong> – Import cycle members (<code>packages/pptx-engine/src/index.ts</code>, <code>apps/docs/src/renderer/editor/extensions.ts</code>, <code>apps/docs/src/renderer/editor/convert.ts</code>).</li><li><strong>MEDIUM – cognitive_load</strong> – Deep nesting (max depth 6) in <code>apps/docs/src/renderer/editor/convert.ts</code> and similar files.</li><li><strong>MEDIUM – cognitive_load</strong> – High branching density (≈ 800 branches) in <code>packages/pptx-engine/src/index.ts</code> and key gateway modules.</li><li><strong>HIGH – clarity</strong> – Hub modules (e.g., <code>packages/pptx-engine/src/index.ts</code>) attract 74 dependent modules, creating a large blast radius.</li></ul>
+<p>Repository hygiene (static audit):</p>
+<ul><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (<code>.github/dependabot.yml</code> missing).</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan to CI (<code>.github/workflows/ci.yml</code> lacks such step).</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on the checkout action to avoid leaking the token.</li></ul>
+<p>All other standard safeguards (tests, CI, license, lockfile) are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>genoffice</code> provides a cohesive, AI‑first desktop office suite with solid test coverage and a clear monorepo layout. The codebase is functional but suffers from large hub modules and import cycles that inflate change risk. Teams comfortable with TypeScript, Electron, and a Rust side‑car will find it extensible; newcomers should prioritize refactoring the identified hotspots before heavy customization.</p>
             </div>
 
             
@@ -96,16 +128,16 @@ Low - CI coverage: .github/workflows/ci.yml exists, but its contents are not vis
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,047<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>102</b></li><li><span>TSX</span><i style="width:24%"></i><b>24</b></li><li><span>Markdown</span><i style="width:6%"></i><b>6</b></li><li><span>YAML</span><i style="width:4%"></i><b>4</b></li><li><span>JSON</span><i style="width:4%"></i><b>4</b></li><li><span>CSS</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>710</b></li><li><span>TSX</span><i style="width:14%"></i><b>101</b></li><li><span>JSON</span><i style="width:9%"></i><b>65</b></li><li><span>Markdown</span><i style="width:4%"></i><b>25</b></li><li><span>CSS</span><i style="width:1%"></i><b>8</b></li><li><span>Rust</span><i style="width:1%"></i><b>7</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>
@@ -151,12 +183,6 @@ Low - CI coverage: .github/workflows/ci.yml exists, but its contents are not vis
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>apps/docs/package.json</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1323748192">Open in Code Brain &rarr;</a>
@@ -164,7 +190,7 @@ Low - CI coverage: .github/workflows/ci.yml exists, but its contents are not vis
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">18 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

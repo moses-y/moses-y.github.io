@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 31, 2026</span>
-                    <span>2 min read</span>
-                    
+                    <span>4 min read</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>screenshot studio</h1>
@@ -80,11 +80,31 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Creating polished product screenshots for documentation, social media, or marketing typically requires either expensive design tools like Figma or Sketch, or clunky browser extensions with watermarks and signup walls. Teams waste time stitching together device frames, backgrounds, and annotations manually.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Screenshot Studio is a browser-based editor that produces production-ready screenshots with device frames, 3D transforms, backgrounds, and markup—entirely client-side. The src/ directory contains the core editor logic, with Zustand managing state across the canvas, timeline, and export pipeline. FFmpeg WASM handles video encoding locally in src/lib/ffmpeg/.</p><p>The tool supports 100+ backgrounds, browser mockups for Safari and Chrome, 3D perspective presets, and video export to MP4, WebM, or GIF at up to 5x resolution. No server round-trips are required for processing—everything runs in the browser via WebCodecs and WebAssembly.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer writing a product launch post can import a screenshot of their app, apply an Arc browser frame, pick a gradient background, add a callout arrow, and export a 2x PNG—all without leaving the browser. The same workflow works for creating animated GIFs of UI interactions for documentation.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - No CI/CD pipeline detected. No .github/ directory or CI config files exist. This means builds, linting, and tests are not automated for contributors or deployments.
-Medium - No test suite visible beyond 1 test file. A project this complex (FFmpeg WASM, canvas rendering, state management) needs integration tests for the export pipeline.
-Medium - No README present at root level. The README excerpt shown is from the forked upstream repo (KartikLabhshetwar/screenshot-studio). This fork has no onboarding documentation.
-Low - The .agents/ and .claude/ directories contain 130+ duplicated skill definition files (SEO, copywriting, animation patterns). These appear to be AI agent training data, not project source code. They inflate the file count significantly and should be separated from the application code.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Screenshot Studio solves a real pain point for developers and content creators who need quick, polished screenshots without tooling overhead. The client-side architecture is technically sound, with sensible state management and hardware-accelerated export. However, the current fork lacks CI, meaningful tests, and a README—making it risky to adopt as-is for production workflows. Worth evaluating for solo use or small teams who can invest in the missing infrastructure.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Designers need a quick way to produce polished screenshots—device frames, gradients, annotations, and short videos—without installing heavyweight tools or dealing with watermarks. Existing desktop apps require downloads, licensing, and manual export steps, slowing iteration for marketing or documentation.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>screenshot-studio</code> is a pure‑browser editor that lets users compose visuals from a library of backgrounds, mock‑ups, and animation presets, then export PNG/JPG, GIF, or MP4. The core UI lives in the <code>components/</code> directory; for example, <code>components/editor/sections/index.ts</code> bundles the editor panels, while <code>components/canvas/html/index.ts</code> draws the live preview onto an HTML canvas. Asset‑heavy resources (e.g., background images) sit under <code>public/</code>. The Next.js app entry (<code>app/</code> with route files such as <code>app/[locale]/for/designers/page.tsx</code>) wires these components into server‑rendered pages.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Startup</strong> – <code>npm run dev</code> launches Next.js (config in <code>next.config.ts</code>). The framework reads the <code>app/</code> folder to create routes; each route renders a page component that imports the editor UI.</li><li><strong>Editor bootstrap</strong> – The page component imports <code>components/editor/sections/index.ts</code>. That file re‑exports a collection of section components, the most connected of which is <code>components/editor/sections/SectionWrapper.tsx</code> (17 inbound imports, instability 0).</li><li><strong>Canvas pipeline</strong> – UI actions dispatch state changes (Zustand stores in <code>lib/store/index.ts</code>, a 1 600‑line file). The updated state flows to <code>components/canvas/html/index.ts</code>, which instantiates <code>components/canvas/ClientCanvas.tsx</code> and the SVG overlay layer (<code>components/canvas/html/SVGAnnotationLayer.tsx</code>).</li><li><strong>Export flow</strong> – When the user clicks “Export”, <code>components/export/index.ts</code> calls into <code>components/image-render/index.ts</code> for raster images or the FFmpeg‑WASM wrapper for video (<code>lib/r2.ts</code>). These modules contain dense branching logic (high branching density reported in <code>lib/r2.ts</code>).</li><li><strong>Blast‑radius hotspots</strong> – <code>SectionWrapper.tsx</code> is a hub; changes here affect 17 other modules, so keep it stable. Oversized files (<code>lib/store/index.ts</code>, <code>SVGAnnotationLayer.tsx</code>, <code>RightSettingsPanel.tsx</code>) and deep nesting (max depth 8 in <code>RightSettingsPanel.tsx</code>) add cognitive load and are prime refactor targets.</li></ol>
+<p>No circular imports were detected, and the import graph spans 257 internal modules with 149 edges, indicating a relatively flat dependency tree aside from the identified hub.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork you will work on
+git clone https://github.com/moses-y/screenshot-studio.git
+cd screenshot-studio
+
+# Install dependencies (npm is declared in package.json)
+npm install
+
+# Start the development server
+npm run dev</code></pre>
+<p><em>Configuration</em>: The repo contains no <code>.env.example</code> or similar files, so no environment variables are required for a local run. <em>Running</em>: The dev server serves the app at <code>http://localhost:3000</code>. The main UI loads from the route <code>app/[locale]/for/designers/page.tsx</code>, which pulls in the editor components described above.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product marketing team can embed the editor in an internal portal, letting copywriters generate device‑framed screenshots of new UI features on the fly. A script could open the page, programmatically set the canvas state via the Zustand store, trigger <code>exportImage()</code> from <code>components/export/index.ts</code>, and retrieve the PNG for inclusion in release notes—all without leaving the browser.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 257 source files, 0 test files.</li><li><strong>High – No CI workflow</strong> – No <code>.github/workflows/*</code> or other build gate.</li><li><strong>High – Missing build validation (vercel.json)</strong> – Deployable artifacts lack automated verification.</li><li><strong>Medium – Dependabot disabled</strong> – Only one <code>package-lock.json</code>; no update bot.</li><li><strong>Medium – Large binaries in repo</strong> – <code>public/mac/mac-asset-7.png</code> (12.9 MB) and related WebP assets exceed 5 MB.</li><li><strong>Low – Missing repo conventions</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>screenshot-studio</code> delivers a functional, zero‑install screenshot editor built on modern React/Next.js tooling, but the codebase suffers from missing automated quality checks, oversized modules, and deep nesting that will hinder large‑scale maintenance. It is suitable for teams that need a quick visual tool and are prepared to add testing and CI infrastructure.</p>
             </div>
 
             
@@ -94,18 +114,18 @@ Low - The .agents/ and .claude/ directories contain 130+ duplicated skill defini
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">707<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>196</b></li><li><span>JSON</span><i style="width:1%"></i><b>2</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>261</b></li><li><span>TSX</span><i style="width:63%"></i><b>165</b></li><li><span>TypeScript</span><i style="width:34%"></i><b>90</b></li><li><span>JSON</span><i style="width:7%"></i><b>17</b></li><li><span>YAML</span><i style="width:0%"></i><b>1</b></li><li><span>CSS</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span><span>Spring</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Express</span><span>Spring</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -148,7 +168,7 @@ Low - The .agents/ and .claude/ directories contain 130+ duplicated skill defini
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>No README - onboarding and intent are undocumented <code>root</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
                     </ul>
                 </div>
 
@@ -158,7 +178,7 @@ Low - The .agents/ and .claude/ directories contain 130+ duplicated skill defini
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:67%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:33%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a test suite; this repository has none</span><span class="chip">high</span><span class="rankchip">257 occurrences</span></div><div class="ev">257 source files, no test files</div><div class="ev">Any change ships with no signal that existing behaviour still holds, so a regression reaches production undetected.</div><div class="rec"><b>Fix:</b> Add one test per public entry point, then a CI step that runs them.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">257 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span></div><div class="loc">vercel.json</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">6 occurrences</span></div><div class="loc">public/mac/mac-asset-7.png</div><div class="ev">6 blobs over 5MB: mac-asset-7.png 12.9MB, loupe.webp 7.5MB, loupe-mono-light.webp 7.5MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><div class="finding low"><div class="head"><span class="ttl">Add the repository convention files this project lacks</span><span class="chip">low</span><span class="rankchip">3 occurrences</span></div><div class="ev">missing .editorconfig, .gitattributes, a formatter config</div><div class="ev">Without them one contributor's editor writes tabs into a Python file, a shell script commits with CRLF and fails in the container, and a notebook diff is unreviewable.</div><div class="rec"><b>Fix:</b> Add .editorconfig, .gitattributes with text=auto eol=lf, and a formatter config.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

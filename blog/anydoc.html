@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Converting documents from various formats to clean Markdown can be a challenging and time-consuming task. Different formats have different structures and requirements, making it difficult to achieve consistent results.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The anydoc repository provides a solution to this problem by offering a fast Rust library that converts documents from various formats (Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF) to clean GitHub-Flavored Markdown. The library includes bindings for Node.js and Python, making it accessible to a wide range of developers. The anydoc library uses a shared document model to parse and render documents, ensuring consistent output across different formats. For example, the to_markdown function in node/README.md and python/README.md demonstrates how to convert a document to Markdown using the library.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using anydoc is in a document processing pipeline, where documents from various sources need to be converted to a standard format for further processing or analysis. For instance, a developer can use the anydoc CLI to convert a batch of documents to Markdown, and then use the resulting Markdown files as input for a machine learning model. The anydoc library can be integrated into a workflow using the npx @firecrawl/anydoc command or by installing it globally with npm install -g @firecrawl/anydoc.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing input validation in node/cli.js and python/anydoc/init.py - node/cli.js and python/anydoc/init.py
- Med - Potential race conditions in src/shared/chain.rs - src/shared/chain.rs
-Low - No clear separation of concerns between src/render/markdown and src/model - src/render/markdown and src/model
-However, the repository appears to be well-maintained, with a comprehensive test suite (tests/ directory) and a clear CI/CD configuration (github/workflows/ci.yml and github/workflows/release.yml).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The anydoc library is a well-designed and well-maintained solution for converting documents to clean Markdown. While there are some potential issues and areas for improvement, the library&#39;s consistent output and ease of use make it a valuable tool for developers working with documents from various formats. The library&#39;s comprehensive test suite and clear CI/CD configuration also contribute to its overall health and reliability.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Office documents are binary containers with inconsistent internal structures. Word, PowerPoint, and Excel files each encode content differently, and converting them to clean Markdown for LLM ingestion usually means running multiple format-specific tools with different output shapes. That fragmentation breaks downstream pipelines.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>anydoc</code> is a Rust library that parses Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, and PDF into a shared document model (<code>src/model/</code>), then renders that model through a single Markdown serializer (<code>src/render/markdown/</code>). The result is consistent output regardless of input format.</p>
+<p>The repo ships three bindings: a Node.js package (<code>node/</code>), a Python package (<code>python/</code>), and a Rust crate (<code>src/</code>). Each binding exposes the same three operations: <code>to_markdown</code>, <code>to_markdown_bytes</code>, and <code>to_document</code>. A CLI (<code>node/cli.js</code>) wraps the Node binding for shell use.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>examples/convert.rs:11</code>, which calls <code>run</code> and reaches 339 functions. The traced path to external I/O is <code>main -&gt; run -&gt; to_document -&gt; parse</code>, ending at <code>cfb::CompoundFile::open</code> for the filesystem call. That is a short path: one entry point, one function, one external effect.</p>
+<p>The format parsers live under <code>src/formats/</code>, one module per format. <code>src/formats/doc/mod.rs</code> is the most connected file: 42 functions, called from 15 files, calling into 23. It defines <code>parse</code>, <code>parse_plc</code>, and <code>parse_clx</code>. The shared XML helpers in <code>src/package/xml.rs</code> (34 functions) serve every format that parses XML, and <code>src/model/link.rs</code> defines <code>is_empty</code>, which is called from 75 places — the widest blast radius in the repo.</p>
+<p>The call graph shows 1,297 internal edges with no circular dependencies. The hub is <code>parse</code>, called from 27 places, and <code>insert</code>, called from 37. Changing either ripples broadly. The <code>node/index.js</code> file (686 lines, 233 branch points) is the largest binding and the hardest to modify safely.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># CLI
+npx @firecrawl/anydoc report.docx
+npx @firecrawl/anydoc slides.pptx -o slides.md
+
+# Node.js
+npm install @firecrawl/anydoc
+import { toMarkdown } from '@firecrawl/anydoc';
+const md = await toMarkdown('report.docx');
+
+# Python
+pip install firecrawl-anydoc
+import anydoc
+md = anydoc.to_markdown("report.docx")
+
+# Rust
+cargo add anydoc
+let md = anydoc::to_markdown("report.docx")?;</code></pre>
+<p>No environment variables or config files are required. The format is auto-detected from content; CSV needs an explicit format argument since it has no signature.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A document processing pipeline that ingests email attachments — mixed <code>.docx</code>, <code>.xlsx</code>, and <code>.pdf</code> files — converts each to Markdown, then chunks and embeds them for retrieval. The single output shape means one chunking and embedding path handles every format.</p>
+<pre data-lang="python"><code>import anydoc
+for path in incoming_files:
+    md = anydoc.to_markdown(path)
+    chunks = chunk_text(md)
+    embed_and_store(chunks)</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 48 findings: 7 high, 41 medium. The high-severity items:</p>
+<ul><li><strong>High - Deep nesting (x33)</strong> - <code>src/formats/doc/lists.rs</code>, <code>src/formats/doc/mod.rs</code>, <code>src/formats/odf/text.rs</code> show max indentation depth of 8. Flatten with early returns.</li><li><strong>High - Duplicated code (x20 blocks across 8 files)</strong> - <code>node/src/document.rs</code> and <code>python/src/document.rs</code> repeat similar logic. Extract shared helpers.</li><li><strong>High - Oversized files (x6)</strong> - <code>node/index.js</code> at 686 lines, <code>tests/gen_fixtures.py</code>, <code>src/formats/doc/mod.rs</code>. Split by responsibility.</li></ul>
+<p>Medium findings include file handles opened without context managers in <code>bench/convert.py</code> and <code>bench/render_truth.py</code>, and broad exception handling in <code>bench/judge.py</code>.</p>
+<p>The CI workflow uses unpinned third-party actions (<code>dtolnay/rust-toolchain@stable</code>), has no Dependabot, no dependency vulnerability scan, and leaves <code>persist-credentials</code> enabled. Fix these before production use.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a well-structured conversion library with a clean architecture: shared model, single renderer, format parsers isolated. The test suite (126 files) and fuzz targets are strong signals. The main risks are the deep nesting in the <code>.doc</code> and ODF parsers and the CI hygiene gaps. Use it if you need consistent Markdown output across many office formats and can tolerate the binding-layer complexity.</p>
             </div>
 
             
@@ -101,7 +139,7 @@ However, the repository appears to be well-maintained, with a comprehensive test
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">246<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>Rust</span><i style="width:100%"></i><b>82</b></li><li><span>Python</span><i style="width:11%"></i><b>9</b></li><li><span>TOML</span><i style="width:7%"></i><b>6</b></li><li><span>Markdown</span><i style="width:7%"></i><b>6</b></li><li><span>JSON</span><i style="width:5%"></i><b>4</b></li><li><span>YAML</span><i style="width:4%"></i><b>3</b></li>
                         </ul>
@@ -141,7 +179,7 @@ However, the repository appears to be well-maintained, with a comprehensive test
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:33%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:33%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span><span class="rankchip">5 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">dtolnay/rust-toolchain@stable, Swatinem/rust-cache@v2, mlugg/setup-zig@v2, PyO3/maturin-action@v1</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">9 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">2 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

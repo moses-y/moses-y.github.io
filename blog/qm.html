@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 1, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The lack of a standardized, multiplayer agent harness for work can lead to complexity and inefficiency in team collaboration, particularly in startups where employees need to work independently and collaboratively.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The qm repository provides a solution to this problem by offering a multiplayer agent harness that allows employees to have their own isolated workspaces while collaborating with the agent in channels, group messages, and projects. The cli folder contains the core functionality, with files like cli/src/cli.ts and cli/src/backends/aws.ts handling the command-line interface and AWS backend, respectively. The deploy folder contains deployment configurations, including Dockerfiles and Terraform scripts.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using qm would be a startup with multiple teams working on different projects. Each team member could have their own qm instance, with personalized configurations and tools, while still being able to collaborate with others through shared channels and projects. For example, a team member could use the qm CLI to deploy a custom internal app, as configured in deploy/admin/Dockerfile, and then share it with others through a Slack channel.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - Possible secrets/credentials committed to the repo - cli/src/secrets.ts, cli/test/docker-secrets.test.ts, cli/test/secrets.test.ts
- Medium - Missing input validation in some API endpoints - cli/src/backends/aws.ts, cli/src/backends/docker.ts
- Low - Some code duplication in test files - cli/test/e2e/.test.ts</p><p>However, the repository appears to be well-maintained, with a good test coverage (57 test files) and a configured CI/CD pipeline using GitHub Actions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The qm repository provides a valuable solution for startups and teams looking for a multiplayer agent harness. While there are some potential issues with secrets management and input validation, the repository is generally well-maintained and well-structured. The use of TypeScript, Docker, and Terraform ensures a high degree of scalability and maintainability. Overall, qm is a good choice for teams that need a flexible and customizable agent harness.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that want a shared AI assistant often end up with a single monolithic bot that cannot keep individual workspaces separate, nor can it scale across Slack, web UI, and custom internal tools. Managing per‑user state, permissions, and extensible “skills” becomes a maintenance burden.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>qm</code> is a portfolio of six loosely‑coupled projects that together provide a <strong>multiplayer agent harness</strong>.</p>
+<ul><li><strong>Core runtime</strong> – <code>src/</code> (≈340 TS files) implements the headless engine, API, orchestration, and wiring (<code>src/wiring.ts</code>, <code>src/types.ts</code>).</li><li><strong>Plugins</strong> – <code>plugins/</code> hosts self‑contained extensions such as the admin UI (<code>plugins/admin/src/index.ts</code>), Slack integration (<code>plugins/auth/src/server.ts</code>), and other optional front‑ends.</li><li><strong>CLI</strong> – <code>cli/src/cli.ts</code> (exposed as <code>cli/bin/qm.ts</code>) validates deployment directories, builds Docker images, and drives infra commands (<code>cli/src/commands/*</code>).</li><li><strong>Deploy scripts</strong> – <code>deploy/</code> and <code>aws/</code> contain Dockerfiles and Terraform snippets for production deployment.</li><li><strong>Skill seeds</strong> – <code>skills‑seed/</code> supplies example skill packages that can be imported into a deployment.</li></ul>
+<p>All projects share the same TypeScript codebase, npm lockfiles, and Docker build pipeline.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>cli/bin/qm.ts</code></strong>, which loads <code>cli/src/cli.ts</code>. The CLI parses sub‑commands (e.g., <code>init</code>, <code>infra</code>, <code>sandbox</code>) and then calls the central wiring layer <code>src/wiring.ts</code>.</p>
+<p><code>src/wiring.ts</code> imports the <strong>hub module</strong> <code>src/types.ts</code> (352 incoming imports, the most connected module). This hub defines shared type definitions and configuration interfaces used across the entire codebase, making any change high‑impact.</p>
+<p>From the wiring layer the flow proceeds to:</p>
+<ol><li><strong>API server</strong> – <code>src/api/server.ts</code> creates a Fastify instance, registers routes, and attaches the orchestrator (<code>src/core/orchestrator.ts</code>).</li><li><strong>Orchestrator</strong> – coordinates a turn by invoking the selected harness (Pi, OpenCode, Claude Code) and interacts with the per‑scope sandbox (<code>src/harness/pi-harness.ts</code>).</li><li><strong>Persistence</strong> – <code>src/persistence/durable-map.ts</code> and the Postgres layer (<code>src/db/*</code>) store session history, memory, and queues.</li></ol>
+<p>Plugins mount onto the API via their own entry points (<code>plugins/admin/src/index.ts</code>, <code>plugins/auth/src/server.ts</code>). They import the same wiring and types, thus sharing the hub’s blast radius.</p>
+<p>The static import graph shows <strong>74 modules in circular dependencies</strong>; the most prominent cycles involve <code>src/types.ts</code>, <code>src/config.ts</code>, and <code>src/auth/capability-token.ts</code>. These cycles increase change risk because a modification may require coordinated updates across multiple files.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and install
+git clone https://github.com/moses-y/qm
+cd qm
+npm ci            # installs root and cli dependencies from package-lock.json
+
+# Inspect the example environment
+cp .env.example .env   # populate required DB and AWS vars per the file
+
+# Validate a deployment directory (example: ./deploy)
+node cli/bin/qm.js check ./deploy
+
+# Build the admin Docker image
+node cli/bin/qm.js infra build admin</code></pre>
+<p>The CLI commands (<code>check</code>, <code>infra</code>, <code>sandbox</code>, etc.) are defined in <code>cli/src/commands/</code>. Docker images are built from the Dockerfiles under <code>aws/</code> and <code>deploy/</code>. No additional build scripts are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A startup can run <code>qm</code> as a service behind a Postgres instance. Each employee logs into the web UI; the core API creates a sandbox image per user, loads the employee’s credentials, and runs scheduled “crons” that pull data from internal databases. Slack messages are processed by the <code>plugins/auth</code> Bolt server, which forwards them to the same core turn loop, guaranteeing identical behavior across channels and the UI.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Import cycles (16 files)</strong> – e.g., <code>src/types.ts</code>, <code>src/config.ts</code>. Break cycles by extracting shared types.</li><li><strong>HIGH – Hub module (<code>src/types.ts</code>)</strong> – 352 dependents; keep it stable, move volatile logic elsewhere.</li><li><strong>HIGH – Oversized files</strong> – <code>src/wiring.ts</code> (1,415 lines). Split by responsibility.</li><li><strong>MEDIUM – High branching density</strong> – <code>src/api/server.ts</code>, <code>src/auth/capability-token.ts</code>. Refactor to strategy tables or smaller functions.</li><li><strong>MEDIUM – Deep nesting</strong> – <code>src/core/orchestrator.ts</code>. Flatten with guard clauses.</li></ul>
+<h4 id="repository-hygiene">Repository Hygiene</h4>
+<ul><li>Tests present (556 files) – CI runs via GitHub Actions (<code>.github/workflows/*</code>).</li><li>Dockerfiles exist for core services.</li><li>LICENSE and lockfiles are committed.</li><li><strong>Committed secrets</strong> detected in <code>cli/src/secrets.ts</code> and related tests – must be removed.</li></ul>
+<h4 id="code-health-audit-findings">Code‑Health Audit Findings</h4>
+<ul><li><strong>MEDIUM</strong> – Least‑privilege <code>GITHUB_TOKEN</code> not declared (<code>.github/workflows/cicd.yml</code>).</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate configuration.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – Docker images run as root (<code>aws/microvm-agent/Dockerfile</code>).</li><li><strong>LOW</strong> – Missing <code>timeout-minutes</code> on workflow jobs.</li></ul>
+<p>Apply the fixes as described in each finding; they are the only recommended changes.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>qm</code> delivers a modular, multi‑user AI assistant platform with clear separation of core, plugins, and deployment artifacts. Its strong test coverage and CI are positives, but the codebase suffers from a large hub module, import cycles, and several security‑related hygiene issues that should be addressed before production use. Engineers comfortable refactoring TypeScript and managing containerized deployments will find it a solid foundation for building collaborative AI tools.</p>
             </div>
 
             
@@ -100,11 +136,11 @@
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,264<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>91</b></li><li><span>Markdown</span><i style="width:35%"></i><b>32</b></li><li><span>JSON</span><i style="width:19%"></i><b>17</b></li><li><span>TOML</span><i style="width:15%"></i><b>14</b></li><li><span>YAML</span><i style="width:12%"></i><b>11</b></li><li><span>Terraform</span><i style="width:4%"></i><b>4</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>1027</b></li><li><span>Markdown</span><i style="width:11%"></i><b>118</b></li><li><span>JSON</span><i style="width:4%"></i><b>40</b></li><li><span>TOML</span><i style="width:1%"></i><b>14</b></li><li><span>YAML</span><i style="width:1%"></i><b>11</b></li><li><span>Shell</span><i style="width:1%"></i><b>8</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span><span>Kubernetes</span><span>Terraform</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>Kubernetes</span><span>Terraform</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -170,7 +206,7 @@
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>cli/src/secrets.ts, cli/test/docker-secrets.test.ts, cli/test/secrets.test.ts</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>cli/src/secrets.ts, cli/test/docker-secrets.test.ts, cli/test/secrets.test.ts</code></span></li>
                     </ul>
                 </div>
 
@@ -180,7 +216,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">4</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:25%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Declare least-privilege permissions for GITHUB_TOKEN</span><span class="chip">medium</span></div><div class="loc">.github/workflows/cicd.yml</div><div class="ev">1 workflow(s) declare no permissions</div><div class="ev">With no declaration the token inherits the repository default, so any injected step can push commits or mint releases from inside your own CI.</div><div class="rec"><b>Fix:</b> Add permissions: contents: read at the top of the workflow and widen per job only where needed.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">7 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a non-root USER to the image</span><span class="chip">medium</span></div><div class="loc">aws/microvm-agent/Dockerfile</div><div class="ev">CMD or ENTRYPOINT with no USER directive</div><div class="ev">A process running as root in the container is root against every mounted volume, and it turns any container escape or writable-mount mistake from a contained problem into a host one.</div><div class="rec"><b>Fix:</b> Create an unprivileged user, chown what it needs, and end the Dockerfile with USER.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/cicd.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

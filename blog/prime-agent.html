@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Prime Agent solves the pain point of managing complex, long-running tasks and coding workflows by providing a self-improving Recursive Language Model (RLM) agent. This agent treats context as variables and tools like recursive subagents as function calls, allowing for more efficient and programmatic management of tasks.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The Prime Agent repository contains two main packages: agent and ai. The agent package handles the core functionality of the agent, including the agent-loop.ts and proxy.ts files, which manage the agent&#39;s lifecycle and interactions. The ai package provides the intelligence and functionality for the agent, including the mcp.ts and oauth.ts files, which handle model control and authentication. The packages/ai/src/utils directory contains various utility functions, such as diagnostics.ts and event-stream.ts, which aid in the agent&#39;s operation.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using Prime Agent is in managing a complex software development project. The agent can be used to automate tasks, such as building and testing code, and can be integrated with other tools, such as version control systems. For example, the prime-agent command can be used to start the agent and execute a series of tasks, such as running tests and building binaries.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing input validation in packages/ai/src/utils/oauth/index.ts - packages/ai/src/utils/oauth/index.ts
- Medium - Potential race conditions in packages/agent/src/agent-loop.ts - packages/agent/src/agent-loop.ts
-High - No clear separation of concerns between packages/ai/src/mcp.ts and packages/ai/src/providers - packages/ai/src/mcp.ts and packages/ai/src/providers
-However, the repository appears to be well-maintained, with a clear directory structure, adequate testing (87 test files), and a configured CI/CD pipeline (GitHub Actions).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Prime Agent is a powerful tool for managing complex tasks and coding workflows. While it has some potential issues, such as missing input validation and potential race conditions, it is well-maintained and has a clear directory structure. It is suitable for use in large-scale software development projects, but may require additional configuration and customization for smaller projects or solo developers.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Long-running autonomous agents lose context, stall on errors, and can't adapt their own behavior. Most agent frameworks treat every session as a fresh start, forcing repeated setup and manual supervision. Prime Agent targets that gap with durable state and self-modifying behavior.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Prime Agent is a TypeScript monorepo (910 TS files) implementing a self-improving agent built on two abstractions: Recursive Language Models (RLM) that treat context as variables, and a Continual Harness storing memories and skill definitions as durable state. The <code>packages/agent/</code> directory holds the core loop (<code>agent-loop.ts</code>), while <code>packages/ai/</code> provides provider adapters for Anthropic, OpenAI, Google, Bedrock, and Mistral.</p>
+<p>The <code>packages/coding-agent/</code> package is the production surface. It implements interactive and daemon modes, session management, and a <code>rlm(...)</code> subagent primitive. The <code>/refine</code> command reviews trajectories and applies evidence-backed updates to harness state, with rollback support via recorded snapshots. Skills are importable Python packages.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>packages/agent/src/index.ts</code>, which exports the agent loop. The <code>packages/ai/src/cli.ts</code> is the CLI entry point. Control flows through <code>packages/coding-agent/src/core/session-manager.ts</code>, which 91 modules import—the widest blast radius in the repo. It manages session lifecycle and routes to <code>agent-session.ts</code> (36 importers, in a circular dependency).</p>
+<p>The import graph shows 938 internal modules with 2,856 edges and 22 modules in cycles. Key hubs: <code>theme/theme.ts</code> (121 importers), <code>packages/ai/src/types.ts</code> (92 importers, in a cycle), and <code>session-manager.ts</code> (91 importers). The cycles in <code>types.ts</code> and <code>agent-session.ts</code> mean changing shared type definitions can trigger cascading rebuilds across the monorepo.</p>
+<p>Provider calls leave the process through <code>packages/ai/src/providers/</code> adapters, which route to external APIs. The <code>packages/ai/src/mcp/</code> directory handles MCP tool integration and OAuth flows.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/prime-agent
+cd prime-agent
+npm install
+npm run build</code></pre>
+<p>Configuration lives in <code>packages/coding-agent/src/core/model-registry.ts</code> for provider setup. API keys go through environment variables or the <code>/login</code> command at first launch. Run the agent from a project directory:</p>
+<pre data-lang="bash"><code>cd /path/to/project
+prime-agent</code></pre>
+<p>The daemon mode (<code>packages/coding-agent/src/modes/daemon/</code>) keeps sessions alive across terminal disconnects.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer runs Prime Agent in a long-lived research session. The agent maintains a persistent IPython kernel, spawns <code>rlm(...)</code> subagents for parallel file analysis, and uses <code>/refine</code> to update its own skill definitions based on what worked. A background daemon session continues overnight and the developer reattaches the next morning.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 529 findings (164 high, 362 medium, 3 low) across 5 kinds:</p>
+<ul><li><strong>High - Oversized files</strong> - <code>session-manager.ts</code> (1,847 lines), <code>theme.ts</code>, <code>model-registry.ts</code>. Changes ripple across the 91+ modules that import them.</li><li><strong>High - Deep nesting</strong> - <code>session-manager.ts</code>, <code>auth-storage.ts</code> hit indentation depth 8; hard to follow control flow.</li><li><strong>High - Import cycles</strong> - <code>packages/ai/src/types.ts</code>, <code>daemon-protocol.ts</code>, <code>agent-session-runtime.ts</code> participate in circular dependencies.</li><li><strong>High - Hub modules</strong> - <code>theme.ts</code> (121 importers), <code>types.ts</code> (92), <code>session-manager.ts</code> (91). Churn here is high-blast-radius.</li><li><strong>Medium - Branching density</strong> - <code>models.ts</code> has 31 branch points over 88 lines.</li></ul>
+<p>CI hygiene findings: no dependency vulnerability scan in workflows, <code>persist-credentials</code> not disabled on checkout, and one workflow lacks job timeouts.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Solid architecture for durable, self-improving agents with good provider coverage and 493 test files. The hub modules and cycles will make large refactors expensive. Suitable for teams building long-running autonomous coding agents who can absorb the maintenance cost of the core session code.</p>
             </div>
 
             
@@ -101,9 +123,9 @@ However, the repository appears to be well-maintained, with a clear directory st
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,133<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>144</b></li><li><span>Markdown</span><i style="width:20%"></i><b>29</b></li><li><span>JSON</span><i style="width:6%"></i><b>8</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>910</b></li><li><span>Markdown</span><i style="width:11%"></i><b>97</b></li><li><span>JSON</span><i style="width:3%"></i><b>28</b></li><li><span>Python</span><i style="width:3%"></i><b>23</b></li><li><span>TOML</span><i style="width:2%"></i><b>14</b></li><li><span>Shell</span><i style="width:1%"></i><b>8</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>
@@ -160,7 +182,7 @@ However, the repository appears to be well-maintained, with a clear directory st
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/build-binaries.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
