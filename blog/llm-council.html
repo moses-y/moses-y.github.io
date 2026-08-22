@@ -80,38 +80,26 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#backend-fastapi-on-default-port-8000">Backend (FastAPI) on default port 8000</a><a href="#frontend-vite-dev-server-on-port-5173">Frontend (Vite dev server) on port 5173</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>When evaluating multiple large‑language‑model (LLM) providers, developers must manually query each API, compare outputs, and synthesize a final answer. This repetitive workflow is error‑prone and slows down rapid prototyping or research that requires side‑by‑side model comparison.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>llm-council implements a lightweight web UI that orchestrates a “council” of LLMs via the OpenRouter gateway. The backend (backend/main.py) runs a FastAPI server that:
-Sends the user prompt to every model listed in backend/config.py (Stage 1).  
-Feeds each model the other models’ responses for anonymous ranking (Stage 2).  
-Passes the ranked set to a designated chairman model for a consolidated answer (Stage 3).</p><p>The frontend (frontend/src/App.jsx and supporting components under frontend/src/components/) displays each stage in separate tabs, letting users inspect raw replies, review rankings, and view the final synthesized response.</p><p>Key files:
-backend/council.py – core orchestration logic, async calls to OpenRouter via httpx.  
-backend/openrouter.py – thin wrapper around the OpenRouter HTTP API.  
-frontend/src/api.js – React‑side helper that calls /api/query on the FastAPI server.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install Python dependencies with uv (requires uv &gt;= 0.4)
-uv sync                     # reads pyproject.toml, creates .venv
-Install frontend dependencies
-cd frontend
-npm install                 # uses package.json
-cd ..
-Provide OpenRouter credentials
-echo &quot;OPENROUTERAPIKEY=sk-or-…&quot; &gt; .env
-(Optional) Adjust the council composition
-Edit backend/config.py → COUNCILMODELS / CHAIRMANMODEL
-Start both services (the repo supplies a convenience script)
-./start.sh                 # runs backend with uv and frontend with npm run dev</p><p>If start.sh is unavailable or you prefer manual control:</p><h3 class="post-h" id="backend-fastapi-on-default-port-8000">Backend (FastAPI) on default port 8000</h3><p>uv run python -m backend.main</p><h3 class="post-h" id="frontend-vite-dev-server-on-port-5173">Frontend (Vite dev server) on port 5173</h3><p>cd frontend
-npm run dev</p><p>Open http://localhost:5173 in a browser to interact with the council UI.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can embed this tool in a research notebook to benchmark new prompts across OpenAI, Anthropic, Google, and other providers. After a single click, the UI returns per‑model answers, peer‑review rankings, and a final aggregated response, reducing the manual copy‑paste cycle and providing a reproducible audit trail stored in data/conversations/ (JSON files).</p><p>Example: programmatically fetch the final answer for downstream processing
-import requests, json
-resp = requests.post(
-    &quot;http://localhost:8000/api/query&quot;,
-    json={&quot;prompt&quot;: &quot;Explain transformer attention in 2 sentences&quot;}
-)
-final = resp.json()[&quot;final_answer&quot;]
-print(final)</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No automated tests – repository lacks any tests/ folder or pytest configuration; core paths (backend/council.py, backend/openrouter.py) are unverified.  
-Med – No CI/CD pipeline – no .github/workflows/ or similar; changes are not gated by builds or lint checks.  
-Med – Missing license – root contains no LICENSE; downstream users have unclear redistribution rights.  
-Low – Secrets handling – API key is read from a plain‑text .env file; the repo does not enforce .env exclusion beyond .gitignore, but accidental commit is possible.  
-Low – Minimal error handling – backend/openrouter.py forwards raw HTTP responses; network failures or non‑2xx codes are not wrapped in custom exceptions, risking uncaught crashes.  
-Low – Documentation gaps – README covers basic setup but omits details on required Python version, uv version, or how to run the backend in production (e.g., uvicorn command).</p><p>Overall code organization is clear, with separation between API wrapper, council orchestration, and React UI. Lint configuration (frontend/eslint.config.js) exists, but no corresponding Python linting (e.g., flake8) is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>llm-council delivers a functional prototype for multi‑LLM comparison with a simple FastAPI + React stack, suitable for quick experiments or internal demos. The lack of tests, CI, and a proper license limits its suitability for production or commercial adoption without additional engineering effort. Teams that need a sandbox for model side‑by‑side evaluation will find it useful; larger organizations should treat it as a reference implementation and extend it with proper testing, security reviews, and deployment tooling.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Many professionals struggle to evaluate and synthesize responses from multiple Large Language Model providers for complex queries. Typically, users rely on a single model or manually copy-prompt several models, losing the benefits of comparative analysis, built-in review cycles, and ranked consensus building that a structured council provides.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This repository implements a "LLM Council" workflow as a local web application. The core logic resides in <code>backend/council.py</code>, which orchestrates a three-stage process: <strong>Stage 1 (<code>stage1_collect_responses</code>)</strong> dispatches a user query to all configured models via <code>backend/openrouter.py</code> using the <code>query_models_parallel</code> function, collecting individual responses. <strong>Stage 2 (<code>stage2_collect_rankings</code>)</strong> anonymizes these responses and asks each model to rank the others for accuracy and insight, utilizing <code>parse_ranking_from_text</code> to process the output. <strong>Stage 3 (<code>stage3_synthesize_final</code>)</strong> has a designated Chairman model compile the ranked inputs into a single final answer. The frontend, built with React and Vite in <code>frontend/src/</code>, presents these stages in a tabbed interface, allowing users to inspect individual model outputs and the final synthesized result.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <code>send_message</code> entry point in <code>backend/main.py:83</code>, which reaches 16 functions and is called by nothing else in the repository. The call graph shows <code>send_message</code> triggers <code>run_full_council</code>, which sequentially calls <code>stage1_collect_responses</code>, <code>stage2_collect_rankings</code>, <code>calculate_aggregate_rankings</code>, and <code>stage3_synthesize_final</code>. Data flows through <code>backend/storage.py</code>, which defines <code>ensure_data_dir</code> and manages JSON file persistence in <code>data/conversations/</code>. The system makes one outbound network call via the path <code>send_message -&gt; generate_conversation_title -&gt; query_model [network via client.post]</code> to OpenRouter. <code>backend/main.py</code> also defines the FastAPI routes and data models (<code>CreateConversationRequest</code>, <code>SendMessageRequest</code>), while <code>backend/openrouter.py</code> handles the specific HTTP communication with the API.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<ul><li>Install backend dependencies: <code>uv sync</code></li><li>Install frontend dependencies: <code>cd frontend &amp;&amp; npm install &amp;&amp; cd ..</code></li></ul>
+<p><strong>Configuration:</strong></p>
+<ul><li>Create a <code>.env</code> file in the project root containing <code>OPENROUTER_API_KEY=sk-or-v1-...</code>.</li><li>Optionally edit <code>backend/config.py</code> to modify <code>COUNCIL_MODELS</code> or <code>CHAIRMAN_MODEL</code>.</li></ul>
+<p><strong>Running it:</strong></p>
+<ul><li><strong>Option 1:</strong> Run <code>./start.sh</code>.</li><li><strong>Option 2:</strong> Start the backend in one terminal: <code>uv run python -m backend.main</code>. Start the frontend in another: <code>cd frontend &amp;&amp; npm run dev</code>.</li><li>Open <a href="http://localhost:5173" rel="noopener">http://localhost:5173</a> in a browser.</li></ul>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A user submits a complex research question, such as "Compare the architectural differences between React Server Components and traditional Node.js endpoints for real-time data." The LLM Council dispatches this to four models simultaneously. The user sees four distinct opinions side-by-side. The models then review each other's work anonymously, ranking accuracy. Finally, the Chairman model synthesizes the top-ranked insights into a cohesive answer, which the user can accept or iterate upon.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[HIGH]</strong> Add a LICENSE; redistribution rights are undefined — evidence: no licence file at the repository root. With no licence the default is all rights reserved, so this code cannot legally be reused.</li><li><strong>[HIGH]</strong> Add a test suite; this repository has none — evidence: 17 source files, no test files. Any change ships with no signal that existing behaviour still holds.</li><li><strong>[HIGH]</strong> Add a workflow that builds and tests this repository — evidence: 17 source files, no CI configuration. Every change merges with nobody having run the build once.</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate — evidence: 2 manifest(s), no update bot configured. Without a bot a published advisory sits unpatched until someone audits by hand.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a functional, educational prototype that successfully demonstrates a multi-LLM ranking and synthesis workflow. The code is clean and the three-stage council pattern is clearly implemented. However, the absence of a license, tests, and CI makes it unsuitable for production use without significant guardrails. It is best suited for experimentation, evaluation, or as a reference architecture for building localized LLM orchestration tools.</p>
             </div>
 
             
