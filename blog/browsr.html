@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 31, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>File exploration in the terminal can be cumbersome, with limited support for various filesystems and a lack of user-friendly interfaces. This can lead to decreased productivity and increased frustration for developers and users alike.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The browsr repository provides a pleasant file explorer in the terminal, supporting all filesystems. The browsr application, defined in browsr/main.py and browsr/cli.py, allows users to navigate through directories and peek at files with syntax highlighting, formatting, and rendering capabilities. The docs folder contains documentation, including screenshots and a usage guide, while the tests folder contains 18 test files to ensure the application&#39;s functionality.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using browsr would be to quickly navigate through a large project directory, viewing code files with syntax highlighting and rendering images. For example, running browsr in the terminal and using the cli.py interface to navigate to a specific directory, then using the code_browser.py widget to view a code file.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing lockfile for dependencies - pyproject.toml: This could lead to non-reproducible builds and potential security vulnerabilities.
- Low - Limited input validation - browsr/cli.py: This could lead to potential security issues or crashes if invalid input is provided.
-The repository appears to be well-maintained, with a CI/CD pipeline configured using GitHub Actions and a significant number of tests present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The browsr repository provides a useful and user-friendly file explorer for the terminal, with support for various filesystems and a pleasant interface. While there are some potential issues with dependency management and input validation, the repository appears to be well-maintained and functional. Developers and users looking for a convenient and efficient way to explore files in the terminal may find browsr to be a suitable solution.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>Technical Briefing: browsr</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>browsr is a terminal-based file explorer (TUI) that supports local and remote filesystems including GitHub, SSH, AWS S3, GCS, and Azure Blob Storage. It enables keyboard/mouse-driven navigation with syntax highlighting, JSON formatting, image rendering, and data table conversion. The codebase contains 64 files (31 Python, 12 YAML, 4 Markdown) with a Python-centric stack built on Textual.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>browsr functions as a cross-platform filesystem navigator. Execution starts at <code>browsr/cli.py:69</code>, which mounts the <code>Browsr</code> screen through <code>TextualAppContext</code> (entry point called from 1 place). The core workflow routes through <code>browsr/browsr.py</code> (<code>mount_screen</code>, <code>action_download_file</code>, <code>action_copy_file_path</code>) and <code>browsr/widgets/windows.py</code> (38 functions, 9 classes, handles file I/O). File operations read/write via <code>browsr/utils.py</code>, which also makes one outbound network call (likely GitHub API). The widget graph shows <code>browsr/widgets/code_browser</code> as a high-instability hub (Ca 1, Ce 10, instability 0.91) — many imports, few importers — suggesting ripple effects when that module changes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution flows: <code>cli.py</code> → <code>TextualAppContext</code> → <code>Browsr</code> mount → widget composition (<code>code_browser</code>, <code>windows</code>, <code>files</code>). Key hubs:</p>
+<ul><li><code>browsr/base.py</code> — 7 callers, defines <code>TextualAppContext</code>, <code>SortedBindingsScreen</code></li><li><code>browsr/utils.py</code> — 4 callers, reads/writes files, makes network call (<code>_open_pdf_as_image</code>, <code>open_image</code>, <code>get_file_info</code>)</li><li><code>browsr/widgets/windows.py</code> — 4 callers, file-to-string/image/json conversions</li><li><code>browsr/widgets/code_browser.py</code> — 3 callers, <code>datatable_window</code>, <code>static_window</code>, <code>compose</code>, <code>bind_keys</code></li></ul>
+<p>A single repeated 6-line block exists in <code>browsr/browsr.py</code> and <code>browsr/screens/code_browser.py</code> (duplicated logic). <code>browsr/utils.py</code> opens files without a context manager — <code>open(...)</code> not wrapped in <code>with</code> — handle may leak on error.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="shell"><code>pipx install "browsr[all]"   # includes remote extras (GitHub, S3, etc.)
+# or: pipx install browsr       # minimal install</code></pre>
+<p><strong>Configuration:</strong> No explicit config file in repo. Remote filesystem access (GitHub, S3, etc.) requires the corresponding extra dependency declared in <code>pyproject.toml</code>. No environment variables or keys are documented in the scanned files.</p>
+<p><strong>Running it:</strong></p>
+<pre data-lang="shell"><code>browsr [path]
+# or via module: python -m browsr [path]</code></pre>
+<p>Entry point: <code>browsr/cli.py:69</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A user launches <code>browsr</code> from a terminal to navigate a remote GitHub repository or local directory tree. Pressing <code>o</code> opens a file; <code>Ctrl+D</code> downloads it. The <code>code_browser</code> widget renders syntax-highlighted source; <code>windows.py</code> manages split panes and file previews. When a PDF is encountered, <code>utils._open_pdf_as_image</code> triggers the network-dependent image conversion.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (4 findings, 0 high / 4 medium / 0 low):</p>
+<ul><li><strong>[MEDIUM/resource_safety]</strong> File opened without context manager — <code>browsr/utils.py</code> — <code>open(...)</code> not wrapped in <code>with</code>; fix: use <code>with open(...) as f:</code>.</li><li><strong>[MEDIUM/cognitive_load]</strong> Deep nesting x2 — <code>browsr/cli.py</code>, <code>.releaserc.js</code> — max indentation depth 6; fix: flatten with early returns/guard clauses.</li><li><strong>[MEDIUM/clarity]</strong> Duplicated code blocks — <code>browsr/browsr.py</code>, <code>browsr/screens/code_browser.py</code> — 2 repeated 6-line blocks; fix: extract shared helper.</li><li><strong>[MEDIUM/clarity]</strong> 3 CI findings from the hygiene audit (separate from the code analysis):</li><li><strong>[HIGH]</strong> Pin third-party GitHub Actions to commit SHAs — <code>.github/workflows</code> — <code>@v1</code> pins can shift; breakage/leak risk.</li><li><strong>[HIGH]</strong> <code>continue-on-error</code> on correctness-gating steps — <code>.github/workflows/lint.yaml:14</code> — failing tests report green check.</li><li><strong>[MEDIUM]</strong> Declare least-privilege <code>GITHUB_TOKEN</code> permissions — <code>.github/workflows/lint.yaml</code> — no permissions declared; inherited default allows push/release actions.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>browsr is a functional TUI file explorer with solid remote-filesystem support and a modular widget architecture. The codebase is manageable at 64 files but carries measurable technical debt: duplicated logic, unguarded file handles, and CI vulnerabilities from unpinned Actions and permissive token defaults. Teams needing a terminal file explorer with remote support can adopt it today, but should pin Action dependencies and address the file-handle leak before production use.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 28, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#overview-of-flashkda">Overview of FlashKDA</a><a href="#what-flashkda-does">What FlashKDA Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="overview-of-flashkda">Overview of FlashKDA</h3><p>FlashKDA is a high-performance Kimi Delta Attention kernel built on top of CUTLASS, providing an efficient solution for attention mechanisms in deep learning models. The repository contains 29 files, with a mix of Python, Shell, Markdown, YAML, C++, and C/C++ Header files.</p><h3 class="post-h" id="what-flashkda-does">What FlashKDA Does</h3><p>FlashKDA provides a high-performance implementation of the Kimi Delta Attention mechanism, which can be used as a backend for flash-linear-attention. The flashkda.fwd function is the core of the implementation, taking in query, key, value, gate, and other parameters to compute the attention output. The repository includes tests, benchmarks, and documentation to facilitate usage and development.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using FlashKDA is in natural language processing tasks, such as machine translation or question answering, where attention mechanisms play a crucial role. For example, the flashkda.fwd function can be used in a PyTorch model to compute attention outputs, as shown in the tests/testfwd.py file.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) — No CI/CD pipeline detected, which may lead to issues with automated testing and deployment — .github/ or CI config files are missing.
- Low (Bugs) — The flashkda.fwd function has a restrictive requirement of K = V = 128, which may limit its applicability to certain use cases — flash_kda/init.py.
-The repository appears to be well-structured, with clear documentation and tests present, which suggests a good level of code hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FlashKDA provides a high-performance implementation of the Kimi Delta Attention mechanism, making it a suitable choice for applications requiring efficient attention computations. However, the lack of a CI/CD pipeline may introduce risks in terms of automated testing and deployment. Overall, FlashKDA is a well-structured and documented repository that can be a valuable resource for developers working with attention mechanisms.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>FlashKDA addresses the performance gap in attention mechanisms for sequence modeling, specifically implementing <strong>Kimi Delta Attention (KDA)</strong> — a variant that combines linear attention with gated recurrent state updates. Standard PyTorch implementations of such attention patterns are too slow for production use, and existing Triton-based implementations in <code>flash-linear-attention</code> leave performance on the table. FlashKDA delivers CUDA kernels that run KDA at hardware-limited speed on NVIDIA GPUs with SM90+ architecture.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>FlashKDA is a CUDA extension for PyTorch that implements high-performance KDA kernels. The core logic lives in <code>csrc/flash_kda.cpp</code> (the C++ binding layer) and <code>csrc/smxx/fwd_kernel1.cuh</code>/<code>fwd_kernel2.cuh</code> (the actual CUDA kernels). The Python entry point is <code>flash_kda/__init__.py</code>, which exposes a single <code>fwd</code> function matching the <code>chunk_kda</code> API from <code>flash-linear-attention</code>.</p>
+<p>The repo includes a test suite (<code>tests/</code>) that verifies correctness against both a torch reference (<code>tests/torch_ref.py</code>) and the <code>flash-linear-attention</code> library, plus benchmark scripts (<code>benchmarks/</code>) that measure performance and generate comparison tables. The <code>setup.py</code> handles compilation, with CUDA architecture detection defaulting to the current device.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>benchmarks/bench_fwd.py:145</code>, which calls <code>run_bench</code> → <code>run_case</code> → <code>bench_fn</code> — this is the only path that leaves the process (via <code>subprocess.run</code>). The benchmark harness runs the kernel, parses output, and generates markdown comparison tables.</p>
+<p>The highest-traffic function is <code>fwd</code> in <code>flash_kda/__init__.py</code>, called from 10 places across the codebase. It's the single public API — every test and benchmark routes through it. <code>torch_ref</code> (in <code>tests/torch_ref.py</code>) is the second most-called function with 6 call sites; it implements the float32 reference implementation used for correctness checks.</p>
+<p>The module graph shows no circular dependencies. <code>flash_kda/__init__.py</code> is the hub (Ca=3, Ce=0), meaning it's imported by three files but imports nothing itself — a clean leaf dependency. The test files (<code>tests/test_fwd.py</code>, <code>tests/test_fwd_full.py</code>) and benchmarks all depend on it but not on each other.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/FlashKDA.git flash-kda
+cd flash-kda
+git submodule update --init --recursive
+pip install -v --no-build-isolation .</code></pre>
+<p>For CI or multi-arch builds, set <code>FLASH_KDA_CUDA_ARCHS=all</code> before pip install. The package requires CUDA 12.9+, PyTorch 2.4+, and SM90+ hardware.</p>
+<p>After install, FlashKDA auto-dispatches from <code>flash-linear-attention</code>'s <code>chunk_kda</code> if <code>flash-linear-attention &gt;= 0.5.0</code> is installed. Call it under <code>torch.inference_mode()</code> with the documented parameters (q, k, v, g, beta, scale, etc.). Set <code>FLA_FLASH_KDA=0</code> to fall back to Triton.</p>
+<p>Tests run via <code>bash tests/test.sh</code>. The test suite covers exact-match correctness against the torch reference and comparison with <code>flash-linear-attention</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>FlashKDA fits into any transformer-style model that uses KDA-style gated linear attention — for example, long-context language models. The integration with <code>flash-linear-attention</code> means you can swap the Triton backend for FlashKDA with zero code changes:</p>
+<pre data-lang="python"><code>from fla.ops.kda import chunk_kda
+
+with torch.inference_mode():
+    out, final_state = chunk_kda(
+        q=q, k=k, v=v, g=g, beta=beta, scale=scale,
+        initial_state=h0, output_final_state=True,
+        use_gate_in_kernel=True, use_qk_l2norm_in_kernel=True,
+        use_beta_sigmoid_in_kernel=True, safe_gate=True,
+        A_log=A_log, dt_bias=dt_bias, lower_bound=lower_bound,
+        transpose_state_layout=True, cu_seqlens=cu_seqlens,
+    )</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 5 issues (1 high, 4 medium) across 3 categories:</p>
+<ul><li><strong>High — Deep nesting</strong> in <code>tests/torch_ref.py</code>, <code>tests/test_fwd.py</code>, <code>tests/test_fwd_full.py</code>: max indentation depth of 10 makes control flow hard to follow. Fix: flatten with guard clauses and early returns.</li><li><strong>Medium — Broad exception handling</strong> in <code>setup.py</code>: bare or <code>Exception</code>-wide <code>except</code> swallows errors. Fix: catch specific exceptions.</li><li><strong>Medium — High branching density</strong> in <code>csrc/flash_kda.cpp</code>: 63 branch points over 181 lines. Fix: decompose decision-heavy logic.</li></ul>
+<p>No CI/CD pipeline exists — there's no <code>.github/</code> or CI config, meaning changes merge without automated build/test gates. The repo has a license but no Dockerfile or lockfile. No committed secrets were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>FlashKDA is a focused, well-structured CUDA kernel project with a clean public API and solid test coverage. The main risks are the absence of CI and the deep nesting in test files. If you need fast KDA inference on H100-class hardware, this is worth adopting; if you're on older GPUs, it won't help you.</p>
             </div>
 
             
@@ -104,7 +137,7 @@ The repository appears to be well-structured, with clear documentation and tests
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>8</b></li><li><span>Shell</span><i style="width:63%"></i><b>5</b></li><li><span>Markdown</span><i style="width:50%"></i><b>4</b></li><li><span>YAML</span><i style="width:13%"></i><b>1</b></li><li><span>C++</span><i style="width:13%"></i><b>1</b></li><li><span>C/C++ Header</span><i style="width:13%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>PyTorch</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -134,7 +167,7 @@ The repository appears to be well-structured, with clear documentation and tests
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
                     </ul>
                 </div>
 

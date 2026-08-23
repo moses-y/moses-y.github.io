@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Security researchers and investigators often need to discover whether a given handle exists on dozens of social‑media or community sites. Doing this manually is time‑consuming and error‑prone, especially when the list of target sites changes frequently.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Tookie‑OSINT is a Python‑based CLI that accepts a username (or any string) and checks it against the catalog of sites defined in sites/sites.json.  
- The core logic lives in modules/webscraper.py, which builds HTTP requests using the headers from sites/headers.txt and parses the JSON field definitions from sites/fields.json.  
- brib.py is the entry‑point script that loads the language packs (lang/.py), reads the version from config/version, prints the MOTD from config/motd, and drives the search loop.  
- Translation files in lang/ and the multilingual README files under docs/readmelang/ allow a simple text UI in many languages, though the repo notes that translations are not yet complete.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Python dependencies (the project targets Python 3.12)
-python3 -m pip install -r requirements.txt
-Optional: run the provided installer script for Linux
-sudo bash install.sh</p><p>The requirements.txt file is the only dependency manifest; there is no poetry.lock or requirements.lock.</p><h3 class="post-h" id="configuration">Configuration</h3><p>config/version – plain‑text file containing the current release number; the script reads it at start‑up.  
- config/motd – message‑of‑the‑day displayed on launch.  
- sites/sites.json – list of target domains and URL patterns; edit to add or remove services. No environment variables are required.</p><h3 class="post-h" id="running">Running</h3><p>Basic invocation – prompts for a target string
-python3 brib.py</p><p>brib.py presents an interactive prompt (the README calls it a “simple‑to‑use UI”). Advanced usage (e.g., batch processing) is not documented, so the safe assumption is to run the script and follow the on‑screen instructions.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A penetration‑testing script can call Tookie‑OSINT as a subprocess to enrich a target profile:</p><p>import subprocess, json</p><p>def enumerateuser(handle):
-    result = subprocess.run(
-        [&quot;python3&quot;, &quot;brib.py&quot;], input=handle.encode(),
-        captureoutput=True, text=True
-    )
-    return json.loads(result.stdout)   # assuming JSON output when –json flag exists</p><p>The returned mapping of site → status can be merged into a larger reconnaissance report.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><div class="table-scroll"><table><thead><tr><th>Severity</th><th>Issue</th><th>Location</th></tr></thead><tbody><tr><td>Medium</td><td>No CI/CD pipeline; the .github folder only contains issue templates and funding metadata.</td><td>.github/</td></tr><tr><td>Low</td><td>Dependencies are pinned only in requirements.txt; no lockfile means builds are not reproducible.</td><td>requirements.txt</td></tr><tr><td>Low</td><td>Test coverage is minimal – a single test file (testsafefilename.py) that does not exercise the main search logic.</td><td>testsafefilename.py</td></tr><tr><td>Low</td><td>No explicit entry‑point defined in packaging metadata (no setup.py / pyproject.toml). Installation relies on the ad‑hoc install.sh.</td><td>Root</td></tr><tr><td>Low</td><td>Language modules (lang/.py) are imported but the UI falls back to English if a translation is missing; the README states translations are “still not ready”.</td><td>lang/</td></tr><tr><td>Low</td><td>Lack of type hints and limited docstrings reduces readability for new contributors.</td><td>Across modules/*.py, brib.py</td></tr></tbody></table></div><p>No obvious security‑critical secrets are stored in the repo, and a LICENSE file is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Tookie‑OSINT provides a straightforward, Python‑only way to enumerate usernames across a curated list of sites, useful for small‑scale OSINT or pen‑testing tasks. The codebase is functional but lacks automation (CI, lockfile) and comprehensive testing, so it is best suited for individual analysts or teams willing to audit and extend the tool rather than for production‑grade deployments.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Finding a user’s accounts across dozens of social‑media sites is tedious and error‑prone. Analysts must manually craft URLs, handle site‑specific quirks, and sanitize input filenames. A repeatable, language‑aware scanner saves time and reduces false‑positives.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Tookie‑OSINT</code> reads a username (or list) and probes a curated set of sites (see <code>sites/sites.json</code>). Core logic lives in <code>modules/modules.py</code>, which defines the public helpers <code>_safe_filename</code>, <code>load_sites</code>, <code>load_fields</code>, and <code>get_info</code>. Language‑specific output strings are kept under <code>lang/</code> (e.g., <code>lang/en.py</code>). The <code>modules/webscraper.py</code> driver wraps Selenium for sites that require JavaScript, while <code>modules/fancy.py</code> provides a simple banner (<code>logo</code>). Tests for filename sanitisation live in <code>test_safe_filename.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point (implicit)</strong> – The repository does not ship a dedicated CLI script; typical usage imports <code>modules.modules</code> and calls <code>get_info(username)</code>.</li><li><strong><code>get_info</code> (modules/modules.py)</strong> – Called by the UI or a wrapper script; it loads site definitions (<code>load_sites</code>), field mappings (<code>load_fields</code>), then iterates over each site, delegating to <code>scan_site</code> (internal) which may invoke the Selenium driver in <code>modules/webscraper.py</code>.</li><li><strong>File I/O</strong> – <code>_safe_filename</code> (modules/modules.py) is the only routine that touches the filesystem (used by <code>write_txt</code>, <code>write_csv</code>, <code>write_json</code>). It is called from nine locations, making it the highest‑blast‑radius function for file writes.</li><li><strong>Network I/O</strong> – <code>scan_site</code> ultimately calls <code>check_site</code> (modules/webscraper.py) which performs HTTP requests or Selenium navigation; four functions across the repo make outbound calls.</li><li><strong>Call density</strong> – The internal call graph shows 33 resolved edges. <code>logo</code> (modules/fancy.py) is a leaf; <code>modules/modules.py</code> imports three other modules and is imported by two, giving it an instability of 0.25. No circular dependencies exist, simplifying future refactors.</li></ol>
+<p>Overall flow: <strong>user input → <code>_safe_filename</code> (sanitise) → <code>load_sites</code>/<code>load_fields</code> → <code>get_info</code> → per‑site <code>scan_site</code> → optional Selenium driver → result aggregation → optional file export</strong>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the upstream repository
+git clone https://github.com/moses-y/tookie-osint.git
+cd toOKIE-osint
+
+# Install Python dependencies (requires Python 3.12)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt</code></pre>
+<p><em>Configuration</em> – Site metadata lives in <code>sites/sites.json</code>; no environment variables are required out of the box.</p>
+<p><em>Running</em> – From a Python interpreter:</p>
+<pre data-lang="python"><code>from modules.modules import get_info
+
+result = get_info("alice")
+print(result)</code></pre>
+<p>If a Selenium‑based scan is needed, ensure a compatible driver is on the PATH; the driver is obtained via <code>modules/webscraper.get_driver()</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A red‑team script can import <code>get_info</code> to bulk‑check a list of candidate usernames and write the findings to CSV:</p>
+<pre data-lang="python"><code>from modules.modules import get_info, write_csv
+
+users = ["alice", "bob", "charlie"]
+records = [get_info(u) for u in users]
+write_csv("report.csv", records)</code></pre>
+<p>This integrates with existing reporting pipelines without additional wrappers.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No CI pipeline</strong> – 23 source files, no <code>.github/workflows</code> or other CI config. <em>Fix</em>: add a GitHub Actions workflow that runs <code>pytest</code> (or the existing test file) on <code>push</code> and <code>pull_request</code>.</li><li><strong>MEDIUM – No Dependabot</strong> – Only <code>requirements.txt</code> is present; no lockfile or automated update bot. <em>Fix</em>: add <code>.github/dependabot.yml</code> for the <code>pip</code> ecosystem.</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>modules/modules.py</code> uses a bare <code>except:</code> that swallows errors. <em>Fix</em>: catch specific exceptions and re‑raise or log.</li><li><strong>MEDIUM – Deep nesting (up to 6 levels)</strong> – In <code>modules/webscraper.py</code>, <code>brib.py</code>, and <code>modules/fancy.py</code> control flow is heavily nested, hurting readability. <em>Fix</em>: refactor with early returns or helper functions.</li><li><strong>MEDIUM – Duplicated language blocks</strong> – Similar 6‑line snippets appear in multiple <code>lang/*.py</code> files. <em>Fix</em>: extract shared helpers into a common module.</li></ul>
+<p>No secrets were found, a license file exists, and a single test (<code>test_safe_filename.py</code>) provides basic coverage.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Tookie‑OSINT</code> delivers a usable, language‑aware OSINT scanner with clear separation of site data, language strings, and scraping logic. It is functional but lacks a defined CLI entry point, automated testing, and robust error handling. Engineers comfortable with Python can adopt it quickly, but should add CI, tighten exception handling, and refactor deep nesting before using it in production pipelines.</p>
             </div>
 
             

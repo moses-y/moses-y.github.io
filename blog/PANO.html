@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 29, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Investigators handling digital evidence—from open-source intelligence (OSINT) to corporate fraud cases—often juggle multiple tools for graph analysis, timeline mapping, geolocation, and entity extraction. Manually stitching these together wastes time and risks missing cross‑domain connections. PANO aims to unify these workflows into one desktop application.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PANO is a Python/PySide6 desktop application that combines interactive graph visualization, timeline analysis, map integration, and AI‑assisted entity extraction. The core entity model lives in entities/ (person, email, location, etc.), while transforms/ implements automated lookups (e.g., emaillookup.py uses GHunt for Google account data, reverseimagesearch.py for image analysis). The ui/ folder contains the Qt front‑end: graph view, timeline, map components, and an AI dock (components/aidock.py) that provides natural‑language queries to a local or remote LLM. The helpers/ module includes cross‑examination (crossexamination.py) and media analysis (mediaanalyzer.py). The start_pano.sh/.bat scripts handle environment setup and dependency installation.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>An investigator adds an email address as an entity, runs the email lookup transform, and PANO automatically creates linked entities (Google account, calendar events, location history). Those events appear on the timeline, and geographic coordinates are plotted on the map. The investigator can then run a username search transform to find social media profiles, and the graph updates in real time. Example workflow:</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No tests detected. The entire codebase (58 Python files) has zero test files. Critical transforms and UI logic are untested; regressions are likely.
-Medium – No CI/CD pipeline. No .github/workflows/ or CI config. Changes cannot be validated automatically.
-Low – No dependency lockfile. requirements.txt is used without a lockfile (e.g., requirements.lock or Pipfile.lock). Builds are non‑reproducible; dependency drift may break the application.
-Low – License restricts commercial use. The LICENSE file is CC BY‑NC 4.0, which prohibits commercial use. This may be a concern for enterprise deployment.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PANO is a well‑structured OSINT investigation platform with a broad feature set—graph, timeline, map, and AI integration—all in a single desktop app. However, the lack of tests, CI, and a reproducible build makes it risky for production or team use. Suitable for individual researchers or small teams who can tolerate manual validation and are comfortable with the non‑commercial license.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Investigators need to stitch together disparate OSINT artefacts—emails, usernames, images, locations—into a single, navigable view. Manual correlation is error‑prone and time‑consuming, especially when the data spans graph, timeline, and map dimensions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>PANO</strong> supplies a desktop GUI (Qt via PySide6) that lets users drag entity objects onto a graph, then run transform plugins that enrich those entities with external data. Core code lives in three logical groups:</p>
+<ul><li><code>entities/</code> – data‑model classes such as <code>email.py</code>, <code>event.py</code>, <code>location.py</code>. The hub <code>entities/base.py</code> defines validation helpers used by 18 other modules.</li><li><code>ui/</code> – Qt widgets and managers. The visual node widget (<code>ui/components/node_visual.py</code>) alone contains 730 lines and is referenced by 11 other files; it handles image loading, sizing, and network fetches.</li><li><code>transforms/</code> – plug‑in style processors (<code>email_lookup.py</code>, <code>reverse_image_search.py</code>, etc.) that call external services and populate entities.</li></ul>
+<p>The entry point is the <code>main</code> function in <strong><code>pano.py</code></strong> (line 872). It builds the Qt application, loads the UI, and registers the transform system. From there user actions trigger the most‑used functions: <code>add_node</code> (11 callers), <code>add_edge</code> (9 callers), and visual property setters like <code>set_text</code> (10 callers).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>pano.py::main</code>. The function creates a <code>QApplication</code>, instantiates <code>ui/managers/graph_manager.py::GraphManager</code>, and shows the main window. User interaction (e.g., dragging a new node) calls <code>ui/managers/graph_manager.py::add_node</code>, which:</p>
+<ol><li>Constructs a <code>ui/components/node_visual.py::NodeVisual</code> instance.</li><li>Calls <code>NodeVisual.__init__</code>, which invokes <code>width</code>/<code>height</code> (each called from 13 places) to size the graphic.</li><li>Triggers <code>_update_scaled_pixmap</code>, which performs a network fetch via <code>helpers/media_analyzer.py::_convert_pos_to_pixmap</code> → <code>session.get</code> (the only outbound network call in the call graph).</li></ol>
+<p>When a transform like <strong>Email Lookup</strong> is run, <code>transforms/base.py::run</code> (entry point for transforms) executes:</p>
+<ul><li><code>run -&gt; _process_ghunt_results -&gt; _create_entities -&gt; update_label -&gt; geocode</code> – a chain that contacts the GHunt API (network) and updates node labels.</li></ul>
+<p>Key blast‑radius modules:</p>
+<ul><li><strong><code>entities/base.py</code></strong> – 18 inbound imports, 1 outbound; any change affects validation across the whole code base.</li><li><strong><code>ui/components/node_visual.py</code></strong> – 11 inbound imports, 10 outbound calls, plus a network request; it is the most complex visual component.</li></ul>
+<p>Circular imports exist between <code>entities/base.py</code> and <code>entities/__init__.py</code>; breaking this cycle would reduce import‑time fragility. Deep nesting (up to 8 levels) appears in <code>entities/event.py</code> and several UI components, making maintenance harder.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork you will work on
+git clone https://github.com/moses-y/PANO.git
+cd PANO
+
+# Install dependencies (Python 3.11+ required)
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Start the application (scripts handle env setup)
+./start_pano.sh   # Linux/macOS
+# or
+start_pano.bat    # Windows</code></pre>
+<p><em>No additional configuration files are present; the README notes that the Email Lookup transform requires a GHunt login, which must be performed manually according to the GHunt README.</em></p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A cyber‑threat analyst loads a CSV of suspect email addresses, drags each into the graph, runs <strong>Email Lookup</strong> to pull calendar events and location history, then switches to the timeline view (<code>ui/components/timeline_visual.py</code>) to spot anomalous activity spikes. The visual node widget automatically fetches avatar images, and the map view (<code>ui/components/map_visual.py</code>) plots any extracted coordinates.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 58 source files, zero test files.</li><li><strong>HIGH – No CI workflow</strong> – repository lacks any GitHub Actions or other CI config.</li><li><strong>MEDIUM – No Dependabot</strong> – only <code>requirements.txt</code> present, no auto‑update bot.</li><li><strong>HIGH – Import cycle</strong> – <code>entities/base.py</code> ↔ <code>entities/__init__.py</code>.</li><li><strong>HIGH – Deep nesting</strong> – up to 8 indentation levels in several modules, hurting readability.</li><li><strong>MEDIUM – Broad exception handling</strong> – many <code>except:</code> blocks swallow errors in UI managers.</li><li><strong>MEDIUM – Hub module</strong> – <code>entities/base.py</code> is a high‑impact change point.</li><li><strong>MEDIUM – Oversized files</strong> – <code>ui/components/node_visual.py</code>, <code>helpers/media_analyzer.py</code>, <code>pano.py</code> each exceed 700 lines.</li></ul>
+<p>No lockfile, Dockerfile, or committed secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>PANO delivers a functional, feature‑rich OSINT desktop platform with a clear plugin architecture, but the code base suffers from maintainability issues (cycles, deep nesting, large monolithic files) and lacks any automated testing or CI. It is suitable for engineers comfortable with Qt and willing to invest in refactoring and test scaffolding before using it in production.</p>
             </div>
 
             

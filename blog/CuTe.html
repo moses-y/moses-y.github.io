@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 31, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>GPU tensor operations require mapping logical coordinates (rows, columns, tiles) to physical memory offsets. The mapping is non-trivial: layouts can be nested, swizzled, or composed from multiple strides. C++ CuTe solves this for CUDA kernels, but prototyping layout transformations requires compiling CUDA code, which is slow and excludes non-GPU environments. Developers need a way to experiment with layout algebra without the CUDA toolchain.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PyCuTe is a pure-Python implementation of the CuTe layout algebra (arXiv:2603.02298). The core lives in pycute/layout.py, pycute/shape.py, and pycute/stride.py, with algebraic operations in pycute/algebra.py (coalesce, composition, complement, logicaldivide, etc.). A thin Tensor/Accessor layer in pycute/tensor.py and pycute/accessor.py provides a reference data model for reading/writing through a layout.</p><p>The package has zero third-party dependencies for the core algebra. Optional extras add visualization (pycute/util/drawsvg.py, pycute/util/drawlatex.py) and symbolic support via sympy. All operations work on integer or coordinate (ArithTuple) strides, with limited F2 (XOR-swizzle) support in pycute/swizzle.py.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>You can prototype a tiled matrix layout and verify its mapping without touching a GPU:</p><p>The same logicaldivide call works identically in C++ CuTe. You can generate test vectors here, dump them to disk, and feed them into your CUDA kernel tests.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD pipeline: No .github/ or CI config detected. No automated test gate for PRs. The test suite exists (test/ with 23 files) but isn&#39;t wired to run automatically. This is safe for a reference implementation but limits collaborative development.
-Low - No dependency lockfile: pyproject.toml declares dependencies without a lockfile. Builds are not reproducible. Minor for a pure-Python library with no C extensions.
-Low - Non-standard install pattern: README documents pip install -e . from source checkout. No PyPI package. Users must clone the repo. Acceptable for a reference implementation, but unusual for a Python library.</p><p>The codebase is otherwise clean: tests exist for all major algebra operations (e.g., test/testlogicaldivide.py, test/test_composition.py), documentation is thorough (8 markdown docs plus figures), and the Apache 2.0 license is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PyCuTe is a faithful, well-documented reference implementation of the CuTe layout algebra. It solves a real problem—prototyping layout transformations without CUDA—but it is not a production library. Use it to learn the algebra, generate test vectors for C++ CuTe, or prototype new layout operations. If you need to run layouts on a GPU, use C++ CuTe.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>C++ CuTe is a header-only template library tightly coupled to CUDA, which makes it hard to learn, prototype, or test outside a GPU environment. Developers working on CUTLASS layouts need a reference implementation that runs anywhere.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>PyCuTe is a pure-Python implementation of the CuTe layout algebra — <code>coalesce</code>, <code>composition</code>, <code>complement</code>, <code>logical_divide</code>, <code>logical_product</code>, <code>right_inverse</code>, <code>left_inverse</code>, <code>nullspace</code>, <code>recast</code>, <code>layout_add</code>, and <code>greatest_common_domain</code> — over integer and coordinate (<code>ArithTuple</code>/basis) strides, plus limited <code>F2</code> (XOR-swizzle) support. A thin <code>Tensor</code>/<code>Accessor</code> layer in <code>pycute/tensor.py</code> and <code>pycute/accessor.py</code> provides a reference data model.</p>
+<p>The core algebra in <code>pycute/</code> has no third-party dependencies and requires only Python 3.10+. Optional extras add visualization (<code>svgwrite</code>, <code>tabulate</code>), symbolic math (<code>sympy</code>), and testing (<code>pytest</code>). The <code>docs/</code> folder contains a full tutorial series (<code>00_quickstart.md</code> through <code>08_api_reference.md</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The single entry point is <code>main</code> in <code>examples/readme_figures.py:26</code>, which reaches 50 functions and touches the filesystem via <code>os.makedirs</code> — the only external effect traced. The repository is a library, not a service; there is no database, network, or long-running process.</p>
+<p>Control flow centers on <code>pycute/layout.py</code>, defining <code>is_layout</code>, <code>_set</code>, <code>_coshape</code>, and <code>__call__</code>. The internal call graph shows <code>Layout</code> called from 153 places, <code>E</code> from 44, <code>is_tuple</code> from 42, <code>size</code> from 39. The test suite drives most of this: <code>test_composition_coords</code> calls <code>E</code> 69 times and <code>Layout</code> 68 times; <code>test_coalesce_f2</code> calls <code>F2</code> 62 times.</p>
+<p>The module graph has a hub: <code>pycute/__init__.py</code> is imported by 30 modules and sits inside a 10-module circular dependency. Changing it has a wide blast radius. <code>pycute/layout.py</code> is called from 28 files and defines the core <code>Layout</code> type; <code>pycute/shape.py</code> provides <code>shape</code>, <code>size</code>, <code>rank</code>, <code>depth</code>; <code>pycute/atuple.py</code> and <code>pycute/htuple.py</code> define the tuple types and their operations; <code>pycute/algebra.py</code> owns the layout transformations. <code>pycute/swizzle.py</code> handles <code>F2</code> XOR-swizzle strides.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="sh"><code>python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -e .              # core layout algebra only (no third-party deps)
+pip install -e ".[viz]"       # + visualization helpers (svgwrite, tabulate)
+pip install -e ".[test]"      # + everything needed to run the test suite</code></pre>
+<p>Run tests with <code>pytest</code> from the repo root. The README documents these commands; no lockfile exists, so installs are not fully reproducible.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<pre data-lang="python"><code>from pycute import *
+
+# Build a tiled layout for a 128x128 GEMM, 32x32 tile
+tile = Layout((32, 32), (1, 32))
+A = make_tensor(tile, (128, 128))
+# Verify the layout algebra
+assert coalesce(Layout((2, (1, 6)), (1, (6, 2)))) == Layout(12, 1)</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 28 findings (21 high, 7 medium) across 6 kinds:</p>
+<ul><li><strong>High - Import cycle</strong> — <code>pycute/__init__.py</code>, <code>pycute/typedefs.py</code>, <code>pycute/htuple.py</code> participate in a 10-module circular dependency. Breaking it requires extracting shared types or deferring imports.</li><li><strong>High - Hub module</strong> — <code>pycute/__init__.py</code> is imported by 30 modules; changes there have a high blast radius.</li><li><strong>High - Deep nesting</strong> — <code>pycute/layout.py</code>, <code>pycute/shape.py</code>, <code>pycute/swizzle.py</code> reach indentation depth 9; control flow is hard to follow.</li><li><strong>Medium - Broad exception handling</strong> — <code>pycute/typedefs.py</code> uses <code>Exception</code>-wide <code>except</code> clauses.</li><li><strong>Medium - Duplicated code</strong> — 5 repeated 6-line blocks across <code>pycute/util/draw_latex.py</code> and <code>pycute/util/draw_svg.py</code>.</li><li><strong>Medium - High branching density</strong> — <code>examples/einsum.py</code> has 31 branch points over 80 lines.</li></ul>
+<p>SDLC gaps: no CI/CD pipeline, no lockfile, no Dependabot/Renovate configuration. The repo has tests, a license, and no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A solid, dependency-free reference implementation of the CuTe algebra with good documentation and a real test suite. The import cycle and hub module make <code>pycute/__init__.py</code> risky to change. Use it for learning, prototyping, or generating test vectors for CUTLASS — not for production GPU work.</p>
             </div>
 
             
