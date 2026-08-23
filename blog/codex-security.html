@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 29, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Code repositories accumulate security vulnerabilities that are easy to miss in manual review and hard to track across branches or over time. Existing scanners often produce noise, lack CI integration, or require separate tooling for triage, remediation, and policy enforcement. Teams need a single pipeline that finds, validates, and fixes issues without switching contexts.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>codex-security provides a CLI and TypeScript SDK (sdk/typescript/src/cli.ts, sdk/typescript/src/index.ts) that scans repositories for vulnerabilities, analyzes changes, and tracks findings. It includes a bundled plugin (sdk/typescript/bundledplugin/) with pre-built skills—such as security-scan, fix-finding, and triage-finding—each with agent configurations, reference docs, and validation scripts. The SDK exposes a CodexSecurity class (see src/index.ts) with methods like run() and close(). Authentication supports both ChatGPT sign-in and API keys, configurable via flags or environment variables. Docker support (Dockerfile, compose.yaml) and CI workflows (.github/workflows/node-ci.yml, container-ci.yml) are included.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team sets up a CI pipeline that runs npx codex-security scan . on every pull request. Findings are stored in the workbench state directory; the scan-comparison module (src/scan-comparison.ts) can diff results against a baseline. Developers use the fix-finding skill to generate remediation patches, and the track-findings skill to create Jira tickets or GitHub advisories automatically. The CLI’s --auth api-key flag enables non-interactive runs in build systems.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The codebase is structurally sound: 30 test files exist under sdk/typescript/tests-ts/, CI workflows are configured, a license is present, and a lockfile (pnpm-lock.yaml) is committed. No obvious red flags. However, several concerns are worth noting:
-Medium — The bundled plugin contains 40+ Python scripts and 13 skill directories. This increases maintenance surface and may cause version drift between the TypeScript SDK and the Python runtime. Scripts like deepscanworkbench.py and snapshot_sqlite.py have no dedicated tests visible.
-Low — The repo is a direct fork of openai/codex-security with 0 stars on the fork. If the parent is actively maintained, this fork may lag behind in updates or patches.
-Low — The .mcp.json and .app.json files in the bundled plugin suggest integration with MCP and a custom plugin system. These are not documented in the top-level README, which could confuse new users.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a well-structured, production-oriented security scanning tool with strong CI and SDK support. It is best suited for teams already using OpenAI’s Codex ecosystem who want an integrated find-fix-track workflow. The bundled plugin adds depth but also complexity; organizations with simple scanning needs may find a lighter tool easier to maintain. The fork status and zero stars are not a concern if the parent repo remains active.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a repeatable way to discover, validate, and remediate security findings across codebases and CI pipelines. Existing manual scans are fragmented and hard to integrate with automated workflows, leading to missed vulnerabilities and inconsistent reporting.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>@openai/codex-security</code> delivers a Node‑based CLI and a TypeScript SDK that orchestrate Codex Security scans, store results in a local work‑bench, and expose a programmatic API. The core runtime lives in <code>sdk/typescript/src/</code>, e.g.:</p>
+<ul><li><code>cli.ts</code> – parses commands, handles authentication, and drives the scan flow.</li><li><code>api.ts</code> – implements the high‑level <code>CodexSecurity</code> class used by the SDK (<code>new CodexSecurity().run(.)</code>).</li><li><code>runtime.ts</code> – prepares the persistent state directory and launches the bundled plug‑in workers.</li></ul>
+<p>Support files (<code>Dockerfile</code>, <code>docker/entrypoint.sh</code>) enable containerised execution, while the test suite under <code>sdk/typescript/tests-ts/</code> validates the CLI and SDK behavior.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <strong><code>sdk/typescript/src/cli.ts</code></strong>, function <code>run</code> (line 611). <code>run</code> invokes <strong>65 functions</strong> across the CLI module and reaches <strong>101 distinct functions</strong> downstream. The most traversed path is:</p>
+<ol><li><strong><code>run</code> → <code>runScan</code></strong> (line 2186) – initiates a scan.</li><li><code>runScan</code> calls <strong><code>preflight</code></strong> in <code>api.ts</code>, which validates input and authenticates via <code>auth.ts</code>.</li><li><code>preflight</code> → <strong><code>checkOpen</code></strong>, <strong><code>loginApiKey</code></strong>, and finally <strong><code>scanFailureMessage</code></strong>.</li><li><code>scanFailureMessage</code> → <strong><code>classifyConnectionFailure</code></strong>, the only place the code touches a database (detected via a regex match on SQLite‑related terms).</li></ol>
+<p>Key hub modules:</p>
+<ul><li><strong><code>src/index.ts</code></strong> – imported by <strong>17</strong> other modules (instability 0.41). It re‑exports public SDK symbols, making it a high‑blast‑radius surface.</li><li><strong><code>src/cli.ts</code></strong> – imported by <strong>9</strong> modules (instability 0.63) and imports <strong>15</strong> others, handling most command‑line logic.</li></ul>
+<p>The internal call graph contains <strong>642 call edges</strong>; the most widely used functions are <code>throwIfAborted</code> (31 callers) and <code>isRecord</code> (23 callers). No circular import cycles were found, simplifying static reasoning.</p>
+<p>External effects are limited: only the database read/write path noted above leaves the process. All other operations interact with the filesystem (state directory, bundled plug‑in scripts) or the network via the Codex Security API, but those calls are encapsulated in the SDK’s HTTP client (not exposed in the static graph).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/codex-security
+cd codex-security/sdk/typescript
+
+# Install dependencies (pnpm is the lockfile format)
+pnpm install
+
+# Authenticate (requires an OpenAI API key)
+npx codex-security login   # or set OPENAI_API_KEY beforehand
+
+# Run a scan on the current directory
+npx codex-security scan .</code></pre>
+<p>For containerised usage, build the image defined by <code>Dockerfile</code>:</p>
+<pre data-lang="bash"><code>docker build -t codex-security .
+docker run --rm -v "$(pwd)":/work -e OPENAI_API_KEY=$OPENAI_API_KEY codex-security scan /work</code></pre>
+<p>Configuration is driven by environment variables (<code>OPENAI_API_KEY</code>, <code>CODEX_SECURITY_STATE_DIR</code>) as documented in <code>README.md</code>. No additional config files are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI job can invoke the CLI after checkout:</p>
+<pre data-lang="yaml"><code>- name: Security scan
+  run: npx codex-security scan .
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}</code></pre>
+<p>The scan writes a <code>scan-manifest.json</code> and <code>findings.json</code> to the work‑bench directory, which downstream steps can consume to fail builds on new high‑severity findings.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – Enable Dependabot or Renovate</strong> – only one manifest (<code>package.json</code>) and no auto‑update bot.</li><li><strong>MEDIUM – Add dependency‑vulnerability scan to CI</strong> – no existing scan in <code>.github/workflows</code>.</li><li><strong>LOW – Set <code>timeout-minutes</code> on workflow jobs</strong> – <code>node-release.yml</code> lacks job timeouts.</li></ul>
+<p>Measured static findings (42 total) include:</p>
+<ul><li><strong>HIGH – Oversized files</strong> (<code>cli.ts</code>, <code>api.ts</code>, <code>runtime.ts</code> each &gt; 2 800 lines).</li><li><strong>HIGH – Duplicated code blocks</strong> across bundled‑plugin Python scripts (≈ 87 repeats).</li><li><strong>HIGH – Deep nesting</strong> (up to 8 levels) in several bundled‑plugin scripts.</li></ul>
+<p>These issues are reported by the analysis and include concrete fix suggestions (split files, extract shared helpers, flatten control flow). No critical or low‑severity structural problems were detected, and the repository contains tests, CI, a Dockerfile, and a license.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>codex-security</code> offers a functional CLI/SDK that integrates Codex Security scans into development and CI pipelines, with a clear entry point (<code>cli.ts</code>) and a well‑scoped SDK surface (<code>index.ts</code>). The codebase is sizable and contains several large, duplicated, or deeply nested files that increase maintenance cost. Adding automated dependency updates and a vulnerability‑scan step would improve long‑term reliability. Teams comfortable with TypeScript and containerised tooling will find it usable; smaller teams should be aware of the refactoring effort needed to tame the high‑complexity modules.</p>
             </div>
 
             
@@ -156,7 +196,7 @@ Low — The .mcp.json and .app.json files in the bundled plugin suggest integrat
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/node-release.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

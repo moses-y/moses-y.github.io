@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Kotlin</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers often struggle to understand the structure and relationships within large codebases, making it difficult to maintain, modify, and scale their software systems.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The code-to-knowledge-graph repository provides a toolkit for transforming complex source code into a rich, structured, and queryable knowledge graph. The project leverages VS Code&#39;s Language Server Protocol (LSP) to parse source code and create a comprehensive representation of code entities and relationships. The antlr folder contains the core parsing logic, with files like CSharpLexer.g4 and KotlinParser.g4 defining the grammar for specific programming languages. The vscode folder provides integration with the VS Code ecosystem, including the VsCodeParser.kt file, which creates a graph from a given project path.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a developer can use the code-to-knowledge-graph toolkit to analyze a large Java project and generate a knowledge graph that represents the relationships between classes, methods, and variables. This graph can then be queried to answer questions like &quot;What classes implement the Serializable interface?&quot; or &quot;What methods call the toString() method?&quot;</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium — Missing CI/CD pipeline — .github/ or CI config: The repository lacks a continuous integration and continuous deployment (CI/CD) pipeline, which is essential for automating builds, tests, and deployments.
- Low — Limited documentation — docs/: While the repository has some documentation, it is limited, and more detailed documentation would be beneficial for users and contributors.
-Low — No clear testing strategy — src/test/: The repository has some test files, but a clear testing strategy and more comprehensive test coverage would be desirable.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The code-to-knowledge-graph repository provides a valuable toolkit for transforming complex source code into a knowledge graph, but it requires additional work to establish a CI/CD pipeline and improve documentation and testing. Despite these limitations, the project has the potential to be a powerful tool for software developers and maintainers.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a fast, multi‑language way to turn a codebase into a queryable graph of entities and relationships. Without an automated pipeline the process is manual, error‑prone, and does not scale across large or mixed‑language projects.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>code-to-knowledge-graph</strong> is a Kotlin/JVM toolkit that parses source code and emits a rich, queryable knowledge graph. It leverages ANTLR grammars for C#, JavaScript and Kotlin, then merges the parsed ASTs into a unified model that can be persisted in Neo4j or queried via the VS Code Language Server Protocol.</p>
+<p>Key components (from the measured structure):</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th>Responsibility</th><th>Notable files</th></tr></thead><tbody><tr><td><strong>antlr</strong></td><td>Generates language parsers (CSharp, JavaScript, Kotlin) from .g4 grammars and provides AST‑walking logic.</td><td><code>antlr/src/main/kotlin/AntlrTreeWalker.kt</code>, <code>antlr/src/main/kotlin/GraphAugmenter.kt</code>, <code>antlr/src/main/kotlin/bevel_ast_ql/ArgumentResolver.kt</code>, language‑specific grammars (<code>CSharpLexer.g4</code>, <code>JavaScriptParser.g4</code>, <code>KotlinParser.g4</code>).</td></tr><tr><td><strong>providers</strong></td><td>Supplies file‑system walking, graph‑merging, and MinHash similarity logic.</td><td><code>providers/src/main/kotlin/GraphMergingServiceImpl.kt</code>, <code>providers/src/main/kotlin/MinHasher.kt</code>, <code>providers/src/main/kotlin/GitignoreAwareFileWalker.kt</code>.</td></tr><tr><td><strong>vscode</strong></td><td>VS Code extension entry point that creates a graph from a project path and exposes it through the LSP.</td><td><code>vscode/src/main/kotlin/VsCodeParser.kt</code>, <code>vscode/src/main/kotlin/BatchProcessor.kt</code>, <code>vscode/src/main/kotlin/VsCodeGraphUpdater.kt</code>.</td></tr><tr><td><strong>src</strong></td><td>Small bootstrap module; contains <code>Factories.kt</code> which creates a <code>VsCodeParser</code> instance.</td><td><code>src/main/kotlin/Factories.kt</code>.</td></tr><tr><td><strong>regex</strong></td><td>Optional utility for HTML/JS‑specific tokenisation.</td><td><code>regex/src/main/kotlin/AngularHtmlParser.kt</code>.</td></tr></tbody></table></div>
+<p>The <strong>entry point</strong> is <code>FactoriesKt.createVsCodeParser(projectPath)</code> (<code>src/main/kotlin/Factories.kt</code>). That function instantiates a <code>VsCodeParser</code>, which internally walks the project respecting <code>.gitignore</code>, invokes the appropriate ANTLR language specification (Kotlin/JS/C#) and feeds the resulting ASTs into <code>GraphAugmenter.kt</code> and <code>GraphMergingServiceImpl.kt</code> to build nodes and edges. The final graph can be stored in a Neo4j instance (the repo references Neo4j visualisation assets) or exported for further tooling.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Project discovery</strong> – <code>GitignoreAwareFileWalker.kt</code> traverses the filesystem, filtering by <code>.gitignore</code>.</li><li><strong>Language selection</strong> – <code>ConverterBasedAntlrLanguageSpecification.kt</code> / <code>QueryBasedAntlrLanguageSpecification.kt</code> decide which ANTLR grammar to use per file extension.</li><li><strong>Parsing</strong> – ANTLR‑generated lexers/parsers (e.g., <code>CSharpLexer.java</code>, <code>JavaScriptParser.java</code>, <code>KotlinParser.java</code>) produce ASTs.</li><li><strong>AST walking</strong> – <code>AntlrTreeWalker.kt</code> walks each tree, extracting entities (classes, functions, imports) and relationships (calls, inherits, uses).</li><li><strong>Graph augmentation</strong> – <code>GraphAugmenter.kt</code> merges per‑file graphs, deduplicates nodes, and attaches MinHash signatures for similarity detection (<code>MinHasher.kt</code>).</li><li><strong>Persist / expose</strong> – <code>GraphMergingServiceImpl.kt</code> writes the graph to Neo4j (or an in‑memory store) and <code>VsCodeParser.kt</code> makes it available via the LSP for VS Code extensions.</li></ol>
+<p><strong>Hub / blast‑radius files</strong> – <code>AntlrTreeWalker.kt</code>, <code>GraphAugmenter.kt</code>, and <code>Factories.kt</code> are the most central: changes to grammar or traversal logic ripple across all language parsers. The measured “oversized file” findings (e.g., <code>CSharpLexer.java</code> at 1 239 lines) indicate that any modification to the C# parser has a wide impact.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repository (use the exact URL)
+git clone https://github.com/moses-y/code-to-knowledge-graph
+
+# Build with Gradle (the project uses the Gradle wrapper)
+./gradlew build   # from the repo root</code></pre>
+<p><strong>Configuration</strong> No external keys or env‑vars are required; the parser respects each language’s <code>.g4</code> grammar files located under <code>antlr/src/main/antlr/</code>. If you wish to persist the graph in Neo4j, add a Neo4j connection string in <code>providers/src/main/kotlin/GraphMergingServiceImpl.kt</code> (the file currently contains a placeholder; adjust the URI, user, password as needed).</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="kotlin"><code>// From Kotlin or Java
+import software.bevel.code_to_knowledge_graph.FactoriesKt
+
+val projectPath = "/path/to/your/codebase"
+val parser = FactoriesKt.createVsCodeParser(projectPath)
+val graph = parser.parse(listOf(projectPath))
+
+println("Nodes: ${graph.nodes.size}")
+println("Connections: ${graph.connections.allConnections.size}")</code></pre>
+<p>The same logic can be invoked from the VS Code extension (<code>Bevel: Re-/Analyze Project</code>) or via the Gradle plugin (<code>software.bevel:code-to-knowledge-graph:1.1.3</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security‑audit team wants to surface every external library call across a monorepo of Kotlin, JavaScript and C# services. They run the parser on the repo root:</p>
+<pre data-lang="bash"><code>./gradlew run -PmainClass=software.bevel.code_to_knowledge_graph.FactoriesKt \
+  -Pargs="\"src/main/kotlin\""</code></pre>
+<p>The resulting graph is loaded into Neo4j (<code>neo4j-admin import</code>‑compatible CSV) and queried:</p>
+<pre data-lang="cypher"><code>MATCH (n:Class)-[:CALLS]-&gt;(m:Class)
+RETURN n.name, count(m) AS callCount
+ORDER BY callCount DESC
+LIMIT 20</code></pre>
+<p>The team then uses the <strong>Bevel Neo4j Visualisation</strong> repo to explore hot‑spot dependencies and prioritise refactoring.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis, 60 total):</strong></p>
+<ul><li><strong>High cognitive load – deep nesting</strong> (28 occurrences) in <code>InmemantlrErrorListener.java</code>, <code>ParseTree.java</code>, <code>ArgumentResolver.kt</code> – max indentation depth 11; guard‑clause refactor recommended.</li><li><strong>High duplicated code blocks</strong> (515 repeated 6‑line blocks across 41 files) – e.g., <code>ParseTreeProcessorException.java</code>, <code>DefaultListener.java</code>, <code>DefaultTreeListener.java</code>, <code>JsonProcessor.java</code>; extract shared helpers.</li><li><strong>High oversized files</strong> (13 files &gt; 1 200 loc) – <code>CSharpLexer.java</code>, <code>JavaScriptParser.java</code>, <code>KotlinLexer.java</code>; split into smaller modules.</li><li><strong>High branching density</strong> (15 files, 24 branch points over 78 lines) – <code>AntlrTreeWalker.kt</code>, <code>GraphAugmenter.kt</code>, <code>ArgumentResolver.kt</code>; decompose decision logic.</li><li><strong>Low TODO/FIXME markers</strong> (3 files) – <code>AntlrTreeWalker.kt</code>, <code>MacroConverters.kt</code>, <code>NodeConverter.kt</code>.</li></ul>
+<p><strong>SDLC observations (from structure):</strong></p>
+<ul><li>No CI/CD pipeline – <code>.github/</code> or CI config absent; every change merges without an automated build/test gate.</li><li>Large binary assets (<code>.gif</code> files 27‑30 MB) stored in the repo; consider Git LFS or moving to object storage.</li><li>Missing convention files: <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config (e.g., Kotlinfmt).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository provides a functional, language‑aware parser that turns source code into a queryable graph with modest setup. The codebase is sizable and contains several high‑severity maintainability hot‑spots (deep nesting, duplicated blocks, oversized files) that should be addressed before scaling. It is well‑suited for teams that need custom code‑graph tools and are willing to invest in refactoring and CI infrastructure.</p>
             </div>
 
             
@@ -104,7 +147,7 @@ Low — No clear testing strategy — src/test/: The repository has some test fi
                         <ul class="an-bars">
                             <li><span>Kotlin</span><i style="width:100%"></i><b>64</b></li><li><span>Java</span><i style="width:48%"></i><b>31</b></li><li><span>Markdown</span><i style="width:5%"></i><b>3</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -118,7 +161,7 @@ Low — No clear testing strategy — src/test/: The repository has some test fi
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
                     </ul>
                 </div>
 
@@ -128,7 +171,7 @@ Low — No clear testing strategy — src/test/: The repository has some test fi
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">95 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">3 occurrences</span></div><div class="loc">assets/testing-prompt-generator.gif</div><div class="ev">3 blobs over 5MB: testing-prompt-generator.gif 29.1MB, neo4j-viz.gif 27.7MB, bevel-apis.gif 13.7MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><div class="finding low"><div class="head"><span class="ttl">Add the repository convention files this project lacks</span><span class="chip">low</span><span class="rankchip">3 occurrences</span></div><div class="ev">missing .editorconfig, .gitattributes, a formatter config</div><div class="ev">Without them one contributor's editor writes tabs into a Python file, a shell script commits with CRLF and fails in the container, and a notebook diff is unreviewable.</div><div class="rec"><b>Fix:</b> Add .editorconfig, .gitattributes with text=auto eol=lf, and a formatter config.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

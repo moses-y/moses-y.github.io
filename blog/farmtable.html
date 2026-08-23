@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing tasks and dependencies across multiple platforms can be a complex and time-consuming process, particularly for AI agents. The lack of a standardized interface and robust dependency tracking can lead to inefficiencies and errors.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Farm Table is an open-source task runtime that provides a single, predictable interface for AI agents to receive work, understand complex dependency structures, and track execution progress. The project includes a graph-native task store with dependency tracking and atomic CAS claims, as well as a rich web dashboard for visualization. The internal/cli folder contains the command-line interface, while the internal/platform folder provides integrations with platforms like GitHub and Jira. The proto/farmtable/v1/farmtable.proto file defines the normalized task object schema.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a developer can use the ft command-line interface to create and manage tasks, while an AI agent can use the Model Context Protocol (MCP) adapter to explore and claim tasks. The GetReadyTasks and GetDependencyTree functions in internal/server/graph_routing.go enable efficient task dependency management.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium — Missing input validation in internal/cli/config.go — potential security risk.
- Low — Some files in design/ folder appear to be outdated or redundant — consider refactoring or removing.
-The presence of 36 test files and a configured CI/CD pipeline (although not detected in the analysis) suggests a good level of code hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Farm Table is a well-structured project that addresses a significant pain point in task management for AI agents. While some areas require attention, such as input validation, the project&#39;s design and testing approach demonstrate a good level of maturity. This project is suitable for teams and organizations looking to streamline their task management processes, particularly those already invested in the AI agent ecosystem.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building AI‑driven agents need a deterministic way to store, claim, and order tasks that may originate from many external systems (GitHub, Jira, Linear) or be created locally. Without a unified graph‑native backend, each integration must re‑implement dependency tracking, CAS‑style claims, and ready‑task detection, leading to duplicated effort and fragile coordination.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>Farm Table</strong> supplies a single runtime that normalises every task into a protobuf‑defined <em>Normalized Task Object</em> (see <code>proto/farmtable/v1/farmtable.proto</code>). The Go backend (<code>internal/</code> and <code>api/</code>) implements a gRPC service (<code>api/farmtable/v1/farmtable_grpc.pb.go</code>) and an in‑process buffer‑connection mode for the CLI (<code>cmd/ft/main.go</code>).</p>
+<p>The web dashboard (<code>web/</code>) is a React/Vite SPA that consumes the same service via gRPC‑web, with generated TypeScript types in <code>web/src/gen/</code>. Core store logic lives in the Ent ORM files (<code>internal/store/ent/*.go</code>), which persist tasks to SQLite (embedded) or Postgres (server mode).</p>
+<p>Key entry points are:</p>
+<ul><li><code>cmd/farmtable-server/main.go</code> – starts the gRPC server, creates the Ent store, and registers handlers.</li><li><code>cmd/decomposer/main.go</code> – runs the task‑decomposition engine (<code>internal/decomposer/engine.go</code>) that calls the LLM model via MCP.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <code>cmd/farmtable-server/main.go</code> at <code>func main()</code>. It:</p>
+<ol><li>Calls <code>NewEntStore</code> (via <code>internal/store/ent/client.go:NewClient</code>) → opens a DB connection (<code>ent.Open</code>), touching the filesystem and a database.</li><li>Registers the gRPC service implementation (<code>api/farmtable/v1/farmtable_grpc.pb.go</code>) which routes RPCs to handlers in <code>internal/mcp/server.go</code>.</li><li>Listens on the configured address (env <code>FARMTABLE_SERVER</code> or CLI flag).</li></ol>
+<p>When a client (CLI or web) invokes a task operation, the call follows the internal call graph:</p>
+<ul><li>Example – creating a task: <code>handleTaskCreate</code> (<code>internal/mcp/server.go:299</code>) → <code>CreateTask</code> (in <code>internal/store/ent/task.go</code>) → <code>sqlSave</code> → <code>SetField</code> (104 calls). This path touches 318 distinct functions and is a high‑blast‑radius hub.</li></ul>
+<p>The most widely referenced modules are the generated TypeScript hubs:</p>
+<ul><li><code>web/src/gen/types.ts</code> – imported by 32 internal modules, no outgoing imports (instability 0).</li><li><code>web/src/gen/service.ts</code> – imported by 18 modules, imports only one, low instability (0.05).</li></ul>
+<p>These files are critical for front‑end stability; changes here propagate widely.</p>
+<p>The backend’s biggest single files are the protobuf generated code (<code>api/farmtable/v1/farmtable.pb.go</code>, <code>farmtable_grpc.pb.go</code>) and the monolithic server (<code>internal/server/server.go</code>), each exceeding 6 800 lines. Their size makes local reasoning difficult and increases the risk of regression.</p>
+<p>No circular dependencies were detected among the 49 Go modules, but deep nesting (max depth 7) and high branching density appear in several conversion and store files, indicating complex decision logic that could be refactored.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/farmtable.git
+cd farmtable
+
+# Build the Go binaries (Makefile provides targets)
+make build        # builds cmd/farmtable-server and cmd/ft
+
+# Run the server (embedded SQLite mode)
+./bin/farmtable-server   # reads FARMTABLE_DB_PATH or defaults to ~/.farmtable/farmtable.db
+
+# In another terminal, use the CLI
+./bin/ft task list        # talks to the in‑process server via bufconn</code></pre>
+<p>To run the web dashboard locally:</p>
+<pre data-lang="bash"><code>cd web
+npm ci                # installs from package-lock.json
+npm run dev           # starts Vite dev server, proxies to the gRPC endpoint</code></pre>
+<p>Configuration is driven by environment variables (<code>FARMTABLE_SERVER</code>, <code>FARMTABLE_DB_PATH</code>) and the optional <code>config.yaml</code> (not present in the repo, so defaults are used). No additional secret files are committed.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>An AI‑assistant that resolves bug tickets can invoke <code>ft task ready</code> to fetch ready tasks, claim one with <code>ft task claim &lt;id&gt;</code>, run the LLM to generate a fix, and push the result back via <code>ft task update</code>. All interactions happen through the same gRPC service, regardless of whether the tasks originated from GitHub issues or the internal graph store.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>golang.org/x/crypto@0.49.0</code> has CVE‑2026‑42508 (plus 26 other advisories). Must upgrade and commit updated <code>go.mod</code>/<code>go.sum</code>.</li><li><strong>High</strong> – <code>google.golang.org/grpc@1.80.0</code> (GHSA‑hrxh‑6v49‑42gf) and <code>golang.org/x/net@0.52.0</code> (CVE‑2026‑25680) are vulnerable; upgrade required.</li><li><strong>High</strong> – No CI pipeline; add a GitHub Actions workflow that runs <code>make test &amp;&amp; go vet &amp;&amp; npm test</code>.</li><li><strong>High</strong> – No build gate for Docker images; create a workflow that builds <code>Dockerfile</code>/<code>Dockerfile.server</code> and validates the manifests.</li><li><strong>Medium</strong> – Enable Dependabot or Renovate for Go and npm ecosystems.</li><li><strong>Medium</strong> – Pin Docker base images by digest to avoid mutable base layers.</li><li><strong>Medium</strong> – Add a non‑root <code>USER</code> to Dockerfiles to reduce container escape risk.</li></ul>
+<p>Additional observations: the repository includes a full test suite (65 test files) but lacks automated execution; the licence file is present (Apache 2.0). Documentation exists in <code>.design/</code> and <code>.agents/</code>, but a top‑level README does not list all required commands.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Farm Table delivers a coherent, graph‑native task runtime with both embedded and client‑server modes, backed by a solid Go/Ent core and a React dashboard. However, the codebase contains several large, highly coupled files and critical dependency vulnerabilities that must be addressed before production use. Teams comfortable managing Go dependencies and adding CI pipelines will find it a useful foundation for AI‑agent task orchestration.</p>
             </div>
 
             
@@ -100,11 +139,11 @@ The presence of 36 test files and a configured CI/CD pipeline (although not dete
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">364<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>103</b></li><li><span>Go</span><i style="width:83%"></i><b>86</b></li><li><span>JSON</span><i style="width:2%"></i><b>2</b></li><li><span>YAML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>181</b></li><li><span>Markdown</span><i style="width:58%"></i><b>105</b></li><li><span>TypeScript</span><i style="width:27%"></i><b>49</b></li><li><span>JSON</span><i style="width:3%"></i><b>6</b></li><li><span>Shell</span><i style="width:3%"></i><b>6</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -147,7 +186,7 @@ The presence of 36 test files and a configured CI/CD pipeline (although not dete
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
                     </ul>
                 </div>
 
@@ -157,7 +196,7 @@ The presence of 36 test files and a configured CI/CD pipeline (although not dete
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">critical</span><span class="track"><span class="fill high" style="width:33%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div></div><div class="finding high"><div class="head"><span class="ttl">Upgrade the pinned dependency carrying a critical advisory</span><span class="chip">critical</span><span class="rankchip">27 occurrences</span></div><div class="ev">golang.org/x/crypto@0.49.0 CVE-2026-42508 (critical) +26 more</div><div class="ev">The manifest pins the exact version the advisory covers, so this is not a warning about drift: the vulnerable code is what installs, and a critical rating means it is reachable over the network without credentials or user interaction.</div><div class="rec"><b>Fix:</b> Upgrade to the fixed version named in the advisory, then commit the lockfile.</div></div><div class="finding high"><div class="head"><span class="ttl">Upgrade the pinned dependency carrying a published advisory</span><span class="chip">high</span><span class="rankchip">11 occurrences</span></div><div class="ev">google.golang.org/grpc@1.80.0 GHSA-hrxh-6v49-42gf (high) +1 more; golang.org/x/net@0.52.0 CVE-2026-25680 (medium) +8 more</div><div class="ev">The pinned version is the one that installs, so a published advisory against it describes this deployment rather than a hypothetical one, and the advisory is also a public description of how to exploit it.</div><div class="rec"><b>Fix:</b> Upgrade to the fixed version named in the advisory, then commit the lockfile.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">230 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span></div><div class="loc">Dockerfile</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">2 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span><span class="rankchip">3 occurrences</span></div><div class="loc">Dockerfile</div><div class="ev">node:22-bookworm, golang:1.26-bookworm, debian:bookworm-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a non-root USER to the image</span><span class="chip">medium</span></div><div class="loc">Dockerfile</div><div class="ev">CMD or ENTRYPOINT with no USER directive</div><div class="ev">A process running as root in the container is root against every mounted volume, and it turns any container escape or writable-mount mistake from a contained problem into a host one.</div><div class="rec"><b>Fix:</b> Create an unprivileged user, chown what it needs, and end the Dockerfile with USER.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

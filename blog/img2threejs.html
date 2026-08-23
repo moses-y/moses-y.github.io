@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 25, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Converting a single 2D image into a production-ready 3D model typically means photogrammetry, mesh extraction, or downloading pre-made assets—none of which yield clean, animatable, code-only geometry. You end up with heavy mesh files, no hierarchy, and no easy way to tweak proportions or materials programmatically.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>img2threejs takes one reference image and produces a TypeScript THREE.Group factory built from primitives, procedural shaders, and generated geometry. The pipeline lives in scripts/ and is a series of Python stdlib tools: probereferenceimage.py extracts landmarks and PBR hints, newprespecassessment.py writes a specification, and generatethreejsfactory.py emits the final Three.js code. Validation is handled by visualfeaturegate.py and validatesculptspec.py. The result is a runtime hierarchy with correct pivots and materials—no mesh files, no downloads. The references/ directory contains 13 specification documents (e.g., likeness-maximization.md, attachment-joint-correctness.md) that define the quality gates.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A game studio needs a quick, lightweight 3D model of a product for an in-browser configurator. They photograph the object once, run the pipeline, and get a createProductModel.ts factory they can drop into a Three.js scene. The model is animation-ready (correct pivot points, named groups) and can be tweaked by editing constants in the generated code—no mesh re-export needed.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med — No CI/CD pipeline — No automated build or test gate in .github/. The 5 test files in scripts/tests/testpipeline.py exist but aren&#39;t run automatically.  
-Low — No dependency lockfile — scripts/requirements.txt lists dependencies without pinned versions, making builds non-reproducible.  
-Low — Manual orchestration — The pipeline scripts (e.g., sculptpassorchestrator.py) appear to be run sequentially by hand; no single entry point or CLI tool ties them together.  
-Good — Documentation — 6 doc files and 13 reference specs are thorough, though the volume suggests a complex workflow.  
-Clean — No secrets or config files — Only .gitignore, LICENSE (MIT), and CONTRIBUTING.md are in root.</p><p>The codebase is well-documented and logically structured, but lacks automation and dependency management for production use.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A technically impressive, code-only approach to image-to-3D that produces clean, animation-ready Three.js models. The pipeline is manual and requires Python expertise to run, making it better suited for prototyping or one-off reconstructions than a turnkey service. If you need lightweight, tweakable 3D from a single photo and are comfortable with the manual workflow, this delivers.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that need a web‑ready 3‑D representation of a product often receive heavy mesh files or rely on manual modeling. Those assets are large, version‑hard to audit, and costly to render on low‑bandwidth devices. A reproducible, code‑only model that can be generated from a single reference photo removes the download burden and guarantees that the geometry is derived from a deterministic pipeline.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>img2threejs</code> takes one reference image and emits a <strong>TypeScript factory</strong> that builds a <code>THREE.Group</code> from primitives, procedural shaders and generated geometry. The core logic lives in the <code>scripts/</code> folder:</p>
+<ul><li><code>scripts/append_sculpt_review.py</code> – the primary entry point (<code>main</code> at line 201).</li><li><code>scripts/validate_sculpt_spec.py</code> and <code>scripts/generate_threejs_factory.py</code> – validate the intermediate “sculpt spec” and turn it into the final Three.js source.</li><li><code>scripts/extract_reference_pbr.py</code>, <code>scripts/delight_reference.py</code>, and <code>scripts/build_detail_inventory.py</code> – handle image analysis, colour‑space conversion and PNG/PNG‑filter utilities.</li></ul>
+<p>All generated models are animation‑ready and token‑efficient, as demonstrated by the animated GIFs in <code>assets/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>scripts/append_sculpt_review.py</code> → <code>main</code></strong> (line 201). <code>main</code> calls a cascade of 170 functions across the repo; the most widely used helpers are:</p>
+<ul><li><code>run</code> – invoked from 19 locations, driving the end‑to‑end pipeline.</li><li><code>is_number</code>, <code>validate_string_array</code>, <code>validate_unit_interval</code> – numeric validation utilities used 17, 13 and 11 times respectively.</li><li><code>load_image</code> → <code>read_png</code> → <code>paeth_predictor</code> – the only path that touches the filesystem (reading PNG data).</li></ul>
+<p>File‑level responsibilities (ordered by impact):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>External effect</th></tr></thead><tbody><tr><td><code>scripts/validate_sculpt_spec.py</code></td><td>48 functions: spec loading, numeric checks, score validation</td><td>Reads spec files</td></tr><tr><td><code>scripts/build_detail_inventory.py</code></td><td>PNG read/write, Paeth predictor, external command execution</td><td>Writes PNG, runs external tool</td></tr><tr><td><code>scripts/extract_reference_pbr.py</code></td><td>Colour distance, clamping, luma calculations</td><td>Reads images</td></tr><tr><td><code>scripts/sculpt_pass_orchestrator.py</code></td><td>Pass ordering, spec persistence, visual evidence generation</td><td>Reads/writes JSON spec</td></tr><tr><td><code>scripts/append_sculpt_review.py</code></td><td>Item splitting, spec loading, score clamping, remote path handling</td><td>Reads spec, writes review output</td></tr></tbody></table></div>
+<p>No circular imports were detected, but several modules contain deep nesting (up to 10 levels) and oversized files (e.g., <code>validate_sculpt_spec.py</code> at 1 620 lines). The internal call graph shows 308 intra‑repo edges; the functions listed above have the broadest “blast radius” because many modules depend on them.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/img2threejs.git
+cd img2threejs
+
+# Install Python dependencies (Python 3.10+ required)
+pip install -r scripts/requirements.txt</code></pre>
+<p>The repository does <strong>not</strong> provide a documented CLI or configuration file. Based on the entry point, a typical invocation would be:</p>
+<pre data-lang="bash"><code>python scripts/append_sculpt_review.py &lt;reference-image-path&gt; &lt;output-dir&gt;</code></pre>
+<p>Replace <code>&lt;reference-image-path&gt;</code> and <code>&lt;output-dir&gt;</code> with the desired input image and destination for the generated TypeScript factory. If additional arguments are required, inspect <code>append_sculpt_review.py</code> for <code>argparse</code> usage (currently absent).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product‑visualization service can embed this pipeline into its asset‑generation backend. After uploading a photo, the service runs the script above, stores the resulting <code>.ts</code> factory in a CDN, and serves the lightweight Three.js model to browsers, eliminating the need to host large GLB files.</p>
+<pre data-lang="python"><code># Example integration (pseudo‑code)
+spec_path = generate_spec_from_image(uploaded_path)
+factory_ts = run_pipeline(spec_path, out_dir="generated/")
+cdn_url = upload_to_cdn(factory_ts)
+render_in_browser(cdn_url)</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No CI/CD</strong> – 16 source files, no workflow in <code>.github/</code>. Fix: add a GitHub Actions workflow that runs the build and tests on push/PR.</li><li><strong>MEDIUM – No Dependabot</strong> – only <code>scripts/requirements.txt</code> exists, no update bot configured. Fix: add <code>.github/dependabot.yml</code> covering the Python ecosystem.</li><li><strong>HIGH – Duplicated code blocks</strong> – 260 repeated 6‑line snippets across 14 files. Fix: extract shared helpers.</li><li><strong>HIGH – Deep nesting</strong> – up to 10 indentation levels in several scripts. Fix: flatten with early returns or guard clauses.</li><li><strong>HIGH – Oversized files</strong> – e.g., <code>validate_sculpt_spec.py</code> (1 620 lines). Fix: split by responsibility.</li><li><strong>MEDIUM – High branching density</strong> – 510 branch points in two scripts. Fix: replace complex <code>if/elif</code> chains with strategy tables.</li></ul>
+<p>No tests are missing; a test suite exists under <code>scripts/tests/</code>, but without CI they are not automatically exercised.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>img2threejs</code> delivers a novel, code‑only pipeline for turning a single image into a Three.js model, which is valuable for bandwidth‑constrained web experiences. The implementation is functional but suffers from maintainability problems (large, duplicated, deeply nested scripts) and lacks automation (no CI, no dependency bot). Teams comfortable refactoring Python code and adding a CI layer can adopt it for internal asset generation; external users should be prepared to supply their own execution wrapper and validation.</p>
             </div>
 
             
@@ -120,7 +149,7 @@ Clean — No secrets or config files — Only .gitignore, LICENSE (MIT), and CON
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>scripts/requirements.txt</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>scripts/requirements.txt</code></span></li>
                     </ul>
                 </div>
 
@@ -130,7 +159,7 @@ Clean — No secrets or config files — Only .gitignore, LICENSE (MIT), and CON
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">16 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

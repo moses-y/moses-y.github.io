@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 21, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,56 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Training speculative decoding models can be a complex and time-consuming process, requiring significant computational resources and expertise. The lack of a compact, from-scratch implementation can hinder the development and deployment of these models.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The tiny-speculators repository provides a compact implementation for training speculative decoding models, such as EAGLE-3. The pipeline.py script orchestrates the full pipeline, from dataset preparation to vLLM-compatible checkpoint export. The preparedata.py script prepares the dataset, while the traineagle3.py script trains the EAGLE-3 model using the model.py and attention.py modules.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>In a practical scenario, a developer can use the tiny-speculators repository to train a speculative decoding model for a specific task, such as text generation. For example, they can run the pipeline.py script to prepare the dataset and train the model, and then use the trained model to generate text.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) — No CI/CD pipeline detected, which can lead to inconsistent builds and testing — .github/ or CI config
- Low (Risk) — Dependencies declared without a lockfile, which can result in non-reproducible builds — pyproject.toml
-The codebase appears to be well-structured, with a clear separation of concerns and adequate testing (16 test files found). However, the lack of a CI/CD pipeline and dependency lockfile may introduce risks.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The tiny-speculators repository provides a useful implementation for training speculative decoding models, with a clear and well-structured codebase. However, the lack of a CI/CD pipeline and dependency lockfile may require additional setup and maintenance. This repository is suitable for developers and researchers working with speculative decoding models, particularly those interested in EAGLE-3.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Training speculative‑decoding drafts (e.g., EAGLE‑3) requires a tightly coupled data‑prep, hidden‑state extraction, and small‑model distillation pipeline. Existing research code is often monolithic, undocumented, and hard to integrate into production workflows, leading to duplicated effort and fragile experiments.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>tiny-speculators</code> implements the full end‑to‑end workflow for a draft model:</p>
+<ul><li><strong>Data preparation</strong> – <code>tiny_speculators/scripts/prepare_data.py</code> tokenizes Qwen‑3 chat data and builds loss masks.</li><li><strong>Draft vocabulary construction</strong> – <code>tiny_speculators/scripts/vocab_mapping.py</code> selects frequent target tokens and writes the mapping; the core logic lives in <code>tiny_speculators/eagle3/vocab.py</code>.</li><li><strong>Hidden‑state extraction</strong> – <code>tiny_speculators/scripts/generate_hidden_states.py</code> runs a frozen verifier with vLLM and stores early/middle/late layer states.</li><li><strong>Draft training</strong> – <code>tiny_speculators/scripts/train_eagle3.py</code> fuses the three hidden‑state streams, runs the three‑step TTT rollout, and distills the verifier’s token distribution into the single‑layer draft (<code>tiny_speculators/eagle3/model.py</code> + <code>attention.py</code>).</li><li><strong>Export</strong> – <code>tiny_speculators/scripts/export_vllm.py</code> converts the checkpoint to the vLLM Speculators format.</li></ul>
+<p>All code is pure Python (15 files) and declared in <code>pyproject.toml</code>. Tests (16 files) cover each stage.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <code>main</code> function in <code>tiny_speculators/modal_pipeline.py:96</code>. From there:</p>
+<ol><li><code>main</code> parses CLI args (<code>parse_args</code>) and calls <code>run</code>.</li><li><code>run</code> (in <code>modal_pipeline.py</code>) invokes the <strong>pipeline</strong> (<code>tiny_speculators/scripts/pipeline.py</code>).</li><li><code>pipeline.py</code> orchestrates the stages: <em> <code>stage_dataset</code> → <code>prepare_data.py</code> → <code>prepare</code> (file I/O). </em> <code>generate_hidden_states</code> → <code>generate_hidden_states.py</code> → <code>subprocess.run</code> (external vLLM call). <em> <code>train</code> → <code>train_eagle3.py</code> → <code>train</code> (calls <code>shuffle_training</code>, <code>generate_hidden_states</code>, <code>save_checkpoint</code>). </em> <code>export_vllm</code> → <code>export_vllm.py</code> → <code>export_vllm</code> (writes checkpoint files).</li></ol>
+<p>The internal call graph shows 62 intra‑repo edges; the most‑used functions are <code>validate_qwen3_8b_config</code> (4 callers), <code>train</code> (4 callers), and <code>run</code> (3 callers). The hubs are:</p>
+<ul><li><code>tiny_speculators/config.py</code> – imported by 8 modules, no outgoing imports (instability 0).</li><li><code>tiny_speculators/eagle3/vocab.py</code> – imported by 4 modules, also a leaf.</li></ul>
+<p>No circular imports are present, so refactoring a hub (e.g., <code>config.py</code>) is low‑risk. The widest blast radius belongs to <code>pipeline.py</code> (8 functions, 3 external callers) because it touches the filesystem, runs a subprocess, and drives the entire workflow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/tiny-speculators
+cd tiny-speculators
+
+# Install dependencies (uv is present)
+uv sync          # creates a virtualenv and installs from pyproject.toml
+
+# Prepare data (example input path)
+python -m tiny_speculators.scripts.prepare_data \
+    --input data/raw_chat.json \
+    --output data/prepared.pt
+
+# Generate hidden states (requires a GPU with CUDA 13.0)
+python -m tiny_speculators.scripts.generate_hidden_states \
+    --verifier-model qwen3-8b \
+    --prepared data/prepared.pt \
+    --outdir hidden_states/
+
+# Train the draft model
+python -m tiny_speculators.scripts.train_eagle3 \
+    --hidden-dir hidden_states/ \
+    --config tiny_speculators/config.py \
+    --output models/draft_eagle3.pt
+
+# Export to vLLM format
+python -m tiny_speculators.scripts.export_vllm \
+    --checkpoint models/draft_eagle3.pt \
+    --outdir vllm_speculators/</code></pre>
+<p>The repository supplies a <code>README.md</code> with a high‑level diagram but no explicit CLI flags; the commands above follow the function signatures observed in each script.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider could embed this pipeline in a nightly data‑processing job: ingest new chat logs, run <code>prepare_data.py</code> → <code>generate_hidden_states.py</code> → <code>train_eagle3.py</code>, then push the exported vLLM checkpoint to a model‑serving fleet. The scripts are modular enough to be called from an orchestration system (e.g., Airflow) by invoking the same module entry points.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing CI</strong> – 15 source files, no <code>.github/workflows</code> or other CI config. Fix: add a GitHub Actions workflow that runs <code>uv sync &amp;&amp; pytest</code>.</li><li><strong>Medium – Dependabot</strong> – Only <code>pyproject.toml</code> present; no Dependabot/Renovate config. Fix: commit <code>.github/dependabot.yml</code>.</li><li><strong>Medium – Resource safety</strong> – <code>tiny_speculators/scripts/train_eagle3.py</code> opens files without a context manager; replace <code>open(...)</code> with <code>with open(...) as f:</code>.</li><li><strong>Medium – Cognitive load</strong> – <code>tiny_speculators/scripts/pipeline.py</code> has nesting depth 6; refactor into early‑return guard clauses or split into smaller functions.</li></ul>
+<p>No lockfile aside from <code>uv.lock</code>; the declared <code>transformers</code> range (<code>&gt;=4.56.1,&lt;5.14.0</code>) is one major version behind the current 5.15.0, which may cause incompatibilities.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>tiny-speculators</code> delivers a clear, reproducible implementation of the full speculative‑decoding training pipeline, with well‑scoped modules and comprehensive tests. However, the lack of CI, automatic dependency updates, and a few resource‑handling bugs make it a research‑grade codebase that needs modest engineering effort before production deployment. Suitable for teams comfortable with Python‑centric ML pipelines and willing to add basic DevOps scaffolding.</p>
             </div>
 
             
@@ -161,7 +207,7 @@ The codebase appears to be well-structured, with a clear separation of concerns 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>pyproject.toml</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
                     </ul>
                 </div>
 
@@ -171,7 +217,7 @@ The codebase appears to be well-structured, with a clear separation of concerns 
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">15 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

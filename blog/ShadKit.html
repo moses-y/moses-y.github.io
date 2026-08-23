@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 30, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Swift</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,50 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building AI-native SwiftUI apps typically requires stitching together disparate UI libraries, custom chat backends, and manual theme systems. Developers waste time reimplementing shadcn&#39;s subtle design tokens (OKLCH color math, Tailwind spacing scales) and AI SDK patterns like streaming message coalescing. ShadKit consolidates these into one dependency-free SwiftUI package.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>ShadKit delivers four libraries: ShadcnUI for design tokens and primitives (buttons, cards, inputs, overlays), AIElementsUI for chat components with a useChat-shaped runtime, and CanvasUI for node-graph canvases. The AIElementsGallery target provides a browsable demo app. Design tokens use OKLCH color conversion from Sources/ShadcnUI/Theme/OKLCH.swift, enabling verbatim paste of shadcn CSS theme blocks. The AIChat class in Sources/AIElementsUI/ChatRuntime.swift mirrors the AI SDK&#39;s useChat with UIMessage types, streaming deltas, and tool call coalescing.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer building a SwiftUI coding assistant can wire AIChat to a backend via AIChatTransport, render streaming reasoning with AIReasoning, display markdown responses with AIResponse, and attach tool calls via AITool. The composer templates (AIChatGPTComposer, AIClaudeComposer, AIGrokComposer) provide ready-made input UIs that differ only in AIPromptInputStyle. Running swift run ShadKitDemo --section aiTemplates --scheme dark previews all three.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - No CI/CD pipeline detected. No .github/ or CI config files. The 21 test files cover OKLCH edge cases, canvas viewport, diff rendering, chat runtime, and theme round-trip conversion, but there&#39;s no automated gate to prevent regressions.
-Low - Markdown rendering explicitly skips table support. Not a bug, but a documented limitation in Sources/AIElementsUI/Response.swift that may surprise users expecting full GFM.
-Low - Syntax highlighting uses a compact tokeniser with only two palettes (one-light, one-dark-pro). Not a full grammar per language - acceptable for a demo but limited for production use.
-Low - The stop() method on AIChat keeps whatever already arrived, but there&#39;s no timeout or error-recovery mechanism visible in the public API. Network failures could leave the chat in an indeterminate state.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>ShadKit is a well-executed SwiftUI port of shadcn/ui and Vercel AI Elements, with thorough OKLCH color handling, a functional chat runtime, and 21 tests across all four libraries. It&#39;s best suited for SwiftUI developers building AI interfaces who want pixel-accurate shadcn components without JavaScript dependencies. The lack of CI is the main operational gap - add that and it&#39;s production-ready for teams targeting macOS 14+ / iOS 17+.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building macOS or iOS apps often need UI that mirrors the look‑and‑feel of <strong>shadcn/ui</strong> and <strong>Vercel AI Elements</strong> but must avoid heavyweight third‑party libraries. Maintaining visual fidelity while keeping the dependency footprint at zero creates friction when teams copy‑paste HTML/CSS or rely on wrappers that drift from the source designs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>ShadKit</strong> delivers a pure‑SwiftUI implementation of the shadcn component library, the AI Elements UI set, a React‑Flow‑style node canvas, and a small demo gallery.</p>
+<ul><li>The design‑token stack lives under <code>Sources/ShadcnUI/Theme/</code> (e.g. <code>ShadcnPalette.swift</code>, <code>ThemeLoading.swift</code>).</li><li>UI primitives such as <code>Button.swift</code>, <code>Badge.swift</code>, and <code>Card.swift</code> are in <code>Sources/ShadcnUI/Primitives/</code>.</li><li>AI‑focused views and runtime live in <code>Sources/AIElementsUI/</code> (<code>AssistantPanel.swift</code>, <code>Chatbot.swift</code>, <code>CodeBlock.swift</code>, <code>ChatRuntime.swift</code>).</li><li>The canvas implementation is under <code>Sources/CanvasUI/</code> (<code>CanvasView.swift</code>, <code>CanvasModel.swift</code>).</li><li>A runnable showcase is provided by <code>Sources/ShadKitDemo/main.swift</code> and the gallery files in <code>Sources/AIElementsGallery/</code>.</li></ul>
+<p>All components are compiled as a single Swift package (<code>Package.swift</code>) that can be added to a host app with the standard Swift Package Manager line shown in the README.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – <code>Sources/ShadKitDemo/main.swift</code> creates a <code>NSHostingView</code> that hosts <code>ShadcnAIGallery()</code> (the top‑level view from <code>Sources/AIElementsGallery/Gallery.swift</code>). The gallery imports the UI modules and presents a tabbed interface that instantiates each component demo.</p>
+<p><strong>Control flow</strong> –</p>
+<ol><li><code>main.swift</code> → <code>ShadcnAIGallery()</code> (gallery view).</li><li>The gallery selects a demo (e.g., AI chat) and instantiates <code>AIChatbot</code> from <code>Sources/AIElementsUI/Chatbot.swift</code>.</li><li><code>AIChatbot</code> owns a <code>@StateObject</code> of type <code>AIChat</code> (runtime in <code>ChatRuntime.swift</code>).</li><li><code>AIChat</code> talks to a transport that conforms to <code>AIChatTransport</code>. The default mock transport (<code>AIMockChatTransport</code>) streams <code>AIChatChunk</code>s, which <code>ChatRuntime</code> parses and forwards to UI components (<code>AIMessageView</code>, <code>AICodeBlock</code>, etc.).</li><li>UI primitives (e.g., <code>Button</code>, <code>Badge</code>) read the current theme from the <code>Environment</code> injected by <code>ShadcnTheme</code> (defined in <code>Sources/ShadcnUI/Theme/ShadcnTheme.swift</code>). Theme loading occurs once in <code>ThemeLoading.swift</code> and populates <code>ShadcnPalette</code> used throughout the UI layer.</li></ol>
+<p><strong>Effect ownership</strong> –</p>
+<ul><li><code>ThemeLoading.swift</code> has the widest blast radius: any change to token parsing affects every primitive.</li><li><code>ChatRuntime.swift</code> and <code>AssistantPanel.swift</code> contain deep nesting (max depth 9) and host the majority of branching logic for AI message handling.</li><li><code>CanvasView.swift</code> owns all canvas‑rendering side effects (node layout, drag handling). No module cycles were detected; the import graph is flat with 0 internal edges.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ShadKit
+cd ShadKit
+
+# Build the package
+swift build
+
+# Run the demo app (macOS)
+swift run ShadKitDemo
+# Optional: open a specific gallery section in dark mode
+swift run ShadKitDemo --section aiTemplates --scheme dark</code></pre>
+<p>No external configuration files, environment variables, or secrets are required. Add the package to another project with:</p>
+<pre data-lang="swift"><code>.package(url: "https://github.com/moses-y/ShadKit", from: "0.1.0")</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product that ships a native macOS chat assistant can replace a web‑based UI by importing <code>ShadKit</code>. In the host app’s root view:</p>
+<pre data-lang="swift"><code>import ShadcnUI
+import AIElementsUI
+
+ContentView()
+    .shadcnSurface()
+    .shadcnTheme(myCustomTheme)   // OKLCH‑based palette
+    .overlay {
+        AIChatbot(chat: AIChat(transport: MyBackendTransport()))
+    }</code></pre>
+<p>The assistant now looks identical to the original Vercel AI Elements while remaining fully SwiftUI‑native and dependency‑free.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – cognitive_load</strong> – Deep nesting (max depth 9) in <code>Gallery.swift</code>, <code>AssistantPanel.swift</code>, <code>CodeBlock.swift</code>. Flatten with early returns or guard clauses, and consider extracting inner blocks.</li><li><strong>High – clarity</strong> – Repeated 6‑line code blocks across 14 UI files (<code>AssistantPanel.swift</code>, <code>Chatbot.swift</code>, <code>Conversation.swift</code>, <code>Surfaces.swift</code>, …). Consolidate into shared helpers.</li><li><strong>Medium – cognitive_load</strong> – High branching density in <code>Gallery.swift</code>, <code>ChatRuntime.swift</code>, <code>ThemeLoading.swift</code>. Break decision‑heavy sections into smaller, strategy‑based functions.</li><li><strong>High – CI missing</strong> – No workflow builds or tests the 69 source files. Add a GitHub Actions workflow that runs <code>swift build</code> and <code>swift test</code> on push and pull‑request.</li></ul>
+<p>All other hygiene items are satisfactory: tests exist (<code>Tests/…</code>), a LICENSE is present, and no secrets were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>ShadKit provides a faithful, dependency‑free SwiftUI port of popular design systems, making it attractive for teams that need visual parity without external packages. The codebase is functional but suffers from deep nesting, duplicated snippets, and a lack of CI automation, which could hinder maintainability and rapid iteration. It is best suited for developers comfortable with SwiftUI who can invest in modest refactoring and CI setup.</p>
             </div>
 
             
@@ -129,7 +168,7 @@ Low - The stop() method on AIChat keeps whatever already arrived, but there&#39;
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">69 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

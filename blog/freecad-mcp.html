@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 29, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The FreeCAD MCP (Model Context Protocol) server repository aims to provide a solution for controlling FreeCAD from Claude Desktop, addressing the need for a more integrated and automated design workflow.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The freecad-mcp repository provides a FreeCAD MCP server that allows users to control FreeCAD remotely. The server is implemented in Python, with the main entry point being the src/freecad_mcp/server.py file. The addon/FreeCADMCP directory contains the necessary files for integrating the MCP server with FreeCAD, including the Init.py and InitGui.py files. The examples directory provides demonstration code for using the MCP server, including a React example in examples/langchain/react.py.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using this repository would be to integrate the FreeCAD MCP server with Claude Desktop, allowing users to design and manipulate 3D models remotely. For example, a user could use the uvx command to start the MCP server and then use the Claude Desktop interface to design a 3D model, with the changes being reflected in real-time in FreeCAD.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) — No test files detected, indicating untested code paths — repository-wide
- Medium (SDLC) — No CI/CD pipeline detected, indicating no automated build/test gate — .github/ or CI config
- Low (Risk) — Dependencies declared without a lockfile, indicating non-reproducible builds — pyproject.toml
- High (Security) — Possible secrets/credentials committed to the repo, indicating a potential security risk — examples/adk/.env</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The freecad-mcp repository provides a functional FreeCAD MCP server, but it lacks essential testing and CI/CD infrastructure, which raises concerns about its reliability and maintainability. While it may be suitable for small-scale or experimental use, it is not recommended for production use without addressing these issues.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Claude Desktop users who need to drive FreeCAD geometry require a bridge that translates natural‑language or tool‑call prompts into FreeCAD’s RPC interface.  This repo provides that bridge, but the codebase has several structural weaknesses that make it hard to extend or trust in production.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a <strong>FreeCAD MCP server</strong> that exposes FreeCAD operations (create document, create object, edit, delete, FEM execution, etc.) as MCP tools consumable by Claude.  Key files and their responsibilities (from the responsibility map) are:</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Functions / Classes</th><th>Calls into</th><th>Reads/writes files</th></tr></thead><tbody><tr><td><code>addon/FreeCADMCP/rpc_server/rpc_server.py</code></td><td>33 f, 1 c</td><td>10</td><td>Yes</td></tr><tr><td><code>src/freecad_mcp/freecad_client.py</code></td><td>20 f, 2 c</td><td>3</td><td>No</td></tr><tr><td><code>src/freecad_mcp/operations/core.py</code></td><td>15 f</td><td>4</td><td>No</td></tr><tr><td><code>src/freecad_mcp/server.py</code></td><td>19 f</td><td>3</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/gui_dispatch.py</code></td><td>10 f, 1 c</td><td>3</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/commands.py</code></td><td>18 f, 5 c</td><td>1</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/property_mapper.py</code></td><td>4 f, 1 c</td><td>2</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/settings.py</code></td><td>3 f</td><td>3</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/ip_filter.py</code></td><td>4 f, 1 c</td><td>3</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/fem_executor.py</code></td><td>1 f</td><td>2</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/parts_library.py</code></td><td>2 f</td><td>2</td><td>No</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/serialize.py</code></td><td>–</td><td>–</td><td>–</td></tr><tr><td><code>addon/FreeCADMCP/rpc_server/view_manager.py</code></td><td>–</td><td>–</td><td>–</td></tr><tr><td><code>addon/FreeCADMCP/InitGui.py</code></td><td>6 f, 1 c</td><td>3</td><td>No</td></tr></tbody></table></div>
+<p>The <strong>entry point</strong> is <code>main</code> in <code>src/freecad_mcp/server.py:524</code>, which reaches 23 other functions and is called from a single place (the server lifespan handler).  Controlling flows start there, then branch through <code>create_document</code>, <code>create_object</code>, <code>edit_object</code>, <code>delete_object</code>, and <code>execute_code</code> before hitting the filesystem (e.g., <code>os.remove</code> via <code>get_active_screenshot</code>).</p>
+<p>The internal call graph shows <code>get_freecad_connection</code> invoked from 15 places, <code>text_response</code> from 14, and <code>dispatch_to_gui</code> from 11 – these are the hubs any change ripples through.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution follows a short path: <code>main → execute_code → execute_code_operation → get_active_screenshot</code>; the screenshot step triggers <code>os.remove</code> to clean up temporary images.  All RPC commands (<code>ping</code>, <code>create_document</code>, <code>create_object</code>, etc.) are defined in <code>addon/FreeCADMCP/rpc_server/rpc_server.py</code> and registered via <code>register_commands</code> in <code>InitGui.py</code>.  The <code>freecad_client</code> module (<code>src/freecad_mcp/freecad_client.py</code>) manages the TCP‑like connection; <code>load_settings</code>/<code>save_settings</code> in <code>settings.py</code> persist configuration to <code>freecad_mcp_settings.json</code>.  Remote connections are toggled through the UI (<code>Configure Allowed IPs</code>) which ultimately sets the IP filter in <code>ip_filter.py</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repository (use the exact URL)
+git clone https://github.com/moses-y/freecad-mcp.git
+cd freecad-mcp
+
+# Install the addon into FreeCAD’s Mod directory (example for Linux Ubuntu)
+cp -r addon/FreeCADMCP ~/.FreeCAD/Mod/
+# Restart FreeCAD, select “MCP Addon” from the Workbench list,
+# then click “Start RPC Server” (or enable “Auto‑Start Server”).
+
+# Configure Claude Desktop
+# Edit ~/.config/claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "freecad": {
+      "command": "uvx",
+      "args": ["freecad-mcp"]
+    }
+  }
+}
+# Optional: add "--only-text-feedback" to the args if text‑only feedback is desired.</code></pre>
+<p><strong>Running it</strong></p>
+<ul><li>In FreeCAD: switch to the MCP Addon workbench, click <strong>Start RPC Server</strong>.</li><li>In Claude: invoke any MCP tool (e.g., <code>create_document</code>, <code>create_object</code>) and the server will translate the call into the corresponding FreeCAD operation.</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A designer can ask Claude: <em>“Create a 30 mm cube, fillet the top edge 5 mm, and export a STEP file.”</em>  Claude translates this into the MCP calls <code>create_object</code> (cube), <code>edit_object</code> (fillet), then <code>execute_code</code> (STEP export).  The server runs the operations inside FreeCAD, returns a screenshot (or text if <code>--only-text-feedback</code> is set), and the designer iterates without leaving the chat.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured static‑analysis findings</strong> (deterministic, from the pipeline):</p>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Deep nesting x4 – files <code>addon/FreeCADMCP/rpc_server/property_mapper.py</code>, <code>addon/FreeCADMCP/rpc_server/gui_dispatch.py</code>, <code>examples/langchain/react.py</code>.  Max indentation depth 8 makes control flow hard to follow.</li><li><strong>[MEDIUM/clarity]</strong> Duplicated code blocks – 11 repeated 6‑line segments across <code>addon/FreeCADMCP/rpc_server/object_factory.py</code>, <code>addon/FreeCADMCP/rpc_server/rpc_server.py</code>, <code>src/freecad_mcp/freecad_client.py</code>, <code>src/freecad_mcp/operations/__init__.py</code>.</li><li><strong>[MEDIUM/resilience]</strong> Broad exception handling x7 – <code>addon/FreeCADMCP/rpc_server/commands.py</code>, <code>addon/FreeCADMCP/rpc_server/fem_executor.py</code>, <code>addon/FreeCADMCP/rpc_server/gui_dispatch.py</code>.  Bare <code>except</code> clauses swallow errors indiscriminately.</li></ul>
+<p><strong>SDLC / repository‑level observations</strong> (from the code‑health audit):</p>
+<ul><li><strong>[HIGH]</strong> Add a test suite – 22 source files, no test files exist.  Any change ships with no signal that existing behaviour holds.</li><li><strong>[HIGH]</strong> Add a CI workflow – no <code>.github/</code> CI configuration; every merge runs untested.</li><li><strong>[HIGH]</strong> Remove the committed <code>.env</code> and rotate its credentials – <code>examples/adk/.env</code> is tracked and loaded by the app, risking live key exposure.</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate – one manifest present, no update bot configured.</li><li><strong>[MEDIUM]</strong> Add a pre‑commit secret gate – no hook scanning staged content; the same class of leak can recur.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This repo delivers a functional FreeCAD ↔ Claude bridge with a clear RPC surface and a small set of well‑defined entry points.  However, the codebase suffers from deep nesting, duplicated logic, and bare exception handlers that raise maintenance risk.  The absence of tests, CI, and a committed <code>.env</code> file means any production deployment must add those safeguards before relying on the integration for critical workflows.  It is suitable for hobbyists and rapid prototyping, but teams needing stability should invest in the outlined test, CI, and secret‑management improvements.</p>
             </div>
 
             
@@ -105,7 +143,7 @@
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>26</b></li><li><span>Markdown</span><i style="width:4%"></i><b>1</b></li><li><span>TOML</span><i style="width:4%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Django</span></p>
+                        <p class="an-fw"><span>React</span><span>Django</span><span>LangChain</span></p>
                     </div>
                 </div>
 
@@ -143,7 +181,7 @@
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected — untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>pyproject.toml</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>examples/adk/.env</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>examples/adk/.env</code></span></li>
                     </ul>
                 </div>
 
@@ -153,7 +191,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:67%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a test suite; this repository has none</span><span class="chip">high</span><span class="rankchip">22 occurrences</span></div><div class="ev">22 source files, no test files</div><div class="ev">Any change ships with no signal that existing behaviour still holds, so a regression reaches production undetected.</div><div class="rec"><b>Fix:</b> Add one test per public entry point, then a CI step that runs them.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">22 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Remove the committed .env and rotate what it holds</span><span class="chip">high</span></div><div class="loc">examples/adk/.env</div><div class="ev">examples/adk/.env</div><div class="ev">A tracked .env is the most common route for a working key to reach a public clone, and it is the file the app actually loads, so the value is usually live.</div><div class="rec"><b>Fix:</b> git rm --cached the file, add it to .gitignore, rotate every credential it names, commit a .env.example with empty values.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a pre-commit secret gate</span><span class="chip">medium</span></div><div class="ev">a secret-shaped file is tracked and no repo-level gate is visible</div><div class="ev">Without a gate the same class of leak recurs on the next commit, so a leak finding is the symptom and this is the cause.</div><div class="rec"><b>Fix:</b> Add a pre-commit hook scanning staged content, and enable push protection.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

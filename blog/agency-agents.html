@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 23, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams waste time manually crafting prompts for AI coding assistants, often getting generic responses that lack domain expertise. Each new tool (Claude Code, Cursor, Gemini CLI) requires a different configuration format, and there’s no standard way to share or version-control agent personalities.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>agency-agents is a library of 188 Markdown agent definitions, each specifying a role’s identity, workflows, deliverables, and success metrics. Agents are organized by division (engineering/, marketing/, game-development/, etc.). The repo provides a convert.sh script that generates tool-specific integration files for Claude Code, Cursor, Gemini CLI, and others. An optional desktop app (agencyagents.app) installs agents across supported tools with a click.</p><p>The integrations/ directory contains per-tool READMEs and a setup script (mcp-memory/setup.sh). CI workflows in .github/workflows/ validate division structure (check-divisions.yml), runbook formatting (check-runbooks.yml), and tool configurations (check-tools.yml). A lint-agents.yml workflow runs on Markdown files.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A digital agency onboarding a new client can install the engineering-frontend-developer.md agent into Claude Code. The agent file includes a core mission, a list of deliverables (e.g., “component library with Storybook stories”), and communication style. The developer activates it with “Hey Claude, activate Frontend Developer mode,” and the assistant responds with role-appropriate suggestions—no manual prompt engineering.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The codebase is structurally sound: tests (10 files), CI (4 workflows), license (MIT), and a lockfile are present. No executable code in agent Markdown files—only definitions. Potential concerns:
-Low — No input validation: The install.sh and convert.sh scripts (not shown in file list but referenced in README) may assume a clean environment; no error handling for missing dependencies.
-Low — Markdown-only repo: No unit tests for agent content; CI only checks file structure and formatting, not semantic correctness.
-Med — Duplication risk: Each agent is a standalone file; cross-referencing shared patterns (e.g., “communication style” templates) would require manual sync.</p><p>Overall, the repo is well-organized for its purpose as a static content library.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a practical, well-structured collection of AI agent definitions that saves teams from reinventing prompts. It’s best suited for organizations already using AI coding assistants and wanting consistent, domain-specific behavior. The desktop app and CI workflows show genuine polish. The main limitation is that it’s a content library, not a runtime—you still need a compatible tool to execute the agents.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that want to adopt AI‑augmented workflows must locate, customize, and maintain dozens of prompt‑driven “agents”.  Without a curated source they spend time copying snippets, reconciling style, and wiring each agent to their preferred development tool.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships a ready‑made roster of 338 agent definition files (e.g., <code>engineering/engineering-frontend-developer.md</code>, <code>marketing/marketing-reddit-community-builder.md</code>).  Each markdown file declares the agent’s personality, mission, and concrete deliverables.  The <strong>scripts</strong> folder contains the only executable glue:</p>
+<ul><li><code>scripts/install.sh</code> – primary entry point; copies selected markdown agents into the target tool’s agent directory (Claude Code, Cursor, etc.).</li><li><code>scripts/convert.sh</code> – generates integration adapters for the supported IDEs/CLI tools (see <code>integrations/</code> readmes).</li><li><code>scripts/check‑runbooks.sh</code>, <code>scripts/check‑divisions.sh</code> – CI helpers that validate agent metadata.</li></ul>
+<p>The GitHub Actions workflow files (<code>.github/workflows/*.yml</code>) invoke the check scripts on every push, ensuring the roster stays syntactically sound.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with the <strong>install</strong> command:</p>
+<pre><code>./scripts/install.sh [--tool &lt;tool&gt;] [--division &lt;folder&gt;]</code></pre>
+<ol><li><code>install.sh</code> parses arguments, determines the destination (<code>~/.claude/agents/</code> for Claude Code, analogous dirs for other tools).</li><li>It calls <code>scripts/convert.sh</code> to materialize any tool‑specific wrapper files under <code>integrations/</code>.</li><li>For each selected division (e.g., <code>engineering/</code>), the script loops over <code>*.md</code> files and copies them to the destination.</li><li>No external services are contacted; the process touches only the local filesystem.</li></ol>
+<p>The <strong>check</strong> scripts (<code>check‑runbooks.sh</code>, <code>check‑divisions.sh</code>) are invoked by the CI workflows (<code>.github/workflows/check‑runbooks.yml</code>, <code>check‑divisions.yml</code>). They read the same markdown files, verify required front‑matter fields, and fail the workflow on violations. The import graph shows only two internal modules (<code>scripts/build-hermes-plugin</code>, <code>scripts/check-hermes-plugin</code>) with zero import edges, meaning each script is self‑contained and has no hidden runtime dependencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL as requested)
+git clone https://github.com/moses-y/agency-agents
+cd agency-agents
+
+# Install all agents for Claude Code (default)
+./scripts/install.sh --tool claude-code
+
+# Install only the marketing agents
+./scripts/install.sh --division marketing --tool claude-code
+
+# Verify the roster locally (runs the same checks CI does)
+./scripts/check-runbooks.sh</code></pre>
+<p>If you prefer a graphical install, download the companion desktop app from the README links; the CLI workflow above is the exact process the app automates.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team can bootstrap their sprint planning by copying <code>product/product‑manager.md</code> and <code>product/product‑feedback‑synthesizer.md</code> into their Claude Code workspace.  The agents then generate backlog items, prioritize them, and draft user stories—all with the same prompts the team would have written manually.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Least‑privilege token</strong> – <code>.github/workflows/check-divisions.yml</code> declares no <code>permissions</code> for <code>GITHUB_TOKEN</code>.  Add <code>permissions: { contents: read }</code> at the top of the workflow.</li><li><strong>Low – Missing job timeout</strong> – Same workflow lacks <code>timeout-minutes</code>.  Specify a reasonable bound (e.g., <code>timeout-minutes: 30</code>) for each job.</li><li><strong>Medium – Deep nesting</strong> – <code>scripts/check-runbooks.sh</code> reaches 7‑level indentation, making the flow hard to follow.  Refactor with early returns or helper functions.</li><li><strong>Medium – Duplicated blocks</strong> – <code>scripts/convert.sh</code>, <code>scripts/install.sh</code>, <code>scripts/lint‑agents.sh</code> share a 6‑line snippet repeated 10 times.  Extract to a shared helper script.</li><li><strong>Medium – Broad exception handling</strong> – <code>scripts/build-hermes-plugin.py</code> catches generic <code>except</code>; replace with specific exception types.</li><li><strong>Medium – Oversized file</strong> – <code>scripts/install.sh</code> is 1,063 lines; split by responsibility (argument parsing, conversion, copying).</li><li><strong>Medium – High branching density</strong> – <code>scripts/check‑agent‑originality.sh</code> and two others contain &gt;30 branch points in &lt;120 lines; consider table‑driven dispatch.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional issues were inferred.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a comprehensive, ready‑to‑use catalog of AI agents and a minimal CLI that reliably installs them into supported developer tools.  It is well‑structured for reference but suffers from script‑level technical debt (deep nesting, duplication, oversized files) and a CI permission oversight.  Teams that need a quick, curated set of prompt agents will find it valuable; developers planning to extend or maintain the tooling should first refactor the scripts to reduce cognitive load.</p>
             </div>
 
             
@@ -101,9 +129,9 @@ Med — Duplication risk: Each agent is a standalone file; cross-referencing sha
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">338<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>188</b></li><li><span>YAML</span><i style="width:4%"></i><b>7</b></li><li><span>JSON</span><i style="width:1%"></i><b>1</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>311</b></li><li><span>Shell</span><i style="width:3%"></i><b>9</b></li><li><span>YAML</span><i style="width:2%"></i><b>7</b></li><li><span>JSON</span><i style="width:1%"></i><b>4</b></li><li><span>Python</span><i style="width:1%"></i><b>2</b></li>
                         </ul>
                         
                     </div>
@@ -123,7 +151,7 @@ Med — Duplication risk: Each agent is a standalone file; cross-referencing sha
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Declare least-privilege permissions for GITHUB_TOKEN</span><span class="chip">medium</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/check-divisions.yml</div><div class="ev">4 workflow(s) declare no permissions</div><div class="ev">With no declaration the token inherits the repository default, so any injected step can push commits or mint releases from inside your own CI.</div><div class="rec"><b>Fix:</b> Add permissions: contents: read at the top of the workflow and widen per job only where needed.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/check-divisions.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
