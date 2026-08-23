@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Legal technology at Am Law 100 firms costs $50,000–$150,000 per lawyer per year. Small firms and solo practitioners cannot access these tools. Most legal AI projects focus on narrow use cases—document review or contract analysis—and leave the broader workflow (drafting, billing, docketing, collaboration) unaddressed.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>BigLaw is a single Go binary that replicates the core legal tech stack as an open-source platform. The codebase at biglaw-go/internal/ contains 172 Go files covering research, drafting, redlining, e-signatures, briefing, docketing, billing, and collaboration. It runs on a Raspberry Pi with 4GB RAM or entirely on local models via Ollama/LM Studio.</p><p>The system orchestrates 100+ agents through a structured multi-round debate architecture defined in biglaw-go/internal/agents/. The topoflow/ directory implements a topology-based routing and governance layer. internal/lpm/ handles the legal practice management pipeline—intake, drafting, portfolio management, and reporting. External integrations include Clio (internal/integrations/clio.go), Slack and Teams bots (internal/bots/), and DocuSeal for e-signatures (internal/tools/docuseal.go).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A solo practitioner could deploy the Go binary, configure a local LLM via internal/providers/ollama.go, and run the full intake-to-billing workflow from a single server. The docker-compose.yml in biglaw-go/ provides a one-command deployment. The benchmarks/harvey-lab/ directory contains a Python-based evaluation harness for comparing model performance across legal tasks.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - Secrets committed to repo: biglaw-go/internal/secrets/secrets.go likely contains credential definitions or placeholder secrets. This file should be in .gitignore and loaded from environment variables or a vault.
-Medium - No CI/CD pipeline: No .github/ or CI configuration detected. 44 test files exist but have no automated gate to enforce they pass before merge.
-Medium - Default auth disabled: AUTH_ENABLED=false is the default. Exposing the API without authentication on a shared network is a real risk, as the README explicitly warns.
-Low - Mixed language stack: 7 Python files in benchmarks/ create a secondary dependency chain (requirements.txt) for a Go-centric project. Not a defect, but adds maintenance surface.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>BigLaw is the most ambitious open legal AI platform available, with genuine breadth across legal workflows and a thoughtful agent architecture. It is not production-ready—the security posture requires hardening, and the experimental status is honest, not modest. Suited for firms with engineering capability who want to evaluate or build on an open legal AI stack, but not for firms expecting a drop-in replacement for commercial tools.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Am Law 100 firms spend roughly $2M/year per firm on legal tech. BigLaw targets solos, boutiques, and small firms that cannot afford that stack, consolidating research, drafting, redlining, e-signatures, briefing, docketing, billing, and collaboration into a single open-source platform. The project is explicitly experimental and not production-hardened.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>BigLaw is a portfolio of six self-contained projects, not one codebase. The core is <code>biglaw-go/</code> (177 files), a Go backend that runs as a single static binary on 4 GB of RAM, with 100+ agents in a multi-round debate architecture. The <code>ui/</code> folder (34 files) is a React/TypeScript frontend. <code>benchmarks/harvey-lab/</code> contains a Python-based evaluation harness comparing this Go implementation against the original TypeScript version.</p>
+<p>The README claims 1.25×–6.9× performance gains over the TypeScript original, which is preserved at tag <code>typescript-final</code>. The system supports local models (Ollama/LM Studio) and in-process vector search in <code>biglaw-go/internal/agents/registry.go</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>biglaw-go/cmd/biglaw/main.go:52</code>, which reaches 401 functions. The shortest path to an external effect is <code>main -&gt; Init</code>, which reads files via <code>os.ReadFile</code>. The API server's <code>Run</code> function (<code>biglaw-go/internal/api/server.go:194</code>) reaches 69 functions and is called from 11 places; it ultimately runs an external command via <code>cmd.Run</code>.</p>
+<p>The most-connected modules are frontend types: <code>ui/src/types</code> (20 modules import it, 0 it imports) and <code>ui/src/api</code> (18 importers). These are hubs — changes ripple widely. On the Go side, <code>biglaw-go/internal/cost/cost.go</code> is called from 49 files and defines <code>CalcCostUSD</code> and <code>CalcWattHours</code>. The <code>strutil.Truncate</code> function is called from 47 places; <code>requirePartner</code> from 62. These carry the widest blast radius.</p>
+<p>Four functions perform cryptographic operations, 44 read/write files, 6 call a model for inference, 7 make outbound network calls, and 2 run external commands. File effects route through <code>handleApproveGate -&gt; ApproveGate -&gt; persistTasks</code> (<code>os.WriteFile</code>) and <code>handleAudit -&gt; Query -&gt; All -&gt; readLocked</code> (<code>os.Open</code>).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>The repo provides a <code>Dockerfile</code> and <code>docker-compose.yml</code> in <code>biglaw-go/</code>, plus a root <code>docker-compose.yml</code>. No CI pipeline exists. Setup steps are not documented beyond the README's claims; the <code>.env.example</code> file exists but its contents are not shown in the analysis.</p>
+<pre data-lang="bash"><code># Build the Go binary
+cd biglaw-go
+go build ./cmd/biglaw
+
+# Or via Docker
+docker build -t biglaw .</code></pre>
+<p>Configuration requires <code>AUTH_ENABLED=false</code> for local development (the default). The README explicitly warns: never expose the API on a public network without enabling auth. Keys and credentials must be treated as production secrets.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A small firm deploys the Docker image on a Raspberry Pi, runs local models via Ollama, and uses the React UI for drafting and matter management. The <code>biglaw-go/internal/api/matters.go</code> file handles budget tracking and calls a model for inference; <code>bots.go</code> handles Slack/Teams notifications. The audit trail (<code>internal/audit/audit.go</code>) writes files for every action.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 60 findings: 10 high, 50 medium. High-severity issues include 30 instances of deep nesting (max indentation depth 7 in <code>ui/src/Library.tsx</code>, <code>AdminPanel.tsx</code>, <code>ClientsPanel.tsx</code>) and 178 duplicated 6-line blocks across 58 files, including <code>cmd/biglaw/main.go</code> and <code>internal/orchestrator/orchestrator.go</code>. Medium issues include 12 oversized files (772 lines in <code>ui/src/types.ts</code>), hub modules (<code>types.ts</code>, <code>api.ts</code>), and two unclosed file handles in <code>benchmarks/harvey-lab/labdriver/deliver.py</code> and <code>scripts/pdf_tools.py</code>.</p>
+<p>SDLC observations: no CI/CD pipeline, no Dependabot/Renovate, unpinned Docker base images (<code>golang:1.25-alpine</code>, <code>alpine:3.21</code>), and committed secrets detected. The README acknowledges the project is not security-audited.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a serious, ambitious experiment with real engineering substance — the Go rewrite is measurable and the architecture is coherent. It is not production software: no CI, no security audit, committed secrets, and the author says so plainly. Use it as a reference for legal AI architecture or a research platform, not for client data without independent security review.</p>
             </div>
 
             
@@ -101,11 +122,11 @@ Low - Mixed language stack: 7 Python files in benchmarks/ create a secondary dep
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">306<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>172</b></li><li><span>Python</span><i style="width:4%"></i><b>7</b></li><li><span>Markdown</span><i style="width:3%"></i><b>5</b></li><li><span>JSON</span><i style="width:2%"></i><b>4</b></li><li><span>YAML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>172</b></li><li><span>JSON</span><i style="width:19%"></i><b>33</b></li><li><span>TSX</span><i style="width:13%"></i><b>23</b></li><li><span>Markdown</span><i style="width:6%"></i><b>10</b></li><li><span>Python</span><i style="width:5%"></i><b>8</b></li><li><span>TypeScript</span><i style="width:5%"></i><b>8</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -152,7 +173,7 @@ Low - Mixed language stack: 7 Python files in benchmarks/ create a secondary dep
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>biglaw-go/internal/secrets/secrets.go</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>biglaw-go/internal/secrets/secrets.go</code></span></li>
                     </ul>
                 </div>
 
@@ -162,7 +183,7 @@ Low - Mixed language stack: 7 Python files in benchmarks/ create a secondary dep
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">212 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span><span class="rankchip">4 occurrences</span></div><div class="loc">biglaw-go/Dockerfile</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">5 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span><span class="rankchip">2 occurrences</span></div><div class="loc">biglaw-go/Dockerfile</div><div class="ev">golang:1.25-alpine, alpine:3.21</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

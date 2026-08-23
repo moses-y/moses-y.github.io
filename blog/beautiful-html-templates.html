@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 17, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">HTML</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The problem this repository solves is the lack of a standardized library of reusable HTML slide templates that can be easily adapted by coding agents to produce beautiful decks automatically. This can save time and effort for developers who need to create visually appealing presentations.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repository, beautiful-html-templates, provides a collection of 34 HTML slide templates, each with its own unique design and layout. The templates are stored in the templates/ folder, with each template having its own subfolder containing the HTML, metadata, and any sibling assets. The index.json file serves as a catalog for the templates, allowing coding agents to easily find and match a template to a user&#39;s brief. The AGENTS.md file provides an operating manual for agents using the library, outlining how to read the index.json file, clone a template, and adapt the content.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a coding agent could use the scripts/new-template.mjs script to create a new template based on the soft-editorial design, which features a warm paper background with sage, blush, and lemon accents. The agent could then adapt the template to fit the user&#39;s specific needs, such as adding custom images or text.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) - No test files detected, indicating untested code paths - repository-wide
- Medium (SDLC) - No CI/CD pipeline detected, indicating no automated build/test gate - .github/ or CI config
-The codebase appears to be well-organized, but the lack of tests and CI/CD pipeline is a concern. The presence of a clear and concise README.md file and an operating manual for agents (AGENTS.md) suggests that the repository is well-maintained, but the absence of tests and automated build processes may introduce risks.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repository provides a valuable collection of reusable HTML slide templates that can save time and effort for developers. However, the lack of tests and CI/CD pipeline is a concern that should be addressed to ensure the reliability and maintainability of the codebase. Overall, this repository is well-suited for use by coding agents and developers who need to create visually appealing presentations, but may require additional setup and maintenance to ensure its long-term viability.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Creating a polished HTML slide deck requires picking a visual system, wiring content into the right markup, and ensuring the output works across browsers. Teams that build decks programmatically spend time re‑creating layout scaffolding for each project, leading to duplicated effort and inconsistent styling.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships <strong>34 ready‑made slide templates</strong> (HTML, JSON metadata, design notes) under <code>templates/</code>. Each template folder contains:</p>
+<ul><li><code>template.html</code> – the base markup with placeholders.</li><li><code>template.json</code> – a schema describing slots (title, body, images).</li><li><code>design.md</code> – styling guidance for agents.</li><li>Optional <code>deck-stage.js</code> – a small JavaScript helper that injects user data into the HTML.</li></ul>
+<p>The runtime helper <code>runtime/deck-stage.js</code> provides a reference implementation that agents can copy or adapt. Utility scripts in <code>scripts/</code> (<code>build-index.mjs</code>, <code>new-template.mjs</code>) automate index generation (<code>index.json</code>) and scaffold new template folders.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with one of the two CLI scripts:</p>
+<ol><li><strong><code>scripts/build-index.mjs</code></strong> – reads every <code>templates/*/template.json</code> and writes a consolidated <code>index.json</code>.</li><li><strong><code>scripts/new-template.mjs</code></strong> – creates a skeleton template directory (copies a starter <code>design.md</code>, empty HTML/JSON files).</li></ol>
+<p>Both scripts are self‑contained; they import only built‑in Node modules (e.g., <code>fs</code>, <code>path</code>). No internal import graph exists—each of the 13 JavaScript files (<code>runtime/deck-stage.js</code> and the 11 <code>templates/*/deck-stage.js</code> plus the two scripts) has <strong>zero import edges</strong>, meaning they operate in isolation.</p>
+<p>When an external agent wants to render a deck, it:</p>
+<ul><li>Reads <code>index.json</code> to discover available templates.</li><li>Loads the chosen <code>templates/&lt;name&gt;/deck-stage.js</code> (if present) or falls back to <code>runtime/deck-stage.js</code>.</li><li>Calls the exported function (typically <code>renderDeck(data)</code>) which:</li><li>Parses <code>template.html</code>.</li><li>Replaces placeholder tokens with the supplied <code>data</code>.</li><li>Returns the final HTML string.</li></ul>
+<p>Because each <code>deck-stage.js</code> is independent, the blast radius of a change is confined to that single file. However, the <strong>duplicated 6‑line code blocks</strong> across all <code>deck-stage.js</code> files (identified in 11 files) indicate a missed opportunity for a shared helper, which would reduce maintenance risk.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/beautiful-html-templates.git
+cd beautiful-html-templates
+
+# Build the master index (required before agents can lookup templates)
+node scripts/build-index.mjs
+
+# Example: render a deck using the runtime helper
+node -e "
+  const { renderDeck } = require('./runtime/deck-stage.js');
+  const data = { title: 'Demo', slides: [{content:'Hello'}] };
+  console.log(renderDeck(data));
+"</code></pre>
+<p><em>To add a new template</em>: run <code>node scripts/new-template.mjs &lt;template-name&gt;</code> and then fill in the generated files (<code>template.html</code>, <code>template.json</code>, <code>design.md</code>).</p>
+<p>No package manager lockfile or <code>package.json</code> is present, so the repository relies only on the Node runtime that ships with the host OS.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A content‑automation service can import <code>renderDeck</code> from a selected <code>deck-stage.js</code>, feed it structured slide data from a CMS, and stream the resulting HTML directly to a static‑site generator. This eliminates manual slide authoring while preserving brand‑consistent styling.</p>
+<pre data-lang="js"><code>import { renderDeck } from '../templates/emerald-editorial/deck-stage.js';
+const html = renderDeck(cmsArticle);
+publishToS3(html);</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Duplicated code blocks</strong> – 6‑line repeats across 11 <code>deck-stage.js</code> files. Consolidate into a shared helper.</li><li><strong>HIGH – Oversized files</strong> – <code>templates/editorial-forest/deck-stage.js</code> and <code>templates/emerald-editorial/deck-stage.js</code> each exceed 1,300 lines; split by responsibility.</li><li><strong>MEDIUM – Empty catch blocks</strong> – 11 occurrences silently swallow errors; add logging or rethrow.</li><li><strong>HIGH – No test suite</strong> – 13 source files, zero test files. Add unit tests for each public function.</li><li><strong>HIGH – No CI pipeline</strong> – No <code>.github/workflows</code> or other CI config; introduce a GitHub Actions workflow that runs the test suite on push/PR.</li></ul>
+<p>Other hygiene notes: a LICENSE file exists, no Dockerfile, no lockfile, and no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo offers a rich, ready‑to‑use collection of HTML slide templates with clear folder conventions, making it easy for automation agents to generate decks. Maintenance is hampered by duplicated logic and large monolithic files, and the lack of testing/CI means changes are risky. Teams that need quick visual consistency and can invest in a modest refactor and test harness will find it valuable; otherwise, the codebase may require more upfront work to reach production stability.</p>
             </div>
 
             
@@ -100,11 +136,11 @@ The codebase appears to be well-organized, but the lack of tests and CI/CD pipel
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">222<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>30</b></li><li><span>JSON</span><i style="width:93%"></i><b>28</b></li><li><span>HTML</span><i style="width:90%"></i><b>27</b></li><li><span>JavaScript</span><i style="width:30%"></i><b>9</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>36</b></li><li><span>JSON</span><i style="width:97%"></i><b>35</b></li><li><span>HTML</span><i style="width:94%"></i><b>34</b></li><li><span>JavaScript</span><i style="width:31%"></i><b>11</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -128,7 +164,7 @@ The codebase appears to be well-organized, but the lack of tests and CI/CD pipel
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a test suite; this repository has none</span><span class="chip">high</span><span class="rankchip">13 occurrences</span></div><div class="ev">13 source files, no test files</div><div class="ev">Any change ships with no signal that existing behaviour still holds, so a regression reaches production undetected.</div><div class="rec"><b>Fix:</b> Add one test per public entry point, then a CI step that runs them.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">13 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 31, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Reconstructing a full 3D indoor scene from a single photograph is an underconstrained problem. Existing methods either produce coarse room layouts, require multi-view input, or generate individual objects without coherent scene assembly. Production workflows in VR, gaming, and design need complete, editable scenes with correct spatial relationships, consistent lighting, and material fidelity from minimal input.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This pipeline takes one RGB image and outputs a textured 3D scene with segmented objects, inpainted backgrounds, and optimized geometry. The workflow runs through stages defined in run.py: instance segmentation (using SAM via src/segmentation/segmentation.py), context-aware inpainting (src/segmentation/inpaintnanoBanana.py), 2D-to-3D asset generation (src/2dto3dmodels/run.py), and constrained scene optimization (src/sceneoptimization/sceneoptim.py). Camera and point cloud estimation uses either DUSt3R or VGGT, configurable in src/config.yaml.</p><p>The system outputs a complete scene with individual object meshes, background geometry, and lighting estimates. The src/scenereconstruction/ directory handles final assembly, including ground plane extraction (extractground.py) and object placement (posematchingplanar.py). Evaluation scripts in src/evaluation/ run metric comparisons against ground truth.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>An interior designer photographs a furnished room and needs a 3D model for client presentations. The pipeline extracts each piece of furniture as a separate mesh, inpaints the occluded background, and assembles everything into a physically plausible scene. Run with python run.py -p 1 2 3 4 5 6 7 8 9 after downloading the SAM checkpoint and setting up the environment per INSTALLATION.md.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - Certificate file committed - segmentor/.gradio/certificate.pem contains a TLS certificate. This should be in .gitignore or generated at runtime. Exposes internal infrastructure.
-Medium - No lockfile for dependencies - requirements.txt without requirements.lock or pyproject.toml means builds are non-reproducible. Pin versions or use pip-compile.
-Medium - No CI pipeline - No .github/ directory or CI config. No automated testing gate. Two test files exist but their coverage is unclear.
-Low - Large binary assets in repo - 54 font files in fonts/ (Roboto variants) add ~50MB. These belong in a CDN or download step, not version control.
-Low - Hardcoded paths and model weights - segmentor/requirements.txt references wget for a 2.5GB SAM checkpoint. No checksum verification or fallback for download failures.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a research prototype from a university lab that demonstrates a complete single-image-to-3D-scene pipeline. The architecture is modular and well-documented for its stage, but the codebase needs hardening for production: remove the certificate, add dependency locking, and slim the repository. Suitable for researchers or developers who want to experiment with generative 3D reconstruction and are comfortable debugging research code. Not ready for deployment without significant cleanup.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Recovering a complete, editable 3‑D indoor scene from a single photograph is hard because the method must simultaneously segment instances, generate plausible geometry and materials, and enforce spatial and lighting consistency. The repository tackles this with a pipeline that combines segmentation, generative in‑painting, 2‑D‑to‑3‑D asset creation, and constrained optimization, but the code base shows several maintainability bottlenecks that affect engineers who need to extend or debug it.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The project implements a full end‑to‑end workflow: an entry point in <strong><code>src/2d_to_3d_models/run.py:139</code></strong> (<code>main</code>) dispatches to <code>process_image</code> → <code>worker</code>, which loads images, runs segmentation (SAM, Grounded‑SAM), and then calls a 2‑D‑to‑3‑D model (VGGT, Hunyuan3D) to produce textured meshes. Those meshes are merged, optimized in <strong><code>src/scene_optimization/scene_optim.py</code></strong>, and written to disk.</p>
+<p>Key statistics from the measured analysis:</p>
+<ul><li><strong>39 total findings</strong> (10 high, 29 medium) across 51 source files.</li><li><strong>Deep nesting</strong> (max indentation 8) in <code>src/utils/global_utils.py</code>, <code>src/segmentation/vst_main/Evaluation/evaluator.py</code>, and <code>src/utils/chamfer_distance/chamfer_distance.cpp</code>.</li><li><strong>Duplicated code blocks</strong> – 460 repeated 6‑line snippets across 21 files, including <code>src/camera_and_pointcloud/minimal_demo_vggt.py</code> and <code>src/evaluation/run_eval.py</code>.</li><li><strong>File‑opened‑without‑context‑manager</strong> in 10 files such as <code>src/segmentation/vst_main/Evaluation/dataloader.py</code>.</li><li><strong>Broad exception handling</strong> in <code>src/blender_rendering/run.py</code>, <code>src/scene_optimization/scene_optim.py</code>, and <code>src/scene_reconstruction/source/diff_model.py</code>.</li><li><strong>Oversized files</strong> – <code>src/segmentation/segmentation.py</code> (1139 lines), <code>src/scene_reconstruction/source/pose_matching_planar.py</code>, <code>src/utils/manual_editor.py</code>.</li><li><strong>High branching density</strong> in <code>src/scene_reconstruction/run.py</code> (23 branch points over 78 lines).</li></ul>
+<p>The internal call graph shows hubs such as <code>T2T_ViT</code> (called from 11 places) and <code>ui_render_display</code> (10 places), meaning changes to those functions ripple widely.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>main</code></strong> in <strong><code>src/2d_to_3d_models/run.py:139</code></strong>, which reaches 120 downstream functions. From there the call graph fans out: <code>get_loader</code> repeatedly calls <code>Compose</code>, <code>ToTensor</code>, and <code>Scale</code> (each &gt;10 edges). The path <code>main → clear_output_directory → shutil.rmtree</code> touches the filesystem; <code>worker → process_image → Image.open</code> reads input images; <code>run_all → run_script → subprocess.run</code> launches external commands.</p>
+<p>Files with the widest blast radius:</p>
+<ul><li><strong><code>src/segmentation/vst_main/transforms.py</code></strong> – 22 functions, 13 types, called from 6 other files.</li><li><strong><code>src/utils/global_utils.py</code></strong> – 15 functions, read/write files, called from 8 files.</li><li><strong><code>src/segmentation/segmentation.py</code></strong> – 22 functions, called from 2 files, touches segmentation masks and point clouds.</li></ul>
+<p>A change to <code>global_utils</code> or <code>transforms</code> therefore affects many downstream modules, which is why the high branching density and duplicated blocks are a practical concern for anyone modifying the pipeline.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repository (verb‑atim URL)
+git clone --recursive https://github.com/moses-y/3D-RE-GEN.git
+cd 3D-RE-GEN
+
+# 2. Create a virtual environment (mamba shown)
+mamba create -n 3dregen python=3.10 -y
+mamba activate 3dregen
+
+# 3. Install dependencies
+mamba env config set pip_packages -r requirements.txt
+pip install -r requirements.txt
+pip install -r segmentor/requirements.txt
+
+# 4. Download the SAM checkpoint (required for segmentation)
+cd segmentor &amp;&amp; wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth &amp;&amp; cd ..
+
+# 5. Run a quick demo (README example)
+mamba run -p ./venv_py310 python run.py -p 1 2 3 4 5 6 7 8 9</code></pre>
+<p>The repository expects a config file <strong><code>src/config.yaml</code></strong> for dataset paths and model checkpoints; environment variables are not explicitly documented, but the <code>run.py</code> script reads the config at startup.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research team wanting to evaluate a new generative in‑painting model can plug it into the pipeline by editing <strong><code>src/segmentation/vst_main/Models/Transformer.py</code></strong> (the transformer backbone) and adding the new model’s inference routine to <strong><code>src/segmentation/vst_main/train_test_eval.py</code></strong>. The existing test‑less state means any change must be manually verified, but the modular function signatures (e.g., <code>forward</code> in <code>Transformer.py</code>) isolate the modification to a single file.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Add a test suite; this repository has none (51 source files, no test files).</li><li><strong>HIGH</strong> – Add a CI workflow that builds and tests on push and pull_request.</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate to keep the two manifest files (<code>requirements.txt</code>, <code>segmentor/requirements.txt</code>) up to date.</li></ul>
+<p>Additional observations from the file structure (not part of the measured block):</p>
+<ul><li><strong>Low risk</strong> – Dependencies declared without a lockfile; builds are non‑reproducible (<code>requirements.txt</code>).</li><li><strong>Low security</strong> – Certificate‑shaped path committed: <code>segmentor/.gradio/certificate.pem</code>.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The codebase delivers a functional generative 3‑D reconstruction pipeline from a single indoor image, but the lack of tests, CI, and a lockfile makes continuous modification risky. The duplicated logic and deep nesting increase the chance of introducing bugs when extending the system. Teams that need a quick prototype or research prototype will find the project usable out‑of‑the‑box; groups building production‑grade pipelines should invest in the suggested test and CI additions first.</p>
             </div>
 
             
@@ -106,7 +141,7 @@ Low - Hardcoded paths and model weights - segmentor/requirements.txt references 
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>50</b></li><li><span>Markdown</span><i style="width:6%"></i><b>3</b></li><li><span>Shell</span><i style="width:4%"></i><b>2</b></li><li><span>YAML</span><i style="width:2%"></i><b>1</b></li><li><span>C++</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -141,7 +176,7 @@ Low - Hardcoded paths and model weights - segmentor/requirements.txt references 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>segmentor/.gradio/certificate.pem</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>segmentor/.gradio/certificate.pem</code></span></li>
                     </ul>
                 </div>
 

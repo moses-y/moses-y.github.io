@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building a trading bot against Hyperliquid&#39;s DEX requires handling low-level WebSocket connections, signing Ed25519 transactions, managing exchange state, and parsing API responses. Without a SDK, each integration duplicates this infrastructure work and risks subtle signing or connection bugs.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This SDK wraps Hyperliquid&#39;s REST and WebSocket APIs into four core modules: hyperliquid/api.py (HTTP client), hyperliquid/info.py (market data queries), hyperliquid/exchange.py (order placement and account actions), and hyperliquid/websocketmanager.py (real-time data streams). The hyperliquid/utils/ directory handles cryptographic signing, type definitions, and constants for both mainnet and testnet endpoints.</p><p>The 46 examples/ files demonstrate every major feature: spot and perpetual orders, sub-accounts, multi-sig transactions, vault operations, staking, EVM interactions, and builder fee configurations. Tests use VCR-style cassettes (tests/cassettes/) to replay HTTP interactions without live API calls.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A market maker deploys this SDK to run a perpetual arbitrage strategy. The basicorder.py example shows the pattern: load a config with account address and private key, instantiate Exchange and Info objects, query info.allmids() for current prices, then call exchange.order() with a signed payload. The basicws.py example streams live order book updates via websocketmanager without polling.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Private keys in config file: examples/config.json.example stores secretkey in plaintext, and examples/exampleutils.py loads it directly. This encourages committing credentials to version control.
-Low - No rate limit handling: the info.py methods don&#39;t expose retry logic or backoff. The test cassette testuserratelimit.yaml exists but the client doesn&#39;t implement client-side throttling.
-Low - Python 3.10 pinning: pyproject.toml requires python = &quot;&gt;=3.10,&lt;3.11&quot;. This blocks adoption on 3.11+ and locks teams into an older interpreter.
-Low - No async support: all API calls are synchronous. Users needing concurrent streams must manage threads manually.
-Positive - Tests exist (26 files), CI is configured (.github/workflows/ci.yml), and pre-commit hooks enforce linting. The codebase is structurally sound.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This SDK is production-ready for Python 3.10 teams already committed to Hyperliquid. The plaintext key handling is the main operational risk—wrap it in a secrets manager or environment variables before deploying. For new projects, the 3.10 requirement and lack of async are real constraints worth evaluating against your stack.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>hyperliquid-python-sdk</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>The SDK provides complete Hyperliquid API trading functionality but suffers from architectural complexity that makes changes high-risk. A single module (<code>hyperliquid/utils/__init__.py</code>) is depended on by 40 other modules, and two files exceed 1,000 lines of code each. Duplicated logic appears across 13 example files, and four files exhibit indentation depth of 8 levels, creating cognitive load for anyone modifying the flow.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The Hyperliquid Python SDK enables programmatic trading against the Hyperliquid exchange. It wraps the exchange's REST and WebSocket APIs, handling order placement, user state retrieval, position management, and WebSocket subscription updates. The core exchange logic lives in <code>hyperliquid/exchange.py</code> (60 functions, 1 class), which defines order construction, signature generation, and price calculation. State queries route through <code>hyperliquid/info.py</code> (45 functions), which makes outbound network calls to fetch user positions, order books, and funding rates. Signature construction is centralized in <code>hyperliquid/utils/signing.py</code> (34 functions), which is imported by 11 other modules. Forty-six example files demonstrate usage, ranging from basic order placement to multi-sig user abstraction and EVM block indexing.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>examples/basic_adding.py:222</code> (<code>main</code> entry point), which reaches 118 functions and is called from 1 call site. The most frequent internal calls are <code>get_timestamp_ms</code> (46 callers), <code>_post_action</code> (43), <code>sign_l1_action</code> (41), and <code>post</code> (40). The primary outbound paths are <code>main -&gt; subscribe</code> (network via <code>self.ws.send</code>) and <code>setup -&gt; user_state -&gt; post</code> (network via <code>self.session.post</code>). The hub module <code>hyperliquid/utils/__init__.py</code> has an instability of 0 but is imported by 40 modules, meaning changes there have blast-radius effects across the entire codebase. Two files—<code>hyperliquid/exchange.py</code> (1,131 lines) and <code>hyperliquid/info.py</code>—are oversized, and 50 repeated 6-line blocks appear across 13 example files, indicating duplicated logic that should be extracted into shared helpers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install via Poetry:</p>
+<pre data-lang="bash"><code>make install</code></pre>
+<p>Or pip:</p>
+<pre data-lang="bash"><code>pip install hyperliquid-python-sdk</code></pre>
+<p><strong>Configuration</strong>: Copy the example config and fill in keys:</p>
+<pre data-lang="bash"><code>cp examples/config.json.example examples/config.json
+vim examples/config.json</code></pre>
+<p>The config file expects <code>account_address</code> (public key) and <code>secret_key</code> (private key). Set <code>skip_ws=True</code> in the <code>Info</code> constructor if WebSocket connections are unnecessary.</p>
+<p><strong>Running it</strong>: Execute an example:</p>
+<pre data-lang="bash"><code>python examples/basic_order.py</code></pre>
+<p>The README also documents running <code>make test</code> to execute the 26 test files.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A typical workflow involves querying user state, placing an order, and subscribing to order book updates. For example:</p>
+<pre data-lang="python"><code>from hyperliquid.info import Info
+from hyperliquid.utils import constants
+
+info = Info(constants.TESTNET_API_URL, skip_ws=True)
+state = info.user_state("0xcd5051944f780a621ee62e39e493c489668acf4d")
+print(state)</code></pre>
+<p>This fetches on-chain user data via a single network call. To place an order, the caller constructs an order wire, signs it via <code>hyperliquid/utils/signing</code>, and posts it through <code>hyperliquid/exchange.post</code>. WebSocket subscriptions for live order book updates follow the path <code>main -&gt; subscribe</code>, which sends a WS message and begins polling.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> - Pin third-party GitHub Actions to commit SHA: <code>.github/workflows</code> declares <code>snok/install-poetry@v1</code>, which can shift if the tag moves, potentially executing unvetted code with repository secrets.</li><li><strong>MEDIUM</strong> - Declare least-privilege GITHUB_TOKEN permissions: 2 workflows have no <code>permissions</code> declaration, so the token inherits repository defaults and could push commits or mint releases.</li><li><strong>MEDIUM</strong> - Enable Dependabot or Renovate: only 1 manifest exists with no configured update bot; published advisories remain unpatched without automated dependency updates.</li><li><strong>MEDIUM</strong> - Gate pull requests on dependency vulnerability scan: no dependency scan is present in CI; a known-vulnerable package could merge before manual audit.</li><li><strong>LOW</strong> - Set <code>timeout-minutes</code> on workflow jobs: 2 jobs declare no timeout, allowing wedged steps to run to the six-hour platform default.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This SDK is functionally complete for Hyperliquid trading but requires discipline to maintain. The highly interconnected module graph and outsized files mean changes ripple widely; the Action pinning and Dependabot gaps are the most urgent SDLC fixes. Teams already using Hyperliquid will find the Python surface familiar, but new contributors should budget time to untangle the nesting and duplicated logic before extending the codebase.</p>
             </div>
 
             
