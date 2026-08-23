@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 2, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,28 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Security teams waste hours manually enriching IOCs, triaging alerts, and creating tickets across disconnected tools. Each incident requires context-switching between VirusTotal, AbuseIPDB, Jira, and Slack, with no standardized automation pipeline to chain these steps together.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo provides 11 importable n8n workflow JSON files for common blue-team automation tasks. The CTI/ folder contains threat intelligence workflows including Slack-Daily-Threat-Digest.json for scheduled IOC reporting and thehiveautocasefromwebhook.json for automated case creation. The incident-reponse/ folder holds triage workflows like abuseipdipreputation.json for IP lookup and jiraincidentfromalert.json for ticket creation.</p><p>All workflows reference environment variables ($env.VTAPIKEY, $env.SLACKWEBHOOKURL) instead of hardcoded secrets. The httpretrybackoffsubflow.json in the incident-reponse folder provides reusable error handling for API calls.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A SOC analyst receives an alert from a SIEM. Instead of manually checking the IP across three services, they trigger the abuseipdbipreputation.json workflow via webhook, which enriches the IP, posts results to Slack, and conditionally creates a Jira ticket if the confidence score exceeds 50.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - No test files - All 11 JSON files are untested. No test framework, fixtures, or validation scripts exist. Any workflow change risks breaking production automation.
-Medium - No CI/CD pipeline - No .github/ or CI config detected. Teams cannot gate changes on workflow validation or syntax checks before deployment.
-Medium - No LICENSE file - README shows MIT badge, but no actual LICENSE file exists in the repo root. Redistribution rights are legally unclear.
-Low - Single-file JSON blobs - Each workflow is a monolithic JSON file with no modularity, versioning, or diff-friendly format. Code review of workflow changes is impractical.
-Low - No input validation documented - Workflows accept webhook payloads and file hashes but no schema validation or sanitization steps are visible in the structure.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a practical starter kit for n8n users who want pre-built security workflow templates. The environment variable approach and reusable subflow are good patterns. However, the lack of tests, CI, and a license file makes this unsuitable for production deployment without significant hardening. Best used as reference material for building your own automation pipelines.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Security teams need to automate alert triage, IOC enrichment, and case management, but building these integrations from scratch in n8n is time-consuming. This repository provides a set of ready-to-import n8n workflow JSON files for common blue-team tasks, cutting down the setup time for threat intelligence pipelines.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo is a collection of 11 n8n workflow JSON files organized by function: <code>CTI/</code> (Slack/Discord alerting, TheHive case creation, IOC normalization), <code>incident-reponse/</code> (AbuseIPDB reputation checks, Jira ticket creation, HTTP retry logic), <code>malware-analysis/</code> (VirusTotal hash enrichment), and <code>recon/</code> (Crt.sh certificate search). Each file is a complete n8n workflow that can be imported directly into an n8n instance.</p>
+<p>All workflows use environment variables for API keys (<code>{{ $env.VT_API_KEY }}</code>, <code>{{ $env.ABUSEIPDB_API_KEY }}</code>) rather than hardcoded secrets. The <code>README.md</code> documents the intended usage and lists the workflows in a table with their inputs and outputs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>These are static JSON workflow definitions, not a codebase with a call graph. Execution starts when you import a workflow into n8n and trigger it via a webhook, cron schedule, or manual execution. Each JSON file defines a graph of n8n nodes that call external APIs (VirusTotal, AbuseIPDB, Slack, Discord, Jira, TheHive) over HTTP. The workflows are self-contained; there is no shared code or module dependency between them.</p>
+<p>Each file is responsible for one automation task: <code>vt_hash_enrichment.json</code> takes a file hash and returns VirusTotal verdicts, <code>abuseipdb_ip_reputation.json</code> checks an IP against AbuseIPDB, <code>jira_incident_from_alert.json</code> creates a Jira issue from an alert payload, and so on. The <code>http_retry_backoff_subflow.json</code> is a reusable sub-workflow for HTTP error handling. The wiring between workflows is not mapped—they are independent.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone the repository and import workflows into n8n v1.40+ (self-hosted, Desktop, or Cloud).</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/n8n-cybersecurity-projects.git</code></pre>
+<p><strong>Configuration</strong>: Create an <code>.env</code> file with your API keys (VirusTotal, AbuseIPDB, Slack/Discord webhooks, etc.) and reference them in n8n Credentials. The README states to copy <code>.env.example</code> to <code>.env</code>, but the <code>.env.example</code> file is not present in the repo structure—you will need to create it manually.</p>
+<p><strong>Running</strong>: In the n8n editor, use <strong>Workflow → Import from File</strong> to load a JSON, create the required credentials, add a trigger node (webhook or cron), and activate the workflow. The README documents these steps.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A SOC analyst receives an alert containing a suspicious hash. The <code>vt_hash_enrichment.json</code> workflow takes that hash, queries VirusTotal, and posts the verdict to a Slack channel via <code>Slack-Daily-Threat-Digest.json</code>. If the verdict is malicious, <code>thehive_auto_case_from_webhook.json</code> creates a TheHive case for investigation, and <code>jira_incident_from_alert.json</code> opens a Jira ticket for tracking.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found the following:</p>
+<ul><li><strong>Medium - No test files detected</strong> - untested workflow logic - repository-wide</li><li><strong>Medium - No CI/CD pipeline detected</strong> - no automated validation of workflow JSON - <code>.github/</code> or CI config</li><li><strong>Medium - No LICENSE file</strong> - unclear usage rights despite README claiming MIT - root</li></ul>
+<p>The README references <code>.env.example</code> and a <code>workflows/</code> directory, neither of which exists in the file structure—the JSON files sit in category folders at the root. The README also lists a <code>shodan_host_footprint.json</code> workflow that is not present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A practical collection of n8n workflows for common security automation tasks, useful as a starting point for teams already using n8n. The lack of tests, CI, and a license file means you should validate each workflow before production use and clarify licensing with the original author (JoasASantos). Forked from a 383-star upstream repo, so the workflows have community traction, but this fork has no additional changes evident.</p>
             </div>
 
             
@@ -130,7 +146,7 @@ Low - No input validation documented - Workflows accept webhook payloads and fil
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Checked against 12 files on 2026-08-22. Nothing was found. No language model is involved in this section.</p></section>
 
             
 

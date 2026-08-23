@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 29, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Rust</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>buzz</h1>
@@ -80,8 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most AI-adjacent collaboration tools treat agents as second-class citizens — bolted-on chatbots with limited permissions, no audit trail, and no ability to act on the workspace itself. Teams end up with fragmented identity models (one for people, one for bots) and no unified record of who did what, whether human or agent.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Buzz is a self-hostable workspace built on a Nostr relay. Every message, reaction, workflow step, and git event is a signed event in a single append-only log. Humans and agents share the same identity model, channel memberships, and capabilities — agents can open repos, send patches, run workflows, and create channels, all scoped by their own keypair and auditable in the same event stream.</p><p>The core is in crates/buzz-acp/ (the relay), crates/buzz-agent/ (agent runtime), and crates/buzz-admin/ (admin CLI). The admin-web/ directory provides a React-based UI. Benchmarks live in benchmarks/harbor-buzz-orchestra/ and test agent orchestration at scale. The project uses Rust with Cargo, Docker for deployment, and GitHub Actions for CI/CD across Linux, macOS, and Windows.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team creates a channel for a feature branch. An agent is added to the channel (same UI as adding a person). The agent monitors CI, reviews patches, and posts findings — all as signed events. When a bug is reported, the agent searches six months of history and posts a thread with the relevant events. The channel becomes the permanent record of why every decision was made.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No structural red flags. The repo has 32 test files, a CI pipeline (.github/workflows/ci.yml), a license (Apache 2.0), and a lockfile (Cargo.lock). The codebase is well-organized into Rust crates with clear separation of concerns.</p><p>Potential concerns: the large number of vision documents (VISION_*.md) may indicate scope creep or unclear product boundaries. The bin/ directory contains Hermit-managed toolchains (.hermit.hcl) that could complicate local development for contributors not using Hermit. The benchmarks/ directory is substantial (40 files) but may not be exercised regularly in CI — worth verifying.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Buzz is a serious, well-architected platform for teams that want a unified workspace where AI agents are first-class participants with full auditability. It is best suited to organizations that already trust Nostr-based event logs and have the infrastructure to self-host a Rust relay. Not a toy, but not a turnkey SaaS product either — expect a meaningful setup investment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that mix human contributors with AI agents need a single, auditable event log that treats people and bots alike. Existing tools either silo AI actions behind separate APIs or expose a fragmented permission model, forcing duplicate tooling and manual sync.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>buzz</code> delivers a self‑hostable, Nostr‑based relay that stores every message, reaction, workflow step, and git event as a signed entry. The workspace is defined by a URL, and the same log backs both human UI (React + Tailwind in <code>admin-web/</code>) and agent back‑ends (Rust crates under <code>crates/</code>).</p>
+<p>Key components:</p>
+<ul><li><strong>Relay core</strong> – <code>crates/buzz-acp/src/relay.rs</code> (176 functions) parses, validates, and routes events, also performing outbound network calls and DB writes.</li><li><strong>Database layer</strong> – <code>crates/buzz-db/src/lib.rs</code> (262 functions) provides the persistent store used by the relay and admin services.</li><li><strong>Agent interface</strong> – <code>crates/buzz-agent/src/llm.rs</code> (146 functions) talks to LLM providers, makes HTTP calls, and returns structured completions.</li><li><strong>Admin UI</strong> – <code>admin-web/src/App.tsx</code> renders channels, patches, and media, driven by the same event stream the agents consume.</li></ul>
+<p>The repo is a portfolio of ten projects (desktop, mobile, web, admin‑web, various Rust crates, benchmarks, scripts, etc.) that share a common event‑log model while each can be built and deployed independently.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in the Rust binary <code>crates/buzz-acp/src/main.rs</code> (<code>fn main</code>). It reaches <strong>308</strong> internal functions and spawns the core event loop. The most‑used internal utilities are <code>Err</code> (440 call sites), <code>path</code> (310), <code>map</code> (291) and <code>bind</code> (265), indicating that error handling and data transformation dominate the code base.</p>
+<p>A typical request flow:</p>
+<ol><li><strong>Entry</strong> – <code>main</code> → <code>spawn</code> (creates a subprocess, sets <code>BUZZ_AGENT_PROVIDER=openai</code>).</li><li><strong>Dispatch</strong> – <code>dispatch</code> (in <code>crates/buzz-agent/src/lib.rs:211</code>) calls <code>as_deref</code> 99 times and eventually invokes <code>cmd_ls</code>, which runs a DB query via <code>client.query</code>.</li><li><strong>Database write</strong> – <code>reconcile_channels</code> (in <code>crates/buzz-admin/src/main.rs:461</code>) calls <code>replace_addressable_event</code>, which rolls back a transaction (<code>tx.rollback</code>).</li></ol>
+<p>The relay (<code>crates/buzz-acp/src/relay.rs</code>) is the hub for outbound network traffic and DB interaction; any change here ripples through &gt;30 other files. The LLM module (<code>crates/buzz-agent/src/llm.rs</code>) is the second biggest outward‑facing component, invoking external APIs and summarising responses.</p>
+<p>Because the call graph is resolved only for intra‑repo edges, framework callbacks (React event handlers, Kubernetes probes) are not represented, but the static analysis shows <strong>6000</strong> internal call edges, giving confidence that most runtime paths are traceable.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/buzz.git
+cd buzz
+
+# Install JS dependencies (pnpm is declared)
+pnpm install      # pulls admin-web packages
+
+# Build Rust crates
+cargo build --workspace
+
+# Run the relay locally (example)
+cargo run -p buzz-acp   # entry point: crates/buzz-acp/src/main.rs
+
+# Optionally spin a container
+docker build -t buzz:local .
+docker run -p 8000:8000 buzz:local</code></pre>
+<p>Configuration lives in <code>.env.example</code>; copy it to <code>.env</code> and supply Nostr keys and DB connection strings before starting. The admin UI can be launched with <code>pnpm --filter admin-web dev</code> (Vite dev server) and will connect to the locally running relay.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team hosts a private Buzz instance. When a new feature branch is pushed, a CI job (outside this repo) posts a signed <code>git-push</code> event to the relay. An agent subscribed to the <code>#release</code> channel reads the event, runs automated tests, and posts a <code>review</code> event with a signed receipt. Humans see the test results and agent comments in the same channel UI, and the entire decision trail is immutable.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Several pinned Rust dependencies have known CVEs (e.g., <code>tokio@1</code>, <code>nostr@0.44</code>). Fix: upgrade to the patched versions and update <code>Cargo.lock</code>.</li><li><strong>Medium</strong> – Dockerfile uses mutable base tags (<code>rust:${RUST_VERSION}-${DEBIAN_VERSION}</code>). Fix: pin images by digest.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI. Fix: add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Low</strong> – Workflow <code>auto-tag-on-release-pr-merge.yml</code> lacks <code>timeout-minutes</code>. Fix: set a reasonable timeout.</li></ul>
+<p>All other hygiene checks pass: tests (755 files), CI (GitHub Actions), licence (Apache 2.0), lockfiles, and no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>buzz</code> is a well‑structured, multi‑language workspace that unifies human and agent collaboration on a single signed event log. Its core Rust crates are solid but need urgent dependency upgrades and tighter container image pinning. Teams comfortable managing Rust builds and Docker deployments will find it a powerful foundation for AI‑augmented development; lighter teams may be deterred by the breadth of components and the need to secure the underlying dependencies.</p>
             </div>
 
             
@@ -98,11 +135,11 @@
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">3,276<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>40</b></li><li><span>Rust</span><i style="width:90%"></i><b>36</b></li><li><span>Python</span><i style="width:55%"></i><b>22</b></li><li><span>YAML</span><i style="width:43%"></i><b>17</b></li><li><span>TOML</span><i style="width:18%"></i><b>7</b></li><li><span>TypeScript</span><i style="width:18%"></i><b>7</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>819</b></li><li><span>Rust</span><i style="width:69%"></i><b>562</b></li><li><span>TSX</span><i style="width:66%"></i><b>541</b></li><li><span>Dart</span><i style="width:37%"></i><b>302</b></li><li><span>Markdown</span><i style="width:12%"></i><b>99</b></li><li><span>YAML</span><i style="width:9%"></i><b>74</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Tailwind</span><span>Docker</span><span>Kubernetes</span></p>
                     </div>
                 </div>
 
@@ -134,7 +171,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Upgrade the pinned dependency carrying a published advisory</span><span class="chip">high</span><span class="rankchip">21 occurrences</span></div><div class="ev">tokio@1 CVE-2021-45710 (high) +7 more; nostr@0.44 RUSTSEC-2026-0216 (high) +7 more; rmcp@1.1.0 CVE-2026-42559 (high) +1 more; futures-util@0.3 CVE-2020-35908 (medium) +1 more; and 1 more package(s)</div><div class="ev">The pinned version is the one that installs, so a published advisory against it describes this deployment rather than a hypothetical one, and the advisory is also a public description of how to exploit it.</div><div class="rec"><b>Fix:</b> Upgrade to the fixed version named in the advisory, then commit the lockfile.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span><span class="rankchip">3 occurrences</span></div><div class="loc">Dockerfile</div><div class="ev">rust:${RUST_VERSION}-${DEBIAN_VERSION}, node:${NODE_VERSION}-${DEBIAN_VERSION}-slim, debian:${DEBIAN_VERSION}-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/auto-tag-on-release-pr-merge.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
