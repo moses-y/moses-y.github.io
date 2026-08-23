@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Backend teams often struggle with maintaining a consistent architecture across multiple repositories, leading to duplicated efforts, inconsistent design patterns, and increased complexity. This problem is exacerbated when new engineers join the team or when revisiting existing services, resulting in a significant amount of time spent on rediscovering established patterns and decisions.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Corbell addresses this issue by providing a living knowledge graph of the team&#39;s architecture, built from the actual code in the repositories and past design documents. The corbell/cli module allows users to generate new specs that respect established patterns, while the corbell/core module handles the underlying graph construction and design pattern extraction. The pyproject.toml and requirements.txt files manage the project&#39;s dependencies and configuration.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, when a new engineer joins the team, they can use Corbell to generate a new spec for a feature, such as &quot;Add user authentication.&quot; The corbell spec new command will create a design document with auto-discovered services, respecting the team&#39;s established patterns. The engineer can then review and refine the spec, ensuring consistency with the existing architecture.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low — Missing lockfile for dependencies — pyproject.toml
- Low — Potential for untested paths in the graph construction logic — corbell/core/graph/builder.py
-Medium — Limited input validation in the corbell/cli module — corbell/cli/commands/spec.py
-However, the codebase appears to be well-structured, with a clear separation of concerns and a comprehensive test suite (tests/ directory).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Corbell is a valuable tool for backend teams struggling with architectural consistency across multiple repositories. While it has some minor issues, the codebase is generally well-maintained, and the project&#39;s goals are well-aligned with the needs of its target audience. Teams with large, complex architectures may benefit from using Corbell to streamline their design and development processes.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Backend teams working across 5-10 repositories lose architectural context. Decisions live in Confluence pages nobody reads and Slack threads nobody finds. When an engineer returns to a service after six months, they start from scratch. Corbell builds a living knowledge graph from actual code and past design docs, so new specs respect established patterns instead of inventing new ones.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Corbell scans multiple repositories and builds a service-level graph stored in SQLite (<code>corbell/core/graph/sqlite_store.py</code>), detecting service types, infrastructure dependencies (AWS, GCP, Azure patterns in <code>corbell/core/graph/providers/</code>), and method-level call paths (<code>corbell/core/graph/method_graph.py</code>). It also extracts design patterns from existing docs (<code>corbell/core/docs/learner.py</code>) and generates PRD-driven design specs via LLM calls (<code>corbell/core/spec/generator.py</code>).</p>
+<p>The CLI (<code>corbell/cli/main.py</code>) exposes commands for graph building, spec generation/review/decomposition, doc scanning, and exports to Linear/Jira/Notion. A local UI server (<code>corbell/core/ui/server.py</code>) visualizes the graph at localhost:7433. An MCP server (<code>corbell/core/mcp/server.py</code>) exposes graph queries to AI coding agents.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>corbell/cli/main.py:42</code> (<code>init</code>), which calls <code>init_workspace_yaml</code> to create the workspace config. The graph build path flows through <code>corbell/core/graph/builder.py</code> → <code>schema.py</code> → <code>sqlite_store.py</code>, touching the filesystem via file iteration and writing to SQLite. The MCP server entry points (<code>get_architecture_context</code>, <code>graph_query</code>, <code>list_services</code>) reach 20-29 functions each and access the database via <code>sqlite3.connect</code>.</p>
+<p>The highest-blast-radius modules are <code>corbell/core/graph/schema.py</code> (imported by 16 modules, 0 outgoing dependencies) and <code>corbell/core/workspace.py</code> (imported by 12). Changes to these ripple widely. <code>SQLiteGraphStore</code> is called from 29 places, <code>get_methods_for_service</code> from 28, and <code>upsert_node</code> from 27. The graph has no circular dependencies across its 74 modules and 133 import edges.</p>
+<p>File responsibilities: <code>schema.py</code> owns node/edge operations, <code>workspace.py</code> resolves paths and API keys, <code>sqlite_store.py</code> handles persistence, <code>llm_client.py</code> wraps Anthropic/OpenAI calls, <code>spec/generator.py</code> orchestrates spec generation with LLM inference and file writes, <code>method_graph.py</code> parses TypeScript/Python method structures.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/Corbell
+cd Corbell
+pip install -e ".[anthropic,openai,notion,linear,jira]"
+
+corbell init
+corbell spec new --prd "Add user authentication feature"
+corbell ui serve</code></pre>
+<p>Configuration lives in <code>workspace.yaml</code> (created by <code>corbell init</code>), which stores repo paths, API keys, and export credentials. Python ≥ 3.11 required. The README documents these commands verbatim.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A staff engineer at a fintech company with 7 microservices runs <code>corbell graph build</code> across all repos. When a new payment retry feature is requested, they run <code>corbell spec new --prd "Payment retry with exponential backoff"</code>. Corbell auto-discovers relevant services via embedding similarity, injects the graph topology and real code snippets into the LLM prompt, and produces a spec that matches existing patterns. <code>corbell spec decompose</code> then generates parallel task tracks, and <code>corbell export linear</code> creates issues carrying exact method signatures and cross-service impacts.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 43 issues (5 high, 37 medium, 1 low) across 7 kinds:</p>
+<ul><li><strong>High</strong> - Deep nesting (16 instances) in <code>sqlite_store.py</code>, <code>workspace.py</code>, <code>builder.py</code>; max indentation depth 6. Fix with guard clauses.</li><li><strong>High</strong> - Duplicated 6-line blocks (112 instances) across 15 files in <code>corbell/cli/commands/</code>. Extract shared helpers.</li><li><strong>Medium</strong> - Broad exception handling (17 instances) in <code>extractor.py</code>, <code>prd_processor.py</code>, <code>docs/learner.py</code>.</li><li><strong>Medium</strong> - Hub modules with high blast radius: <code>schema.py</code>, <code>sqlite_store.py</code>, <code>workspace.py</code>.</li><li><strong>Medium</strong> - Oversized files: <code>builder.py</code> (665 lines), <code>method_graph.py</code>, <code>spec/generator.py</code>.</li><li><strong>Medium</strong> - File opened without context manager in <code>corbell/cli/commands/ui.py</code>.</li><li><strong>Low</strong> - 3 TODO/FIXME markers in <code>spec/decomposer.py</code>.</li></ul>
+<p>Security audit found: no lockfile (non-reproducible builds), wildcard CORS origin in <code>ui/server.py</code>, no least-privilege GITHUB_TOKEN permissions, no Dependabot, no dependency vulnerability scan, and no job timeouts in CI. Tests exist (24 files) with GitHub Actions CI, but no Dockerfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Corbell solves a real problem for teams with multi-repo architectures: it turns scattered code knowledge into a queryable graph and generates specs that respect established patterns. The codebase is well-structured with no circular dependencies, but the duplicated CLI logic and hub modules need refactoring before heavy customization. Production teams should address the security findings (lockfile, CORS, CI permissions) before deploying. Best suited for staff engineers who want AI-assisted spec generation grounded in actual code topology.</p>
             </div>
 
             
@@ -137,7 +159,7 @@ However, the codebase appears to be well-structured, with a clear separation of 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>pyproject.toml</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
                     </ul>
                 </div>
 
