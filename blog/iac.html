@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 6, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Shell</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Terraform</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>iac</h1>
@@ -80,11 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing a multi-node Kubernetes homelab with diverse workloads (media serving, AI tools, databases, monitoring) typically requires stitching together disparate configuration tools, secrets management, and deployment pipelines. Without a unified GitOps approach, configuration drift, manual interventions, and inconsistent environments become the norm.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repository implements a complete GitOps-driven homelab infrastructure using Flux CD for Kubernetes, Ansible for node provisioning, and Docker Compose for services outside the cluster. The kubernetes/ directory contains 116 files organized by application domain (arr/, databases/, monitoring/, default/) with each app following a consistent pattern: a helmrelease.yaml for the chart, source.yaml for the Helm repository, and ks.yaml for the Flux Kustomization. The ansible/ directory handles OS-level tasks like ntp.yml, qemu-guest-agent.yml, and weekly maintenance via apt.yml and docker-prune.yml.</p><p>Secrets management uses SOPS with age encryption, referenced in .sops.yaml. The docker/ directory provides standalone services (Caddy reverse proxy, Jellyfin, Wazuh) with docker-compose.yml files and custom configurations like Caddy&#39;s fail2ban-jail.conf and caddy-limit.conf. CI/CD runs through GitHub Actions workflows including CD.yml for Flux reconciliation, trivy.yml for vulnerability scanning, and ansible-playbooks.yml for node management.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer forks this repo, points Flux at their cluster, and immediately gets a media stack (Sonarr, Radarr, Prowlarr, Sabnzbd), AI tooling (MCP Hub, CLI Proxy API), databases (Crunchy Postgres, Dragonfly), and monitoring (Blackbox exporter, Fluent Bit) with secrets encrypted via age keys. Weekly Ansible playbooks handle apt upgrades and Docker pruning automatically.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - No automated tests detected across any layer (Kubernetes manifests, Ansible playbooks, Docker configurations). Configuration drift and regressions will go undetected until runtime.
-Med - Hardcoded secrets patterns: external-secret.yaml files reference secret names without validation that backing stores exist. Missing a validation step in the CD pipeline.
-Med - No license file in repository root despite LICENSE being listed in structure. Unclear usage rights for the Ansible roles and custom Dockerfiles.
-Low - .gitleaks.toml present but no evidence of secrets scanning in CI workflows. Gitleaks configured but not enforced.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A well-organized, opinionated GitOps homelab that demonstrates production patterns (Flux, SOPS, external-secrets-operator) applied to personal infrastructure. The lack of tests and validation pipelines makes it risky for production adoption, but it&#39;s an excellent reference for anyone building a Kubernetes homelab with similar service requirements. Best suited for experienced operators who can add testing and validation as needed.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Managing a personal homelab with dozens of services, databases, and networking rules quickly becomes a manual, error‑prone process. Each change—adding a new container, updating a Helm chart, or rotating a secret—needs to be applied consistently across Docker, Kubernetes, Terraform, and Ansible layers while keeping secrets safe.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository provides a <strong>single source of truth</strong> for the entire stack:</p>
+<ul><li><strong>Kubernetes</strong> – 389 YAML files under <code>kubernetes/</code> define Helm releases, Kustomize overlays, and external‑secret objects (e.g., <code>kubernetes/apps/arr/radarr/app/helmrelease.yaml</code>).</li><li><strong>Terraform</strong> – 70 <code>.tf</code> files in <code>terraform/</code> provision cloud resources such as Cloudflare DNS (<code>terraform/cloudflare/</code>) and the underlying Proxmox/VPS hosts.</li><li><strong>Docker</strong> – <code>docker/</code> holds per‑service <code>docker-compose.yml</code> files (e.g., <code>docker/jellyfin/docker-compose.yml</code>) and reusable Dockerfiles (<code>docker/Dockerfiles/actions-runner/Dockerfile</code>).</li><li><strong>Ansible</strong> – Playbooks in <code>ansible/playbooks/</code> automate host‑level tasks like Docker login, package updates, and NTP sync.</li></ul>
+<p>The GitHub Actions CI (<code>.github/workflows/</code>) runs a Flux‑based GitOps pipeline that continuously reconciles the cluster with the manifests, while Trivy scans container images for CVEs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point:</strong> <code>.github/workflows/CD.yml</code> (GitHub Actions). The workflow checks out the repo, runs <code>flux diff</code> (via <code>fluxcd/flux2/action@v2.9.0</code>), applies changes with <code>flux apply</code>, and triggers Trivy (<code>aquasecurity/trivy-action@v0.36.0</code>).</p>
+<p><strong>Control flow:</strong></p>
+<ol><li><strong>CI trigger</strong> → GitHub Actions job.</li><li><strong>Flux diff</strong> reads the <code>kubernetes/</code> directory, resolves Kustomize bases (<code>kustomization.yaml</code>) and HelmRelease specs, then produces a manifest diff.</li><li><strong>Flux apply</strong> pushes the diff to the cluster’s GitOps controller, which creates/updates Kubernetes resources (Deployments, Services, ExternalSecrets).</li><li><strong>External‑Secrets</strong> controller (<code>kubernetes/cluster/tofu-controller/app/external-secrets.yaml</code>) fetches secrets from SOPS‑encrypted files or Terraform outputs.</li><li><strong>Terraform</strong> runs are invoked manually (or via a separate workflow) inside <code>terraform/</code>; the state is stored locally or in a remote backend.</li><li><strong>Docker compose</strong> files are independent of the GitOps loop; they are used to spin up local or edge services (<code>docker/npm/docker-compose.yml</code>).</li></ol>
+<p><strong>Blast radius:</strong> The Flux controller is the hub; any change to a HelmRelease or Kustomization can affect multiple services. Terraform files are isolated per provider, so failures are scoped to the targeted cloud resource. Docker compose changes affect only the host where <code>docker compose up</code> is executed.</p>
+<p>No circular import dependencies were detected; the static analysis reports <strong>0 internal modules</strong> and <strong>0 import edges</strong>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/iac.git
+cd iac
+
+# 2. Set up SOPS key (required for encrypted secrets)
+#    Place the key in the default location or export SOPS_KMS_ARN, etc.
+
+# 3. Apply Terraform (example for Cloudflare)
+cd terraform/cloudflare
+terraform init
+terraform apply   # approve plan interactively
+
+# 4. Deploy the Kubernetes stack (GitOps)
+#    The GitHub Actions workflow does this automatically on push.
+#    To run locally:
+flux install
+flux reconcile source git iac --with-source
+flux reconcile kustomization iac --with-source
+
+# 5. Start edge services with Docker Compose
+cd docker/jellyfin
+docker compose up -d</code></pre>
+<p><em>Configuration files</em>:</p>
+<ul><li><code>docker/secret-mappings.yml</code> maps secret names to Docker‑compose variables.</li><li><code>kubernetes/apps/*/app/external-secret.yaml</code> reference SOPS‑encrypted secret files.</li><li><code>terraform/*.tf</code> contain provider blocks and required variables.</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A homelab operator adds a new media server:</p>
+<ol><li>Create a HelmRelease manifest in <code>kubernetes/apps/media/plex/app/helmrelease.yaml</code>.</li><li>Commit the file; the CI workflow runs, Flux diff shows the new release, and Flux apply deploys Plex automatically.</li><li>If Plex needs a DNS record, add it to <code>terraform/cloudflare/plex.tf</code>; run <code>terraform apply</code> to provision the record.</li></ol>
+<p>All three layers stay in sync without manual <code>kubectl</code> or <code>docker</code> commands.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions use version tags instead of commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – <code>docker/npm/docker-compose.yml</code> runs containers in privileged mode with <code>network_mode: host</code>.</li><li><strong>MEDIUM</strong> – Workflows do not declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> (<code>.github/workflows/CD.yml</code>).</li><li><strong>MEDIUM</strong> – Base image in <code>docker/Dockerfiles/actions-runner/Dockerfile</code> is not pinned by digest.</li><li><strong>LOW</strong> – No <code>timeout-minutes</code> defined on workflow jobs (<code>.github/workflows/CD.yml</code>).</li><li><strong>SECURITY</strong> – Secret‑shaped paths appear in <code>kubernetes/cluster/tofu-controller/app/external-secrets.yaml</code>, <code>kubernetes/components/volsync/external-secrets.yaml</code>, and <code>terraform/cloudflare/secrets.tf</code>.</li></ul>
+<p>Other observations: tests exist (1 test file), a LICENSE is present, but no lockfile for Docker images; documentation is limited to README and a handful of Markdown files.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a well‑structured, GitOps‑driven homelab IaC stack that integrates Kubernetes, Terraform, Docker, and Ansible. It is functional out of the box, but the CI pipeline needs hardening (action pinning, privileged‑mode removal, token scoping) before it can be trusted in a production‑grade environment. Engineers comfortable with YAML‑centric pipelines will find it easy to extend; teams less familiar with GitOps may need to invest in Flux and SOPS onboarding.</p>
             </div>
 
             
@@ -96,16 +138,16 @@ Low - .gitleaks.toml present but no evidence of secrets scanning in CI workflows
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">548<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>159</b></li><li><span>Markdown</span><i style="width:4%"></i><b>7</b></li><li><span>JSON</span><i style="width:3%"></i><b>5</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li><li><span>SQL</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>YAML</span><i style="width:100%"></i><b>430</b></li><li><span>Terraform</span><i style="width:16%"></i><b>70</b></li><li><span>Markdown</span><i style="width:2%"></i><b>10</b></li><li><span>JSON</span><i style="width:1%"></i><b>5</b></li><li><span>HCL</span><i style="width:0%"></i><b>2</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Express</span><span>Docker</span><span>Kubernetes</span><span>Terraform</span></p>
                     </div>
                 </div>
 
@@ -119,7 +161,7 @@ Low - .gitleaks.toml present but no evidence of secrets scanning in CI workflows
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>kubernetes/cluster/tofu-controller/app/external-secrets.yaml, kubernetes/components/volsync/external-secrets.yaml, terraform/cloudflare/secrets.tf</code></span></li>
                     </ul>
                 </div>
 
@@ -129,7 +171,7 @@ Low - .gitleaks.toml present but no evidence of secrets scanning in CI workflows
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">fluxcd/flux2/action@v2.9.0, allenporter/flux-local/action/diff@8.4.0, mshick/add-pr-comment@v3, aquasecurity/trivy-action@v0.36.0</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding high"><div class="head"><span class="ttl">Drop privileged mode and host networking</span><span class="chip">high</span><span class="rankchip">6 occurrences</span></div><div class="loc">docker/npm/docker-compose.yml</div><div class="ev">network_mode: host</div><div class="ev">privileged hands the container every capability including direct device access, which makes escaping to the host a documented one-liner, and host networking removes the network boundary so every port the container opens is open on the host.</div><div class="rec"><b>Fix:</b> Grant the specific capability the workload needs with cap_add, and publish ports explicitly.</div></div><div class="finding medium"><div class="head"><span class="ttl">Declare least-privilege permissions for GITHUB_TOKEN</span><span class="chip">medium</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows/CD.yml</div><div class="ev">2 workflow(s) declare no permissions, 2 of them reference secrets</div><div class="ev">With no declaration the token inherits the repository default, so any injected step can push commits or mint releases from inside your own CI.</div><div class="rec"><b>Fix:</b> Add permissions: contents: read at the top of the workflow and widen per job only where needed.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span></div><div class="loc">docker/Dockerfiles/actions-runner/Dockerfile</div><div class="ev">ghcr.io/actions/actions-runner:2.335.1</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/CD.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

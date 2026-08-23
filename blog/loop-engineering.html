@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 3, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Shell</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>loop engineering</h1>
@@ -80,10 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI coding agents waste context windows on repetitive instructions. Every new session requires re-explaining how you want triage, changelogs, or PR reviews handled. Teams lack a structured way to encode agent behavior as reusable, auditable configurations.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>loop-engineering provides a pattern library and CLI tooling for defining agent workflows as declarative configurations. The patterns/ directory contains seven reusable workflows (e.g., daily-triage.md, pr-babysitter.md), each with tool-specific implementations under examples/ for Claude Code, Codex, Cursor, Grok, and GitHub Actions. The npm packages (loop-init, loop-audit, loop-cost) scaffold projects, score loop readiness, and track token usage.</p><p>The starters/ directory ships fully scaffolded projects with LOOP.md state files, skill definitions, and agent configurations. The scripts/ folder includes validation gates (ci-audit-gates.sh, ci-validate-gates.sh) that run in CI via GitHub Actions workflows under .github/workflows/.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team wants automated PR changelog drafting. They run npx @cobusgreyling/loop-init ., which scaffolds a changelog-drafter starter with skill files under .claude/skills/changelog-scan/SKILL.md. The CI pipeline uses loop-audit to validate pattern compliance on each PR. The team defines budget constraints in loop-budget.md and tracks session costs via loop-cost.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - No test files detected across 200 files. The scripts/ directory contains validation logic with no test coverage. Untested code paths in scripts/validate-registry.mjs and scripts/check-loop-init-sync.mjs.
-Low - CI workflows run audits but no unit/integration tests execute in CI. The audit.yml workflow runs loop-audit on the repo itself (dogfooding) but doesn&#39;t validate the audit tool&#39;s correctness.
-Low - The scripts/issue-bodies/ folder contains template fragments used for issue generation. These are hardcoded strings with no schema validation against actual repository state.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A practical pattern library and scaffolding toolkit for teams that use AI coding agents regularly. The no-tests gap is a real concern for production use, but the patterns themselves are well-documented and the multi-tool support is genuinely useful. Best suited for teams already using Claude Code or Codex who want repeatable, auditable agent workflows rather than ad-hoc prompting.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers spend most of their time writing and maintaining prompts that drive AI coding agents. The repetitive “prompt‑then‑run” loop is noisy, hard to version, and offers no systematic way to measure effectiveness or cost.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>loop-engineering</code> supplies a library of <strong>patterns, starters, and CLI tools</strong> that let teams treat an AI‑agent workflow as a first‑class software component. The core packages—<code>@cobusgreyling/loop‑audit</code>, <code>@cobusgreyling/loop‑init</code>, <code>@cobusgreyling/loop‑cost</code>, and <code>@cobusgreyling/loop‑context</code>—are located under <code>tools/</code> and expose a TypeScript CLI (<code>tools/*/src/cli.ts</code>). Scaffolding (<code>loop-init</code>) creates a <code>skills/</code> directory, a <code>state/</code> file and a budget manifest, then prints a “Loop Ready” score (see <code>README.md</code> and <code>docs/QUICKSTART.md</code>). The pattern catalog (<code>patterns/</code>) and example projects (<code>examples/</code>) show ready‑made loops for Claude, Codex, Cursor, and others.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – Running <code>npx @cobusgreyling/loop‑init .</code> executes the compiled CLI at <code>tools/loop‑init/dist/cli.js</code>, which loads <code>tools/loop‑init/src/cli.ts</code>.</li><li><strong>CLI bootstrap</strong> – <code>cli.ts</code> parses command‑line flags, resolves the target directory, and calls <code>auditor.ts</code> (e.g., <code>tools/goal‑audit/src/auditor.ts</code> or <code>tools/loop‑audit/src/auditor.ts</code>) to validate the generated loop configuration.</li><li><strong>Auditor</strong> – The auditor reads the generated <code>skills/</code>, <code>state/</code>, and <code>budget/</code> files, runs a series of rule checks (see <code>tools/*/src/reporter.ts</code> for output formatting) and returns an exit code. It is the most‑connected module in both audit tools (Ca = 2, Ce = 0).</li><li><strong>Reporter</strong> – Formats results for the console and, when invoked via CI, writes a JSON artifact.</li><li><strong>Context manager</strong> – <code>tools/loop‑context/src/context-manager.ts</code> (Ca = 1, Ce = 0) holds runtime metadata (e.g., token budgets) that the CLI can query.</li><li><strong>Publish workflows</strong> – GitHub Actions in <code>.github/workflows/</code> call the audit CLIs (<code>publish-goal-audit-bootstrap.yml</code>, <code>release-loop-audit.yml</code>, etc.) to validate loops before publishing the npm packages.</li></ol>
+<p>No circular imports are present; the import graph consists of 28 internal modules with 10 edges, keeping the dependency surface small and predictable.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/loop-engineering
+cd loop-engineering
+
+# Install the CLI tools (npm is the package manager)
+npm install
+
+# Scaffold a new loop in the current directory
+npx @cobusgreyling/loop-init .
+
+# Run an audit on the generated loop
+npx @cobusgreyling/loop-audit .</code></pre>
+<p><em>Configuration</em> – The scaffold creates <code>skills/</code>, <code>state/</code>, and <code>budget/</code> JSON/TOML files. No external environment variables are required for a local run; CI workflows inject a GitHub token only when publishing (<code>publish-goal-audit-bootstrap.yml</code>).</p>
+<p><em>Running examples</em> – Pick an example, <code>cd examples/claude-code</code>, then invoke the same CLI commands against that folder.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can treat the audit CLI as a gate: on every PR, <code>tools/loop-audit</code> validates that the loop’s budget stays within limits and that required skills are present. If the audit passes, the pipeline proceeds to <code>npm publish</code> the corresponding <code>@cobusgreyling/*</code> package, guaranteeing that any downstream service consumes a vetted loop definition.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Measured findings</strong> (static analysis)</li><li><strong>HIGH – duplicated code blocks</strong> in <code>tools/goal-audit/src/auditor.ts</code>, <code>tools/loop-audit/src/auditor.ts</code>, <code>tools/mcp-server/src/resolver.ts</code>, <code>tools/mcp-server/src/index.ts</code> (≈20 repeated 6‑line fragments). <em>Fix</em>: extract shared helpers into a common module.</li><li><strong>MEDIUM – high branching density</strong> in <code>tools/loop-audit/src/auditor.ts</code>, <code>scripts/ci-validate-gates.sh</code>, <code>scripts/validate-registry.mjs</code> (147 branch points over 485 lines). <em>Fix</em>: refactor into smaller, strategy‑based functions or tables.</li></ul>
+<ul><li><strong>Repository hygiene</strong> (CI, tests, licence, lockfile) – all present.</li></ul>
+<ul><li><strong>Code‑health audit</strong> (GitHub Actions)</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Checkout step keeps the token (<code>persist-credentials: false</code> needed).</li><li><strong>LOW</strong> – Jobs lack <code>timeout-minutes</code>; set realistic limits.</li><li><strong>LOW</strong> – Missing convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>No critical or high‑severity CI issues were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>loop-engineering</code> provides a concrete, CLI‑driven framework for turning AI‑agent prompts into versioned, auditable loops. The codebase is well‑structured with minimal coupling, but duplicated auditor logic and dense branching raise maintenance overhead. Adding dependency scanning and a few CI hardening steps would make the repo production‑ready for teams that want reproducible AI‑agent pipelines.</p>
             </div>
 
             
@@ -93,16 +121,16 @@ Low - The scripts/issue-bodies/ folder contains template fragments used for issu
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">388<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>129</b></li><li><span>YAML</span><i style="width:20%"></i><b>26</b></li><li><span>JSON</span><i style="width:7%"></i><b>9</b></li><li><span>Shell</span><i style="width:4%"></i><b>5</b></li><li><span>TOML</span><i style="width:2%"></i><b>2</b></li><li><span>CSS</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>203</b></li><li><span>JSON</span><i style="width:16%"></i><b>32</b></li><li><span>TypeScript</span><i style="width:15%"></i><b>30</b></li><li><span>YAML</span><i style="width:13%"></i><b>27</b></li><li><span>JavaScript</span><i style="width:7%"></i><b>15</b></li><li><span>TOML</span><i style="width:3%"></i><b>7</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>
@@ -136,12 +164,6 @@ Low - The scripts/issue-bodies/ folder contains template fragments used for issu
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1287965380">Open in Code Brain &rarr;</a>
@@ -149,7 +171,7 @@ Low - The scripts/issue-bodies/ folder contains template fragments used for issu
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:100%"></span></span><span class="n">2</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/publish-goal-audit-bootstrap.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/publish-goal-audit-bootstrap.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><div class="finding low"><div class="head"><span class="ttl">Add the repository convention files this project lacks</span><span class="chip">low</span><span class="rankchip">3 occurrences</span></div><div class="ev">missing .editorconfig, .gitattributes, a formatter config</div><div class="ev">Without them one contributor's editor writes tabs into a Python file, a shell script commits with CRLF and fails in the container, and a notebook diff is unreviewable.</div><div class="rec"><b>Fix:</b> Add .editorconfig, .gitattributes with text=auto eol=lf, and a formatter config.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

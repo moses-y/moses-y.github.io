@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Coding agents like Claude Code, Codex, and Cline each operate in isolation. They forget context between sessions, re-explain the codebase on every new chat, and have no shared memory. When multiple agents work on the same project, they clobber each other’s work and duplicate research. The result is wasted tokens, inconsistent decisions, and no persistent organizational knowledge.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Continuum is a local MCP server (NestJS, TypeScript) that gives every AI agent on your machine a shared memory and orchestration layer. It stores vector embeddings in sqlite-vec (apps/api/src/database/schema.ts), maintains an agent registry with state-machine tracking (apps/api/src/agent/agent.service.ts), and persists a canonical workflow per project called a “plot” (apps/api/src/plot/plot.service.ts). The web panel (apps/web/, Astro + React) lets humans browse projects, agents, and knowledge while agents drive everything via MCP.</p><p>Key files: apps/api/src/knowledge/knowledge.tool.ts exposes knowledgesearch and knowledgeget MCP tools for semantic retrieval. apps/api/src/agent/agent.tool.ts handles agent dispatch and reservation. apps/api/src/plot/plot.tool.ts reads/writes the project’s PLOT.md protocol. All data lives in a single SQLite file on your disk.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer working on a webhook retry system starts a Claude Code session and tells it to “read the plot.” The agent loads the project’s PLOT.md, researches the codebase, persists a dispatch record, and hands the developer a ready-to-paste prompt for a second agent in an isolated git worktree. The second agent runs the implementation, logs a “webhook retry logic” lesson to knowledge with knowledgeupsert. Later, a third agent working on error handling searches knowledgesearch({q: &quot;how do we handle webhook retries?&quot;}) and gets the lesson instantly — no re-explaining.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium/SDLC – No CI/CD pipeline (no .github/ or CI config). No automated build/test gate.  
-Medium/SDLC – No LICENSE file in root. Usage and redistribution rights are unclear.  
-Low/Risk – Dependencies declared in apps/api/package.json without a lockfile (no pnpm-lock.yaml or yarn.lock). Builds are not reproducible.  
-Low/Bugs – 18 test files exist (apps/api/test/, *.spec.ts), which is good coverage for a project this size. No obvious untested critical paths.  
-Low/Documentation – Only 3 doc files (READMEs). The README is thorough, but missing API docs for the MCP tools beyond the README.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Continuum solves a real pain point for teams using multiple AI coding agents on the same codebase. The architecture is clean and local-first. It’s production-ready for solo developers or small teams who already use MCP-speaking agents. The lack of CI and license files are minor but should be addressed before wider adoption. If your workflow involves multiple AI coding sessions on the same project, this is worth trying today.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Coding agents (Claude Code, Codex, Cline) each start with a blank slate. They re-explore the codebase, re-learn conventions, and can step on each other's work in parallel sessions. Continuum gives them a shared memory and a coordination protocol so lessons persist and agents don't clobber each other.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Continuum is a local MCP server that provides vectorized knowledge storage, an agent registry, and a dispatch workflow. The API (<code>apps/api/src/</code>) is a NestJS app exposing MCP tools via Streamable HTTP. The web panel (<code>apps/web/src/</code>) is an Astro + React UI for humans to browse projects, agents, and knowledge.</p>
+<p>The core workflow is a 4-phase dispatch protocol (Intake → Research → Verify → Handoff) seeded into each project's <code>PLOT.md</code>. Agents read the plot, become orchestrators, and dispatch fresh agents into isolated git worktrees. Knowledge is stored as 768-dim embeddings in SQLite via <code>sqlite-vec</code>, with semantic search instead of exact-match.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>apps/api/src/main.ts</code> (NestJS bootstrap). The routing hub is <code>apps/api/src/app.module.ts</code> — 7 modules import it, making it a high-blast-radius change point. The <code>knowledge.service.ts</code> is the most connected service: 4 modules import it, it calls 17 others, and it's the heaviest dependency in the graph.</p>
+<p>Control flow for a typical request: HTTP → controller → service → repository → SQLite. The <code>orchestrator-db.service.ts</code> is the database choke point — 11 modules depend on it, so schema changes ripple widely. The <code>service-errors.ts</code> module is even more central: 13 modules import it, and it's where shared error types live. Keep it stable.</p>
+<p>The web panel's <code>cn</code> utility (<code>apps/web/src/lib/utils.ts</code>) is called from 96 places — it's the shadcn class merger and the most-touched symbol in the frontend. The <code>sidebar.tsx</code> component is oversized at 1165 lines and defines 25 functions.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/continuum
+cd continuum
+pnpm install
+cp .env.example .env  # configure embedder and MCP settings
+pnpm --filter api start  # runs the NestJS server
+pnpm --filter web dev   # runs the Astro panel</code></pre>
+<p>The API Dockerfile (<code>apps/api/Dockerfile</code>) uses <code>node:22.12-bookworm-slim</code> — pin it by digest before production. The <code>.env.example</code> at the root defines required configuration; the embedder is optional but defaults to in-process.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team running parallel Claude Code sessions on one repo. Agent A reads the plot, researches the codebase, persists a dispatch record, and hands off a prompt for a fresh agent in a worktree. Agent B in another chat sees what's reserved via <code>knowledge_search({q: "webhook retries"})</code> and avoids duplicating work. Both share learned lessons without re-explaining the codebase.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found 11 findings: 1 high, 10 medium.</p>
+<ul><li><strong>High</strong> — Duplicated code blocks: 347 repeated 6-line blocks across 61 files, concentrated in the controllers (<code>agent.controller.ts</code>, <code>knowledge.controller.ts</code>, <code>project.controller.ts</code>). Extract shared helpers.</li><li><strong>Medium</strong> — High branching density in <code>agent.repository.ts</code> and <code>knowledge.repository.ts</code> (51 branch points over 161 lines) — decompose decision-heavy logic.</li><li><strong>Medium</strong> — Deep nesting (depth 6) in the web data tables (<code>data-table.tsx</code>, <code>ProjectsTable.tsx</code>) — flatten with guard clauses.</li><li><strong>Medium</strong> — Oversized files: <code>knowledge.service.spec.ts</code> and <code>sidebar.tsx</code> at 1165 lines each.</li></ul>
+<p>SDLC gaps: no CI/CD pipeline, no LICENSE file (all rights reserved by default), no Dependabot/Renovate for the 4 dependency manifests, and the Dockerfile base image isn't pinned by digest.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Solid architecture for a real pain point — local-first, client-agnostic, and the MCP protocol is standard. The main risks are operational: no CI, no license, and duplicated logic that will drift. Worth using if you run multiple AI coding agents on the same codebase, but add a build gate and license before treating it as production-ready.</p>
             </div>
 
             
@@ -95,18 +115,18 @@ Low/Documentation – Only 3 doc files (READMEs). The README is thorough, but mi
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">227<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>124</b></li><li><span>TSX</span><i style="width:38%"></i><b>47</b></li><li><span>JSON</span><i style="width:6%"></i><b>8</b></li><li><span>Markdown</span><i style="width:2%"></i><b>3</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>129</b></li><li><span>TSX</span><i style="width:36%"></i><b>47</b></li><li><span>JSON</span><i style="width:11%"></i><b>14</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li><li><span>Markdown</span><i style="width:2%"></i><b>3</b></li><li><span>CSS</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>NestJS</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>NestJS</span><span>Docker</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -140,7 +160,7 @@ Low/Documentation – Only 3 doc files (READMEs). The README is thorough, but mi
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>apps/api/package.json</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
                     </ul>
                 </div>
 
@@ -150,7 +170,7 @@ Low/Documentation – Only 3 doc files (READMEs). The README is thorough, but mi
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:67%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a LICENSE; redistribution rights are undefined</span><span class="chip">high</span></div><div class="ev">no licence file at the repository root</div><div class="ev">With no licence the default is all rights reserved, so this code cannot legally be reused, which matters most for the owner's own work carried into client engagements.</div><div class="rec"><b>Fix:</b> Add MIT or Apache-2.0 at the repository root.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">178 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span><span class="rankchip">2 occurrences</span></div><div class="loc">apps/api/Dockerfile</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">4 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span><span class="rankchip">3 occurrences</span></div><div class="loc">apps/api/Dockerfile</div><div class="ev">node:22.12-bookworm-slim, node:22.12-bookworm-slim, node:22.12-bookworm-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

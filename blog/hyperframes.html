@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 21, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">HTML</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>hyperframes</h1>
@@ -80,16 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Generating video programmatically typically requires either complex compositing pipelines (After Effects scripting, FFmpeg filters) or heavyweight media frameworks (Remotion, MoviePy). For AI coding agents, the gap between generating HTML and producing a rendered MP4 is wide—agents can write markup but have no native way to turn it into video with deterministic timing, captions, and transitions.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>HyperFrames is a Node.js framework that renders HTML, CSS, and seekable animations into deterministic MP4 video. The core workflow lives in the CLI (npx hyperframes preview, npx hyperframes render) and the docs/ directory contains over 140 catalog entries showing specific visual effects: transitions (blur, dissolve, grid, mechanical), captions (kinetic, neon, particle burst, karaoke), and UI blocks (liquid glass, macOS notifications, Spotify cards).</p><p>The repo is structured for agent-driven workflows. The .claude-plugin/, .cursor-plugin/, and .codex-plugin/ directories provide skill definitions that teach AI coding agents the production loop: plan, write HTML, wire animations, lint, preview, render. The AGENTS.md and CLAUDE.md files document how agents interact with the framework.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A product team can describe a video in natural language to an AI agent, which uses HyperFrames skills to generate the HTML, validate it with the linter, preview in the browser, and render to MP4. The docs/catalog/ provides ready-to-remix blocks—data charts, code diffs, map animations, social video templates—that agents can compose into longer sequences.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The repo appears well-maintained for a v0 project. Strengths include:
-Full CI pipeline in .github/workflows/ci.yml with multiple jobs
-Code scanning (CodeQL) configured in .github/workflows/codeql.yml
-Renovate dependency automation in .github/renovate.json
-License (Apache 2.0), code of conduct, contributing guide, and security policy present
-Linting configs (oxlint, prettier, commitlint) in root</p><p>Notable concerns:
-Med - No test files visible in the file tree beyond what the analysis counts as &quot;2 test files.&quot; For a rendering framework, absence of render-output comparison tests or snapshot testing is a risk. The Dockerfile.test exists but test structure isn&#39;t clear from the file listing.
-Med - No lockfile (bun.lock is listed but may be Bun-specific; no package-lock.json or yarn.lock visible). This creates non-deterministic installs across environments.
-Low - The docs/ directory dominates the repo (149 of 200 files). This suggests the framework itself may be thin and the catalog/guide content is the primary deliverable at this stage.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>HyperFrames solves a real problem—bridging HTML generation and video rendering for AI agents—with a pragmatic approach and solid documentation. The framework is early-stage; the catalog of effects is impressive but the core rendering engine&#39;s reliability and performance in production remain unverified without visible test coverage. Best suited for teams exploring AI-assisted video generation or building automated content pipelines, not for mission-critical video production without additional validation.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Creating deterministic video from HTML/CSS/animation is tedious: designers must manually translate web assets into a timeline, and automation agents lack a reliable, reproducible rendering pipeline. The result is fragile scripts, duplicated tooling, and inconsistent output quality.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>hyperframes</code> supplies an end‑to‑end stack that turns a web‑style markup file into an MP4 video. The repository is a portfolio of four self‑contained projects:</p>
+<ul><li><strong>packages</strong> – the core runtime, CLI, AWS Lambda wrapper, and rendering engine (<code>packages/*</code>).</li><li><strong>skills</strong> – pre‑packaged “agent skills” that let LLM‑based coders invoke HyperFrames (<code>skills/*</code>).</li><li><strong>registry</strong> – a catalog of reusable block definitions and design tokens (<code>registry/*</code>).</li><li><strong>docs / examples</strong> – reference material, MDX catalog entries, and sample Dockerfiles.</li></ul>
+<p>Key source files include <code>packages/cli/src/commands/_examples</code> (CLI entry), <code>packages/engine/src/services/frameCapture.ts</code> (frame capture), and <code>packages/producer/src/services/renderOrchestrator.ts</code> (orchestration). The project uses React for the preview UI, Tailwind for styling, Docker for reproducible builds, and Terraform for optional cloud deployment.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the CLI entry points declared in <code>packages/cli/src/auth/index.ts</code>, <code>capture/index.ts</code>, and <code>commands/_examples</code>. The <code>npx hyperframes</code> script (generated from <code>packages/cli/package.json</code> bin field) loads <code>packages/cli/src/ui/colors.ts</code> – a hub module imported by 60 other files – and parses the user‑provided <code>frame.md</code> or HTML source.</p>
+<p>The CLI dispatches to the <strong>engine</strong> (<code>packages/engine/src/services/frameCapture.ts</code>) which drives FFmpeg (via <code>packages/cli/src/docker/Dockerfile.render</code>). The engine calls the <strong>producer</strong> (<code>packages/producer/src/services/renderOrchestrator.ts</code>), a high‑instability module (22 inbound, 22 outbound imports) that coordinates asset loading, animation sequencing, and final MP4 assembly. This orchestrator sits in a documented import cycle with <code>packages/producer/src/services/render/shared.ts</code> and <code>packages/studio/src/player/index.ts</code>, inflating the blast radius for changes.</p>
+<p>Runtime initialization lives in <code>packages/core/src/runtime/init.ts</code> (34 outgoing imports, 2 inbound) and sets up the design system (<code>frame.md</code> → <code>DESIGN.md</code>). The <strong>studio</strong> UI (<code>packages/studio/src/App</code>) imports 50 modules and is the most outward‑facing component, but its high instability (0.96) indicates many downstream dependencies.</p>
+<p>Hub modules (<code>cli/src/ui/colors.ts</code>, <code>studio/src/player/store/playerStore.ts</code>, <code>studio/src/components/editor/domEditing.ts</code>) concentrate import traffic; modifications there affect dozens of callers. No lockfile (<code>package.json</code> only) means builds are not reproducible, and the import‑cycle members make refactoring risky.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/hyperframes
+cd hyperframes
+
+# Install Node dependencies (npm works because package.json is present)
+npm ci   # fails without a lockfile; npm install is the fallback
+
+# Run the CLI locally
+npx hyperframes init my-video
+cd my-video
+npx hyperframes preview   # launches a React preview UI (packages/studio)
+npx hyperframes render    # produces my-video.mp4 via Docker/FFmpeg</code></pre>
+<p>For containerised builds, the test image is defined in <code>Dockerfile.test</code>; replace the base tag with a digest (see health section). AWS Lambda deployment uses the CDK entry <code>packages/aws-lambda/src/cdk/index.ts</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A marketing automation platform can embed the CLI as a microservice: an incoming request triggers <code>packages/aws-lambda/src/index.ts</code>, which calls the same orchestrator used by the local CLI to render a product‑launch video on demand, then stores the MP4 in S3. The same code path is exercised by LLM agents via the <code>skills</code> package, enabling “write‑and‑render” loops without custom glue code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – 33 committed <code>node_modules</code> files; remove, <code>.gitignore</code>, and reinstall.</li><li><strong>High</strong> – CI steps discard exit codes (<code>.github/workflows/ci.yml</code> line 573); let failures surface.</li><li><strong>High</strong> – <code>continue-on-error</code> on correctness steps (<code>.github/workflows/ci.yml</code> line 146); delete or isolate.</li><li><strong>Medium</strong> – Base image not pinned (<code>Dockerfile.test</code>); use <code>node:22-bookworm-slim@sha256:&lt;digest&gt;</code>.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Checkout persists token; set <code>persist-credentials: false</code>.</li><li><strong>Medium</strong> – Docker image runs as root; add a non‑root <code>USER</code>.</li></ul>
+<p>Measured static analysis (384 findings) highlights:</p>
+<ul><li>7 import cycles (e.g., <code>studio/src/player/index.ts</code> ↔ <code>producer/src/services/renderOrchestrator.ts</code>).</li><li>12 oversized files (&gt;1 k LOC) such as <code>renderOrchestrator.ts</code>.</li><li>16 hub modules with &gt;40 inbound imports, most notably <code>cli/src/ui/colors.ts</code>.</li><li>4 empty catch blocks, 17 high‑branching functions, and 4 deep‑nesting blocks – all increase cognitive load.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>hyperframes</code> delivers a functional HTML‑to‑video pipeline with a solid CLI, cloud‑ready Lambda wrapper, and agent‑focused skill set. However, the codebase suffers from import cycles, oversized core modules, and missing reproducibility safeguards (lockfile, pinned containers). It is suitable for teams that need a customizable rendering engine and are prepared to address the highlighted health concerns before scaling.</p>
             </div>
 
             
@@ -99,18 +123,18 @@ Low - The docs/ directory dominates the repo (149 of 200 files). This suggests t
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">3,761<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>17</b></li><li><span>Markdown</span><i style="width:71%"></i><b>12</b></li><li><span>JSON</span><i style="width:53%"></i><b>9</b></li><li><span>HTML</span><i style="width:6%"></i><b>1</b></li><li><span>JavaScript</span><i style="width:6%"></i><b>1</b></li><li><span>CSS</span><i style="width:6%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>1147</b></li><li><span>Markdown</span><i style="width:68%"></i><b>779</b></li><li><span>HTML</span><i style="width:42%"></i><b>481</b></li><li><span>JSON</span><i style="width:27%"></i><b>314</b></li><li><span>TSX</span><i style="width:11%"></i><b>128</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>21</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Spring</span><span>Tailwind</span><span>Docker</span><span>Terraform</span><span>Vector store</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -144,6 +168,12 @@ Low - The docs/ directory dominates the repo (149 of 200 files). This suggests t
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1276052589">Open in Code Brain &rarr;</a>
@@ -151,7 +181,7 @@ Low - The docs/ directory dominates the repo (149 of 200 files). This suggests t
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:75%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">4</span></div></div><div class="finding high"><div class="head"><span class="ttl">Remove the committed dependency directory</span><span class="chip">high</span><span class="rankchip">33 occurrences</span></div><div class="loc">node_modules</div><div class="ev">33 files committed under node_modules</div><div class="ev">The code that actually runs was never resolved from a manifest, so no scanner, lockfile or update bot has any view of it.</div><div class="rec"><b>Fix:</b> Gitignore the directory, git rm -r --cached it, and reinstall from the lockfile.</div></div><div class="finding high"><div class="head"><span class="ttl">Stop discarding the exit code of steps whose failure matters</span><span class="chip">high</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">lines 573 discard failure</div><div class="ev">The job reports green while the artifact it was supposed to produce was never produced, so a crash becomes a successful run built on stale data.</div><div class="rec"><b>Fix:</b> Let the step fail, or test the specific expected condition instead of discarding all exit codes.</div></div><div class="finding high"><div class="head"><span class="ttl">Remove continue-on-error from steps that gate correctness</span><span class="chip">high</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">line 146 on a correctness step</div><div class="ev">A failing test suite reports a green check, which is precisely the path this audit exists to close.</div><div class="rec"><b>Fix:</b> Delete continue-on-error, or move a genuinely advisory step into a separate non-required job.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span></div><div class="loc">Dockerfile.test</div><div class="ev">node:22-bookworm-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a non-root USER to the image</span><span class="chip">medium</span></div><div class="loc">Dockerfile.test</div><div class="ev">CMD or ENTRYPOINT with no USER directive</div><div class="ev">A process running as root in the container is root against every mounted volume, and it turns any container escape or writable-mount mistake from a contained problem into a host one.</div><div class="rec"><b>Fix:</b> Create an unprivileged user, chown what it needs, and end the Dockerfile with USER.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 30, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building and managing a homelab is like assembling IKEA furniture without a manual—frustrating, time-consuming, and filled with bad decisions you&#39;ll regret later. Sure, there are hundreds of open-source apps to choose from, but good luck figuring out which ones are actually worth your time. Nobody has the energy to sift through GitHub repos with 3 stars and last commits from 2018.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>awesome-homelab is basically your cheat sheet for home server apps. It&#39;s a curated list of open-source tools, organized into YAML files under the data/ directory, like data/ai.yaml, data/backup.yaml, and data/infra-management.yaml. Each file lists apps in that category, along with metadata like GitHub stars and descriptions.</p><p>The main entry point is the README.md, which pulls all this data together into a clean table format. It&#39;s not some over-engineered database—just YAML files and a markdown table. Simple and effective. The assets/logo.svg and .github/workflows/build.yaml suggest there&#39;s some automation here, likely to ensure the README stays fresh. (If not, someone should add that—manual updates are a nightmare.)</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re setting up a homelab and need a backup solution. Instead of wasting hours Googling &quot;best open source backup tools&quot; and ending up on page six of Reddit threads, you can just check the data/backup.yaml. There, you’ll find curated options with details like GitHub stars and descriptions to help you decide.</p><p>For example, maybe you find BorgBackup listed. You click the link, skim the repo, and decide it’s perfect. You install it, configure it, and boom—your data is now safe. You didn’t have to sort through 15 abandoned projects first.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>awesome-homelab is a solid resource if you’re serious about building a homelab without wasting time. The YAML-and-markdown approach is lightweight and easy to contribute to. That said, with 0 stars and no original content (it’s a fork), this repo currently brings nothing new to the table. If you’re already familiar with the original repo (miantiao-me/awesome-homelab), skip this one. Otherwise, it’s a good starting point for homelab enthusiasts. Just don’t expect magic.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Homelab operators need a single source that lists vetted open‑source applications and provides a reproducible way to generate a curated markdown table. Maintaining that list manually is error‑prone and makes it hard to keep badge counts (stars, language) up to date.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository stores 35 YAML files under <code>data/</code>, each describing a category of homelab apps (e.g., <code>data/ai.yaml</code>, <code>data/networking.yaml</code>). A small Node.js script (<code>script/index.js</code>) reads those files, extracts key fields, and produces a markdown table similar to the one shown in <code>README.md</code>. Helper functions live in <code>script/utils.js</code> (<code>toPascalCase</code>, <code>getRepoInfo</code>, <code>getBadge</code>, <code>getTitle</code>) and <code>script/yaml.js</code> (<code>getYAMLFiles</code>). The CI workflow (<code>.github/workflows/build.yaml</code>) runs the script on every push, ensuring the public README stays in sync with the data files.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>script/index.js</code></strong> (the only entry point). It calls two internal modules:</p>
+<ol><li><strong><code>script/utils.js</code></strong> – imported twice (instability = 1). Functions here perform the heavy lifting: <em> <code>list</code> iterates over each YAML file returned by <code>getYAMLFiles</code>. </em> For each app entry, <code>getRepoInfo</code> fetches GitHub metadata, <code>getBadge</code> builds the shield URLs, and <code>getTitle</code> formats the display name. * The call graph shows <code>list → getBadge</code> (twice) and <code>list → getTitle</code>, indicating that badge generation and title formatting dominate the runtime.</li></ol>
+<ol><li><strong><code>script/yaml.js</code></strong> – provides <code>getYAMLFiles</code>, the sole consumer of the filesystem (the only external I/O). It scans <code>data/</code> and returns an array of file paths.</li></ol>
+<p><code>script/utils.js</code> has no outward dependencies beyond the standard library, so its functions are the widest blast radius; a change there affects every generated badge and title. No circular imports exist, and the module graph consists of four files with only two import edges, making the codebase easy to reason about.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/awesome-homelab.git
+cd awesome-homelab
+
+# Install dependencies with pnpm (lockfile present)
+pnpm install
+
+# Run the generator locally
+node script/index.js</code></pre>
+<p>The script writes its output directly into <code>README.md</code>. No environment variables or external configuration files are required. To update the list, add or edit YAML files under <code>data/</code> and push; the GitHub Actions workflow will regenerate the README automatically.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A homelab CI pipeline could schedule a nightly run of the GitHub Action to keep the public app list fresh. For example, a personal automation could fetch the generated <code>README.md</code> via the repository’s raw URL and embed the table in a self‑hosted documentation site, ensuring the site always reflects the latest curated apps without manual copy‑pasting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin third‑party GitHub Actions to a commit SHA</strong> – <code>.github/workflows/build.yaml</code> uses <code>pnpm/action-setup@v4</code> and <code>actions-js/push@master</code>. Tags can be retagged, exposing the workflow to supply‑chain attacks. Replace each tag with a full SHA and let Dependabot update them.</li><li><strong>Medium – Enable Dependabot or Renovate</strong> – only one manifest (<code>package.json</code>) exists; no update bot is configured. Add <code>.github/dependabot.yml</code> covering <code>pnpm</code> and <code>github-actions</code>.</li><li><strong>Medium – Gate PRs with a dependency‑vulnerability scan</strong> – CI lacks a step that runs <code>dependency-review-action</code> or <code>osv-scanner</code>. Adding such a step will block known vulnerable packages from merging.</li><li><strong>Medium – Review the install lifecycle script and disable scripts in CI</strong> – <code>package.json</code> contains a <code>postinstall</code> script that fetches a binary. This can be abused during CI builds. Either move the work to an explicit build step or run CI with <code>ignore-scripts</code>.</li><li><strong>Low – Set <code>timeout-minutes</code> on workflow jobs</strong> – <code>build.yaml</code> omits a job timeout, risking runaway runs. Add a reasonable timeout (e.g., 15 min).</li><li><strong>No test files</strong> – repository has zero tests, so code paths are unverified.</li><li><strong>No LICENSE file</strong> – redistribution rights are unclear. Adding an MIT or Apache‑2.0 license would remove ambiguity.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a simple, well‑structured generator that keeps a homelab app catalog up to date with minimal friction. Its narrow module graph and single entry point make it easy to extend, but the lack of tests, a license, and several CI hardening gaps mean it should be hardened before being used in production‑grade automation. Suitable for personal or small‑team homelab documentation pipelines, provided the highlighted health issues are addressed.</p>
             </div>
 
             
@@ -91,9 +116,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -124,6 +149,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1152153309">Open in Code Brain &rarr;</a>
@@ -131,12 +162,12 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:33%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:33%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">pnpm/action-setup@v4, actions-js/push@master</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Review the install lifecycle script and disable scripts in CI</span><span class="chip">medium</span></div><div class="loc">package.json</div><div class="ev">postinstall</div><div class="ev">Install scripts are the execution vector for every npm compromise from event-stream onward, and a postinstall that fetches a binary makes the build depend on a URL nobody reviews.</div><div class="rec"><b>Fix:</b> Move the work into an explicit build step, or set ignore-scripts in CI and run it by name.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/build.yaml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
             <div class="post-actions">
-                <a href="https://github.com/yebeai/awesome-homelab" target="_blank" rel="noopener" class="primary-btn">
+                <a href="https://github.com/moses-y/awesome-homelab" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>

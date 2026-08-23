@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 21, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,39 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents that need live web data often hit bot walls, require API keys, or rely on expensive third-party scrapers. Existing solutions like Firecrawl or Jina charge per request and route data externally. Hound solves this with a single, local MCP server that handles fetch, crawl, search, and PDF extraction—no accounts, no billing, no data leaving your machine.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Hound exposes six hand-crafted tools (~2,700 tokens total) through the MCP protocol. The server entry point is src/masterfetch/server.py; content extraction uses src/masterfetch/trafilaturaextractor.py and src/masterfetch/ocr.py (for scanned PDFs). It bypasses Cloudflare via a warm browser instance (Playwright), respects robots.txt via src/masterfetch/robots.py, and provides keyless local search through src/masterfetch/searchengines.py. Every response includes structured fields (contentok, nextaction, pagetype, fetchrelevance) so agents can branch programmatically rather than parsing error text.</p><p>The package (pyproject.toml) installs as hound-mcp. CI runs via .github/workflows/ci.yml. A separate pi-extension/ provides a TypeScript integration for the Pi agent. Tests (39 files in tests/) cover core paths: fetch, crawl, search, PDF extraction, security, and lifecycle.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>An AI coding agent (Claude Code, Cursor) needs to fetch a Cloudflare-protected API doc, extract the main content, search for alternative libraries, and crawl related pages—all in one session. Hound handles each step with distinct tools. The agent uses contentok and next_action fields to decide whether to retry, paginate, or stop, without parsing HTML errors.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The codebase is well-structured with clear separation of concerns (crawl, search, extraction, security each in their own module). CI is configured, tests exist, and the README documents honest limits. One low-risk issue: package.json and pi-extension/package.json declare dependencies without lockfiles, making Node.js builds non-reproducible. The Python side has no lockfile either (no poetry.lock or requirements.txt), though pyproject.toml pins versions via ranges. No secrets or credentials were found in the repo. The 39 test files appear functional; the README claims 705 tests—likely counting parametrized or generated test cases.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Hound is a practical, well-engineered MCP server for teams that need free, self-hosted web fetch without external dependencies. It’s ready for production use with an AI agent, provided you accept the lack of managed infrastructure and lockfiles. Best suited for developers who want full control over their agent’s web access.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> AI agents need reliable, zero‑cost web access for research, PDF extraction and bypassing Cloudflare blocks. Existing services require API keys, incur per‑request fees, or run multiple isolated tools, which adds latency and operational overhead.</p>
+<p><strong>What This Does</strong> <code>master-fetch</code> (the Hound MCP server) runs a single local process that implements the Model‑Context‑Protocol (MCP). It fetches URLs, crawls pages, extracts text with Trafilatura, reads PDFs (including OCR), and performs a small meta‑search layer. The core code lives in <code>src/master_fetch/</code> – e.g. <code>server.py</code> (entry point, HTTP API), <code>actions.py</code>, <code>crawl.py</code>, <code>ocr.py</code>, and <code>search_metasearch.py</code>. The CLI wrapper (<code>src/master_fetch/__main__.py</code>) starts the server, while the test suite under <code>tests/</code> validates each tool. No external API keys are required; the only runtime dependency is a local Chromium browser installed via Playwright.</p>
+<p><strong>How It Is Wired</strong></p>
+<ol><li><strong>Startup</strong> – Execution begins at <code>src/master_fetch/__main__.py:main</code>, which invokes <code>src/master_fetch/server.py:main</code> (line 3060). This function creates the <code>MasterFetchServer</code> instance and registers 62 functions and 11 classes.</li><li><strong>Request handling</strong> – An incoming MCP call reaches <code>_make_response</code> (server.py) which builds a <code>ResponseModel</code> (used in 53 places) and routes to the appropriate tool via <code>_apply_chunking</code> (server.py) and <code>smart_fetch</code> (src/master_fetch/actions.py).</li><li><strong>Core work</strong> –   <em> URL validation → <code>validate_url</code> (called 36 times) may raise <code>SecurityError</code>. </em> Fetch → <code>self.client.request</code> (network call) in <code>get</code>/<code>request</code> methods of <code>MasterFetchServer</code>. <em> Optional crawling → <code>src/master_fetch/crawl.py</code> (deeply nested logic, 8‑level indentation). </em> PDF handling → <code>src/master_fetch/pdf_extractor.py</code> and <code>ocr.py</code> open files (currently without context managers). * Search → <code>src/master_fetch/search_metasearch.py</code> performs outbound HTTP calls (21 call sites).</li><li><strong>Persistence</strong> – <code>src/master_fetch/cache.py</code> and <code>src/master_fetch/reranker.py</code> read/write a SQLite DB and compute SHA‑256 hashes for caching and ranking.</li><li><strong>External effects</strong> – The server runs subprocesses (<code>scripts/compress_tooldef.py</code> etc.) and invokes Playwright‑managed Chromium to bypass Cloudflare.</li></ol>
+<p>The most‑connected hub is <code>MasterFetchServer</code> (83 inbound call sites); changes here propagate widely. No circular imports were detected, but many modules contain duplicated 6‑line blocks and deep nesting, raising maintenance risk.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/master-fetch
+cd master-fetch
+
+# Install Python dependencies (pyproject.toml) and optional extras
+pip install "hound-mcp[all]"   # pulls all extras, matches README
+
+# Install the bundled Chromium browser used by Playwright
+playwright install chromium
+
+# Start the MCP server (default listens on 127.0.0.1:8000)
+python -m master_fetch   # runs src/master_fetch/__main__.py</code></pre>
+<p>Configuration is driven by environment variables (e.g., <code>PORT</code>, <code>PROXY_URL</code>) read in <code>src/master_fetch/server.py</code>; the repo does not ship a sample <code>.env</code> file, so users must define the needed vars manually.</p>
+<p><strong>Real‑World Use</strong> An internal chatbot can call the server via MCP:</p>
+<pre data-lang="python"><code>import json, httpx
+
+payload = {"action": "fetch", "url": "https://example.com"}
+resp = httpx.post("http://127.0.0.1:8000/mcp", json=payload)
+data = resp.json()
+print(data["content_ok"], data["summary"])</code></pre>
+<p>The response contains structured fields (<code>content_ok</code>, <code>page_type</code>, <code>relevance_score</code>) that the agent can branch on without parsing raw HTML.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>High</strong> – No lockfile for <code>package.json</code>; transitive JS deps are not reproducible.</li><li><strong>Medium</strong> – Broad <code>except:</code> clauses (24 sites) swallow errors; replace with specific exception handling.</li><li><strong>Medium</strong> – Files opened without <code>with</code> context (<code>open(...)</code>) in 8 places; may leak handles.</li><li><strong>Medium</strong> – Deep nesting (max depth 8) in <code>actions.py</code>, <code>crawl.py</code>, <code>ocr.py</code> makes reasoning hard.</li><li><strong>Medium</strong> – Oversized <code>server.py</code> (≈2.6 k lines); split into routing, network, and cache modules.</li><li><strong>Medium</strong> – GitHub Actions lack least‑privilege <code>GITHUB_TOKEN</code> permissions and a dependency‑vulnerability scan.</li><li><strong>Medium</strong> – No Dependabot/Renovate configuration; vulnerable ranges (e.g., <code>pydantic&gt;=2.0</code> includes CVE‑2024‑3772).</li><li><strong>Low</strong> – CI jobs have no <code>timeout-minutes</code>; long hangs can overlap scheduled runs.</li></ul>
+<p>All findings are derived from static analysis; no additional hidden issues were observed.</p>
+<p><strong>The Bottom Line</strong> <code>master-fetch</code> delivers a fully self‑hosted, keyless web‑fetch service with a rich toolset, but the codebase suffers from maintainability problems (large monolith, duplicated logic, deep nesting) and lacks reproducible JS builds and CI hardening. It is suitable for teams that can invest in refactoring and lockfile management, and that need a zero‑cost, locally controlled web accessor for AI agents.</p>
             </div>
 
             
@@ -128,7 +158,7 @@
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>package.json</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>package.json</code></span></li>
                     </ul>
                 </div>
 
