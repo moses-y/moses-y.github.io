@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 27, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Training large language models can be prohibitively expensive and require significant computational resources. The smol-kimi-k3 repository aims to address this issue by providing a smaller, 49M-parameter language model that can be trained on a single 8GB GPU.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The smol-kimi-k3 repository provides a training-oriented, text-only miniature of the language backbone described in the Kimi K3 technical report. The model is implemented in Python, with key components located in the k3 folder, including model.py, config.py, and optim.py. The dashboard folder contains a live training dashboard, and the scripts folder includes a script for preparing the TinyStories dataset. The train.py file is the main entry point for training the model.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>To use this repository, one would first need to prepare the TinyStories dataset using the prepare_tinystories.py script. Then, they can train the model using the train.py file, which utilizes the k3 module and its components. The live training dashboard can be accessed through the dashboard/app.js file.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) — No CI/CD pipeline detected — root directory
- Medium (SDLC) — No LICENSE file — root directory
-Low (Risk) — Dependencies declared without a lockfile — pyproject.toml
-However, the repository does include tests, with one test file found in the tests folder, and documentation is provided in the README.md file.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The smol-kimi-k3 repository provides a unique solution for training a smaller language model on limited computational resources. While it has some issues, such as the lack of a CI/CD pipeline and LICENSE file, the repository is well-structured and includes tests and documentation. This project is suitable for researchers and developers looking to experiment with smaller language models, but may require additional setup and configuration for production use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Training a modern transformer‑style language model usually requires dozens of gigabytes of GPU memory and a large codebase that hides the experimental components. Researchers who want to experiment with the Kimi K3 attention mechanisms must either re‑implement the tricks from scratch or work with a heavyweight repository that cannot run on a single 8 GB GPU.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>smol‑kimi‑k3</code> delivers a <strong>49 M‑parameter</strong> K3‑inspired model that fits on one 8 GB GPU. The core implementation lives in the <code>k3/</code> package:</p>
+<ul><li><code>k3/model.py</code> – defines the <code>K3ForCausalLM</code> class, its <code>forward</code> and <code>step</code> logic.</li><li><code>k3/config.py</code> – holds <code>K3Config</code> and helpers (<code>head_size</code>, <code>attention_type</code>).</li><li><code>k3/optim.py</code> – custom optimizer utilities (<code>zeroth_power_via_newton_schulz</code>, <code>step</code>).</li><li><code>k3/monitoring.py</code> – runtime metrics (<code>_now</code>, <code>_write_state</code>).</li></ul>
+<p>Training utilities are in <code>train.py</code> (batch preparation, learning‑rate scaling, checkpointing, and a <code>generate_sample</code> helper). A minimal live dashboard is provided by <code>dashboard.py</code> (HTTP handler, file serving) together with the static assets in <code>dashboard/</code>. The <code>scripts/prepare_tinystories.py</code> script tokenizes the TinyStories dataset and writes the split files used by training.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – the only explicit <code>main</code> function is in <code>dashboard.py</code> (line 56). Starting the dashboard runs:</p>
+<pre><code>dashboard.py → main
+   ├─ encode_split → writes split files (output_path.open)
+   ├─ set_status / load_state_dict (model checkpoint handling)
+   └─ K3ForCausalLM (instantiated 5 times across the repo)</code></pre>
+<p><code>K3ForCausalLM</code> is the central hub: it is created in <code>train.py</code>, <code>generate.py</code>, the dashboard handler, and the test suite. Each instance calls:</p>
+<ul><li><code>__init__</code> → constructs layers (<code>RMSNorm</code>, <code>CausalDepthwiseConv1d</code>, <code>AttentionResidual</code>, <code>SiTUGLU</code>).</li><li><code>forward</code> → invokes <code>_shape_heads</code> (4 calls per forward) and the custom KDA/MLA kernels.</li></ul>
+<p>The <strong>call graph</strong> shows the widest blast radius on <code>K3ForCausalLM</code> (5 distinct callers) and on internal helpers <code>_write_state</code> (5 callers) and <code>_now</code> (4 callers). Changing these functions will affect most of the codebase.</p>
+<p><code>train.py</code> orchestrates the training loop:</p>
+<ul><li><code>get_batch</code> → reads tokenized data files.</li><li><code>evaluate</code> → runs a forward pass and computes loss.</li><li><code>save_checkpoint</code> → writes model state (<code>state_dict</code>) to disk.</li><li><code>generate_sample</code> → calls <code>K3ForCausalLM.forward</code> and then <code>generate.py</code>’s <code>main</code> for inference.</li></ul>
+<p><code>tests/test_model.py</code> validates the same pathways, exercising <code>tiny_config</code> (a minimal <code>K3Config</code>) and exercising forward/backward passes, causal masking, and cached decoding.</p>
+<p>No circular imports were detected; the import graph is shallow (11 modules, 9 edges). Deep nesting (max indentation depth 6) appears in <code>k3/optim.py</code>, <code>dashboard.py</code>, and <code>train.py</code>, which can make the control flow harder to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/smol-kimi-k3
+cd smol-kimi-k3
+
+# Install Python dependencies
+pip install -r requirements.txt   # or: pip install -e .  (pyproject.toml defines the package)
+
+# Prepare the TinyStories tokenized split (requires internet access)
+python scripts/prepare_tinystories.py
+
+# Start the live training dashboard (optional)
+python dashboard.py &amp;   # serves on localhost, default port 8000
+
+# Train the model (single‑GPU)
+python train.py          # uses default config from configs/k3_50m.json
+
+# Generate a sample after training
+python generate.py</code></pre>
+<p>The repository supplies <code>configs/k3_50m.json</code> as the default model hyper‑parameters; no environment variables are required beyond a CUDA‑capable GPU.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can embed the model in a microservice that calls <code>K3ForCausalLM.forward</code> for inference, while developers experiment with the KDA/MLA blocks by editing <code>k3/model.py</code> and re‑running <code>train.py</code>. The lightweight dashboard provides live loss curves without needing external monitoring tools.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing LICENSE</strong> – no <code>LICENSE</code> file; reuse is legally undefined.</li><li><strong>High – No lockfile</strong> – <code>pyproject.toml</code> lacks a corresponding lockfile; builds are non‑reproducible.</li><li><strong>High – No CI pipeline</strong> – repository contains no GitHub Actions, Travis, etc.; changes are not automatically verified.</li><li><strong>Medium – No Dependabot/Renovate</strong> – dependency updates are manual; known vulnerabilities may linger.</li><li><strong>Medium – Version ranges include vulnerable releases</strong> – e.g., <code>torch&gt;=2.5</code> covers a CVE‑critical version; without a lockfile the exact version is ambiguous.</li></ul>
+<p>Additional observation from the measured analysis: deep nesting (max indentation depth 6) in <code>k3/optim.py</code>, <code>dashboard.py</code>, and <code>train.py</code> raises cognitive load; refactoring into smaller helper functions would improve readability.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>smol‑kimi‑k3</code> provides a compact, reproducible implementation of Kimi K3’s novel attention mechanisms that can be trained on a modest GPU. The code is functional but lacks essential production hygiene (license, lockfile, CI). It is best suited for research prototyping and educational exploration rather than for deployment without further engineering.</p>
             </div>
 
             

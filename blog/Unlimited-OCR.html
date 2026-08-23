@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,27 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The Unlimited-OCR repository addresses the need for efficient and accurate Optical Character Recognition (OCR) capabilities, particularly in scenarios requiring one-shot long-horizon parsing. This technology aims to enhance document parsing, making it more accessible and user-friendly.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The Unlimited-OCR repository provides a model for OCR tasks, leveraging the Hugging Face transformers library. The infer.py file contains the core inference functionality, utilizing the AutoModel and AutoTokenizer from the transformers library. The model supports both single-image and multi-page parsing, with configurations for different use cases, such as gundam and base. The repository also includes documentation and assets, like the Unlimited-OCR.pdf and assets/Unlimited-OCR.png files.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>In a practical scenario, a user could utilize the Unlimited-OCR model for parsing documents, such as invoices or receipts, by using the model.infer function with the tokenizer and providing the image file path. For example:</p><p>This would generate a parsed output of the document, which can then be further processed or analyzed.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) — No test files detected, indicating potential untested code paths — repository-wide
- Medium (SDLC) — No CI/CD pipeline detected, suggesting a lack of automated build and test processes — .github/ or CI config
-However, the presence of a LICENSE file and documentation suggests some attention to code health and maintainability.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The Unlimited-OCR repository offers a promising solution for OCR tasks, particularly with its support for one-shot long-horizon parsing. While the codebase appears to be well-structured, the lack of tests and CI/CD pipeline is a notable concern. This repository may be better suited for users or teams already familiar with the Hugging Face ecosystem and transformer-based models, who can integrate and test the model within their existing workflows.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Documents that span many pages—contracts, academic papers, historical archives—break conventional OCR pipelines. Most systems process one page at a time, losing cross-page context, repeating content, and producing fragmented output. <code>Unlimited-OCR</code> is a Baidu research model that performs one-shot, long-horizon parsing: it ingests an entire document and produces a single coherent parse, eliminating the page-by-page stitching problem.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a lightweight inference wrapper around the <code>baidu/Unlimited-OCR</code> model. It provides <code>infer.py</code>, a single Python file with 14 functions, that handles the full pipeline: converting PDFs to images (<code>pdf_to_images</code>), encoding images (<code>encode_image</code>), building prompts (<code>build_content</code>), and running inference through a local server (<code>start_server</code>, <code>infer_one</code>). It supports single-image, multi-page, and PDF inputs.</p>
+<p>The repo includes documentation (<code>README.md</code>, <code>CONTRIBUTING.md</code>, <code>Unlimited-OCR.pdf</code>), a license, and an asset directory. It does not include tests, CI configuration, or a Dockerfile. The only code file is <code>infer.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>infer.py:319</code>, which calls <code>parse_args</code>, <code>start_server</code>, <code>run</code>, and <code>stop_server</code>. <code>run</code> (at <code>infer.py:267</code>) calls <code>build_jobs</code>, which builds a job list from either a PDF (<code>pdf_to_images</code>) or a directory of images (<code>collect_dataset_images</code>). Each job flows through <code>infer_one</code>, which calls <code>build_content</code> → <code>encode_image</code> and <code>collect_stream_silent</code> to gather output.</p>
+<p>The internal call graph has 14 edges across 14 functions. <code>stop_server</code> is the most-called function (2 call sites), but the real hub is <code>infer_one</code>—it routes through <code>build_content</code>, <code>get_ngram_processor_str</code>, and <code>collect_stream_silent</code>, and is the single point where a document is converted into a model request. <code>start_server</code> and <code>stop_server</code> manage the local inference server lifecycle, which is the only external effect: the code spins up a server, sends requests to it, and tears it down. There are no circular dependencies and no other modules.</p>
+<p>File-by-file: <code>infer.py</code> owns all logic—parsing, image conversion, server management, and inference. The <code>assets/</code> folder holds images and a 78MB GIF. The <code>wheel/</code> folder contains a pinned <code>sglang</code> wheel.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install the dependencies listed in the README (<code>torch</code>, <code>transformers</code>, <code>pymupdf</code>, etc.) with <code>pip</code>. There is no <code>pyproject.toml</code> or <code>requirements.txt</code> in the repo, so pin versions manually.</p>
+<p><strong>Running it</strong>: The README shows the intended usage—load the model via <code>AutoModel.from_pretrained('baidu/Unlimited-OCR', trust_remote_code=True)</code>, then call <code>model.infer()</code> for single images or <code>model.infer_multi()</code> for multi-page PDFs. The <code>infer.py</code> CLI offers a local-server path; the README does not document its exact CLI flags, so inspect <code>parse_args</code> in <code>infer.py:319</code> for the available options.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A legal firm processes a 200-page contract. The workflow: convert the PDF to images at 300 DPI, feed all pages to <code>model.infer_multi</code> with <code>image_size=1024</code> and <code>max_length=32768</code>, and receive a single structured text output. The <code>no_repeat_ngram_size</code> and <code>ngram_window</code> parameters control repetition suppression, which matters for long documents where the model might otherwise loop on boilerplate language.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis of <code>infer.py</code> found 14 functions, 0 classes, and no circular dependencies. One medium-severity finding:</p>
+<ul><li><strong>Medium - Large binaries in repo</strong> - <code>assets/long-horizon-ocr.gif</code> is 78.4MB and <code>wheel/sglang-0.0.0.dev11416+g92e8bb79e-py3-none-any.whl</code> is 11.9MB. Every clone pays for these. Move the GIF to LFS and the wheel to object storage.</li></ul>
+<p>SDLC observations from the file structure: no test files, no CI pipeline, and no lockfile. The single <code>infer.py</code> is untested and has no automated gate. The README references a <code>requirements.txt</code>-style list but no such file exists in the repo.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Unlimited-OCR</code> is a functional inference wrapper for a strong research model, but it is not a production-ready package. The single-file design is easy to read and modify, but the lack of tests, CI, and a dependency manifest means you will be debugging against the model's own behavior. Use it for experimentation or as a reference implementation; for production, extract the model call into a service with proper packaging and test coverage.</p>
             </div>
 
             
@@ -118,7 +135,7 @@ However, the presence of a LICENSE file and documentation suggests some attentio
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected — untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected — no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
                     </ul>
                 </div>
 
@@ -128,7 +145,7 @@ However, the presence of a LICENSE file and documentation suggests some attentio
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">2 occurrences</span></div><div class="loc">assets/long-horizon-ocr.gif</div><div class="ev">2 blobs over 5MB: long-horizon-ocr.gif 78.4MB, sglang-0.0.0.dev11416+g92e8bb79e-py3-none-any.whl 11.9MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

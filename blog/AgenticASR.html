@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 1, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Speech recognition systems often struggle with real-world scenarios, such as disfluencies, self-corrections, and varying speech patterns. This can lead to inaccurate or incomplete transcripts, making it difficult to extract meaningful information from speech data.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The AgenticASR repository provides a solution to this problem by refining speech recognition in real-world scenarios via an agentic approach. The pipeline folder contains the core implementation of the Refiner, which accepts JSONL output from any ASR frontend and produces refined transcripts. The experiments folder contains scripts for training and evaluating the Refiner, including postprocessasr.py for batch inference.</p><p>The Refiner is designed to be ASR-agnostic, allowing it to be attached to any ASR frontend that produces text hypotheses. The system folder contains backend implementations for live ASR and refiner services. The assets folder contains documentation and demo materials, including a bilingual demo for English and Chinese speech-to-clean-text refinement.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>In a practical scenario, the AgenticASR Refiner can be used to improve the accuracy of speech-to-text systems in applications such as voice assistants, transcription services, or voice-controlled interfaces. For example, the postprocessasr.py script can be used to refine transcripts from an ASR frontend, producing more accurate and readable text output.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) - No test files detected - untested code paths - repository-wide: The lack of tests in the repository raises concerns about the reliability and maintainability of the code.
- Medium (SDLC) - No CI/CD pipeline detected - no automated build/test gate - .github/ or CI config: The absence of a CI/CD pipeline makes it difficult to ensure that changes to the codebase do not introduce errors or break existing functionality.
-Low (Risk) - Dependencies declared without a lockfile - non-reproducible builds - requirements.txt: The use of a requirements.txt file without a lockfile can lead to inconsistencies in the build environment.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The AgenticASR repository provides a promising solution for refining speech recognition in real-world scenarios. While the codebase appears to be well-organized, the lack of tests and CI/CD pipeline raises concerns about its reliability and maintainability. With additional investment in testing and automation, this repository has the potential to provide a robust and accurate speech-to-text refinement system.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Raw ASR output is full of disfluencies, self-corrections, and conversational noise that don't match the speaker's intended written text. Most post-processing pipelines are rule-based and brittle — they can't handle context-dependent rewrites or revise earlier output when new speech arrives.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>AgenticASR is a research codebase for an agent-based ASR refiner. It turns raw speech hypotheses into clean, written-form text while preserving speaker intent. The refiner is ASR-agnostic and works with any frontend that produces text hypotheses.</p>
+<p>The repo has three projects: <code>pipeline/</code> (data generation and training pipeline), <code>experiments/</code> (inference and benchmarking), and <code>system/</code> (online/offline refinement system). The pipeline generates synthetic training data from seed prompts, simulates ASR errors, and produces clean text via LLM-based generators.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>experiments/scripts/main.py:153</code> (<code>main</code>), which routes through <code>parse_args</code> and <code>run</code>. <code>main</code> is called from one place and reaches 182 functions — it's the primary entry point. The <code>run</code> function (line 103) reaches 90 functions and handles the actual workflow.</p>
+<p>The core flow: <code>main</code> → <code>run</code> → <code>load_rubric</code> (reads filesystem via <code>path.read_text</code>) and <code>setup_logging</code> (writes via <code>os.makedirs</code>). These are the shortest traced paths from entry to external effect — two hops.</p>
+<p>The most connected modules form a small graph: <code>system/chunking</code> (3 importers, 0 deps), <code>system/refiner</code> (2 importers, 1 dep), and <code>pipeline/run_pipeline</code> (1 importer, 0 deps). No circular dependencies exist among the 45 internal modules with 7 import edges.</p>
+<p>Key files by responsibility:</p>
+<ul><li><code>experiments/scripts/postprocess_asr.py</code> — batch refiner inference; called from 10 files</li><li><code>experiments/scripts/benchmark_io.py</code> — data loading and rubric parsing</li><li><code>pipeline/src/utils/io_utils.py</code> — file I/O helpers (<code>read_jsonl</code>, <code>write_jsonl</code>); called from 11 files</li><li><code>pipeline/src/services/llm_client.py</code> — LLM client wrapper; <code>generate</code> called from 10 places</li><li><code>pipeline/src/services/vllm_lifecycle.py</code> — VLLM process management; runs external commands</li></ul>
+<p>The highest blast radius: <code>generate</code> (10 callers), <code>read_jsonl</code> (9 callers), and <code>AsyncLLMClient</code> (7 callers). Changes to these break the most downstream code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>:</p>
+<pre data-lang="bash"><code>python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r system/requirements.txt</code></pre>
+<p>Refiner training requires <a href="https://github.com/hiyouga/LLaMA-Factory" rel="noopener">LLaMA Factory</a> installed separately.</p>
+<p><strong>Running batch inference</strong>:</p>
+<pre data-lang="bash"><code>python experiments/scripts/postprocess_asr.py \
+  /path/to/asr_output.jsonl \
+  /path/to/refined_output.jsonl \
+  --model /path/to/refiner-checkpoint</code></pre>
+<p>Input records must contain <code>source_record_id</code> and <code>output.raw_text</code>. The refiner checkpoint is available on Hugging Face (<code>Andrew0425/AgenticASR-Refiner</code>) and ModelScope (<code>MuyuanJ/AgenticASR-Refiner</code>).</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A production ASR system (e.g., Whisper or Qwen3-ASR) emits raw hypotheses as JSONL. AgenticASR refines them in batch or online mode. For streaming, <code>system/live_asr.py</code> handles continuous refinement with bounded active spans — useful for live captioning or meeting transcription where you want clean text without waiting for the full utterance.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found 13 medium findings across 5 kinds:</p>
+<ul><li><strong>Medium</strong> — Deep nesting (9 instances) in <code>pipeline/run_pipeline.py</code>, <code>experiments/scripts/postprocess_asr.py</code>, <code>pipeline/scripts/03_simulate_asr.py</code> (max depth 6)</li><li><strong>Medium</strong> — File opened without context manager in <code>pipeline/src/services/vllm_lifecycle.py</code></li><li><strong>Medium</strong> — Duplicated code blocks (6 repeated 6-line blocks across 8 files)</li><li><strong>Medium</strong> — Broad exception handling in <code>pipeline/src/services/vllm_lifecycle.py</code></li><li><strong>Medium</strong> — High branching density in <code>pipeline/src/utils/keyword_utils.py</code> (34 branch points over 113 lines)</li></ul>
+<p>SDLC gaps: no test suite (45 source files, 0 tests), no CI configuration, no dependency lockfile, and a 22MB binary (<code>MediaSup/CH_demo.mp4</code>) committed to the repo. Missing tests and CI are high-severity issues — any change ships without verification.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The architecture is sound: clear separation between data generation, inference, and system components. The lack of tests and CI is a real risk for a research codebase that others will build on. Worth using if you need a working reference implementation for agent-based ASR refinement, but budget for a test suite before relying on it in production.</p>
             </div>
 
             

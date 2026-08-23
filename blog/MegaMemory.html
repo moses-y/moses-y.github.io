@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 20, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,52 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Coding agents lose context between sessions. They cannot recall prior architectural decisions, module purposes, or design patterns unless explicitly reminded. Without persistent memory, each session starts from scratch, wasting tokens and producing inconsistent code.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MegaMemory is an MCP server that stores a per-project knowledge graph in SQLite (src/db.ts). The graph holds concepts—features, modules, patterns, decisions—indexed by the agent itself via natural language. The server exposes tools (src/tools.ts) including understand for semantic search (powered by src/embeddings.ts) and getconcept for exact ID lookup. After a task, the agent calls createconcept or updateconcept to persist new knowledge.</p><p>Installation (src/install.ts) configures the server for opencode, Claude Code, Antigravity, or Codex by updating their config files and adding workflow instructions (e.g., commands/bootstrap-memory.md, plugin/megamemory.ts). The embedding model (~23MB) downloads on first use.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer starts a session with an opencode agent. The agent calls listroots to orient itself, then understand(&quot;payment flow architecture&quot;) to retrieve prior concepts about the payment module. After implementing a new retry logic, the agent calls create_concept with a description and links to related concepts. Next session, the agent queries the same concept and builds on it without re-reading the entire codebase.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The repo is well-structured: 14 tests cover conflict resolution, concurrency, embeddings, and timeline (src/tests/). CI is configured (.github/workflows/publish.yml), a license is present, and package-lock.json is committed. No obvious structural red flags.</p><p>Potential concerns:
-Medium — The embedding implementation (src/embeddings.ts) is a single file; there are no benchmarks or accuracy tests for the semantic search. Retrieval quality is untested.
-Low — Concurrency tests exist (db.concurrency.test.ts), but the SQLite database uses a single file; race conditions under heavy parallel agent calls are possible without explicit locking documentation.
-Low — No input validation is visible in src/tools.ts; malformed queries could cause crashes or SQL injection (though SQLite is local). The MCP server reads from stdin, so attack surface is minimal but untrusted inputs could still be an issue.
-Low — Code coverage is not reported; 14 tests is a decent start but may not cover all edge cases.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MegaMemory is a pragmatic solution for teams using MCP-based coding agents that need persistent project memory. The architecture is simple and testable, with good installation support for popular clients. It is best suited for projects where agents frequently revisit the same codebase and where context retention directly reduces errors and rework. Not needed for one-off or trivial tasks.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers using LLM‑driven coding agents lose context once a session ends. Agents must repeatedly re‑learn a project's architecture, decisions, and terminology, which wastes time and leads to inconsistent outputs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>MegaMemory</code> implements a local MCP (Model Context Protocol) server that persists a knowledge graph in a per‑project SQLite file (<code>.megamemory/knowledge.db</code>). The agent writes natural‑language concepts via <code>create_concept</code> / <code>update_concept</code> and retrieves them with <code>understand</code> or <code>get_concept</code>.</p>
+<p>Key implementation files:</p>
+<ul><li><code>src/index.ts</code> – launches the MCP server (<code>startMcpServer</code>).</li><li><code>src/db.ts</code> – all SQLite interactions (runInTransaction, migrate, etc.).</li><li><code>src/web.ts</code> – static web UI served from the <code>web/</code> folder.</li><li><code>src/install.ts</code> – CLI installer that writes config files and the embedding model.</li></ul>
+<p>The repository is TypeScript‑first (25 TS files) with a small React UI under <code>src/web.ts</code> and supporting scripts in <code>scripts/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>src/index.ts:147</code> (<code>startMcpServer</code>). The server creates a <code>MegaMemoryServer</code> instance that:</p>
+<ol><li>Calls <code>src/db.ts</code> to open or create <code>.megamemory/knowledge.db</code>. The DB module is the central hub – 14 other modules import it, and it defines 44 functions (e.g., <code>runInTransaction</code>, <code>runWithRetry</code>).</li><li>Registers MCP RPC handlers (<code>understand</code>, <code>create_concept</code>, <code>get_concept</code>, etc.) that invoke utility functions in <code>src/tools.ts</code> and <code>src/embeddings.ts</code>.</li><li>For web access, <code>src/web.ts</code> resolves <code>index.html</code> from <code>web/</code> and serves JSON endpoints that again delegate to <code>src/db.ts</code>.</li></ol>
+<p>The internal call graph shows the most‑used utilities: <code>success</code> (11 callers), <code>info</code> (8), <code>errorBold</code> (7), and the DB helper <code>runInTransaction</code> (6). These functions have the widest blast radius; changes here affect most request paths. No circular imports were detected, so dependency changes are predictable.</p>
+<p>External effects:</p>
+<ul><li>Filesystem – <code>src/install.ts</code> reads/writes config files (e.g., <code>fs.readFileSync</code>, <code>fs.writeFileSync</code>).</li><li>SQLite – all CRUD operations in <code>src/db.ts</code> read/write the knowledge database.</li></ul>
+<p>The test harness (<code>src/__tests__/helpers/db-worker.ts</code>) demonstrates the same DB path handling, confirming that the core persistence path is exercised in both production and test code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/MegaMemory
+cd MegaMemory
+
+# Install globally (npm is the package manager)
+npm install -g megamemory
+
+# Run the interactive installer (writes config files and downloads the embedding model)
+megamemory install</code></pre>
+<p>The installer writes a <code>.megamemory/knowledge.db</code> file in the current project directory. To start the MCP server manually:</p>
+<pre data-lang="bash"><code># Starts the local MCP server on the default port
+megamemory</code></pre>
+<p>Clients connect by adding the following snippet to their MCP configuration (e.g., <code>~/.config/opencode/opencode.json</code>):</p>
+<pre data-lang="json"><code>{
+  "megamemory": {
+    "type": "local",
+    "command": ["megamemory"],
+    "enabled": true
+  }
+}</code></pre>
+<p>The optional web UI is reachable at <code>http://localhost:&lt;port&gt;/</code> and is served by <code>src/web.ts</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline could invoke <code>megamemory understand "authentication flow"</code> before a code‑generation step, allowing the LLM to retrieve the stored concept of the project's auth architecture. After the generation, <code>megamemory create_concept</code> records any new decisions, keeping the graph up‑to‑date without manual documentation.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Enable Dependabot</strong> – No update bot configured; add <code>.github/dependabot.yml</code>.</li><li><strong>Medium – Dependency‑vulnerability scan</strong> – CI lacks a scan step; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Persist‑credentials false</strong> – Checkout keeps the token; set <code>persist-credentials: false</code> in <code>publish.yml</code>.</li><li><strong>Low – Job timeouts</strong> – Workflow jobs have no <code>timeout-minutes</code>; add a reasonable bound.</li></ul>
+<p>Measured findings:</p>
+<ul><li><strong>High – Duplicated test code</strong> – 34 repeated 6‑line blocks across 10 test files; extract shared helpers.</li><li><strong>Medium – Oversized files</strong> – <code>src/db.ts</code>, <code>src/__tests__/db.test.ts</code>, <code>src/install.ts</code> each exceed 800 lines; consider splitting by responsibility.</li><li><strong>Medium – Hub module</strong> – <code>src/db.ts</code> is imported by 14 modules; keep its API stable and move volatile logic elsewhere.</li><li><strong>Medium – Empty catch blocks</strong> – <code>scripts/stress-test*.js</code> swallow errors; add logging or rethrow.</li></ul>
+<p>No critical structural issues were found; the test suite and CI are present, and the license file is included.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>MegaMemory</code> delivers a lightweight, persistent knowledge graph that integrates cleanly with LLM‑based coding agents via a local MCP server. The core DB module is well‑encapsulated but large, and the codebase would benefit from modular refactoring and standard CI hardening. It is suitable for teams that need a simple, self‑hosted context store without heavy static analysis overhead.</p>
             </div>
 
             
@@ -157,7 +197,7 @@ Low — Code coverage is not reported; 14 tests is a decent start but may not co
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:33%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/publish.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/publish.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

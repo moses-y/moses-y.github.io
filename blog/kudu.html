@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>System cleaning and security scanning are essential tasks for maintaining a healthy computer system. However, many existing solutions are closed-source, ad-filled, and potentially malicious. This creates a need for a trustworthy, open-source alternative that can effectively clean and secure systems without compromising user privacy.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Kudu is a free, open-source system cleaner and security scanner designed for Windows, macOS, and Linux. It provides a range of cleaning and optimization tools, including a system cleaner, browser cleaner, and registry cleaner, as seen in the src/main/ipc directory. Additionally, Kudu offers security features like a malware scanner and privacy shield, implemented in files such as src/main/ipc/malware-scanner.ipc.ts and src/main/ipc/privacy-shield.ipc.ts. The README.md file provides a comprehensive overview of Kudu&#39;s features and usage.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using Kudu would be for a user who wants to remove temporary files, clean up browser caches, and scan for malware on their system. They could use Kudu&#39;s CLI mode, as described in CLI.md, to script these tasks and automate system maintenance. For example, running kudu clean --system --browser would initiate a system and browser cleaning process.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low — Missing input validation in some IPC files (e.g., src/main/ipc/app-cleaner.ipc.ts) — src/main/ipc/.
- Medium — Potential for race conditions in concurrent cleaning tasks — src/main/ipc/disk-analyzer.ipc.ts.
-The codebase appears well-structured, with a clear separation of concerns and adequate testing coverage, as evidenced by the presence of package.json, package-lock.json, and 48 test files.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Kudu is a promising open-source system cleaner and security scanner that effectively addresses the need for a trustworthy alternative to closed-source solutions. While it has some areas for improvement, such as input validation and potential race conditions, its well-structured codebase and comprehensive feature set make it a viable option for users seeking to maintain their system&#39;s health and security.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises and power users need a trustworthy way to reclaim disk space, remove lingering app data, and scan for malware on Windows, macOS, and Linux. Existing cleaners are often closed‑source, bundled with ads, or require paid upgrades, leaving security teams unable to audit what is being deleted.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Kudu is an open‑source Electron application that bundles a system‑cleaner, privacy‑shield, and malware scanner. The core logic lives under <code>src/main/</code> (the Electron <strong>main</strong> process) and <code>src/renderer/</code> (the React UI).</p>
+<ul><li>The CLI entry point <code>src/main/cli.ts</code> exposes commands such as <code>scanApp</code>, <code>scanBrowserCli</code>, and <code>scanGaming</code>.</li><li>Platform‑specific code lives in <code>src/main/platform/</code> (e.g., <code>darwin/</code>, <code>linux/</code>).</li><li>Shared type definitions and IPC channel names are defined in <code>src/shared/types.ts</code> and <code>src/shared/channels.ts</code>, which are imported by &gt; 60 other modules.</li></ul>
+<p>All cleaners (e.g., <code>src/main/ipc/disk-analyzer.ipc.ts</code>, <code>src/main/ipc/malware-scanner.ipc.ts</code>) implement a common IPC contract and are invoked from the UI or CLI.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong>CLI</strong> (<code>src/main/cli.ts</code>) or the <strong>Electron main</strong> entry (<code>src/main/index.ts</code>).</p>
+<ol><li><strong>CLI</strong> parses arguments, then calls the high‑level helper <code>scanApp</code> (≈ 63 functions) which eventually invokes <code>t</code> (the i18n helper from <code>src/main/i18n.ts</code>). <code>t</code> is the most‑referenced function (called from 145 places).</li><li><strong>Renderer</strong> boots <code>src/renderer/src/App.tsx</code>, which creates the React tree and loads the IPC bridge. UI components such as <code>MalwareScannerPage</code> repeatedly call <code>t</code> to render localized strings.</li><li>UI actions trigger IPC calls (e.g., <code>src/main/ipc/malware-scanner.ipc.ts</code>). These modules import shared types (<code>src/shared/types.ts</code>) and channel constants (<code>src/shared/channels.ts</code>). Both files act as <strong>hub modules</strong> (66 and 46 importers respectively), so any change propagates widely.</li><li>Platform‑specific services (<code>src/main/platform/darwin/*</code>, <code>src/main/platform/linux/*</code>) are loaded via <code>src/main/platform/index.ts</code>. This file participates in an <strong>import cycle</strong> with <code>src/main/ipc/index.ts</code> and <code>src/main/services/elevation.ts</code>, increasing the risk of subtle runtime errors.</li><li>Core work (file deletion, registry edits, network cleanup) is performed by functions such as <code>execUtf8</code> (<code>src/main/services/exec-utf8.ts</code>), <code>psUtf8</code>, and <code>execNativeUtf8</code>. These are called from many IPC modules (e.g., <code>disk-analyzer</code>, <code>duplicate-finder</code>).</li></ol>
+<p>External effects are limited: only three functions write to a local database, one touches the file system, and one makes an outbound network request. The call graph shows 2 374 internal edges, with a few high‑impact functions (<code>t</code>, <code>invoke</code>, <code>getPlatform</code>) acting as thin wrappers around the substantive service code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/kudu.git
+cd kudu
+
+# Install dependencies (npm is declared in package.json)
+npm ci
+
+# Run the CLI (example: scan the whole system)
+node ./src/main/cli.js scanApp
+
+# Start the full Electron UI (script defined in package.json, e.g. npm start)
+npm start</code></pre>
+<p><em>Configuration</em>: No environment variables are required out‑of‑the‑box. Platform‑specific paths are resolved by the code in <code>src/main/platform/*</code>.</p>
+<p><em>Database</em>: The SQLite‑style store is used by <code>src/main/services/cloud-agent.ts</code> and <code>src/main/cli.ts</code>; no external setup is needed.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A DevOps team can embed Kudu in a nightly maintenance pipeline:</p>
+<pre data-lang="bash"><code>npm run start -- --headless clean --log /var/log/kudu.log</code></pre>
+<p>The CLI runs the same cleaners the UI uses, writes a summary to the local DB, and returns an exit code that can be consumed by orchestration tools.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability gate in CI (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on the checkout step (<code>.github/workflows/ci.yml</code>).</li><li><strong>Low</strong> – Define <code>timeout-minutes</code> for jobs lacking it (<code>.github/workflows/commitlint.yml</code>).</li></ul>
+<p>Additional static findings (all high severity) include:</p>
+<ul><li>Oversized files (<code>src/shared/types.ts</code>, <code>src/main/services/cloud-agent.ts</code>, <code>src/main/services/software-updater.ts</code>) &gt; 1 000 lines, making changes risky.</li><li>Import cycles (28 files, e.g., <code>src/main/ipc/index.ts</code>, <code>src/main/platform/index.ts</code>).</li><li>Deep nesting (up to 8 levels) in several renderer pages, hurting readability.</li><li>Repeated 6‑line code blocks across dozens of scripts and source files, indicating DRY violations.</li></ul>
+<p>No critical security or licensing gaps were detected; tests, CI, and a LICENSE file are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Kudu provides a fully open‑source, cross‑platform cleaning and scanning stack with a clear separation between UI, IPC, and platform services. The codebase is functional but hampered by large monolithic files, import cycles, and duplicated helpers, which raise the maintenance burden. Teams comfortable with TypeScript and Electron can adopt it for internal tooling, but should first refactor hub modules and break cycles to improve long‑term stability.</p>
             </div>
 
             
@@ -100,9 +133,9 @@ The codebase appears well-structured, with a clear separation of concerns and ad
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,239<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>113</b></li><li><span>JSON</span><i style="width:24%"></i><b>27</b></li><li><span>Markdown</span><i style="width:12%"></i><b>14</b></li><li><span>YAML</span><i style="width:12%"></i><b>13</b></li><li><span>JavaScript</span><i style="width:8%"></i><b>9</b></li><li><span>Shell</span><i style="width:3%"></i><b>3</b></li>
+                            <li><span>JSON</span><i style="width:100%"></i><b>871</b></li><li><span>TypeScript</span><i style="width:29%"></i><b>252</b></li><li><span>TSX</span><i style="width:6%"></i><b>53</b></li><li><span>Markdown</span><i style="width:2%"></i><b>14</b></li><li><span>YAML</span><i style="width:1%"></i><b>13</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>9</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>
@@ -151,7 +184,7 @@ The codebase appears well-structured, with a clear separation of concerns and ad
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span></div><div class="loc">.github/workflows</div><div class="ev">azure/login@v3</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows/commitlint.yml</div><div class="ev">2 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

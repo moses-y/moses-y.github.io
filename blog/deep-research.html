@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 3, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The ability to break down complex questions into manageable sub-questions is a significant challenge in research and decision-making. This process can be time-consuming and may not always lead to comprehensive answers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The deep-research repository provides a solution to this problem by utilizing recursive Claude agents that spawn sub-agents to explore questions in a fractal manner. The src/deepresearch/cli.py file serves as the entry point for the application, and the recipes folder contains various examples of how to use the tool. The src/deepresearch/core directory contains the core functionality, including the graph.py and node.py files, which handle the recursive exploration of questions.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a user can run the command deep-research research -d 1 -m haiku -r haiku &quot;A small question&quot; to start exploring a question using the Haiku model. The tool will then break down the question into sub-questions and spawn child agents to explore each sub-question in parallel.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing dependency lockfile - pyproject.toml: The repository does not include a lockfile, which can lead to non-reproducible builds.
- Low - Limited input validation - src/deepresearch/validation.py: The validation module does not cover all possible input scenarios, which may lead to errors or unexpected behavior.
-Medium - Potential for unbounded fan-out - src/deepresearch/core/operations/decompose.py: The recursive nature of the tool can lead to an unbounded number of sub-questions and child agents, potentially causing performance issues or excessive costs.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The deep-research repository provides a unique solution for breaking down complex questions into manageable sub-questions. While the codebase is generally well-structured, there are some areas that require attention, such as the missing dependency lockfile and limited input validation. Overall, this tool is suitable for users who need to explore complex questions in a fractal manner, but may require additional configuration and monitoring to avoid potential issues.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need deep, multi‑turn analysis of a single question often build ad‑hoc scripts that spawn many LLM calls, track intermediate results, and then synthesize a final answer. Maintaining that logic, handling parallelism, and preventing runaway costs quickly becomes a maintenance burden.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>deep-research</code> implements a recursive “research tree” where a top‑level question is decomposed into sub‑questions, each handled by its own LLM agent. The process repeats until leaf questions are atomic, after which a synthesis step produces a single answer. Core logic lives in <code>src/deep_research/cli.py</code> (the user‑facing CLI) and the orchestration classes under <code>src/deep_research/core/</code> – notably <code>operation.py</code>, <code>chef.py</code>, <code>graph.py</code>, and the <code>operations/</code> package (e.g., <code>answer.py</code>, <code>decompose.py</code>). Provider adapters for Claude, Gemini, OpenAI‑Azure, OpenRouter, and Kimi are in <code>src/deep_research/providers/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <code>research</code> command defined in <code>src/deep_research/cli.py</code> (line 122). This parses CLI flags, builds a <code>Chef</code> instance, and calls <code>Chef.run()</code>. <code>Chef.run()</code> invokes <code>Operation.execute()</code> (via <code>src/deep_research/core/operation.py</code> line 106) which routes to the appropriate operation class (<code>Decompose</code>, <code>Detect</code>, <code>Answer</code>, etc.) based on the current phase.</p>
+<p>The most‑used internal functions are:</p>
+<ul><li><code>parse</code> – called from 31 locations, builds question objects.</li><li><code>validate_question</code> – called from 17 locations, raises <code>QuestionValidationError</code>.</li><li><code>generate</code> – called from 12 locations, triggers the provider’s LLM call.</li></ul>
+<p>A typical run follows this path:</p>
+<pre><code>research (cli) → Chef.run → Operation.execute → parse → generate
+   → ProviderFactory.get_provider_for_model → Provider.generate (e.g., providers/claude.py)
+   → filesystem writes (self.output_dir.mkdir, _write_output_file)
+   → recursion back up via OperationResult handling</code></pre>
+<p>The call graph shows 558 internal edges; the hub modules are <code>src/deep_research/core/operations/base.py</code> (7 inbound, 9 outbound, part of a circular import) and <code>src/deep_research/cli.py</code> (8 outbound, no inbound). Circular imports involve <code>base.py</code>, <code>answer.py</code>, and <code>decompose.py</code>, increasing the risk of import‑time side effects.</p>
+<p>External effects are limited to:</p>
+<ul><li>Filesystem I/O (creation of output directories, checkpoint files, cache files).</li><li>One LLM invocation per leaf node (<code>self.client.chat.completions.create</code>).</li><li>A single external subprocess when the default Claude provider shells out to the <code>claude</code> binary.</li></ul>
+<p>No database or network services beyond the LLM endpoints are touched.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the upstream repository
+git clone https://github.com/moses-y/deep-research
+cd deep-research
+
+# Install in editable mode with dev extras (includes pytest)
+pip install -e ".[dev]"
+
+# Set up a provider (example for Claude CLI, already on PATH)
+# No env vars needed for the default haiku model
+# For Gemini or OpenAI‑Azure, create a .env as described in README
+
+# Run a shallow test to avoid cost explosion
+deep-research research -d 1 -m haiku "Why do smart people make bad decisions?"</code></pre>
+<p>The CLI also offers <code>validate</code> (question validation) and <code>cache</code> (cache management) sub‑commands, each mapped to functions in <code>src/deep_research/cli.py</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team could embed <code>deep-research</code> in a nightly analysis pipeline: feed each new market hypothesis to <code>deep-research research -d 2</code>, store the generated synthesis in a markdown report, and commit the file to the repository. The pipeline would only need to configure the appropriate provider API key and run the CLI as a subprocess.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Import cycles across <code>src/deep_research/core/operations/base.py</code>, <code>answer.py</code>, <code>decompose.py</code>. Break cycles by extracting shared types or using lazy imports.</li><li><strong>High</strong> – Missing lockfile (<code>pyproject.toml</code> only). Run <code>pip install -r requirements.txt</code> (or <code>uv pip compile</code>) and commit the generated lockfile.</li><li><strong>Medium</strong> – No least‑privilege <code>GITHUB_TOKEN</code> permissions in <code>.github/workflows/ci.yml</code>. Add <code>permissions: contents: read</code>.</li><li><strong>Medium</strong> – No automated dependency updates. Add a <code>dependabot.yml</code> covering <code>python</code> and <code>github-actions</code>.</li><li><strong>Medium</strong> – No vulnerability‑scan step in CI. Insert <code>dependabot</code> or <code>dependency-review-action</code> on PRs.</li><li><strong>Medium</strong> – Checkout step keeps credentials (<code>persist-credentials: false</code> missing). Update the checkout action accordingly.</li><li><strong>Medium</strong> – No job timeout defined; add <code>timeout-minutes</code> to avoid overlapping runs.</li><li><strong>Low</strong> – Three stray <code>TODO/FIXME</code> markers in <code>src/deep_research/core/chef.py</code>. Resolve or file issues.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>deep-research</code> delivers a functional recursive‑agent framework with a clear CLI and provider abstraction, but its codebase suffers from import cycles, duplicated scripts, and missing production safeguards (lockfile, CI hardening). It is suitable for experimentation or internal tooling where the team can address the highlighted health issues; production deployments should first resolve the high‑severity import cycles and add reproducible dependency management.</p>
             </div>
 
             

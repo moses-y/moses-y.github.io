@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 13, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The Lead-Generation repository aims to solve the pain point of generating robust leads on a mass scale, particularly for individuals with no programming background. It focuses on parsing Google Maps and Yelp data to extract valuable information such as telephone numbers, emails, and addresses.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository utilizes Python as its primary language and employs the Flask framework. It consists of various modules, including pyleadgeneration and archived, which contain scripts for lead generation. The pyleadgeneration module includes engines for Google Maps and Yelp, which can be used to extract data. For example, the GoogleMapsEngine class in pyleadgeneration/src/googlemaps/engine.py allows users to search for specific queries and locations.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using this repository is to generate leads for a business by parsing Google Maps data. For instance, a user can utilize the GoogleMapsEngine class to search for barbershops in Paris and export the collected data to a CSV file. The quickstart example in the README.md demonstrates how to achieve this using the asyncio library.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low — Dependencies declared without a lockfile — non-reproducible builds — pyleadgeneration/requirements.txt
- Low — Missing comprehensive tests for the engines and modules — tests directory
-Medium — Potential security risks due to missing input validation and error handling in the engines — pylead_generation/src/engines/abstract.py
-However, the repository does have some positive aspects, such as the presence of a LICENSE file and a README.md with clear instructions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The Lead-Generation repository provides a useful starting point for generating leads from Google Maps and Yelp data. However, it requires further development and refinement to address the existing issues and ensure a more robust and secure solution. It is suitable for users who are familiar with Python and are willing to contribute to the project&#39;s growth and improvement.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Business development teams often need hundreds of contact records (phone, email, address) for a specific service in a target city. Manually extracting that data from Google Maps, Yelp or similar sites is slow, error‑prone, and scales poorly.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository bundles a collection of scrapers that automate the extraction of lead data from Google Maps and Yelp, then write the results to CSV. The core logic lives under <code>py_lead_generation/src/engines/</code> – e.g. <code>google_maps/engine.py</code> and <code>yelp/engine.py</code> – while a legacy Flask UI lives in <code>archived/app/</code>. The top‑level <code>run.py</code> provides a simple CLI entry point that imports the engines, runs them asynchronously, and calls the <code>save_to_csv</code> method on each engine instance.</p>
+<p>Key files:</p>
+<ul><li><code>run.py</code> – entry script used in the README quick‑start.</li><li><code>py_lead_generation/src/engines/base.py</code> – abstract base class that defines <code>run</code>, <code>save_to_csv</code>, and helper <code>_open_url_and_wait</code>.</li><li><code>py_lead_generation/src/google_maps/engine.py</code> – concrete implementation for Google Maps.</li><li><code>py_lead_generation/src/yelp/engine.py</code> – concrete implementation for Yelp.</li><li><code>archived/app/views.py</code> – Flask view layer (login, subscription checks, DB writes).</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <strong><code>run.py:5</code></strong> (<code>main</code>). The call flow is:</p>
+<ol><li><code>main</code> → <code>GoogleMapsEngine(...).run()</code> (via <code>base.run</code>).</li><li>Inside <code>base.run</code>, the engine calls <code>_open_url_and_wait</code> (2 places) which launches a headless browser, navigates to the search URL, and waits for page load.</li><li>The browser actions invoke <code>search</code> → <code>_locate</code> → <code>_scrape</code> (in <code>archived/google-maps/extractor.py</code>).</li><li><code>_scrape</code> eventually calls <code>dump</code> (from <code>archived/bufferization.py</code>) which writes raw HTML to a temporary buffer.</li><li>The scraper extracts JSON payloads and makes outbound HTTP calls (<code>requests.get</code>) – the only network‑leaving edge detected.</li><li>After the async run completes, <code>engine.save_to_csv()</code> (implemented in <code>py_lead_generation/src/misc/writer.py</code> → <code>CsvWriter.append</code>) writes the parsed rows to a CSV file on disk.</li></ol>
+<p>A parallel path runs <code>YelpEngine(...).run()</code> with the same internal sequence, using its own <code>search</code> implementation under <code>archived/yellow-pages/extractor.py</code>.</p>
+<p>The Flask side (<code>archived/app/app.py</code>) is not part of the CLI flow; it starts a web server that imports <code>archived/app/views.py</code>. That module defines 13 functions (including <code>login_required</code>, <code>subscription_required</code>) which read/write the database (<code>archived/app/models.py</code>) and also perform network calls (e.g., sending emails via <code>archived/emails/hunterio.py</code>).</p>
+<p>The internal import graph shows 40 Python modules with only 10 import edges and no circular dependencies, indicating a relatively flat structure. The most fan‑in modules are <code>py_lead_generation/src/engines/base.py</code> (6 imports/exports) and <code>archived/app/views.py</code> (13 functions, heavy DB/network impact).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Install the published package (recommended)
+pip install py-lead-generation
+
+# 2. Or clone the source
+git clone https://github.com/moses-y/Lead-Generation
+cd Lead-Generation
+
+# 3. Install runtime dependencies
+pip install -r py_lead_generation/requirements.txt
+
+# 4. Run the example CLI
+python run.py</code></pre>
+<p>The script will prompt for a query and location, then generate two CSV files (<code>google_maps_results.csv</code>, <code>yelp_results.csv</code>). If you need the legacy Flask UI, start it with:</p>
+<pre data-lang="bash"><code>cd archived
+export FLASK_APP=app/app.py
+flask run</code></pre>
+<p>Configuration for the Flask app lives in <code>archived/app/config.py</code> (DEBUG flag, <code>SECRET_KEY</code>). No other environment variables are required for the CLI path.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A sales‑ops engineer can embed the engines in an internal pipeline:</p>
+<pre data-lang="python"><code>from py_lead_generation import GoogleMapsEngine, YelpEngine
+
+gm = GoogleMapsEngine("plumber", "Austin, TX")
+yelp = YelpEngine("plumber", "Austin, TX")
+
+await asyncio.gather(gm.run(), yelp.run())
+gm.save_to_csv("gm_leads.csv")
+yelp.save_to_csv("yelp_leads.csv")</code></pre>
+<p>The resulting CSVs feed directly into a CRM import or a downstream validation service.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Debug mode enabled</strong> – <code>archived/app/config.py</code> sets <code>DEBUG = True</code>.</li><li><strong>High – Hard‑coded secret key</strong> – <code>archived/app/config.py</code> contains a 128‑character fallback <code>SECRET_KEY</code>.</li><li><strong>Medium – Dependabot missing</strong> – No automated dependency update bot configured.</li><li><strong>Medium – No dependency‑vulnerability scan in CI</strong> – <code>.github/workflows/python-publish.yml</code> lacks a scan step.</li><li><strong>Medium – Checkout persists token</strong> – <code>persist-credentials</code> not disabled in the workflow.</li><li><strong>Medium – Test coverage low</strong> – Only 1 test file for ~40 source files (≈2 % coverage).</li><li><strong>Low – Workflow jobs lack timeout</strong> – No <code>timeout-minutes</code> set, risking long‑running runs.</li></ul>
+<p>Additional observations: the repository ships a <code>requirements.txt</code> without a lockfile, making reproducible builds harder; the Flask app’s config is the only place where environment variables are expected, but the CLI path does not use any. Documentation is limited to the README; no <code>pyproject.toml</code> or pre‑commit hooks are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The project delivers functional, asynchronous scrapers for Google Maps and Yelp that can be invoked via a simple CLI, but the codebase shows limited test coverage, insecure defaults in the Flask config, and missing CI safeguards. It is suitable for prototyping or internal tooling where the security trade‑offs are managed, but production deployments should first address the high‑severity config issues and add automated testing.</p>
             </div>
 
             
@@ -153,7 +195,7 @@ However, the repository does have some positive aspects, such as the presence of
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>py_lead_generation/requirements.txt</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>py_lead_generation/requirements.txt</code></span></li>
                     </ul>
                 </div>
 
@@ -163,7 +205,7 @@ However, the repository does have some positive aspects, such as the presence of
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">4</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:25%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Turn off debug mode and drive it from the environment</span><span class="chip">high</span></div><div class="loc">archived/app/config.py</div><div class="ev">DEBUG = True in config.py</div><div class="ev">Django and Flask debug pages render local variables, settings and the full traceback to whoever triggered the error, so one unhandled exception publishes the database password to a stranger, and Werkzeug's debugger additionally offers a remote shell.</div><div class="rec"><b>Fix:</b> Read it from the environment with a safe default: DEBUG = os.environ.get(&quot;DEBUG&quot;) == &quot;1&quot;.</div></div><div class="finding high"><div class="head"><span class="ttl">Remove the hardcoded fallback for the signing key</span><span class="chip">high</span></div><div class="loc">archived/app/config.py</div><div class="ev">SECRET_KEY assigned a 128-character literal</div><div class="ev">A default that applies when the variable is unset is the value that ships the day someone forgets to set it, and because it is in the repository anyone can forge a session cookie or a token signed with it.</div><div class="rec"><b>Fix:</b> Fail to start when the key is absent rather than substituting a literal.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/python-publish.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding medium"><div class="head"><span class="ttl">Expand the test suite; it cannot cover this codebase</span><span class="chip">medium</span></div><div class="ev">1 test files against 40 source files (ratio 0.025)</div><div class="ev">A reviewer reads &quot;has tests&quot; and assumes a safety net that covers two files out of eighty-five, which is how untested paths ship behind a green badge.</div><div class="rec"><b>Fix:</b> Add tests for the highest fan-in modules first.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/python-publish.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
