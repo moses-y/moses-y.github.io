@@ -134,8 +134,21 @@ function main() {
   // The old one listed 17 pages and none of the articles, so the largest body
   // of writing on the site was undiscoverable.
   const today = (data.lastUpdated || new Date().toISOString()).slice(0, 10);
+  /*
+   * A page that asks not to be indexed does not belong in the sitemap: the two
+   * instructions contradict each other, and Search Console reports it as an
+   * error rather than picking one. The case-study slugs were renamed to stop
+   * naming clients in the URL, and the old paths now hold noindex redirect
+   * stubs, which a directory scan would otherwise submit for indexing - putting
+   * the names it back in front of a crawler.
+   */
+  const indexable = (p) => {
+    try { return !/name=["']robots["'][^>]*noindex/i.test(fs.readFileSync(p, 'utf8')); }
+    catch (e) { return true; }
+  };
   const staticPages = fs.readdirSync('.')
-    .filter(f => f.endsWith('.html') && !['callback.html', 'elements.html', 'generic.html'].includes(f));
+    .filter(f => f.endsWith('.html') && !['callback.html', 'elements.html', 'generic.html'].includes(f))
+    .filter(indexable);
   const urls = [];
   const add = (loc, priority, freq) => urls.push(
     `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${today}</lastmod>\n` +
@@ -152,7 +165,8 @@ function main() {
   // 1,331 articles or the case studies and insights, never both.
   for (const dir of ['case-studies', 'insights']) {
     if (!fs.existsSync(dir)) continue;
-    for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.html')).sort()) {
+    for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.html'))
+      .filter(x => indexable(path.join(dir, x))).sort()) {
       add(`${SITE}/${dir}/${f === 'index.html' ? '' : f}`, '0.7', 'monthly');
     }
   }

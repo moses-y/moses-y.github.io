@@ -104,9 +104,9 @@ const services = [
       'Handover &amp; team enablement'
     ],
     proof: [
-      'FAISS-backed RAG pipeline serving live users at AICE Africa',
+      'FAISS-backed RAG pipeline serving live users on a careers platform',
       'NLP pipeline over 1M+ documents at 99% accuracy',
-      'Deep knowledge-graph + retrieval work at Autar.ai'
+      'Deep knowledge-graph and retrieval work on a code-analysis platform'
     ],
     related: [
       { slug: 'graphrag-knowledge-graph-agents', label: 'GraphRAG Agents' },
@@ -139,7 +139,7 @@ const services = [
       'Evaluate against a vector-RAG baseline'
     ],
     proof: [
-      'Three-layer knowledge-graph pipeline (FalkorDB/Cypher, 149 entity types) at Autar.ai',
+      'Three-layer knowledge-graph pipeline (FalkorDB/Cypher, 149 entity types) on a production code-analysis platform',
       '7 specialist agents each served a tailored graph slice - fewer tokens, better output',
       "This site's own code-graph analysis is graph-driven"
     ],
@@ -190,13 +190,13 @@ const services = [
 
 const caseStudies = [
   {
-    slug: 'autar-knowledge-graph-agents',
+    slug: 'knowledge-graph-agents',
     sector: 'Developer tooling / AI platform',
     title: 'Case Study: Knowledge-Graph Multi-Agent Platform | Moses Yebei',
     h1: 'A knowledge graph that made 7 AI agents cheaper and sharper',
     keywords: 'knowledge graph case study, GraphRAG, multi-agent system, FalkorDB, LangGraph',
     description: 'How a three-layer knowledge-graph pipeline feeding 7 specialist agents cut token usage and lifted output quality on a production code-analysis platform.',
-    summary: 'As founding engineer at Autar.ai, I designed the knowledge-graph backbone for an automated software-analysis platform - turning raw context into structured graph slices that made a fleet of AI agents both cheaper to run and more accurate.',
+    summary: 'As founding engineer at a US developer-tooling startup, I designed the knowledge-graph backbone for an automated software-analysis platform - turning raw context into structured graph slices that made a fleet of AI agents both cheaper to run and more accurate.',
     metrics: [
       { value: '149', label: 'Entity types modeled' },
       { value: '7', label: 'Specialist agents served' },
@@ -208,13 +208,13 @@ const caseStudies = [
     stack: ['FalkorDB / Cypher', 'LangGraph', 'Temporal', 'Kafka', 'ClickHouse', 'GKE']
   },
   {
-    slug: 'salix-ediscovery-nlp',
+    slug: 'ediscovery-nlp-at-scale',
     sector: 'Legal / e-discovery',
     title: 'Case Study: NLP Over 1M+ Legal Documents at 99% | Moses Yebei',
     h1: 'Reviewing 1M+ litigation documents at 99% accuracy',
     keywords: 'e-discovery NLP case study, document classification, legal AI, NLP pipeline',
     description: 'How an NLP/ML pipeline processed over a million litigation documents at 99% accuracy, cutting retrieval time and lifting process efficiency.',
-    summary: 'As technical lead at SALIX Data, I built the NLP/ML pipeline behind high-stakes litigation delivery - turning a manual review bottleneck into an accurate, auditable, automated process.',
+    summary: 'As technical lead at a US litigation-data firm, I built the NLP/ML pipeline behind high-stakes litigation delivery - turning a manual review bottleneck into an accurate, auditable, automated process.',
     metrics: [
       { value: '1M+', label: 'Documents processed' },
       { value: '99%', label: 'Classification accuracy' },
@@ -304,7 +304,7 @@ const posts = [
             <p><strong>RAG (retrieval-augmented generation)</strong> changes <em>what the model knows</em> at answer time - it looks up relevant facts and puts them in the prompt. <strong>Fine-tuning</strong> changes <em>how the model behaves</em> - its style, format, and its handling of a narrow task. If your problem is "the model doesn't know our data," that's RAG. If it's "the model knows enough but answers in the wrong shape," that's fine-tuning.</p>
 
             <h2 style="color:var(--text-primary);margin:32px 0 12px;">Start with RAG almost every time</h2>
-            <p>RAG keeps knowledge fresh (update the index, not the weights), gives you citations, and is far cheaper to iterate. At AICE Africa I built a FAISS-backed RAG pipeline serving live users precisely because the underlying data - jobs, CVs, requirements - changed constantly. Fine-tuning that knowledge in would have gone stale the same day.</p>
+            <p>RAG keeps knowledge fresh (update the index, not the weights), gives you citations, and is far cheaper to iterate. On a careers platform I built a FAISS-backed RAG pipeline serving live users precisely because the underlying data - jobs, CVs, requirements - changed constantly. Fine-tuning that knowledge in would have gone stale the same day.</p>
 
             <h2 style="color:var(--text-primary);margin:32px 0 12px;">When fine-tuning earns its keep</h2>
             <p>Reach for fine-tuning (LoRA/QLoRA on an open model) when you need: consistent tone or a strict output format; lower per-call cost at high volume; on-prem or private deployment; or a narrow task a general model does inconsistently even with good prompts. The tell is that you're fighting the same behavior with ever-longer prompts - that's a training problem, not a retrieval one.</p>
@@ -342,13 +342,13 @@ const posts = [
             <p>Plain vector RAG struggles when an answer requires chaining several facts together, because each chunk is retrieved in isolation. GraphRAG traverses explicit edges, so the model sees the connected sub-graph - the entities <em>and</em> how they link. The 2026 consensus is clear: GraphRAG outperforms on multi-hop, relationship-heavy, and thematic questions, while vector search stays faster and cheaper for direct factual lookups.</p>
 
             <h2 style="color:var(--text-primary);margin:32px 0 12px;">A production lesson: feed agents graph slices, not raw context</h2>
-            <p>At Autar.ai I designed a three-layer knowledge-graph pipeline in FalkorDB (Cypher, 149 entity types) feeding 7 specialist agents. The key move was giving each agent a <em>tailored graph slice</em> instead of raw context. That cut token usage and lifted output quality at the same time - the model saw only the connected facts it needed, not a haystack. This is graph engineering as a cost lever, not just an accuracy one.</p>
+            <p>On a production code-analysis platform I designed a three-layer knowledge-graph pipeline in FalkorDB (Cypher, 149 entity types) feeding 7 specialist agents. The key move was giving each agent a <em>tailored graph slice</em> instead of raw context. That cut token usage and lifted output quality at the same time - the model saw only the connected facts it needed, not a haystack. This is graph engineering as a cost lever, not just an accuracy one.</p>
 
             <h2 style="color:var(--text-primary);margin:32px 0 12px;">Don't over-build it</h2>
             <p>Two failure modes to avoid. First: if your queries are mostly single-fact lookups, a knowledge graph adds cost without meaningful accuracy gains - start with a vector DB and a reranker. Second, and more common: treating graph construction as one-and-done. Entity graphs go stale exactly like any index; without a refresh pipeline, retrieval quality quietly degrades. Graph engineering is a living system, not a migration.</p>
 
             <h2 style="color:var(--text-primary);margin:32px 0 12px;">The pragmatic path</h2>
-            <p>Start with vector RAG plus a reranker. Add a knowledge graph / GraphRAG layer when you hit multi-hop questions, entity-disambiguation pain, or compliance requirements that demand traceable reasoning. That progression - the same one I walked from <a href="/insights/rag-vs-fine-tuning.html">FAISS RAG at AICE to graph-backed agents at Autar</a> - gets you value early without over-engineering day one.</p>`,
+            <p>Start with vector RAG plus a reranker. Add a knowledge graph / GraphRAG layer when you hit multi-hop questions, entity-disambiguation pain, or compliance requirements that demand traceable reasoning. That progression - the same one I walked from <a href="/insights/rag-vs-fine-tuning.html">FAISS RAG on a careers platform to graph-backed agents on a code-analysis platform</a> - gets you value early without over-engineering day one.</p>`,
     faqs: [
       { q: 'What is the difference between GraphRAG and vector RAG?', a: 'Vector RAG retrieves text chunks by semantic similarity and has no model of how they relate. GraphRAG builds an explicit knowledge graph of entities and relationships and retrieves connected sub-graphs, which enables multi-hop reasoning and more faithful answers on relationship-heavy questions.' },
       { q: 'When is a knowledge graph worth the effort?', a: 'When questions require chaining multiple facts (multi-hop), when entity disambiguation is causing errors, or when compliance requires traceable reasoning. For mostly single-fact lookups, a vector database with a reranker is cheaper and sufficient.' },
