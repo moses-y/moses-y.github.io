@@ -80,30 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Clients need a thin, Pythonic wrapper around Massive (formerly Polygon.io) REST and WebSocket endpoints that hides pagination, rate‑limit handling, and request construction. Manually building URLs, handling pagination loops, and keeping the base URL up‑to‑date after the rebrand creates boiler‑plate code and integration friction.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The massive package implements RESTClient and WebSocketClient classes that expose high‑level methods such as listaggs, getlasttrade, and listtrades. Core logic lives in massive/rest/ (base.py, aggs.py, economy.py, etc.) and massive/websocket/ (generated from .massive/websocket.json). Example scripts in examples/rest/ and examples/websocket/ demonstrate each endpoint.</p><p>massive/init.py exports the public client classes.  
- massive/rest/base.py handles HTTP session setup, pagination toggling, and error mapping.  
- examples/tools/docker/app.py shows a minimal Flask‑based container that can run a client script inside Docker, useful for CI or isolated execution.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the published package (includes compiled source)
-pip install -U massive   # requires Python &gt;=3.9</p><p>If you want to work from source, install the development requirements:
-python -m venv .venv
-source .venv/bin/activate
-pip install -r docs/requirements.txt   # note: no lockfile, see issues section</p><h3 class="post-h" id="configuration">Configuration</h3><p>API key – required for every client. Provide it as the apikey argument or via the MASSIVEAPIKEY environment variable (the client reads os.getenv(&#39;MASSIVEAPIKEY&#39;) in massive/rest/base.py).  
- Base URL – defaults to https://api.massive.com; you can override with baseurl= when constructing the client if you still need the legacy api.polygon.io.</p><h3 class="post-h" id="running-it">Running it</h3><p>Typical usage is a short script that imports the client:</p><p>examples/rest/simple-get.py
-from massive import RESTClient</p><p>client = RESTClient()                      # picks up API key from env
-for agg in client.listaggs(ticker=&quot;AAPL&quot;, multiplier=1, timespan=&quot;minute&quot;,
-                            from=&quot;2023-01-01&quot;, to=&quot;2023-01-02&quot;):
-    print(agg)</p><p>Execute the script directly:</p><p>python examples/rest/simple-get.py</p><p>For a containerised run, build and start the Docker helper:</p><p>docker build -t massive-demo examples/tools/docker
-docker run -e MASSIVEAPIKEY=YOURKEY massive-demo</p><p>The Dockerfile (examples/tools/docker/Dockerfile) installs the package and runs app.py, which contains a minimal Flask endpoint that can trigger any client call.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑engineering pipeline can pull daily aggregates for a watchlist and store them in a data lake:</p><p>from massive import RESTClient
-import json, datetime, pathlib</p><p>client = RESTClient()
-today = datetime.date.today().isoformat()
-watchlist = [&quot;AAPL&quot;, &quot;MSFT&quot;, &quot;TSLA&quot;]</p><p>for sym in watchlist:
-    aggs = list(client.listaggs(ticker=sym, multiplier=1, timespan=&quot;day&quot;,
-                                 from=today, to=today))
-    pathlib.Path(f&quot;data/{sym}{today}.json&quot;).write_text(json.dumps(aggs))</p><p>Schedule the script via Airflow or a cron job; the built‑in pagination will retrieve the full day&#39;s data in a single call per symbol.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – docs/requirements.txt lists development dependencies without a requirements.lock or pipfile.lock; reproducible builds are not guaranteed.  
-Medium – Sparse test coverage – Only one test file is present; core REST logic (massive/rest/base.py, aggs.py) lacks unit tests, raising confidence gaps for edge‑case handling.  
-Low – No explicit packaging config – The repo does not contain setup.py, pyproject.toml, or requirements.txt for the library itself; installation relies on the published PyPI wheel. This is acceptable for consumption but limits local development.  
-Low – CI configuration – GitHub Actions workflows (.github/workflows/.yml) run linting, code‑QL, and a single test job, indicating basic CI hygiene.  
-Low – Documentation – 27 ReST/Markdown files cover each endpoint; the docs are generated from the source and kept up‑to‑date, but there is no versioned API reference.</p><p>Overall, the codebase follows a clear separation (client vs. examples) and includes practical Docker tooling, but it would benefit from a lockfile, expanded test suite, and an explicit local packaging manifest.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>massive delivers a straightforward, well‑documented Python wrapper for Massive’s market data APIs, handling pagination and base‑URL changes out of the box. It is ready for production use where rapid data retrieval is needed, provided you accept the limited internal test coverage and add a lockfile for reproducible development builds. Ideal for teams that want a thin client without building their own HTTP layer.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building applications on financial market data face a recurring integration problem: every REST endpoint and WebSocket channel has its own response shape, pagination rules, and rate limits. Maintaining hand-rolled HTTP clients for each endpoint is error-prone and burns engineering time. This repository is the official Python SDK for the Massive.com (formerly Polygon.io) market data API, and it exists to replace that per-endpoint boilerplate with a single, typed client.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo is a portfolio of five self-contained projects, not a single codebase. The core library lives in <code>massive/</code> and provides two clients: <code>RESTClient</code> (defined in <code>massive/rest/__init__.py</code>) for HTTP requests and <code>WebSocketClient</code> (defined in <code>massive/websocket/__init__.py</code>) for real-time streaming. Both are built on a small set of shared primitives in <code>massive/rest/base.py</code> and <code>massive/modelclass.py</code>.</p>
+<p>The <code>examples/</code> directory (158 files) is the largest project. It is a collection of standalone scripts, one per API endpoint, plus a few larger tools like <code>examples/launchpad/launchpad.py</code> and <code>examples/tools/docker/app.py</code>. The <code>test_rest/</code> directory (59 files) holds the test suite, with 43 JSON fixture files alongside 16 test modules.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>examples/launchpad/launchpad.py:26</code>, which reaches 29 functions. The shortest traced path to an external effect is <code>main -&gt; fetch_stock_data -&gt; get_aggs -&gt; _get</code>, where <code>_get</code> in <code>massive/rest/base.py</code> makes the network call via <code>self.client.request</code>. That is four hops from entry point to the wire.</p>
+<p>Everything routes through a small set of hot functions. <code>_get_params</code> is called from 87 places, <code>_paginate</code> from 63, and <code>_get</code> from 30. These live in <code>massive/rest/base.py</code>, which is the most-connected module in the repo: 15 files import it, and it makes the outbound HTTP call. <code>massive/__init__.py</code> is the hub with 138 modules depending on it; a change there ripples through nearly the entire codebase.</p>
+<p>The file-by-file map is straightforward: <code>massive/rest/base.py</code> owns HTTP transport and pagination, <code>massive/rest/reference.py</code> owns reference-data endpoints (28 functions), and the <code>massive/rest/models/</code> subpackage is a set of <code>from_dict</code> factory classes, one per response type. The WebSocket client in <code>massive/websocket/__init__.py</code> handles connection lifecycle and subscription, with its own model classes in <code>massive/websocket/models/models.py</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install with pip per the README: <code>pip install -U massive</code>. The repo uses Poetry (<code>pyproject.toml</code>, <code>poetry.lock</code>), so <code>poetry install</code> also works. Python 3.9+ is required.</p>
+<p><strong>Configuration</strong>: Set your API key when constructing the client. The README shows <code>client = RESTClient(api_key="&lt;API_KEY&gt;")</code>. The API now defaults to <code>api.massive.com</code>; <code>api.polygon.io</code> remains supported.</p>
+<p><strong>Running it</strong>: There is no single application to run. The <code>examples/</code> scripts are self-contained, each taking an API key and returning data. The only executable entry point is <code>examples/launchpad/launchpad.py</code>, which is a CLI tool. The Dockerfile in <code>examples/tools/docker/</code> builds a container for one of the example tools.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A quantitative research team needs daily OHLCV bars for a watchlist of 500 tickers. They use <code>client.list_aggs</code> with pagination enabled, which the client handles automatically:</p>
+<pre data-lang="python"><code>client = RESTClient(api_key="&lt;API_KEY&gt;")
+bars = [bar for bar in client.list_aggs(
+    ticker="AAPL", multiplier=1, timespan="day",
+    from_="2024-01-01", to="2024-12-31", limit=50000
+)]</code></pre>
+<p>The same client pattern extends to trades, quotes, and WebSocket streams for real-time signals.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 23 issues (7 high, 16 medium). The high-severity findings are:</p>
+<ul><li><strong>High - Hub module</strong> - <code>massive/__init__.py</code> has 138 dependents; changes here have maximum blast radius. Keep it stable and small.</li><li><strong>High - Deep nesting</strong> - 12 files exceed indentation depth 7, including <code>massive/rest/base.py</code> and <code>massive/websocket/__init__.py</code>. Control flow is hard to follow; extract inner blocks.</li><li><strong>High - Oversized files</strong> - <code>massive/rest/models/financials.py</code> (1227 lines) and <code>massive/rest/reference.py</code> are too large to hold in one head. Split by responsibility.</li><li><strong>High - Duplicated code</strong> - 109 repeated 6-line blocks across 53 files in <code>examples/rest/</code>. Extract shared helpers.</li></ul>
+<p>The SDLC audit adds two high-severity security issues: GitHub Actions are pinned to mutable tags (e.g., <code>abatilo/actions-poetry@v2</code>) rather than commit SHAs, and the Dockerfile bakes <code>MASSIVE_API_KEY</code> into image layers via <code>ENV</code>, readable with <code>docker history</code>. Both warrant immediate fixes.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a functional, well-tested SDK for a real financial data API, with solid pagination and a clean client surface. The main risks are structural: the <code>massive/__init__.py</code> hub makes core changes expensive, and the example scripts are copy-paste heavy rather than shared. Teams needing Polygon/Massive market data should use this library, but should fix the CI pinning and Docker secret handling before production use.</p>
             </div>
 
             
@@ -113,16 +117,16 @@ Low – Documentation – 27 ReST/Markdown files cover each endpoint; the docs a
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">301<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>153</b></li><li><span>reStructuredText</span><i style="width:9%"></i><b>14</b></li><li><span>Markdown</span><i style="width:7%"></i><b>11</b></li><li><span>YAML</span><i style="width:4%"></i><b>6</b></li><li><span>JSON</span><i style="width:3%"></i><b>4</b></li><li><span>HTML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>209</b></li><li><span>JSON</span><i style="width:22%"></i><b>47</b></li><li><span>reStructuredText</span><i style="width:7%"></i><b>14</b></li><li><span>Markdown</span><i style="width:5%"></i><b>11</b></li><li><span>YAML</span><i style="width:3%"></i><b>6</b></li><li><span>HTML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Flask</span><span>Docker</span></p>
                     </div>
@@ -172,12 +176,6 @@ Low – Documentation – 27 ReST/Markdown files cover each endpoint; the docs a
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>docs/requirements.txt</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1330256578">Open in Code Brain &rarr;</a>

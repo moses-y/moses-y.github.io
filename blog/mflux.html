@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#mflux-mlx-native-generative-image-models">MFLUX: MLX Native Generative Image Models</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="mflux-mlx-native-generative-image-models">MFLUX: MLX Native Generative Image Models</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Everyone wants to run fancy generative image models locally, but most repos assume you love Python environments more than your sanity. Dependency hell, GPU compatibility issues, and bloated libraries are often the norm. Hugging Face’s diffusers and transformers are great—but they’re huge, and they’re not optimized for local MLX workflows. That’s where mflux steps in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>mflux is essentially a stripped-down, MLX-native implementation of state-of-the-art generative image models like Hugging Face&#39;s Diffusers, minus the bloat. It’s not trying to be everything for everyone. Instead, it’s minimal and explicit, sticking to the Karpathy philosophy.</p><p>The repo includes CLI commands in .cursor/commands/ for tasks like testing (test-fast.md, test-slow.md) and formatting (format.md). Skills-specific docs in .cursor/skills/ break down workflows like mflux-model-porting and mflux-debugging. For code nerds, the Python API lets you call models directly, as shown in the README’s generate.py example. If you’re dealing with model downloads, errors like hftransfer are addressed with clear troubleshooting steps, because let’s face it—something will break.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Here’s a practical use case: generating images like the puffin example in the README. Install uv, add mflux, and run this CLI command:</p><p>mflux-generate-z-image-turbo \
-  --prompt &quot;A puffin standing on a cliff&quot; \
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running state-of-the-art generative image models locally on Apple Silicon is typically slow or impossible because most implementations rely on CUDA. MFLUX solves this by providing line-by-line MLX ports of models like FLUX.2, Z-Image, and Qwen3-VL, letting you generate images natively on a Mac without a GPU cloud.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MFLUX is a from-scratch MLX implementation of several diffusion models, ported from Hugging Face Diffusers/Transformers. The repo contains model definitions (<code>src/mflux/models/</code>), a CLI (<code>src/mflux/cli/</code>), a callback system for monitoring generation (<code>src/mflux/callbacks/</code>), and a training pipeline for LoRA fine-tuning (<code>src/mflux/models/common/training/</code>). It supports text-to-image, image editing, inpainting, ControlNet, and LoRA training.</p>
+<p>The codebase is substantial — 627 Python files, 1,752 functions, 496 classes — and covers the full stack from weight mapping to VAE tiling. The CLI is the primary interface, with per-model entry points like <code>mflux-generate-z-image-turbo</code> and <code>mflux-generate-flux2</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at CLI entry points. For example, <code>main</code> in <code>src/mflux/cli/completions/install.py</code> reaches 412 functions, and the core <code>parse_args</code> function (defined in <code>src/mflux/cli/parser/parsers.py</code>) is called from 57 places. The call graph shows <code>resolve</code> in <code>src/mflux/models/common/resolution/config_resolution.py</code> is the most-connected function, called from 72 places — it handles model configuration resolution and is a high-blast-radius change point.</p>
+<p>The heaviest hub is <code>WeightTarget</code> in the weight mapping module, called 468 times from <code>get_vae_mapping</code> and 314 times from <code>get_transformer_mapping</code>. This is where model weights get mapped from Hugging Face checkpoints to MLX tensors. The callbacks system (<code>src/mflux/callbacks/callback_registry.py</code>) routes through 197 functions and handles file I/O for saving intermediate results.</p>
+<p>The module graph shows no circular dependencies, but there are high-instability modules: <code>src/mflux/models/common/schedulers/__init__.py</code> and <code>src/mflux/models/common_models/qwen3_vl/qwen3_vl_vision_block.py</code> have instability 1, meaning they depend on many modules but nothing depends on them — they're leaf nodes that are easy to change in isolation.</p>
+<p>File I/O happens in 105 functions, with <code>src/mflux/utils/image_util.py</code> handling image save/load and <code>src/mflux/models/common/training/state/training_spec.py</code> managing training state persistence. External commands are run from <code>src/mflux/cli/completions/install.py</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> — Install with <code>uv</code> (the README specifies this):</p>
+<pre data-lang="sh"><code>uv tool install --upgrade mflux</code></pre>
+<p><strong>Configuration</strong> — No config files required. Model weights download automatically from Hugging Face on first run. If you use <code>hf_transfer</code> for faster downloads, install with <code>--with hf_transfer</code>.</p>
+<p><strong>Running it</strong> — Generate an image with the CLI:</p>
+<pre data-lang="sh"><code>mflux-generate-z-image-turbo \
+  --prompt "A puffin standing on a cliff" \
   --width 1280 \
   --height 500 \
   --seed 42 \
   --steps 9 \
-  -q 8</p><p>You get a locally generated puffin image without needing a GPU cluster or a PhD in package management.</p><p>For more control, dive into the Python API. Here’s how you’d generate the same puffin programmatically:</p><p>from mflux.models.zimage import ZImageTurbo</p><p>model = ZImageTurbo(quantize=8)
-image = model.generateimage(
-    prompt=&quot;A puffin standing on a cliff&quot;,
-    seed=42,
-    numinference_steps=9,
-    width=1280,
-    height=500,
-)
-image.save(&quot;puffin.png&quot;)</p><p>This approach makes sense for automation or custom pipelines.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>mflux is refreshingly barebones. It’s perfect for MLX users who want local generative models without drowning in Hugging Face dependencies. The CLI and Python API are well-documented, but its minimalism means it’s not a plug-and-play solution for casual users. If you’re comfortable debugging and tweaking configs, it’s a great tool. If not, stick to the original Hugging Face libraries or something more polished.</p>
+  -q 8</code></pre>
+<p>Or use the Python API directly, as shown in the README's <code>generate.py</code> example with <code>ZImageTurbo</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A designer on a Mac wants to prototype variations of a product shot without waiting for cloud GPU queues. They run <code>mflux-generate-flux2-klein --prompt "minimalist desk lamp, studio lighting" --seed 7 -q 4</code> and get a 4-bit quantized result in seconds. For a production pipeline, they'd use the Python API to batch-generate with different seeds, then run LoRA training on their own product images via <code>mflux-train</code> to fine-tune the model.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 60 issues (6 high, 54 medium). The high-severity items:</p>
+<ul><li><strong>High — Duplicated code blocks</strong> — 1,082 repeated 6-line blocks across 186 files. Shared helpers should be extracted.</li><li><strong>High — Deep nesting (30 instances)</strong> — Files like <code>src/mflux/models/common/resolution/path_resolution.py</code> reach indentation depth 8, making control flow hard to follow.</li><li><strong>Medium — Files opened without context managers (8)</strong> — <code>src/mflux/cli/parser/parsers.py</code> and <code>src/mflux/models/common/training/runner.py</code> risk handle leaks.</li><li><strong>Medium — Broad exception handling (2)</strong> — <code>src/mflux/utils/metadata_builder.py</code> and <code>src/mflux/utils/version_util.py</code> swallow errors indiscriminately.</li><li><strong>Medium — High branching density (12)</strong> — <code>src/mflux/cli/parser/parsers.py</code> has 31 branch points over 82 lines.</li></ul>
+<p>The CI workflow has a <strong>high</strong> issue: GitHub Actions are pinned to tags (<code>astral-sh/setup-uv@v4</code>) rather than commit SHAs, which is a supply-chain risk. The workflow also lacks least-privilege <code>permissions</code> declarations and a dependency vulnerability scan. There's no lockfile, so builds aren't reproducible. Tests exist (90 files) and CI runs on GitHub Actions.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MFLUX is a serious, well-structured MLX implementation with broad model coverage and a working training pipeline. The main risks are the duplicated code and the CI supply-chain hygiene. For Mac users who need local generative image models, this is the most complete option available — worth adopting despite the maintainability debt.</p>
             </div>
 
             
@@ -105,18 +121,18 @@ image.save(&quot;puffin.png&quot;)</p><p>This approach makes sense for automatio
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">743<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>120</b></li><li><span>Markdown</span><i style="width:21%"></i><b>25</b></li><li><span>YAML</span><i style="width:3%"></i><b>3</b></li><li><span>TOML</span><i style="width:2%"></i><b>2</b></li><li><span>JSON</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>627</b></li><li><span>Markdown</span><i style="width:5%"></i><b>31</b></li><li><span>YAML</span><i style="width:0%"></i><b>3</b></li><li><span>TOML</span><i style="width:0%"></i><b>2</b></li><li><span>JSON</span><i style="width:0%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -163,6 +179,12 @@ image.save(&quot;puffin.png&quot;)</p><p>This approach makes sense for automatio
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1155558381">Open in Code Brain &rarr;</a>
@@ -175,7 +197,7 @@ image.save(&quot;puffin.png&quot;)</p><p>This approach makes sense for automatio
             
 
             <div class="post-actions">
-                <a href="https://github.com/yebeai/mflux" target="_blank" rel="noopener" class="primary-btn">
+                <a href="https://github.com/moses-y/mflux" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>

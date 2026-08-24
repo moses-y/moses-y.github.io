@@ -80,28 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#clone-the-repo">Clone the repo</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#example-agent-definition-in-docker-compose-yml">Example agent definition in docker-compose.yml</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing a Traefik reverse‑proxy by hand means editing multiple YAML files, restarting services, and tracking changes across homelab nodes. A mistake can take a service offline at night, and keeping backups or syncing configs between machines is tedious.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>traefik-manager supplies a self‑hosted web UI that talks to a lightweight Go agent (agent/main.go) deployed on each Traefik instance. The UI (Vue code under docs/.vitepress/theme/) lets users create, edit, enable or disable HTTP/TCP/UDP routes, middle‑wares, TLS certificates and static traefik.yml without touching YAML directly.</p><p>Core server logic lives in Python (app.py and the core/ package). Functions such as core/traefik.py query the Traefik API, while core/backups.py handles timestamped local backups and optional Git pushes. The Go agent provides a thin proxy for remote Traefik instances, exposing the same API over HTTP (agent/handlers.go).</p><p>All components are containerised; the top‑level Dockerfile builds the UI + Python server, and agent/Dockerfile builds the Go binary.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><h3 class="post-h" id="clone-the-repo">Clone the repo</h3><p>git clone https://github.com/chr0nzz/traefik-manager.git
-cd traefik-manager</p><p>Build and start with Docker Compose (uses the provided compose file)
-docker compose up -d</p><p>Evidence: docker-compose.yml defines two services – the manager container (exposes port 5000) and an optional agent service. The repository also ships a Makefile with a make docker-build target that runs docker build -t traefik-manager ., confirming the intended build path.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy the example env file and edit as needed:</p><p>cp .env.example .env
-Edit .env – at minimum set COOKIESECURE, TRAEFIKURL, and optional GIT credentials</p><p>Key variables referenced in core/config.py include TRAFFIKURL, APIKEY, and BACKUPPATH. The agent reads its own .env.example (agent/.env.example) for AGENTPORT and the shared secret used to authenticate the manager.
-Mount persistent volumes as shown in the README snippet:</p><p>volumes:
-/path/to/traefik/dynamic.yml:/app/config/dynamic.yml
-/path/to/traefik-manager/config:/app/config
-/path/to/traefik-manager/backups:/app/backups</p><h3 class="post-h" id="running">Running</h3><p>The manager runs automatically when the container starts (entrypoint defined in Dockerfile). For a native run without Docker:</p><p>Install Python deps (requirements.txt is inferred from imports)
-pip install -r requirements.txt   # not explicit but typical for Flask/Django mix
-python app.py</p><p>The Go agent can be run directly for debugging:</p><p>cd agent
-go run main.go</p><p>Once the container is up, open http://&lt;host&gt;:5000 and follow the web‑based setup wizard.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A homelab with three Raspberry‑Pi nodes runs Traefik on each. Deploy the Go agent on every node (via its own Docker image) and point a single Traefik‑Manager instance to the agents’ URLs. The UI then presents a unified dashboard where the admin can add a new subdomain, assign it to a service on node 2, and enable a rate‑limit middleware—all with one click, while the manager automatically commits the change to a Git backup repository.</p><h3 class="post-h" id="example-agent-definition-in-docker-compose-yml">Example agent definition in docker-compose.yml</h3><p>agent:
-  image: ghcr.io/chr0nzz/traefik-agent:latest
-  environment:
-AGENTSECRET=supersecret
-TRAEFIKURL=http://traefik-node2:8080</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Bugs / Risks  
-Medium – core/crypto.py handles secret storage but lacks explicit zero‑ing of memory; in a high‑security environment this could retain keys in RAM.  
-Low – UI component ComposeUpgrader.vue imports a remote image URL without fallback, which may break in offline setups.
-SDLC &amp; Code Violations  
-Low – No requirements.txt or pyproject.toml is present, so Python dependency management is implicit; this can hinder reproducible builds.  
-Low – Tests exist for the Go agent (_test.go), but the Python/ Vue layers have no automated test suite. CI runs the Go tests but not UI or Python linting.  
-None – License (GPL‑3.0) is included, CI workflows are defined (.github/workflows/.yml), and Dockerfiles are present, indicating a reasonable release process.</p><p>Overall the repository shows a coherent structure, clear entry points, and functional CI for the compiled component. The missing Python dependency file and lack of frontend tests are the most notable gaps.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>traefik-manager delivers a practical UI plus a Go agent for centralized Traefik control, making homelab routing far less error‑prone. It is production‑ready for single‑node or small‑cluster setups, provided you accept the limited automated testing of the Python/Vue layers and add your own dependency lock file. Teams that need rapid UI‑driven configuration without building a custom front end will find it immediately useful.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Managing a Traefik reverse‑proxy by hand means editing YAML files, reloading services, and tracking backups across many hosts.  A mistake at 2 am can break traffic for an entire homelab.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>traefik-manager</code> provides a self‑hosted web UI that abstracts the Traefik API and the static <code>traefik.yml</code> configuration.  The Python Flask app in <strong><code>app.py</code></strong> implements the HTTP API (e.g., <code>api_routes</code>, <code>api_agent_routes</code>, <code>api_git_backup_push</code>).  Core logic lives in the <strong><code>core/</code></strong> package – settings (<code>core/settings.py</code>), file handling (<code>core/config.py</code>), Git backup (<code>core/git.py</code>), authentication (<code>core/auth.py</code>), and the Traefik client (<code>core/traefik.py</code>).  A lightweight Go agent (<strong><code>agent/main.go</code></strong>) runs on remote nodes and forwards API calls, allowing the UI to manage multiple Traefik instances from a single container.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when the Flask server is launched from <strong><code>app.py</code></strong> (the <code>setup</code> function at line 652).  <code>setup</code> loads the secret key (<code>_load_or_create_secret_key</code>) and calls <strong><code>load_settings</code></strong> (called from 85 places) which reads the user config via <strong><code>core/config.py</code></strong> (<code>read_config</code> → <code>yaml.load</code>).  Most UI actions flow through a small set of hub functions:</p>
+<ul><li><strong><code>load_settings</code></strong> – central read of <code>config/*.yml</code>; 85 callers (e.g., route editors, backup jobs).</li><li><strong><code>save_settings</code></strong> – writes the same files; 30 callers (settings wizard, backup restore).</li><li><strong><code>post_form</code></strong> – processes HTML form submissions; 34 callers (route creation, middleware wizards).</li></ul>
+<p>When a route is toggled, <code>api_route_raw_save</code> calls <code>_toggle_route</code> → <code>create_backup</code> (via <code>core/backups.py</code>) → <code>save_config</code> (writes YAML).  The Traefik client (<code>core/traefik.py</code>) uses <code>_traefik_request</code> → <code>requests.get/post</code> (network call) to fetch or push routers, services, and middlewares.  The Go agent’s entry point (<strong><code>agent/main.go</code></strong>) registers HTTP handlers that forward calls to the central Flask API, enabling multi‑host management without exposing Traefik’s admin port directly.</p>
+<p>The most‑connected internal modules are <code>core/__init__.py</code> (imported by 26 modules) and <code>core/env.py</code> (15 imports).  Their stability directly affects the whole code base.  No circular imports were detected, so changes to a hub module have a predictable blast radius.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/traefik-manager
+cd traefik-manager
+
+# Build and run the container (Dockerfile and docker‑compose.yml are provided)
+docker compose up -d</code></pre>
+<p><em>Required configuration</em> – copy <strong><code>.env.example</code></strong> to <code>.env</code> and adjust the variables referenced in <code>app.py</code> (e.g., <code>COOKIE_SECURE</code>, <code>TRAEFIK_URL</code>).  For remote hosts, build the Go agent image (<code>docker build -f agent/Dockerfile -t traefik-agent .</code>) and run it with the same <code>.env</code> values; the UI will discover it via the <code>agents</code> endpoint.</p>
+<p><em>Running locally without containers</em> – install Python dependencies (<code>pip install -r requirements.txt</code>) and start the Flask app:</p>
+<pre data-lang="bash"><code>export FLASK_APP=app.py
+flask run --port 5000</code></pre>
+<p>The UI is reachable at <code>http://&lt;host&gt;:5000</code>; the first‑run wizard creates the secret key and a backup directory under <code>backups/</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A homelab operator runs a single <code>traefik-manager</code> container on a NAS.  Each Docker host runs the lightweight Go agent (<code>agent/main.go</code>) as a sidecar.  When a new service is deployed, the operator opens the UI, adds an HTTP route via the wizard, and clicks “Apply”.  The UI writes the updated <code>dynamic.yml</code>, triggers a Git commit (<code>core/git.py</code>), and the agent calls the remote Traefik API to reload the configuration—all in under a minute and without manual YAML edits.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis reported 12 actionable findings:</p>
+<ul><li><strong>HIGH</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Add an npm lockfile for <code>package.json</code>.</li><li><strong>HIGH</strong> – Re‑enable TLS verification (<code>verify=False</code> in <code>app.py</code>).</li><li><strong>HIGH</strong> – Replace unsafe <code>yaml.load</code> with <code>yaml.safe_load</code> (<code>core/config.py</code>).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/tests.yml</code>).</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate.</li><li><strong>MEDIUM</strong> – Pin the base Docker image by digest (<code>Dockerfile</code>).</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan step in CI.</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout.</li><li><strong>MEDIUM</strong> – Add a non‑root <code>USER</code> to the container image.</li></ul>
+<p>No critical findings were reported.  The repository includes tests, CI, a license, and documentation, but the missing lockfile and the unsafe YAML loader are the most immediate production risks.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>traefik-manager</code> delivers a functional UI and backup workflow that removes manual YAML editing for Traefik, making it suitable for small‑to‑medium homelabs.  The code base is reasonably modular, but hub modules (<code>core/__init__.py</code>, <code>core/env.py</code>) are large and the unsafe YAML loader plus disabled TLS verification are serious security gaps that should be fixed before production use.  With the high‑severity health items addressed, the project offers a practical, container‑first solution for managing multiple Traefik instances.</p>
             </div>
 
             
@@ -118,11 +126,11 @@ None – License (GPL‑3.0) is included, CI workflows are defined (.github/work
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">364<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>22</b></li><li><span>Python</span><i style="width:82%"></i><b>18</b></li><li><span>Vue</span><i style="width:59%"></i><b>13</b></li><li><span>YAML</span><i style="width:41%"></i><b>9</b></li><li><span>Go</span><i style="width:32%"></i><b>7</b></li><li><span>TypeScript</span><i style="width:9%"></i><b>2</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>53</b></li><li><span>Python</span><i style="width:89%"></i><b>47</b></li><li><span>HTML</span><i style="width:66%"></i><b>35</b></li><li><span>JavaScript</span><i style="width:55%"></i><b>29</b></li><li><span>YAML</span><i style="width:30%"></i><b>16</b></li><li><span>Vue</span><i style="width:25%"></i><b>13</b></li>
                         </ul>
-                        <p class="an-fw"><span>Vue</span><span>Django</span><span>Flask</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Django</span><span>Flask</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 

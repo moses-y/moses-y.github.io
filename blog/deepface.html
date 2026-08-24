@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,52 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#face-representation">Face representation</a><a href="#attribute-analysis">Attribute analysis</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>DeepFace addresses the pain of integrating multiple state-of-the-art face recognition models into a single pipeline. Rather than stitching together separate implementations of VGG-Face, FaceNet, ArcFace, and others, this library provides a unified Python API for face detection, recognition, and facial attribute analysis (age, gender, emotion, race). It&#39;s designed for developers who need production-ready face analysis without building the underlying model infrastructure from scratch.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The core framework lives in deepface/DeepFace.py and deepface/init.py, exposing a thin abstraction over 11+ backbone models including VGG-Face, FaceNet, OpenFace, ArcFace, Dlib, SFace, and GhostFaceNet. Face detection is handled by a parallel hierarchy under deepface/models/facedetection/ — RetinaFace, MTCNN, Yolo, MediaPipe, Dlib, CenterFace, YuNet, and SSD. Facial attribute analysis (age, gender, emotion, race) is modularized through deepface/models/demography/ with dedicated Age, Gender, Emotion, and Race submodules. The API layer is in deepface/api/src/app.py with dependency injection via deepface/api/src/dependencies/container.py and deepface/api/src/dependencies/variables.py, suggesting an enterprise-ready Flask service ready for containerization.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup:  
-pip install deepface</p><p>The repository uses setup.py for package registration and requirements.txt for runtime dependencies. No lockfile is present — installs will resolve to the latest compatible versions, which may introduce reproducibility risk across environments.</p><p>Configuration:  
-The API module references deepface/api/.env.example for environment variables, though the actual .env file is absent from the structure. No database credentials or API keys are required for the core face analysis functions; only the Docker setup (docker/docker-compose.yml, docker/pgvector-init/) implies PostgreSQL vector storage for embedding search.</p><p>Running it:  
-The entry point is deepface/api/src/app.py, a Flask application. To start the API server, the Makefile likely provides a target, or one can invoke python -m deepface.api.src.app from the repository root. The Docker image serengil/deepface on Docker Hub suggests docker run is the primary deployment path.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical workflow: load an image, detect faces, generate a 512-dimensional embedding with DeepFace.represent(), then compare against a known database using cosine similarity. For attribute analysis, DeepFace.analyze() returns age, gender, emotion, and race predictions per face. The module database layer (deepface/modules/database/pgvector.py, deepface/modules/database/milvus.py) supports persisting embeddings for later retrieval — useful in access control or celebrity look-alike services. Example:</p><p>from deepface import DeepFace</p><h3 class="post-h" id="face-representation">Face representation</h3><p>embedding = DeepFace.represent(imgpath=&quot;input.jpg&quot;, model=&quot;ArcFace&quot;)[0][&quot;embedding&quot;]</p><h3 class="post-h" id="attribute-analysis">Attribute analysis</h3><p>result = DeepFace.analyze(img_path=&quot;input.jpg&quot;, actions=[&quot;age&quot;, &quot;gender&quot;])</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low/Risk — Dependencies declared without a lockfile (requirements.txt at root). No requirements-lock.txt or pip-compile output is present, so pip install deepface may pull different dependency versions across fresh installs, breaking reproducibility.
-Med — CI configured but test scope unclear. GitHub Actions workflow .github/workflows/tests.yml exists, and 50 test files reside in tests/, but the .github/workflows/tests.yml badge is commented out in README.md, suggesting the CI may not be actively running on every push.
-Low — No lockfile + no .python-version or pyproject.toml. Dependency pinning relies solely on requirements.txt ordering, which is fragile for long-term project maintenance.
-Low — Environment file referenced but not committed. deepface/api/.env.example documents expected variables, yet no .env is tracked, risking secrets or config drift between development and production.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>DeepFace is a pragmatic choice for Python projects needing multi-model face recognition and attribute analysis without managing individual model checkpoints. The library is well-structured, heavily tested, and Docker-ready, making it suitable for prototyping or production services that need flexible backbone selection. However, the absence of a dependency lockfile and the commented-out CI badge are concrete risks for teams prioritizing build reproducibility and automated quality gates. Use it if you need rapid face analysis integration; opt for a locked-env alternative if dependency stability is non-negotiable.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that need on‑premise face recognition or facial‑attribute analysis must stitch together disparate model files, image‑pre‑processing, and database back‑ends. Maintaining that pipeline manually leads to version drift, duplicated logic, and fragile integrations.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>deepface</code> bundles a Python API that wraps multiple pre‑trained models (VGG‑Face, FaceNet, ArcFace, etc.) and provides a unified interface for detection, verification, and attribute inference (age, gender, emotion, race). Core code lives in <code>deepface/DeepFace.py</code> (high‑level functions <code>build_model</code>, <code>verify</code>, <code>analyze</code>, <code>represent</code>) and the model implementations under <code>deepface/models/</code>. Helper utilities such as logging (<code>deepface/commons/logger.py</code>), weight handling (<code>deepface/commons/weight_utils.py</code>), and image loading (<code>deepface/commons/image_utils.py</code>) are shared across the stack.</p>
+<p>A lightweight Flask API is exposed via <code>deepface/api/src/app.py</code>, which registers routes in <code>deepface/api/src/modules/core/routes.py</code>. The repository also ships Docker support (<code>Dockerfile</code>, <code>docker/docker-compose.yml</code>) and a set of database adapters (<code>deepface/modules/database/*.py</code>) for Milvus, PostgreSQL/pgvector, Neo4j, Pinecone, etc.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the Flask entry point <code>deepface/api/src/app.py</code> → <code>create_app()</code>. The app calls <code>load_models_on_startup()</code> which invokes <code>deepface/DeepFace.py.__init__()</code> → <code>build_model()</code> → <code>load_model()</code> → <code>download_weights_if_necessary()</code>. The weight download path touches the filesystem (reading/writing model files) and may launch a subprocess via <code>os.system</code> (observed in <code>tests/unit/test_api.py:setUp</code>).</p>
+<p>The most frequently called internal functions are:</p>
+<ul><li><code>represent</code> (30 callers) – builds embeddings via <code>deepface/models/facial_recognition/*</code> and writes/reads files.</li><li><code>extract_faces</code> (20 callers) – uses detectors (<code>deepface/models/Detector.py</code>, <code>deepface/models/face_detection/*.py</code>) and may invoke OpenCV or YOLO back‑ends.</li><li><code>verify</code> (14 callers) – pulls embeddings from the datastore (<code>deepface/modules/datastore.py</code>) and computes cosine/angular distances.</li><li><code>download_weights_if_necessary</code> (12 callers) – performs network I/O to fetch model binaries.</li><li><code>build_model</code> (12 callers) – assembles Keras/TensorFlow graphs.</li></ul>
+<p>Hub modules (<code>deepface/commons/logger.py</code>, <code>deepface/commons/__init__.py</code>, <code>deepface/__init__.py</code>) have the highest inbound dependency counts (59, 32, 22 respectively). Changing these files has the widest blast radius because many other modules import them directly.</p>
+<p>Database interactions are confined to the <code>deepface/modules/database/*.py</code> adapters. For example, <code>deepface/modules/database/pgvector.py.insert_embeddings()</code> calls <code>initialize_database()</code> then writes vectors; the same path is used by <code>search_by_vector()</code>. No circular import cycles were detected, simplifying static analysis.</p>
+<p>External effects:</p>
+<ul><li>Filesystem: model weight download, image I/O (<code>deepface/commons/image_utils.py</code>).</li><li>Network: weight download, optional outbound calls in <code>deepface/commons/image_utils.py</code>.</li><li>Database: CRUD via the selected adapter.</li><li>Subprocess: <code>os.system</code> invoked in test setup.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/deepface.git
+cd deepface
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# (Optional) Build the Docker image
+docker build -t deepface:local -f Dockerfile .
+
+# Start the API (local Python)
+export FLASK_APP=deepface/api/src/app.py
+flask run   # defaults to 127.0.0.1:5000</code></pre>
+<p>Configuration files:</p>
+<ul><li><code>.env.example</code> in <code>deepface/api/</code> – copy to <code>.env</code> and set any required DB connection strings.</li><li>Docker compose (<code>docker/docker-compose.yml</code>) defines services for PostgreSQL/pgvector and the API; run <code>docker compose up</code> after adjusting env vars.</li></ul>
+<p>To run the face verification flow from Python:</p>
+<pre data-lang="python"><code>from deepface import DeepFace
+
+result = DeepFace.verify(
+    img1_path="tests/unit/dataset/img1.jpg",
+    img2_path="tests/unit/dataset/img2.jpg",
+    model_name="VGG-Face"
+)
+print(result["verified"])</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A retail chain can deploy the Docker image behind their internal network, configure the PostgreSQL/pgvector adapter, and call <code>DeepFace.verify</code> on CCTV snapshots to flag repeat customers. The same service can invoke <code>DeepFace.analyze</code> to collect age‑gender demographics for foot‑traffic analytics, storing results in the configured vector store for later similarity queries.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – GITHUB_TOKEN permissions</strong> – <code>.github/workflows/tests.yml</code> lacks explicit <code>permissions</code>.</li><li><strong>MEDIUM – Dependabot missing</strong> – No <code>dependabot.yml</code> for automated security updates.</li><li><strong>MEDIUM – Base image not pinned</strong> – <code>Dockerfile</code> uses mutable tag <code>python:3.8.12</code>.</li><li><strong>MEDIUM – No dependency scan in CI</strong> – No step checks for vulnerable packages.</li><li><strong>MEDIUM – Notebook outputs not stripped</strong> – Large outputs in <code>boosted/Perform-Boosting-Experiments-LightGBM.ipynb</code>.</li><li><strong>MEDIUM – Checkout persists token</strong> – <code>.github/workflows/tests.yml</code> should set <code>persist-credentials: false</code>.</li><li><strong>MEDIUM – Container runs as root</strong> – Dockerfile lacks a non‑root <code>USER</code>.</li><li><strong>LOW – Workflow jobs missing timeout</strong> – <code>.github/workflows/tests.yml</code> has no <code>timeout-minutes</code>.</li></ul>
+<p>Additional observations: a lockfile is absent, making reproducible builds harder; tests are extensive (89 files) and CI runs them, but no coverage badge is present. Documentation consists of a short README and three markdown docs; no API reference generated.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>deepface</code> provides a ready‑made, multi‑model face recognition stack with a Flask API and Docker support, but the codebase suffers from heavy central modules, duplicated blocks, and a few security‑hygiene gaps. It is suitable for teams that need a quick on‑premise solution and are prepared to refactor the hub modules for long‑term maintainability.</p>
             </div>
 
             
@@ -104,11 +142,11 @@ Low — Environment file referenced but not committed. deepface/api/.env.example
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">239<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>86</b></li><li><span>Markdown</span><i style="width:10%"></i><b>9</b></li><li><span>YAML</span><i style="width:8%"></i><b>7</b></li><li><span>Shell</span><i style="width:6%"></i><b>5</b></li><li><span>JSON</span><i style="width:3%"></i><b>3</b></li><li><span>SQL</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>105</b></li><li><span>Markdown</span><i style="width:9%"></i><b>9</b></li><li><span>YAML</span><i style="width:7%"></i><b>7</b></li><li><span>Jupyter Notebook</span><i style="width:5%"></i><b>5</b></li><li><span>Shell</span><i style="width:5%"></i><b>5</b></li><li><span>JSON</span><i style="width:3%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>Flask</span><span>Docker</span></p>
+                        <p class="an-fw"><span>Flask</span><span>Docker</span><span>OpenCV</span><span>YOLO</span><span>Vector store</span><span>Neo4j</span></p>
                     </div>
                 </div>
 

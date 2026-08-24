@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>4 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,23 +80,28 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Bio‑informatics teams spend weeks curating command‑line arguments, data‑format quirks, and best‑practice notes for each tool (e.g., STAR, DESeq2, scanpy). When an AI coding assistant lacks that domain knowledge, it generates broken pipelines, forcing developers to intervene manually. The gap is a reusable, structured knowledge base that an agent can read and apply without bespoke fine‑tuning.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SciAgent‑Skills supplies 199 self‑contained markdown skill definitions (e.g., skills/genomics-bioinformatics/rnaseq/deseq2-differential-expression/SKILL.md). Each file includes:</p><p>a concise description,  
- runnable code snippets,  
- parameter tables, and  
- troubleshooting tips.</p><p>The repository also ships a Claude‑compatible plugin manifest (.claude-plugin/plugin.json) and a registry (registry.yaml) that map skill names to their locations. The small Python helper suite (scripts/validateregistry.py, scripts/blindknowledgetest.py) validates that the registry is syntactically correct and that the benchmark data (blindtestresults.csv) matches expectations.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Create a Python environment – the project uses Pixi (see pixi.toml / pixi.lock).  
-   pixi install          # resolves the conda/pip dependencies
-   pixi run python -m pip install -e .   # editable install (no package, but registers scripts)
-Validate the skill registry – run the supplied script to ensure all SKILL.md files are reachable.  
-   pixi run python scripts/validateregistry.py
-Add the plugin to Claude Code – copy the .claude-plugin directory into the Claude plugin path or reference it via the marketplace URL contained in marketplace.json. The plugin JSON points to the registry.yaml file, which the agent reads at runtime.
-Invoke a skill – within Claude Code, request a task such as “run DESeq2 differential expression”. The agent will locate the matching entry in registry.yaml, retrieve the code block from skills/genomics-bioinformatics/rnaseq/deseq2-differential-expression/SKILL.md, and execute it in the current environment.
-Run the benchmark (optional) – to reproduce the reported BixBench score:  
-   pixi run python scripts/blindknowledgetest.py blindtestresults.csv</p><p>All CI steps are defined in .github/workflows/validate.yml, which runs the validation script and the test suite on each push.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A research group automates an RNA‑seq analysis pipeline. After installing the skill set, a data‑science engineer writes a short prompt to Claude Code:</p><p>“Using the DESeq2 skill, compare condition A vs B in counts.tsv and output a volcano plot as volcano.png.”</p><p>Claude Code retrieves the snippet from SKILL.md, substitutes the file path, runs the R code via the system R interpreter, and returns the plot. The entire step is reproducible without hand‑typing any R commands, reducing analyst time from hours to minutes.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests – Medium – 9 test files exist, but they only cover the validation scripts; the markdown skills themselves have no automated verification.  
- Dependency Hygiene – Low – Pixi manages Python packages, yet no explicit lock for external tools (e.g., R, Java) that many skills require, which could cause runtime failures on fresh systems.  
- Documentation – Low – The README explains the concept and benchmark but lacks a quick‑start guide; users must infer commands from pixi.toml and scripts.  
- License – Low – The repository includes LICENSE (CC‑BY‑4.0), satisfying legal reuse, but no SPDX header in source files.  
-CI Coverage – Low – The GitHub Actions workflow validates the registry but does not lint markdown or test code snippets, leaving syntax errors undetected.</p><p>Overall, the codebase shows no structural red flags; the layout is clear, and CI runs successfully on push.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SciAgent‑Skills delivers a well‑organized, markdown‑based knowledge base that materially improves AI coding agents on bio‑informatics tasks (92 % BixBench accuracy). It is ready for teams that already use Claude Code or a similar markdown‑aware agent and can tolerate the manual step of installing external toolchains (R, Java, etc.). The primary gaps are limited automated testing of the skill snippets and sparse start‑up documentation; addressing these would make adoption smoother for solo developers.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Life-science researchers and bioinformatics engineers increasingly rely on AI coding agents like Claude Code, but these agents lack domain-specific knowledge. A generic model will fumble RNA-seq pipelines, misinterpret BAM files, or hallucinate API parameters for tools like Scanpy or RDKit. The result is slow, error-prone analysis that requires heavy human oversight.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SciAgent-Skills is a library of 197 self-contained <code>SKILL.md</code> files, each teaching an AI agent one bioinformatics task—from <code>scanpy-scrna-seq</code> to <code>rdkit-chemdraw-cdxml</code>. Each skill bundles runnable code, key parameters, and troubleshooting guidance. The README reports a <strong>92.0% accuracy on BixBench-Verified-50</strong>, up from 65.3% for a baseline Claude Code (Opus 4.6). The repo also includes scaffolding and validation tooling under <code>.claude/skills/sciagent-skill-creator/</code> and <code>scripts/</code> to author and test new skills.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>.claude/skills/sciagent-skill-creator/scripts/scaffold.py</code> (line 224), which reaches 26 functions and is the only entry point. It validates skill metadata (<code>validate_name</code>, <code>validate_tags</code>, <code>validate_category</code>) and renders new skill files via <code>render_skill_md</code>, which touches the filesystem by reading a template. The <code>fail</code> function is the hub—called from 18 places across the codebase—so any change to error handling ripples widely. The <code>scripts/validate_registry.py</code> <code>parse_frontmatter</code> (6 call sites) and <code>scripts/blind_knowledge_test.py</code> <code>invoke_claude</code> (2 call sites, makes an outbound network call for benchmarking) are the other key touchpoints.</p>
+<p>The internal call graph shows 84 resolved edges with no cycles, so refactoring is low-risk. The <code>tests/test_skill_quality.py</code> (43 functions) is the largest test file, exercising skill content quality; <code>scripts/validate_registry.py</code> is called from 3 other files, making it the most reusable validation module.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone and install dependencies via <code>pixi</code> (the <code>pixi.toml</code> and <code>pixi.lock</code> files indicate a pixi-managed environment):</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/SciAgent-Skills
+cd SciAgent-Skills
+pixi install</code></pre>
+<p><strong>Configuration</strong>: No environment variables are required for basic use. The <code>blind_knowledge_test.py</code> script reads a <code>.env</code> file for AWS Bedrock credentials, but that's only for running the benchmark, not for using the skills.</p>
+<p><strong>Running it</strong>: For Claude Code, the skills load automatically from the <code>.claude/skills/</code> directory. To validate your own skill, run <code>python scripts/validate_registry.py</code>. To scaffold a new one, run <code>python .claude/skills/sciagent-skill-creator/scripts/scaffold.py</code>. The README documents no other launch commands.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A researcher with a batch of raw FASTQ files can prompt Claude Code with "Run differential expression using DESeq2" and the agent will pull the <code>deseq2-differential-expression</code> skill, execute the correct pipeline, and interpret the output. The <code>integration-templates/</code> folder shows how to wire these skills into Cursor or Windsurf, extending the same capability beyond Claude Code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (deterministic, not opinion) found 7 findings: 1 high, 6 medium. The high-severity issue is <code>[cognitive_load]</code> deep nesting (max indentation depth 9) in <code>build_reaction_scheme.py</code>, <code>blind_knowledge_test.py</code>, and <code>validate_registry.py</code>—control flow is hard to follow; fix with guard clauses. Medium issues include <code>[resilience]</code> broad exception handling in <code>check_scheme.py</code> (bare <code>except</code> swallows errors) and <code>[cognitive_load]</code> high branching density in <code>check_scheme.py</code> and <code>test_registry.py</code> (68 branch points over 207 lines).</p>
+<p>Beyond that, the CI audit flags two high-severity SDLC issues: GitHub Actions are pinned to mutable tags (<code>prefix-dev/setup-pixi@v0.8.0</code>) rather than commit SHAs, and the workflow never runs the test suite despite 3 test files existing. The <code>validate.yml</code> also lacks least-privilege <code>permissions</code> and job timeouts. No secrets or license issues were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a genuinely useful, well-organized skill library with a strong benchmark result and clean internal architecture. The main risks are operational—unpinned CI dependencies and a test suite that isn't wired into the pipeline. For any team running bioinformatics through AI agents, this is worth adopting; just fix the CI before trusting the green check.</p>
             </div>
 
             
@@ -113,11 +118,11 @@ CI Coverage – Low – The GitHub Actions workflow validates the registry but d
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">315<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>184</b></li><li><span>Python</span><i style="width:2%"></i><b>4</b></li><li><span>JSON</span><i style="width:1%"></i><b>2</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>289</b></li><li><span>Python</span><i style="width:3%"></i><b>8</b></li><li><span>JSON</span><i style="width:1%"></i><b>2</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Express</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>PyTorch</span><span>OpenCV</span><span>Transformers</span><span>pandas</span></p>
                     </div>
                 </div>
 

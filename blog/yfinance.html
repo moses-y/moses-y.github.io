@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 10, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,16 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#download-historical-data-for-a-ticker">Download historical data for a ticker</a><a href="#get-a-ticker-object-for-detailed-info">Get a Ticker object for detailed info</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Applications that need financial market data—prices, dividends, splits, fundamentals, live quotes—typically face a choice between expensive vendor APIs or scraping HTML pages. yfinance solves this by wrapping Yahoo Finance&#39;s public JSON endpoints in a clean Python API, giving developers programmatic access to a broad range of market data without API keys or paid subscriptions.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>yfinance is a Python library that downloads and normalizes market data from Yahoo Finance. The core entry point is yfinance/init.py, which exposes the main components: Ticker and Tickers for single and multi-ticker queries, download() for bulk historical data, Market for market-level info, Search for quotes and news, and Screener for building filtered market queries. Live streaming is handled by yfinance/live.py via WebSocket and AsyncWebSocket classes.</p><p>The library handles data repair and validation internally—yfinance/data.py and yfinance/base.py contain the core fetching and normalization logic, while yfinance/pricerepair.py (referenced in the docs) fixes common errors like bad dividends and stock splits. The tests/ directory contains 100+ files with fixture data covering edge cases across global exchanges, suggesting significant maturity in handling real-world data quirks.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install from PyPI. The repo uses setup.py for packaging and requirements.txt for dependencies. No lockfile is present, so builds are not fully reproducible.</p><p>pip install yfinance</p><p>Configuration: No API keys or environment variables required. Optional configuration for caching and logging is documented in doc/source/advanced/config.rst and doc/source/advanced/caching.rst.</p><p>Running it: Import the library in Python and call the high-level functions. The README documents the primary interface:</p><p>import yfinance as yf</p><h3 class="post-h" id="download-historical-data-for-a-ticker">Download historical data for a ticker</h3><p>data = yf.download(&quot;AAPL&quot;, period=&quot;1mo&quot;)
-print(data.head())</p><h3 class="post-h" id="get-a-ticker-object-for-detailed-info">Get a Ticker object for detailed info</h3><p>ticker = yf.Ticker(&quot;MSFT&quot;)
-print(ticker.info[&quot;marketCap&quot;])</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A portfolio tracking service could use yfinance to pull daily closing prices for a watchlist, compute returns, and detect corporate actions. The library&#39;s Tickers class handles multiple symbols efficiently, and the repair logic in yfinance/data.py helps ensure dividend and split adjustments are applied correctly—critical for accurate backtesting.</p><p>import yfinance as yf
-import pandas as pd</p><p>symbols = [&quot;AAPL&quot;, &quot;MSFT&quot;, &quot;GOOGL&quot;]
-data = yf.download(symbols, period=&quot;6mo&quot;, groupby=&quot;ticker&quot;)
-returns = data[&quot;Close&quot;].pct_change().dropna()</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - No lockfile for dependencies - requirements.txt pins versions at a coarse level, so builds may differ across environments. This is common for libraries but worth noting for reproducibility.
-Low - Legacy CI configuration - .travis.yml is present but the active CI appears to be GitHub Actions (.github/workflows/ contains pytest.yml.disabled, ruff.yml, pyright.yml). The disabled pytest workflow is a minor concern—test CI may not be running in this fork.
-Low - Unsupported Python version badge - README claims Python 2.7 support, which is almost certainly stale given the modern codebase and dependencies.
-Clean aspects - The test suite is extensive with fixture data covering real-world edge cases across multiple exchanges. Type checking (pyrightconfig.json) and linting (ruff.yml) are configured. The codebase has clear module separation (domain/, data.py, live.py, lookup.py).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>yfinance is a mature, well-tested library that solves a real problem—free, programmatic access to financial market data. It is battle-tested in production (25k+ stars upstream) and has solid documentation and test coverage. The main risks are Yahoo&#39;s terms of service and the possibility of API changes breaking the library. It is well-suited for research, prototyping, and internal tools where free data outweighs the legal and reliability trade-offs.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients need programmatic access to historical and realtime market data without negotiating Yahoo!’s undocumented API contracts. Existing wrappers are either stale or tightly coupled to a single request style, making it hard to integrate into automated pipelines that require reliable error handling and configurable caching.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>yfinance</code> provides a thin Pythonic layer over Yahoo! Finance’s public endpoints. Core symbols live in the <strong><code>yfinance/</code></strong> package:</p>
+<ul><li><code>yfinance/ticker.py</code> – <code>Ticker</code> class exposing <code>history()</code>, <code>info</code>, <code>options</code>, etc.</li><li><code>yfinance/base.py</code> – shared logic for lazy‑loading price history and timezone handling.</li><li><code>yfinance/_http.py</code> – low‑level request handling, cookie/CSRF management, and retry policies.</li><li><code>yfinance/config.py</code>, <code>yfinance/const.py</code>, <code>yfinance/exceptions.py</code> – global settings, constant definitions, and domain‑specific error types.</li></ul>
+<p>The <strong><code>tests/</code></strong> directory (≈100 files) validates end‑to‑end data retrieval, caching, and edge‑case handling (e.g., dividend‑adjustment fixes). Documentation lives under <strong><code>doc/</code></strong> and is built with the Makefile in that folder.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution typically starts with user code that imports <code>yfinance</code> and creates a <code>Ticker</code>:</p>
+<pre data-lang="python"><code>from yfinance import Ticker
+ts = Ticker("AAPL")
+df = ts.history(period="1mo")</code></pre>
+<ul><li><strong>Entry point</strong> – <code>yfinance/__init__.py</code> re‑exports <code>Ticker</code>, <code>download</code>, and helper functions. It is the hub module (36 inbound imports, 16 outbound) and sits in a circular import chain with <code>yfinance/data.py</code> and <code>yfinance/_http.py</code>.</li><li><strong>Call flow</strong> – <code>Ticker.__init__</code> (in <code>ticker.py</code>) builds a <code>YfData</code> object (<code>yfinance/data.py</code>). Subsequent calls such as <code>history()</code> delegate to <code>Base.history</code> (<code>base.py</code>), which invokes <code>_lazy_load_price_history</code>. That method eventually calls <code>_fetch_and_parse</code> in <code>_http.py</code>, which performs the HTTP GET, applies retry logic (<code>_is_transient_error</code>), and parses CSV/JSON into pandas structures.</li><li><strong>Blast radius</strong> – The hub (<code>__init__</code>) and base (<code>base.py</code>) modules are the widest impact points: 74 call sites reference <code>Ticker</code>, and <code>history</code> is invoked from 43 locations. Changing their signatures will ripple through most of the library and the test suite.</li><li><strong>Cycles &amp; nesting</strong> – The import cycle (<code>__init__</code> ↔ <code>data</code> ↔ <code>_http</code>) adds maintenance friction; deep nesting (max depth 8) appears in <code>const.py</code>, <code>exceptions.py</code>, and <code>utils.py</code>, making the control flow harder to follow.</li><li><strong>External touch</strong> – Only file I/O occurs in <code>yfinance/scrapers/quote.py</code> (raw CSV open without a context manager). No database or network sockets are opened directly by the library; all network traffic is encapsulated in <code>_http.py</code>.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and install
+git clone https://github.com/moses-y/yfinance
+cd yfinance
+pip install -e .   # reads requirements.txt and setup.cfg</code></pre>
+<p><em>No additional configuration</em> is required; the library reads proxy settings from environment variables (e.g., <code>HTTP_PROXY</code>) as handled in <code>yfinance/data.py</code>. To fetch data:</p>
+<pre data-lang="python"><code>from yfinance import download, Ticker
+
+# Bulk download
+df = download(["MSFT", "GOOG"], start="2023-01-01", end="2023-12-31")
+
+# Single ticker
+ticker = Ticker("TSLA")
+prices = ticker.history(period="5d")</code></pre>
+<p>The <code>download</code> helper lives in <code>yfinance/__init__.py</code>; <code>Ticker</code> lives in <code>yfinance/ticker.py</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team can embed the library in a nightly ETL job:</p>
+<pre data-lang="python"><code>import pandas as pd
+from yfinance import download
+
+symbols = ["AAPL", "AMZN", "NVDA"]
+prices = download(symbols, period="1d", interval="1m")
+prices.to_parquet("s3://data/market/quotes.parquet")</code></pre>
+<p>The call chain is <code>download → _http._fetch_and_parse → pandas.read_csv</code>, yielding a DataFrame ready for downstream analysis.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Measured static analysis (71 modules, 178 import edges, 26 cycles):</em></p>
+<ul><li><strong>HIGH – Import cycles (26 files)</strong> – e.g., <code>yfinance/__init__.py</code>, <code>yfinance/data.py</code>, <code>yfinance/_http.py</code>. Break cycles by extracting shared types or lazy imports.</li><li><strong>HIGH – Hub module</strong> – <code>yfinance/__init__.py</code> is a single point of failure; keep its API stable.</li><li><strong>HIGH – Oversized files</strong> – <code>yfinance/const.py</code>, <code>yfinance/utils.py</code>, <code>yfinance/scrapers/history.py</code> (&gt;1 k lines each). Split into logical sub‑modules.</li><li><strong>HIGH – Deep nesting (max depth 8)</strong> – <code>yfinance/const.py</code>, <code>yfinance/exceptions.py</code>, <code>yfinance/utils.py</code>. Refactor with early returns.</li><li><strong>MEDIUM – Broad exception handling</strong> – many <code>except Exception:</code> blocks swallow errors (e.g., <code>yfinance/data.py</code>). Replace with specific catches.</li><li><strong>MEDIUM – High branching density</strong> – <code>yfinance/screener/query.py</code> contains 60 branches in 203 lines; consider strategy dispatch.</li><li><strong>MEDIUM – Duplicated test code</strong> – 27 identical 6‑line blocks across 15 test files; extract helpers.</li><li><strong>LOW – File opened without context manager</strong> – <code>yfinance/scrapers/quote.py</code> uses <code>open(...)</code> directly.</li></ul>
+<p><em>Code‑Health audit (CI/ops):</em></p>
+<ul><li><strong>HIGH – CI does not run tests</strong> – <code>.github/workflows/*.yml</code> lack a test step; add <code>pytest</code> invocation.</li><li><strong>MEDIUM – No dependency vulnerability scan</strong> – add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>LOW – Missing job timeouts</strong> – set <code>timeout-minutes</code> in <code>.github/workflows/deploy_doc.yml</code>.</li></ul>
+<p>No lockfile (<code>requirements.txt</code> only) means reproducible builds are not guaranteed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>yfinance</code> delivers a functional, well‑documented wrapper for Yahoo! Finance data with a clear public API (<code>Ticker</code>, <code>download</code>). The codebase is heavily tested but suffers from import cycles, large hub modules, and deep nesting that raise the maintenance burden. It is suitable for internal tooling or research pipelines, provided the team budgets time for refactoring the identified hotspots and tightening CI.</p>
             </div>
 
             
@@ -106,9 +141,9 @@ Clean aspects - The test suite is extensive with fixture data covering real-worl
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">220<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>53</b></li><li><span>reStructuredText</span><i style="width:57%"></i><b>30</b></li><li><span>YAML</span><i style="width:21%"></i><b>11</b></li><li><span>Markdown</span><i style="width:8%"></i><b>4</b></li><li><span>CSS</span><i style="width:2%"></i><b>1</b></li><li><span>JSON</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>71</b></li><li><span>reStructuredText</span><i style="width:42%"></i><b>30</b></li><li><span>YAML</span><i style="width:15%"></i><b>11</b></li><li><span>Markdown</span><i style="width:6%"></i><b>4</b></li><li><span>CSS</span><i style="width:1%"></i><b>1</b></li><li><span>JSON</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
                         
                     </div>

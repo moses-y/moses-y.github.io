@@ -80,43 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#step-1-create-database">Step 1 – create database</a><a href="#step-2-feature-extraction-spherical-model">Step 2 – feature extraction (spherical model)</a><a href="#step-3-spatial-feature-matching">Step 3 – spatial feature matching</a><a href="#step-4-incremental-mapper-sphere-camera">Step 4 – incremental mapper (sphere camera)</a><a href="#step-5-visualise">Step 5 – visualise</a><a href="#step-6-cubic-conversion-dense-pipeline-entry-poi">Step 6 – cubic conversion (dense‑pipeline entry point)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>SphereSfM addresses the gap in structure‑from‑motion pipelines that natively support spherical (ERP) imagery. Most SfM engines assume perspective cameras, so users of 360° cameras (Insta360, Ricoh Theta) must either convert data to a different projection or rely on ad‑hoc work‑arounds. This project provides a Spherical camera model integrated into the ColMap framework, enabling sparse reconstruction of ERP images without manual re‑projection.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository extends ColMap with a SPHERE camera model and additional Spherical SfM steps. Key components lives in lib/:  
-lib/SiftGPU/ – GPU‑accelerated feature extraction and matching (CUDA kernels in ProgramCU.cu, SiftMatchCU.cpp/h).  
-lib/VLFeat/ – classic vision primitives (detectors, descriptors, kd‑trees).  
-lib/PoissonRecon/ – mesh reconstruction (marching cubes, octree data structures).  
-lib/LSD/ line segment detector (lsd.c/h).</p><p>The build system is CMake‑based (CMakeLists.txt files in the root, lib/, and sub‑directories) and a docker/Dockerfile provides a reproducible environment with CUDA support. The README lists a full SfM pipeline using ColMap commands; the pipeline re‑uses ColMap’s databasecreator, featureextractor, spatialmatcher, and mapper but adds --Mapper.spherecamera 1 and fixed camera parameters.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install ColMap (the repo assumes a working ColMap build).  
-Clone this repo and initialise submodules (git submodule update --init).  
-Build the SphereSfM libraries:</p><p>mkdir build &amp;&amp; cd build
-cmake .. -DCMAKECUDAARCHITECTURES=8.0   # adjust for your GPU
-make -j$(nproc)</p><h3 class="post-h" id="configuration">Configuration</h3><p>Place ERP images in images/.  
-Optional: provide a camera mask (cameramask.png) and POS file (POS.txt) with geolocation/pose data.  
-The docker/Dockerfile bundles all dependencies (CUDA, VLFeat, SiftGPU) if you prefer a containerised build.</p><p>Running the pipeline (commands taken verbatim from the README)</p><h3 class="post-h" id="step-1-create-database">Step 1 – create database</h3><p>colmap databasecreator --databasepath ./colmap/database.db</p><h3 class="post-h" id="step-2-feature-extraction-spherical-model">Step 2 – feature extraction (spherical model)</h3><p>colmap featureextractor \
-  --databasepath ./colmap/database.db \
-  --imagepath ./images \
-  --ImageReader.cameramodel SPHERE \
-  --ImageReader.cameraparams &quot;1,3520,1760&quot; \
-  --ImageReader.singlecamera 1 \
-  --ImageReader.cameramaskpath ./cameramask.png \
-  --ImageReader.posepath ./POS.txt</p><h3 class="post-h" id="step-3-spatial-feature-matching">Step 3 – spatial feature matching</h3><p>colmap spatialmatcher \
-  --databasepath ./colmap/database.db \
-  --SiftMatching.maxerror 4 \
-  --SiftMatching.minnuminliers 50 \
-  --SpatialMatching.isgps 0 \
-  --SpatialMatching.maxdistance 50</p><h3 class="post-h" id="step-4-incremental-mapper-sphere-camera">Step 4 – incremental mapper (sphere camera)</h3><p>colmap mapper \
-  --databasepath ./colmap/database.db \
-  --imagepath ./images \
-  --outputpath ./colmap/sparse \
-  --Mapper.barefinefocallength 0 \
-  --Mapper.barefineprincipalpoint 0 \
-  --Mapper.barefineextraparams 0 \
-  --Mapper.spherecamera 1</p><h3 class="post-h" id="step-5-visualise">Step 5 – visualise</h3><p>colmap gui --databasepath ./colmap/database.db \
-           --imagepath ./images \
-           --importpath ./colmap/sparse/0</p><h3 class="post-h" id="step-6-cubic-conversion-dense-pipeline-entry-poi">Step 6 – cubic conversion (dense‑pipeline entry point)</h3><p>colmap spherecubicreprojector --image_path ./images --in ...</p><p>Step 6 continues the workflow into ColMap’s dense reconstruction pipeline.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A surveyor capturing an urban street with a Ricoh Theta can run the above commands to obtain a sparse 3D point cloud that includes near‑ground buildings and street geometry. The resulting colmap/sparse directory can be fed directly into ColMap’s dense MVS stage or exported as OBJ/PLY for downstream visualization. Because the camera model is Spherical, the reconstruction avoids the severe radial distortion that would otherwise degrade metric accuracy.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No test suite – the heuristic flag notes “No test files detected – untested code paths – repository‑wide”. Unit or integration tests for the Spherical camera model or the ColMap extensions are absent, making regression risk higher when upstream ColMap changes.  
-CI/CD gap – while .azure-pipelines/ contains build YAML files for Windows, macOS, and Ubuntu, there is no .github/workflows directory, so automated CI gates (pull‑request validation, nightly builds) are not configured.  
-Dependencies – VLFeat, SiftGPU, and PoissonRecon are bundled as source; license files (LICENSE) are present, but the build assumes the user has a compatible CUDA toolkit and CMake. Missing or outdated system libraries will cause build failures without clear error messages.  
-Documentation – doc/ contains tutorial, CLI, and format guides; however, the README’s step‑by‑step commands are the primary entry point for newcomers.  
-Configuration drift – camera parameters (1,3520,1760) are hard‑coded in the example; users adapting to different sensor resolutions must adjust these values manually.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SphereSfM is a focused extension that plugs a Spherical camera model into the mature ColMap SfM pipeline, enabling reconstruction of ERP imagery with minimal user overhead. The codebase is well‑structured, with clear CMake build files and a Docker recipe, but it lacks automated testing and CI integration, and the example pipeline relies on hard‑coded camera parameters. It is best suited for teams or researchers who already maintain a ColMap installation and need occasional spherical‑image SfM; solo users who prefer a fully out‑of‑the‑box, zero‑configuration solution may find the setup overhead non‑trivial.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Standard Structure-from-Motion pipelines assume pinhole or fisheye camera models. Spherical cameras (Insta360, Ricoh Theta) capture 360° imagery in equirectangular projection (ERP), which breaks those assumptions—lines curve, distortion is extreme, and naive feature extraction fails. SphereSfM extends COLMAP to run incremental SfM directly on ERP images, producing sparse reconstructions for urban scenes where spherical capture is common.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SphereSfM is a fork of COLMAP (itself forked from <code>json87/SphereSfM</code>) that adds a <code>SPHERE</code> camera model, a spherical feature extractor, and a <code>sphere_cubic_reprojector</code> for converting reconstructions to cubic format for dense matching. The core changes live in <code>src/</code> (411 files) alongside the COLMAP codebase, with the spherical logic integrated into the existing feature extraction and mapping stages.</p>
+<p>The repo ships with three test datasets (campus parterre, campus building, urban street) and a Dockerfile for containerized builds. A <code>README.md</code> documents a six-step CLI workflow from database creation through cubic conversion.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The pipeline is the standard COLMAP sequence, modified at two points. Entry is <code>colmap database_creator</code>, then <code>feature_extractor</code> with <code>--ImageReader.camera_model SPHERE</code> and <code>--ImageReader.camera_params "1,3520,1760"</code> (focal length, width, height). The spherical camera model is registered in <code>src/</code> alongside the existing models. Feature matching via <code>spatial_matcher</code> uses POS data when available, falling back to vocabulary-tree matching. The <code>mapper</code> runs incremental SfM with <code>--Mapper.sphere_camera 1</code> and camera parameters held fixed (<code>--Mapper.ba_refine_focal_length 0</code>). Finally, <code>sphere_cubic_reprojecer</code> converts the sparse model for downstream dense matching.</p>
+<p>The import graph shows 22 internal Python modules with zero import edges—the Python scripts in <code>scripts/python/</code> are standalone utilities (build, bundler conversion, database handling). The C++ core is where the real control flow lives, but the static analysis did not map C++ call graphs. No hub modules or cycles were detected in the Python layer.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Build requires CUDA 11.7 and the COLMAP dependency stack. The <code>docker/Dockerfile</code> pins <code>nvcr.io/nvidia/cuda:11.7.0-devel-ubuntu22.04</code>; <code>docker/build.sh</code> and <code>docker/quick-start.sh</code> handle the container build. Native builds follow COLMAP's CMake flow (<code>CMakeLists.txt</code> at root, <code>cmake/</code> for helper modules).</p>
+<p><strong>Configuration</strong>: No environment variables. Camera parameters, POS data, and masks are passed as CLI flags to <code>feature_extractor</code>.</p>
+<p><strong>Running it</strong> (verbatim from <code>README.md</code>):</p>
+<pre data-lang="sh"><code>colmap database_creator --database_path ./colmap/database.db
+colmap feature_extractor \
+  --database_path ./colmap/database.db \
+  --image_path ./images \
+  --ImageReader.camera_model SPHERE \
+  --ImageReader.camera_params "1,3520,1760" \
+  --ImageReader.single_camera 1 \
+  --ImageReader.camera_mask_path ./camera_mask.png \
+  --ImageReader.pose_path ./POS.txt
+colmap spatial_matcher \
+  --database_path ./colmap/database.db \
+  --SiftMatching.max_error 4 \
+  --SiftMatching.min_num_inliers 50 \
+  --SpatialMatching.is_gps 0 \
+  --SpatialMatching.max_distance 50
+colmap mapper \
+  --database_path ./colmap/database.db \
+  --image_path ./images \
+  --output_path ./colmap/sparse \
+  --Mapper.ba_refine_focal_length 0 \
+  --Mapper.ba_refine_principal_point 0 \
+  --Mapper.ba_refine_extra_params 0 \
+  --Mapper.sphere_camera 1
+colmap gui --database_path ./colmap/database.db --image_path ./images --import_path ./colmap/sparse/0
+colmap sphere_cubic_reprojecer --image_path ./images --in...</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A street-level survey captures 2,000 ERP images from a vehicle-mounted Insta360. The team runs the five-step CLI workflow, using GPS-derived POS data for spatial matching. The resulting sparse reconstruction is converted to cubic format and fed into COLMAP's dense matching stage, producing a 3D mesh of building facades without manual camera calibration.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (350 findings: 246 high, 104 medium) reports one dominant issue:</p>
+<ul><li><strong>High - Deep nesting (x60)</strong> - <code>lib/LSD/lsd.c</code>, <code>lib/PoissonRecon/MultiGridOctreeData.h</code>, <code>lib/PoissonRecon/PlyFile.cpp</code> reach max indentation depth 11; control flow is hard to follow. Fix: early returns and extracted inner blocks.</li></ul>
+<p>Additional SDLC observations from the audit:</p>
+<ul><li><strong>High - No CI pipeline</strong> - 79 source files, no workflow in <code>.github/</code> or <code>.azure-pipelines/</code> (the latter has build configs but they are not wired as gates). Every change merges unbuilt.</li><li><strong>High - No build gate for Docker image</strong> - <code>docker/Dockerfile</code> exists but no workflow validates it.</li><li><strong>Medium - Unpinned base image</strong> - <code>docker/Dockerfile</code> uses <code>nvcr.io/nvidia/cuda:11.7.0-devel-ubuntu22.04</code> without a digest; builds are non-reproducible.</li><li><strong>Medium - No timeout on outbound calls</strong> - <code>scripts/python/build.py</code> makes requests without <code>timeout=</code>.</li><li><strong>Medium - Test coverage is minimal</strong> - 3 test files against 277 source files (ratio 0.011).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>SphereSfM is a functional research-grade extension of COLMAP for spherical imagery, with working datasets and documented commands. It inherits COLMAP's build complexity, adds no CI, and ships with negligible test coverage—treat it as a reference implementation rather than production software. Teams needing spherical SfM should evaluate it against COLMAP's native support before committing.</p>
             </div>
 
             
@@ -126,18 +136,18 @@ Configuration drift – camera parameters (1,3520,1760) are hard‑coded in the 
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">686<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>60</b></li><li><span>C++</span><i style="width:38%"></i><b>23</b></li><li><span>C</span><i style="width:28%"></i><b>17</b></li><li><span>reStructuredText</span><i style="width:23%"></i><b>14</b></li><li><span>YAML</span><i style="width:8%"></i><b>5</b></li><li><span>Markdown</span><i style="width:8%"></i><b>5</b></li>
+                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>233</b></li><li><span>C</span><i style="width:15%"></i><b>35</b></li><li><span>C++</span><i style="width:10%"></i><b>23</b></li><li><span>Python</span><i style="width:9%"></i><b>22</b></li><li><span>reStructuredText</span><i style="width:6%"></i><b>14</b></li><li><span>Shell</span><i style="width:3%"></i><b>8</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span><span>CUDA</span></p>
+                        <p class="an-fw"><span>Flask</span><span>Docker</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -151,7 +161,7 @@ Configuration drift – camera parameters (1,3520,1760) are hard‑coded in the 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
                     </ul>
                 </div>
 
@@ -161,7 +171,7 @@ Configuration drift – camera parameters (1,3520,1760) are hard‑coded in the 
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:67%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">79 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span></div><div class="loc">docker/Dockerfile</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span></div><div class="loc">docker/Dockerfile</div><div class="ev">nvcr.io/nvidia/cuda:11.7.0-devel-ubuntu22.04</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Give the outbound request a timeout</span><span class="chip">medium</span></div><div class="loc">scripts/python/build.py</div><div class="ev">1 outbound call(s) with no timeout</div><div class="ev">requests has no default timeout, so a peer that accepts the connection and then says nothing holds the worker forever, and with a small worker pool a single slow dependency takes the whole service down without anything appearing to fail.</div><div class="rec"><b>Fix:</b> Pass timeout= on every call, or use a session with one configured.</div></div><div class="finding medium"><div class="head"><span class="ttl">Expand the test suite; it cannot cover this codebase</span><span class="chip">medium</span><span class="rankchip">3 occurrences</span></div><div class="ev">3 test files against 277 source files (ratio 0.011)</div><div class="ev">A reviewer reads &quot;has tests&quot; and assumes a safety net that covers two files out of eighty-five, which is how untested paths ship behind a green badge.</div><div class="rec"><b>Fix:</b> Add tests for the highest fan-in modules first.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

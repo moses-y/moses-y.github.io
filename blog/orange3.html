@@ -80,16 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Orange3 addresses a persistent gap in data science tooling: the assumption that meaningful analysis requires programming skill. Domain experts—biologists, marketers, healthcare analysts—often have the data and the questions but lack the Python fluency to explore either. Orange3 provides a visual, workflow-based environment where users construct analysis pipelines by connecting widgets, not by writing code.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Orange3 is a mature, full-featured data mining suite. The Orange/ package contains the entire analytical backend: Orange/data/ handles data loading, storage, and domain manipulation (including SQL backends for PostgreSQL and MSSQL); Orange/classification/, Orange/clustering/, and Orange/ensembles/ implement a broad algorithm library spanning SVMs, random forests, gradient boosting, k-means, and hierarchical clustering; Orange/evaluation/ provides cross-validation and scoring utilities.</p><p>The Orange/canvas/ directory is the graphical front end. Orange/canvas/main.py is the entry point that launches the workflow editor. Pre-built example workflows in Orange/canvas/workflows/ (e.g., 250-tree-scatterplot.ows) demonstrate standard analysis patterns. The Orange/datasets/ folder ships with sample data like iris.tab and titanic.tab for immediate experimentation.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The README documents three installation paths. Conda is recommended:</p><p>conda config --add channels conda-forge
-conda config --set channelpriority strict
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Orange3 solves a specific problem: making data mining and visualization accessible to users without programming skills. It provides a visual workflow-based interface where users connect widgets (data loading, preprocessing, modeling, visualization) to explore data interactively. The target audience is analysts and domain experts who need to inspect data and build models without writing code.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Orange3 is a Python desktop application built on PyQt. The core data structures live in <code>Orange/data/</code> (<code>table.py</code>, <code>variable.py</code>, <code>domain.py</code>), handling tabular data with discrete and continuous variables. Machine learning algorithms are in <code>Orange/classification/</code>, <code>Orange/regression/</code>, and <code>Orange/clustering/</code>, with a common <code>Learner</code>/<code>Model</code> abstraction in <code>Orange/base.py</code>. The visual canvas interface is in <code>Orange/canvas/</code>, and widgets—the individual visual components—are in <code>Orange/widgets/</code>.</p>
+<p>The project also includes <code>benchmark/</code> for performance testing, <code>doc/</code> with extensive reStructuredText documentation, and <code>i18n/</code> for translations.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>Orange/canvas/__main__.py</code>, specifically the <code>run</code> function at line 88. This reaches 54 functions and makes outbound network calls via <code>send_statistics</code> (using <code>requests.post</code>). The <code>main</code> function at line 463 orchestrates application startup, reaching 19 functions. The application touches the filesystem through <code>open_compressed</code> (gzip file access) and <code>_rm_tree</code> (directory removal for settings cleanup).</p>
+<p>The most critical module is <code>Orange/data/__init__.py</code> with 418 modules depending on it—a change there ripples across the entire codebase. The <code>Domain</code> class is called from 149 places and <code>Table</code> from 147, making them the highest-risk change points. The call graph shows test code dominates: <code>setUpClass -&gt; Table</code> appears 120 times, and <code>setUp -&gt; create_widget</code> 91 times.</p>
+<p>The import graph shows 88 modules in circular dependencies, including <code>Orange/data/__init__.py</code> and <code>Orange/classification/__init__.py</code>. This makes incremental imports fragile and complicates refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (from README):</p>
+<pre data-lang="bash"><code>conda config --add channels conda-forge
+conda config --set channel_priority strict
 conda create python=3.12 --yes --name orange3
 conda activate orange3
-conda install orange3</p><p>Pip installation is possible but requires a C/C++ compiler and PyQt6/PyQt5 plus WebEngine bindings. A Windows winget installer is also available.</p><p>Running it: After installation, launch the canvas with either orange-canvas or:</p><p>python3 -m Orange.canvas</p><p>Configuration: No environment variables or config files are required for basic operation. Add-ons are managed through the GUI (Options -&gt; Add-ons...). The .gitmodules file indicates the project relies on git submodules, which is relevant only for source development.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A marketing analyst with customer survey data (CSV export) can load it via the File widget, drag a Scatter Plot widget to visualize segments, then connect a k-Means widget to discover clusters. The workflow file 310-clustering.ows demonstrates exactly this pattern. The same pipeline can be extended with a Data Table widget for inspection and a Report widget to export findings. No code is written at any step.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No README in this fork - The root lacks a README; the analysis excerpt is from the upstream project. Onboarding is undocumented in this specific repository.
-Med - Large, monolithic package - Orange/ contains 177 files with tight coupling between the canvas UI and analysis backends. A change in Orange/data/table.py can ripple through the entire widget layer.
-Low - Cython and C extensions - Files like simpletree.c and distance.pyx require a compiler for source installs, complicating development setup.
-Low - Test coverage is uneven - 37 test files exist, but Orange/modelling/ and Orange/ensembles/ have no dedicated test directories, leaving those paths less verified.
-Low - External service dependencies - Orange/misc/server_embedder.py and the announcement/update icons in Orange/canvas/icons/ suggest runtime calls to remote services that could fail offline.</p><p>The project has solid CI (GitHub Actions workflows for tests, docs, and wheels), a CHANGELOG.md, and a code of conduct. The heuristic flag about a missing README is the most concrete documentation gap.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Orange3 is a production-grade, long-lived project (5,600+ upstream stars) with a genuine niche: making sophisticated data analysis accessible to non-programmers. It is not a lightweight library—installing and running it carries real overhead. Use it if your users need visual, interactive analysis; if your team is already fluent in Python, the underlying Orange/data and Orange/classification modules are better used directly.</p>
+conda install orange3</code></pre>
+<p><strong>Running</strong>:</p>
+<pre data-lang="bash"><code>orange-canvas
+# or
+python3 -m Orange.canvas</code></pre>
+<p>For development, clone with submodules (<code>.gitmodules</code> is present) and install with <code>pip install -e .</code> after satisfying PyQt and C/C++ compiler requirements.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A typical workflow: load a CSV with the File widget, connect it to Data Table (inspect rows), Scatter Plot (visualize), and Train Models (e.g., Random Forest). The workflow file format is <code>.ows</code>—examples are in <code>Orange/canvas/workflows/</code>. The user connects widgets visually, no code required.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 694 issues (432 high, 254 medium, 8 low) across 5 categories:</p>
+<ul><li><strong>High - Import cycle members (x14)</strong>: <code>Orange/data/__init__.py</code>, <code>Orange/classification/__init__.py</code> participate in circular imports. Fix: extract shared types or defer imports.</li><li><strong>High - Deep nesting (x20)</strong>: <code>Orange/widgets/tests/base.py</code> has indentation depth 10. Fix: early returns and guard clauses.</li><li><strong>High - Hub modules (x16)</strong>: <code>Orange/data/__init__.py</code> has 418 dependents; churn here is high-blast-radius.</li><li><strong>High - Oversized files (x5)</strong>: <code>Orange/widgets/tests/base.py</code> is 923 lines.</li><li><strong>Medium - Broad exception handling (x5)</strong>: <code>Orange/classification/__init__.py</code> catches <code>Exception</code> indiscriminately.</li></ul>
+<p>SDLC observations:</p>
+<ul><li><strong>High - Unpinned GitHub Actions</strong>: workflows use <code>@v4</code> and <code>@v3</code> tags, which can be moved. Pin to commit SHAs.</li><li><strong>High - No lockfile</strong>: <code>pyproject.toml</code> exists but no lockfile, so builds are non-reproducible.</li><li><strong>Medium - No Dependabot/Renovate</strong>: 9 manifests, no automated dependency updates.</li><li><strong>Medium - No dependency vulnerability scan in CI</strong>.</li></ul>
+<p>Tests exist (397 files), CI runs GitHub Actions, and a license is present. No committed secrets found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Orange3 is a mature, feature-rich data mining tool with strong documentation and testing. The circular imports and hub modules make core changes risky, and the lack of a lockfile is a supply-chain concern. It's a solid choice for non-programmers needing interactive data analysis, but developers should approach <code>Orange/data/</code> with caution.</p>
             </div>
 
             
@@ -99,18 +121,18 @@ Low - External service dependencies - Orange/misc/server_embedder.py and the ann
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,141<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>131</b></li><li><span>YAML</span><i style="width:7%"></i><b>9</b></li><li><span>Markdown</span><i style="width:6%"></i><b>8</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li><li><span>C</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>748</b></li><li><span>reStructuredText</span><i style="width:5%"></i><b>38</b></li><li><span>YAML</span><i style="width:2%"></i><b>13</b></li><li><span>Markdown</span><i style="width:2%"></i><b>13</b></li><li><span>Shell</span><i style="width:1%"></i><b>5</b></li><li><span>C</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Django</span><span>OpenCV</span><span>pandas</span></p>
                     </div>
                 </div>
 
@@ -156,7 +178,7 @@ Low - External service dependencies - Orange/misc/server_embedder.py and the ann
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>No README - onboarding and intent are undocumented <code>root</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
                     </ul>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 10, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers often need to run ad‑hoc SQL against many different back‑ends, but launching a full‑featured GUI (SSMS, DBeaver, VS Code extensions) is heavyweight for quick queries. Switching between CLI tools, driver installations, and connection strings adds friction, especially when working across cloud providers or Docker containers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>sqlit provides an ncurses‑style TUI that discovers local Docker containers, reads cloud‑CLI credentials (AWS, Azure, GCP), and presents a modal editor with Vim‑style keybindings. The core entry point is sqlit/cli.py, which boots the Textual UI and wires the connection manager (sqlit/core/connectionmanager.py). Provider implementations live under sqlit/domains/connections/providers/ (e.g., postgresql, mysql, duckdb, aws/athena). The discovery layer in sqlit/domains/connections/discovery/cloud/ parses the respective cloud CLIs to build connection profiles. Themes and keymaps are defined in sqlit/core/keymap.py and docs/screenshots/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>The project uses a standard pyproject.toml. Installation is documented in the README:</p><p>pipx install sqlit-tui          # recommended, isolates the tool
-or, from source
-python -m pip install .         # run from the repository root</p><h3 class="post-h" id="configuration">Configuration</h3><p>Default settings are stored in config/sqlit-config/settings.json. Users can copy the template config/settings.template.json and edit fields such as defaulttheme, keymappath, or keyringbackend. Credentials are stored securely via the OS keyring; no clear‑text passwords are committed.</p><h3 class="post-h" id="running">Running</h3><p>Launch the TUI with the installed entry point:</p><p>sqlit                           # invokes sqlit/cli.py
-or, for a direct run from source
-python -m sqlit.cli</p><p>The UI presents a connection picker, which draws from:
- Docker discovery (sqlit/domains/connections/discovery/dockerdetector.py)  
- Cloud discovery (.../cloud/aws/provider.py, .../azure/provider.py, .../gcp/provider.py)  
-Saved profiles (sqlit/core/connectionmanager.py)</p><p>From there, users can edit queries, run them, and explore results with built‑in filters (sqlit/core/actionvalidation.py).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑engineer on a Linux workstation needs to query a PostgreSQL instance running in a Docker compose stack and a Snowflake warehouse accessed via the AWS CLI. After installing sqlit:</p><p>sqlit                 # pick the Docker‑detected PostgreSQL container
-run quick SELECTs, copy results
-sqlit                 # switch to the Snowflake profile auto‑populated from AWS credentials</p><p>The engineer never leaves the terminal, avoids driver installation hassles (the “dependency wizard” in sqlit/domains/connections/app/installstrategy.py), and can filter millions of rows instantly.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – Dependencies declared only in pyproject.toml; no poetry.lock or uv.lock → builds are not reproducible.  
-Low – Test coverage – Only one test file detected; CI runs but does not enforce extensive testing (.github/workflows/ci.yml exists).  
-Medium – Cloud provider error handling – Cloud discovery modules (aws/provider.py, azure/provider.py) assume CLI tools are present; missing fallback could raise FileNotFoundError.  
-Low – License present – MIT license is included, no violation.  
-Low – Secrets exposure – No secret keys are hard‑coded; credentials are stored via OS keyring.  
-Medium – Tight coupling to Textual – UI logic (sqlit/cli.py) is intertwined with core connection handling, making headless usage harder without additional wrappers.</p><p>Overall, the repository follows a clear package layout, includes CI pipelines, and documents usage in the README. The primary gaps are reproducible dependency management and limited automated testing.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>sqlit delivers a functional, terminal‑first experience for managing and querying a wide range of databases with minimal setup. It is well‑structured and documented, making it suitable for solo developers or small teams that prefer CLI workflows. The main drawbacks are the lack of a lockfile and thin test coverage, which should be addressed before adopting it in environments where reproducible builds and high reliability are required.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who need quick, interactive access to many different SQL engines often launch heavyweight GUIs or VS Code extensions. The latency of those tools and the friction of configuring connection strings impede rapid debugging or ad‑hoc data inspection, especially when working from a terminal‑only environment.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>sqlit</code> provides a terminal‑UI (TUI) that discovers local Docker containers, reads OS key‑ring credentials, and talks to &gt; 20 database drivers. The main entry point is <strong><code>sqlit/cli.py</code></strong> (calls <code>main()</code> at line 467) which builds the textual UI, loads saved connections from <strong><code>sqlit/domains/connections/store/connections.py</code></strong>, and dispatches actions through the core action system (<code>sqlit/core/*</code>).</p>
+<p>Connection configuration lives in <strong><code>sqlit/domains/connections/domain/config.py</code></strong>, a hub module imported by 115 other files. Provider implementations (e.g., <strong><code>sqlit/domains/connections/providers/mysql/provider.py</code></strong>) expose a uniform <code>adapter</code> API used by the UI to open a DB cursor.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>sqlit/cli.py → main()</code>. <code>main()</code> constructs the textual app (<code>sqlit/domains/shell/app/main.py</code>) and registers commands. The most‑used internal functions are:</p>
+<ul><li><code>pause</code> – called from 131 places (e.g., UI waiting states).</li><li><code>query_one</code> – 129 callers (fetch‑single‑row actions).</li><li><code>_clear_leader_pending</code> – 98 callers (leader‑key state cleanup).</li></ul>
+<p><code>main()</code> → <code>compose()</code> (in <code>sqlit/domains/shell/app/main.py:1172</code>) builds the UI layout, then <code>run_cli()</code> (called 38 times) starts the event loop. User actions eventually invoke <code>connect()</code> (in <code>sqlit/core/connection_manager.py</code>) which:</p>
+<ol><li>Calls <code>get_option</code> → reads configuration from <code>config.py</code>.</li><li>Calls <code>_import_driver_module</code> → dynamically loads the provider package.</li><li>Opens a DB cursor (<code>cursor.execute</code>) – the only direct database write/read path (70 functions).</li></ol>
+<p>File system interaction occurs via <code>open()</code> calls in <code>main.py</code> (e.g., loading historic queries) and <code>write_restart_cache</code> (writes a cache file). External commands are run from <code>start → populate_credentials_if_missing → run_password_command</code> (uses <code>subprocess.run</code>).</p>
+<p>Import‑cycle analysis shows <strong><code>config.py</code></strong>, <strong><code>catalog.py</code></strong>, and <strong><code>model.py</code></strong> form a circular dependency (10 high‑severity cycles). Because <code>config.py</code> is the hub, any change there propagates to &gt; 115 modules, raising the blast radius for refactors. The oversized file <code>sqlit/domains/shell/app/main.py</code> (1,310 lines) contains deep nesting (max depth 7) and broad exception handling, which together increase cognitive load and risk of hidden bugs.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/sqlit
+cd sqlit
+
+# Install dependencies (uv is declared in pyproject.toml)
+uv pip install --editable .   # or: pip install -e .
+
+# Run the TUI
+python -m sqlit.cli          # entry point defined in sqlit/cli.py</code></pre>
+<p>Configuration files live under <code>config/</code> (e.g., <code>settings.template.json</code>). The first run creates <code>config/sqlit-config/settings.json</code> where saved connections are stored. No additional environment variables are required unless you need to point to a custom key‑ring backend.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer working on a microservice can start <code>sqlit</code> inside their dev container, let the Docker discovery pick up the service’s Postgres container, and run ad‑hoc queries without leaving the terminal. The UI’s Vim‑style keybindings let them filter results, copy rows, and edit queries on the fly, accelerating debugging cycles.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*.yml</code> uses tag references (<code>@v26</code>, <code>@v5</code>). Replace with commit SHAs.</li><li><strong>High – Discard exit codes</strong> – <code>.github/workflows/ci.yml</code> line 563 masks failures; let the step fail.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – no permissions block; add <code>permissions: contents: read</code>.</li><li><strong>Medium – No Dependabot</strong> – only one manifest (<code>pyproject.toml</code>); add <code>.github/dependabot.yml</code>.</li><li><strong>Medium – Unpinned base image</strong> – <code>tests/fixtures/d1/Dockerfile</code> uses <code>node:20-slim</code>; pin by digest.</li><li><strong>Medium – No vulnerability scan</strong> – add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Persist‑credentials true</strong> – checkout step keeps token; set <code>persist-credentials: false</code>.</li><li><strong>Medium – No non‑root user</strong> – Dockerfile runs as root; create an unprivileged user.</li><li><strong>Low – No job timeout</strong> – add <code>timeout-minutes</code> to CI jobs.</li></ul>
+<p>Additional findings from static analysis: 10 import cycles, a hub module with 115 dependents, two oversized files, many bare <code>except</code> blocks, and file handles opened without context managers.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>sqlit</code> delivers a functional, multi‑engine TUI that fills a clear niche for terminal‑centric database work. The codebase is feature‑rich but suffers from architectural hotspots (import cycles, large monolithic files) and several CI hygiene gaps that should be addressed before heavy production use. Engineers comfortable navigating Python import graphs and willing to refactor the hub module will find it a solid foundation for rapid data access.</p>
             </div>
 
             
@@ -112,11 +127,11 @@ Medium – Tight coupling to Textual – UI logic (sqlit/cli.py) is intertwined 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">790<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>140</b></li><li><span>JSON</span><i style="width:4%"></i><b>6</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li><li><span>Markdown</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>691</b></li><li><span>JSON</span><i style="width:1%"></i><b>6</b></li><li><span>YAML</span><i style="width:1%"></i><b>5</b></li><li><span>Markdown</span><i style="width:0%"></i><b>3</b></li><li><span>Terraform</span><i style="width:0%"></i><b>3</b></li><li><span>Shell</span><i style="width:0%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>Django</span></p>
+                        <p class="an-fw"><span>Django</span><span>Docker</span><span>Terraform</span></p>
                     </div>
                 </div>
 

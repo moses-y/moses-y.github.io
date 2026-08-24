@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 10, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,38 +79,60 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Business users need a way to let LLMs manipulate real Excel workbooks—reading data, applying formulas, and preserving formatting—without writing custom code for each spreadsheet. Existing “prompt‑only” solutions cannot guarantee that the generated changes are applied correctly inside Excel.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository ships two complementary components:</p><p>Excel MCP server – a lightweight Python server that exposes ~30 spreadsheet‑editing tools via Server‑Sent‑Events. The server is started with the example in demo/ExcelAssistant/server.py (see the runmcpserver coroutine in the README).  
- Excel Agent Runner – a Python wrapper (excelagent/agentrunner.py, excelagent/config.py) that sends a user instruction plus input‑/output file paths to the MCP endpoint and returns the LLM’s response.</p><p>A runnable web UI lives in demo/ExcelAssistant/. The front‑end is built with React/Vite (src/App.jsx, src/ChatSidebar.jsx) and talks to the Python backend via the SSE endpoint (http://127.0.0.1:8765/sse). A Slack‑based workflow is provided in demo/SlackExcelWorkflow/ (excelagentbot.py).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Python environment (as documented)
-conda create -n excel python=3.11
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> The repository supplies an Excel MCP server and an Excel‑AI agent runner that let LLMs read, edit, and automate spreadsheets, yet the codebase has no test suite, no CI/CD gate, and only a single lockfile‑free manifest.  A change can ship with no signal that existing behaviour still holds, so regressions reach production undetected.</p>
+<p><strong>What This Does</strong> The repo is a portfolio of four loosely‑coupled projects:</p>
+<ul><li><strong>excel_mcp</strong> (8 code files) – defines ~30 MCP tools (<code>excel_mcp/schemas.py</code>, <code>excel_mcp/excel_server.py</code>, <code>excel_mcp/helpers.py</code>) that expose read/write operations to a running server.</li><li><strong>excel_agent</strong> (4 code files) – contains the agent runner (<code>excel_agent/agent_runner.py</code>, <code>excel_agent/config.py</code>, <code>excel_agent/reasoning_models.py</code>) that orchestrates LLM calls, retries, and task execution.</li><li><strong>demo</strong> (15 files, 6 code files) – two demo fronts: a web‑based Excel Assistant (<code>demo/ExcelAssistant/</code>) and a Slack workflow (<code>demo/SlackExcelWorkflow/</code>).</li><li><strong>evals</strong> (304 files, mostly data) – a verification harness with SpreadsheetBench cases and comparison scripts (<code>evals/comparison.py</code>).</li></ul>
+<p>The two primary entry points are <code>chat</code> in <code>demo/ExcelAssistant/server.py:79</code> (reaches 21 functions, called from outside the repo) and <code>main</code> in <code>demo/SlackExcelWorkflow/excel_agent_bot.py:178</code> (reaches 30 functions, called once from the Slack handler).  The <code>lifespan</code> hook in <code>demo/ExcelAssistant/server.py:63</code> starts the MCP server on start‑up.</p>
+<p><strong>How It Is Wired</strong> Execution flows as follows:</p>
+<ol><li><strong>Entry → server start</strong> – <code>lifespan</code> launches the MCP SSE server (<code>excel_mcp/excel_server.py</code>) on <code>127.0.0.1:8765</code>.</li><li><strong>Agent runner</strong> – <code>ExcelAgentRunner.run_excel_agent</code> (<code>excel_agent/agent_runner.py</code>) sends a prompt to the LLM, then iteratively calls MCP tools (<code>get_sheet</code>, <code>set_range_data</code>, <code>auto_fill</code>, etc.).</li><li><strong>Tool actions</strong> – most functions end with <code>to_json</code> or <code>ToolError</code>; <code>ToolError</code> is invoked from 31 places, <code>to_json</code> from 30, indicating a broad error‑wrapping pattern.</li><li><strong>External side‑effects</strong> – <code>save_workbook_async</code> → <code>calculate_formulas</code> → <code>_calculate_formulas_excel_mac</code> (<code>subprocess.run</code>) writes the workbook back to disk; <code>run_evaluation</code> creates output directories (<code>main</code> path).</li></ol>
+<p>Key hubs and their import counts (Ca = callers, Ce = callees, instability = Ce/(Ca+Ce)):</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th class="num">Ca</th><th class="num">Ce</th><th class="num">Instability</th></tr></thead><tbody><tr><td><code>excel_mcp/excel_server</code></td><td class="num">4</td><td class="num">6</td><td class="num">0.6</td></tr><tr><td><code>excel_agent/agent_runner</code></td><td class="num">3</td><td class="num">4</td><td class="num">0.57</td></tr><tr><td><code>excel_agent/config</code></td><td class="num">4</td><td class="num">0</td><td class="num">0</td></tr><tr><td><code>excel_mcp/helpers</code></td><td class="num">2</td><td class="num">2</td><td class="num">0.5</td></tr><tr><td><code>excel_mcp/sessions</code></td><td class="num">2</td><td class="num">2</td><td class="num">0.5</td></tr></tbody></table></div>
+<p>The most connected functions are <code>ToolError</code> (31 callers), <code>to_json</code> (30), <code>get_sheet</code> (14), and <code>parse_range</code> (7).  Changing any of these ripples widely because of the high branching density and deep nesting described below.</p>
+<p><strong>How To Use It</strong></p>
+<p><em>Setup</em> (from <code>README.md</code>):</p>
+<pre data-lang="bash"><code>conda create -n excel
 conda activate excel
-pip install -r requirements.txt          # requirements.txt is in the repo root
-pip install -e .                        # installs excelmcp and excelagent packages
-Start the MCP server (example from README)
-python demo/ExcelAssistant/server.py    # runs the async SSE server on 127.0.0.1:8765
-Launch the web demo
-cd demo/ExcelAssistant
-npm install                               # reads demo/ExcelAssistant/package.json
-npm run dev                               # starts Vite dev server, opens index.html
-Run the agent programmatically
-python - &lt;&lt;&#39;PY&#39;
-import asyncio
-from excelagent.agentrunner import ExcelAgentRunner, TaskInput
-from excelagent.config import ExperimentConfig</p><p>runner = ExcelAgentRunner(
-    config=ExperimentConfig(model=&#39;openrouter:openai/gpt-5.1&#39;),
-    mcpserverurl=&quot;http://127.0.0.1:8765/sse&quot;,
-)</p><p>task = TaskInput(
-    instruction=&quot;Add a column that calculates profit = revenue - cost&quot;,
-    inputfile=&quot;samples/input.xlsx&quot;,
-    outputfile=&quot;samples/output.xlsx&quot;,
-)</p><p>result = asyncio.run(runner.runexcelagent(task))
-print(result)
-PY</p><p>The evaluation harness (evals/comparison.py) can be invoked similarly after installing the optional openpyxl/xlwings dependencies; it loads the verified SpreadsheetBench subset from evals/data/.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A financial reporting pipeline could call ExcelAgentRunner after nightly data export. The LLM receives a prompt such as “Reconcile the P&amp;L sheet and flag any negative margins,” the agent edits the workbook in place via the MCP tools, and the downstream ETL reads the resulting file. The Slack bot (demo/SlackExcelWorkflow/excelagentbot.py) provides an interactive “ask‑Excel” channel for non‑technical analysts.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No automated tests – there are no test.py or Jest files; code paths for the MCP server and agent runner are untested.  
- Medium – No CI/CD pipeline – repository lacks .github/workflows or other CI config, so quality gates are missing.  
- Low – Missing type hints – core modules (excelmcp/excelserver.py, excelagent/agent_runner.py) are pure Python without static typing, raising the risk of runtime errors.  
- Low – Sparse documentation – README covers demos but does not describe required environment variables for the MCP server (e.g., no .env.example).  
- Low – Front‑end build script not version‑pinned – vite.config.js references default Vite plugins; lockfile (package-lock.json) exists but no explicit Node version is enforced.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repo provides a functional proof‑of‑concept for LLM‑driven Excel manipulation, with a usable web demo and Slack integration. It is ready for exploratory pilots but lacks production‑grade safeguards (tests, CI, typed interfaces). Teams that can allocate engineering effort to add testing and CI will find the core idea solid; solo developers should treat it as a starting scaffold rather than a drop‑in solution.</p>
+conda install python=3.11
+pip install -r requirements.txt
+pip install -e .</code></pre>
+<p><em>Start the MCP server</em> (from <code>README.md</code>):</p>
+<pre data-lang="python"><code>import asyncio
+from excel_mcp.excel_server import mcp
+
+async def run_mcp_server():
+    await mcp.run_sse_async(host="127.0.0.1", port=8765)
+
+asyncio.run(run_mcp_server())</code></pre>
+<p><em>Run the Excel agent</em> (example from <code>README.md</code>):</p>
+<pre data-lang="python"><code>from excel_agent.agent_runner import ExcelAgentRunner, TaskInput
+from excel_agent.config import ExperimentConfig
+
+message = "your prompt to edit the file"
+input_file = Path("path/to/input.xlsx")
+output_file = Path("path/to/output.xlsx")
+
+runner = ExcelAgentRunner(
+    config=ExperimentConfig(model="openrouter:openai/gpt-5.1"),
+    mcp_server_url="http://127.0.0.1:8765/sse",
+)
+
+task_input = TaskInput(
+    instruction=message,
+    input_file=str(input_file),
+    output_file=str(output_file),
+)
+
+agent_response = await runner.run_excel_agent(task_input)</code></pre>
+<p><em>Configuration</em> – the model name is supplied to <code>ExperimentConfig</code>; no additional environment variables are required beyond what the package manager resolves.</p>
+<p><strong>Real‑World Use</strong> A finance team can ask an LLM to “add a quarterly totals row and format the header in bold,” the agent forwards the request to the MCP server, which calls <code>set_range_values</code> and <code>auto_fill</code>.  The runner retries on <code>ToolError</code>, and the resulting workbook is saved alongside the original, ready for downstream reporting.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<p><em>Measured static‑analysis findings</em> (15 total, 2 high, 13 medium, 0 low):</p>
+<ul><li><strong>Deep nesting x6</strong> – <code>excel_mcp/excel_server.py</code>, <code>excel_agent/agent_runner.py</code>, <code>excel_mcp/helpers.py</code>; max indentation depth 9 makes control flow hard to follow.</li><li><strong>Broad exception handling x5</strong> – <code>excel_mcp/excel_server.py</code>, <code>excel_mcp/models.py</code>, <code>excel_mcp/sessions.py</code>; bare <code>except</code> swallows errors indiscriminately.</li><li><strong>Oversized file x3</strong> – <code>excel_mcp/excel_server.py</code> (872 loc), <code>excel_mcp/helpers.py</code>, <code>demo/ExcelAssistant/src/App.jsx</code>; a single file holds too much logic, ripple effects are wide.</li><li><strong>High branching density</strong> – <code>excel_mcp/formatting.py</code>; 54 branch points over 170 lines, decision‑heavy logic should be decomposed.</li></ul>
+<p><em>Code‑health audit</em> (4 findings, each with a prescribed fix):</p>
+<ul><li><strong>[HIGH] Add a test suite</strong> – 20 source files, no test files exist; any change ships without regression signal.</li><li><strong>[HIGH] Commit a lockfile beside the manifest</strong> – <code>pyproject.toml</code> has no corresponding lockfile; tested artifact may differ from shipped artifact.</li><li><strong>[HIGH] Add a CI/CD workflow</strong> – no CI configuration; every merge runs untested.</li><li><strong>[MEDIUM] Enable Dependabot or Renovate</strong> – 3 manifest files, no update bot configured; advisories remain unpatched until manual audit.</li></ul>
+<p><strong>The Bottom Line</strong> The repo delivers a functional Excel‑MCP server and agent runner that can automate spreadsheet tasks via LLMs, and the evaluation harness gives concrete performance data.  However, the absence of tests, CI, and a lockfile makes production‑grade changes risky, and the codebase suffers from deep nesting, broad exception handling, and oversized files that hinder maintenance.  It is suitable for prototyping or internal tooling where the above gaps can be tolerated, but not for open‑source or regulated deployment without addressing the health findings.</p>
             </div>
 
             
@@ -127,9 +149,9 @@ PY</p><p>The evaluation harness (evals/comparison.py) can be invoked similarly a
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">341<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>4</b></li><li><span>JSON</span><i style="width:75%"></i><b>3</b></li><li><span>Python</span><i style="width:75%"></i><b>3</b></li><li><span>CSS</span><i style="width:75%"></i><b>3</b></li><li><span>JSX</span><i style="width:75%"></i><b>3</b></li><li><span>HTML</span><i style="width:25%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>16</b></li><li><span>Markdown</span><i style="width:25%"></i><b>4</b></li><li><span>JSON</span><i style="width:19%"></i><b>3</b></li><li><span>CSS</span><i style="width:19%"></i><b>3</b></li><li><span>JSX</span><i style="width:19%"></i><b>3</b></li><li><span>HTML</span><i style="width:6%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Express</span></p>
                     </div>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 11, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#generate-evaluation-traces">Generate evaluation traces</a><a href="#grade-the-traces">Grade the traces</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers building Gemini Enterprise agents must juggle several Google Cloud services (Agent Runtime, Cloud Run, GKE, BigQuery, Cloud Trace) and a fragmented set of CLIs. The manual wiring of scaffolding, evaluation pipelines, CI/CD, and observability creates friction and errors, especially for teams that rely on a coding assistant rather than deep platform expertise.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>agents-cli supplies a single Python‑based command line that wraps the full agent lifecycle. The core entry point is src/google/agents/cli/main.py, which registers sub‑commands defined in modules such as src/google/agents/cli/scaffold/, src/google/agents/cli/eval/, and src/google/agents/cli/deploy/.</p><p>Scaffolding templates live under src/google/agents/cli/scaffold/basetemplates/ (e.g., Go, Java, Python ADK) and include Dockerfiles, Makefiles, and Terraform modules (shared/deployment/terraform/). The skills/ directory ships ready‑to‑install skill packs (e.g., google-agents-cli-deploy) that a coding assistant can load via npx skills add google/agents-cli.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Prereqs: Python 3.11+, uv (https://astral.sh/uv)
-uvx google-agents-cli setup          # installs the CLI and registers the skill packs
-Alternative installation via PyPI
-pip install google-agents-cli</p><p>The setup command is defined in src/google/agents/cli/click.py and wires the skill bundles into the host agent.</p><h3 class="post-h" id="configuration">Configuration</h3><p>GCP authentication – the CLI expects the standard Google SDK env var GOOGLEAPPLICATIONCREDENTIALS pointing at a service‑account key file (referenced in src/google/agents/cli/gcpproject.py).  
-Project defaults – edit src/google/agents/cli/project.py or pass --project flags to commands; no dedicated config file is shipped.</p><h3 class="post-h" id="running">Running</h3><p>Create a new agent project (Python ADK scaffold)
-agents-cli scaffold my‑agent --template python</p><h3 class="post-h" id="generate-evaluation-traces">Generate evaluation traces</h3><p>agents-cli eval generate --dataset path/to/dataset.json</p><h3 class="post-h" id="grade-the-traces">Grade the traces</h3><p>agents-cli eval grade --traces ./traces/</p><p>Deploy to Cloud Run (or GKE) using the built Terraform stack
-agents-cli deploy --target cloud-run</p><p>Each sub‑command maps directly to a module in src/google/agents/cli/ (e.g., eval/, deploy/).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can automate model iteration:
-Scaffold a new agent
-agents-cli scaffold sentiment‑bot --template python
-Run the agent against a curated test set
-agents-cli eval generate --dataset data/sentiment.json
-Grade with LLM‑as‑judge and export metrics
-agents-cli eval grade --traces ./traces/ --output metrics.json
-Push the best‑scoring version to production
-agents-cli deploy --target cloud-run --region us-central1</p><p>The workflow is fully reproducible; all Terraform files under basetemplates/shared/deployment/terraform/ provision the required Cloud Run service, IAM bindings, and logging sinks.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><div class="table-scroll"><table><thead><tr><th>Severity</th><th>Issue</th></tr></thead><tbody><tr><td>Low</td><td>Missing CI for tests – only a docs workflow (.github/workflows/docs.yml) exists; no GitHub Actions run the 14 test files.</td></tr><tr><td>Low</td><td>Configuration documentation – env‑var requirements are implied but not enumerated in README or a sample .env for the Python CLI.</td></tr><tr><td>Medium</td><td>Error handling in GCP calls – modules like gcpproject.py raise generic exceptions without retry logic; failures may surface as uncaught errors during deploy.</td></tr><tr><td>Low</td><td>License present (LICENSE) and extensive docs (docs/), indicating good governance.</td></tr><tr><td>Low</td><td>Dependency hygiene – Python dependencies are declared in docs/pyproject.toml (used for docs tooling) but the CLI’s runtime requirements are not clearly listed; a requirements.txt or pyproject.toml at the repo root would improve reproducibility.</td></tr></tbody></table></div><p>Overall the repository is well‑structured, with modular Python code, rich documentation, and ready‑to‑use scaffolds. The primary gaps are the lack of automated test CI and clearer runtime dependency specifications.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>agents-cli consolidates the fragmented tooling required to build, evaluate, and deploy Gemini Enterprise agents, making it practical for teams that rely on coding assistants. It is production‑ready for organizations comfortable managing GCP credentials and willing to supplement the missing CI pipeline. Solo developers may find the setup overhead (Terraform, Docker, multiple language templates) heavier than needed for simple prototypes.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building Gemini Enterprise agents must juggle many Google‑Cloud services (Cloud Run, GKE, Terraform, CI/CD) and keep the tooling in sync with the coding assistant they use. Manually wiring authentication, scaffolding, evaluation, and deployment scripts is error‑prone and slows iteration.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>agents-cli</code> supplies a single Python‑based command line that bundles <strong>scaffolding</strong>, <strong>evaluation</strong>, <strong>deployment</strong>, and <strong>observability</strong> primitives for agents. The source tree groups related concerns:</p>
+<ul><li><code>src/google/agents/cli/main.py</code> – top‑level CLI entry point (<code>agents-cli …</code>).</li><li><code>src/google/agents/cli/_runner.py</code> – core command dispatcher (<code>run</code>, <code>run_resolved</code>).</li><li><code>src/google/agents/cli/scaffold/</code> – templates for Go, Java, Python, TypeScript projects and the <code>create</code>, <code>enhance</code>, <code>upgrade</code> commands.</li><li><code>src/google/agents/cli/eval/</code> – dataset handling, trace generation, grading, and metric calculation.</li><li><code>src/google/agents/cli/deploy/</code> – runtime building, secret parsing, and GKE/Cloud‑Run deployment helpers.</li><li><code>src/google/agents/cli/infra/</code> – CI/CD Terraform generation and GitHub‑Actions utilities.</li></ul>
+<p>Documentation lives under <code>docs/</code> and the agent‑specific <strong>skills</strong> are shipped in <code>skills/</code> for direct consumption by coding assistants.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <code>src/google/agents/cli/main.py</code> at line 80 (<code>main</code>). <code>main</code> parses the invoked sub‑command and eventually calls <code>run</code> from <code>src/google/agents/cli/_runner.py</code> (line 47).</p>
+<ul><li><code>run</code> → <code>run_resolved</code> (12 distinct callers) → <code>subprocess.run</code> (external command) – this is the only path that leaves the process, used for invoking tools like <code>gcloud</code>, <code>uv</code>, or Docker.</li><li>The dispatcher (<code>run</code>) also calls utility functions such as <code>require_tool</code> (12 callers) and <code>read_project_config</code> (12 callers) from <code>_tools.py</code> and <code>_project.py</code>.</li><li><code>read_project_config</code> loads the project manifest (<code>pyproject.toml</code> in <code>docs/</code>) and feeds data to scaffold commands (<code>create</code>, <code>enhance</code>, <code>upgrade</code>).</li><li>Scaffold commands live in <code>src/google/agents/cli/scaffold/commands/</code>. The most connected module is <code>scaffold/commands/enhance</code> (imports 10 others, no inbound imports) and <code>scaffold/commands/create</code> (2 inbound, 5 outbound). Both rely heavily on <code>scaffold/utils/template.py</code> (30 functions, 3 callers) for file copying, conditional inclusion, and dependency injection.</li><li><code>scaffold/utils/template.py</code> participates in a circular import with <code>scaffold/utils/remote_template.py</code>; breaking this cycle would reduce the instability of those two modules (instability 0.6/0.33).</li><li>Evaluation commands (<code>eval/cmd_*</code>) ultimately call <code>eval_utils.py</code> and <code>optimize_utils.py</code>, which invoke model inference (9 functions across the repo).</li><li>Deployment (<code>deploy/cmd_deploy.py</code>) calls <code>deploy/agent_runtime.py</code>, which builds environment variables and may invoke a model for secret handling (<code>parse_secrets</code>).</li></ul>
+<p>The internal call graph shows 704 resolved edges, with the highest‑fan‑out functions (<code>run_resolved</code>, <code>run</code>, <code>find_project_root</code>) called from 20+ locations, indicating they are change‑impact hotspots.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/agents-cli
+cd agents-cli
+
+# Install the CLI and its skills (requires uv)
+uvx google-agents-cli setup</code></pre>
+<p><em>Configuration</em> – The CLI expects Google Cloud ADC credentials (<code>gcloud auth application-default login</code>) and, for Gemini Enterprise, an API key placed in <code>~/.config/gemini/api_key</code>. The scaffold templates read optional <code>.env.example</code> files in <code>src/google/agents/cli/scaffold/base_templates/*</code> for local development.</p>
+<p><em>Scaffolding a new agent</em></p>
+<pre data-lang="bash"><code>agents-cli scaffold my-agent
+# creates a project under ./my-agent using the selected language template</code></pre>
+<p><em>Running evaluation</em></p>
+<pre data-lang="bash"><code>cd my-agent
+agents-cli eval generate   # produces trace files
+agents-cli eval grade      # scores the traces</code></pre>
+<p><em>Deploying</em></p>
+<pre data-lang="bash"><code>agents-cli deploy          # builds Docker image, pushes to Artifact Registry,
+                           # and creates GKE or Cloud Run resources via Terraform</code></pre>
+<p>All commands are defined under <code>src/google/agents/cli/</code> and invoked through the <code>agents-cli</code> entry point.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can ask their coding assistant to “create a Gemini agent that classifies support tickets”. The assistant runs <code>agents-cli scaffold</code> to generate a Python ADK project, adds evaluation datasets via <code>agents-cli eval generate</code>, iterates locally, then runs <code>agents-cli deploy</code> to push the container to Cloud Run with Terraform‑managed IAM and monitoring. The entire lifecycle is driven by the same CLI, reducing context‑switching and manual cloud‑setup.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions use mutable tags (<code>astral-sh/setup-uv@v6</code>). Pin to commit SHA.</li><li><strong>HIGH</strong> – No lockfile alongside <code>docs/pyproject.toml</code>; generate and commit one.</li><li><strong>HIGH</strong> – CI workflow does not run the test suite despite 37 test files. Add a test step.</li><li><strong>MEDIUM</strong> – Dependabot not configured; add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – Dockerfiles use mutable base images (<code>golang:1.26-alpine</code>, <code>distroless/static-debian12</code>). Pin by digest.</li><li><strong>MEDIUM</strong> – No vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Containers run as root; add a non‑root <code>USER</code>.</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li><li><strong>LOW</strong> – Missing convention files (<code>.editorconfig</code>, formatter config).</li></ul>
+<p>Static analysis also reports 21 deep‑nesting hotspots, 13 broad exception catches, and two import cycles (<code>template.py</code> ↔ <code>remote_template.py</code>). These increase cognitive load and risk of regression when modifying scaffold utilities.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>agents-cli</code> provides a cohesive, language‑agnostic workflow for building, testing, and deploying Gemini Enterprise agents, with a clear entry point and well‑structured command modules. However, the codebase suffers from high‑impact health issues (unpinned CI actions, missing lockfile, absent test execution) and architectural smells (deep nesting, import cycles) that should be addressed before using it in production environments. Teams comfortable fixing those gaps will find the CLI a practical bridge between coding assistants and Google Cloud agent services.</p>
             </div>
 
             
@@ -112,11 +133,11 @@ agents-cli deploy --target cloud-run --region us-central1</p><p>The workflow is 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">336<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>63</b></li><li><span>Markdown</span><i style="width:97%"></i><b>61</b></li><li><span>YAML</span><i style="width:32%"></i><b>20</b></li><li><span>Terraform</span><i style="width:27%"></i><b>17</b></li><li><span>Go</span><i style="width:10%"></i><b>6</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>104</b></li><li><span>Markdown</span><i style="width:67%"></i><b>70</b></li><li><span>Terraform</span><i style="width:43%"></i><b>45</b></li><li><span>YAML</span><i style="width:34%"></i><b>35</b></li><li><span>JSON</span><i style="width:9%"></i><b>9</b></li><li><span>Java</span><i style="width:7%"></i><b>7</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span><span>Terraform</span></p>
+                        <p class="an-fw"><span>React</span><span>Flask</span><span>Spring</span><span>Docker</span><span>Terraform</span></p>
                     </div>
                 </div>
 

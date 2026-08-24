@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>August 13, 2026</span>
                     <span>4 min read</span>
-                    <span class="post-language">Python</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>open second brain</h1>
@@ -80,10 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents working with Obsidian vaults lack a deterministic memory layer that survives across sessions. Without structured persistence, project context gets lost between interactions, and corrections made during one session vanish in the next. Agents either rely on fragile conversation history or fail to persist structured knowledge that humans can also read and version.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Open Second Brain provides a local-first memory layer that stores preferences, signals, and evidence as plain Markdown files within Brain/ directories in your Obsidian vault. The system consists of a Python CLI (cli.py) with adapters for Claude Code, Codex, and OpenClaw, plus an MCP server for extensibility. Configuration lives in brain.yaml at the vault root, which declares write prefixes and authority boundaries. The 1.44.0 release fixed critical bugs including entity extraction failures on non-Latin scripts (Chinese, Thai, Lao) that caused cubic indexing slowdowns, and transient search index failures that silently triggered full rebuilds wiping all embeddings. The project structure shows docs/ contains 179 design and architecture files, while the root contains cli.py, init.py, and plugin configurations including .claude-plugin/plugin.json, .codex-plugin/plugin.json, and .mcp.json.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via the package&#39;s Python dependencies. The presence of pyproject.toml and bunfig.toml suggests both Python and Bun/Node tooling are involved, but the primary entry point is cli.py. No explicit install command appears in the excerpt, so verify the package is pip-installable or check for a local development setup.</p><p>Configuration: Create brain.yaml at the vault root to declare path prefixes and authority for agent writes. The README notes you can declare which path prefixes a caller-named write may touch, enabling controlled boundary enforcement.</p><p>Running it: Invoke the CLI with python cli.py or via the entry point. The system integrates with Hermes Agent and provides MCP server capabilities for tool integration beyond the built-in adapters.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>An AI agent receives a user query about a codebase feature. Instead of losing context after the response, the agent extracts entities from the interaction and writes them to Brain/decision-log.md in the user&#39;s Obsidian vault via the brain.yaml-defined prefix. The next day, a different session reads that same .md file to recall the prior decision, searches it with grep, or version-controls the change via git—all without a daemon running or external vector store charged.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Bugs / risks: The 1.44.0 CHANGELOG documents two significant bugs: entity extraction backtracking on unbroken letter sequences (affecting CJK text indexing performance), and transient search index failures classified as corruption that trigger silent full rebuilds, potentially losing all embeddings. These are documented in CHANGELOG.md and suggest the indexing pipeline needs stronger error boundaries.
-SDLC &amp; code violations: Only 1 test file is present despite 200 total files. CI/CD is configured via GitHub Actions (ci.yml, release.yml), but no license file was detected in the file listing. The codebase has extensive documentation (182 doc files in docs/) but the test coverage is minimal. Dependency hygiene appears unremarkable but should be verified against the pyproject.toml and lockfiles.
-Configuration gaps: The brain.yaml file is referenced but not present in the repo structure—it must be created by users in their own Obsidian vaults, which creates an implicit onboarding step not captured in the codebase itself.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a functional local-first memory layer for Hermes Agent users who already live in Obsidian and want their AI agent to retain context across sessions. The code is structurally sound with comprehensive design documentation, but low test coverage and the two documented indexing bugs from 1.44.0 warrant caution for production use until those stability issues are resolved. Best suited for individual researchers or small teams comfortable with Obsidian workflows who need persistent agent memory without external dependencies.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents need a deterministic, version‑controlled place to store context and preferences. Current vector‑store approaches hide data in opaque binaries, making audit, diffing, and manual correction difficult. Teams using Obsidian already keep knowledge in plain Markdown – they lack a thin, local‑first layer that lets an agent read/write that vault safely and reproducibly.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>open-second-brain</code> ships a set of CLI and MCP (Memory‑Control‑Protocol) tools that treat an Obsidian vault as the single source of truth. The core logic lives under <code>src/cli/brain/</code> (e.g., <code>src/cli/brain/verbs/index.ts</code> defines the verb dispatcher) and under <code>src/core/brain/</code> where policies, time handling, and the atomic file helper <code>src/core/fs-atomic.ts</code> reside.</p>
+<p>Adapters for Claude, Codex and OpenClaw are in <code>plugins/</code> – each provides a <code>cli.py</code> that registers the provider with the Hermes Agent (<code>plugins/hermes/provider.py</code>). The memory layer persists everything as <code>.md</code> files under <code>Brain/</code> in the vault, so normal Git workflows, search, and manual edits remain possible.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the concrete entry points:</p>
+<ul><li><strong><code>plugins/hermes/cli.py</code></strong> – <code>run</code> is invoked by the Hermes Agent. It calls <code>_status</code> → <code>resolve_vault</code> → <code>_config_value</code> → <code>_config_text</code>, which reads the vault configuration file (<code>_config_text</code> uses <code>path.read_text</code>).</li><li><strong><code>src/cli/main.ts</code></strong> – the top‑level Node CLI parses arguments (<code>src/cli/argparse.ts</code>) and dispatches to the verb map in <code>src/cli/brain/verbs/index.ts</code>. That module imports 120 other verb implementations, making it the most outward‑facing hub (instability = 1).</li></ul>
+<p>The internal call graph shows that the most widely used functions are:</p>
+<ul><li><code>FakeBrainBridge</code> – called from <strong>35</strong> places.</li><li><code>_init</code> – called from <strong>17</strong> places.</li><li><code>OpenSecondBrainMemoryProvider</code> – called from <strong>14</strong> places.</li></ul>
+<p>These functions sit in <code>plugins/hermes/provider.py</code> and <code>src/core/brain/</code>, and any change propagates to many callers.</p>
+<p>Filesystem interaction occurs in 12 functions (e.g., <code>_config_text</code>, <code>src/core/fs-atomic.ts</code>), external commands in 2 functions (<code>plugins/hermes/bridge.py</code> runs the agent binary), and network calls in 3 functions (e.g., <code>call_tool</code> in <code>plugins/hermes/bridge.py</code>).</p>
+<p>A circular import exists between <code>plugins/hermes/cli.py</code> and <code>plugins/hermes/__init__.py</code>; breaking it would reduce the risk of import‑time side effects. The duplicated 720 six‑line blocks across <code>hooks/</code> and <code>plugins/</code> indicate that shared helpers should be extracted to a common module.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/open-second-brain
+cd open-second-brain
+
+# Install TypeScript dependencies
+npm install   # reads package.json (no lockfile)
+
+# Install Python dependencies
+pip install -e .   # reads pyproject.toml
+
+# Configure the vault location (example)
+export O2B_VAULT_PATH=/path/to/obsidian/vault
+
+# Register the provider with Hermes Agent
+python -m plugins.hermes.cli run</code></pre>
+<p>The <code>plugins/hermes/cli.py</code> script registers the memory provider; the Node CLI (<code>npm run start</code> → <code>src/cli/main.ts</code>) can be used for ad‑hoc commands such as <code>o2b brain snapshot</code>. No Dockerfile or pre‑built binary is supplied, so the above local install is the only supported path.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A development team stores design notes in Obsidian. By adding the Hermes plugin (<code>plugins/hermes/cli.py</code>) to their CI pipeline, each test run invokes <code>o2b brain snapshot</code> to capture the current context. The agent can later retrieve that snapshot via <code>call_tool</code> to answer questions about prior decisions, with the entire audit trail available as Git‑tracked Markdown.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Measured findings</strong> (static analysis)</li><li><strong>HIGH – Hub module</strong>: <code>src/core/fs-atomic.ts</code> imported by 148 modules – keep it stable, move volatile logic out.</li><li><strong>HIGH – Duplicated code</strong>: 720 repeated 6‑line blocks across 179 files – extract shared helpers.</li><li><strong>MEDIUM – High branching density</strong>: <code>src/cli/argparse.ts</code>, <code>src/core/path-safety.ts</code>, <code>src/mcp/coerce.ts</code> have &gt;20 branches in &lt;80 lines – consider strategy tables.</li><li><strong>MEDIUM – Deep nesting</strong>: <code>src/mcp/instructions.ts</code> depth 7 – flatten with guard clauses.</li><li><strong>HIGH – Import cycle</strong>: <code>plugins/hermes/cli.py</code> ↔ <code>plugins/hermes/__init__.py</code> – break by moving shared types.</li><li><strong>MEDIUM – Broad exception handling</strong>: <code>plugins/hermes/__init__.py</code> uses bare <code>except</code> – catch specific errors.</li></ul>
+<ul><li><strong>Repository hygiene</strong></li><li>No lockfile for npm (<code>package.json</code> only) – builds are non‑reproducible.</li><li>CI exists (<code>.github/workflows/ci.yml</code>) but lacks pinned actions, dependency scanning, and job timeouts.</li></ul>
+<ul><li><strong>Code‑health audit</strong> (high‑confidence)</li><li><strong>HIGH</strong> – Pin GitHub Actions to commit SHA (e.g., <code>oven-sh/setup-bun@v2</code>).</li><li><strong>MEDIUM</strong> – Enable Dependabot (<code>.github/dependabot.yml</code>).</li><li><strong>MEDIUM</strong> – Add dependency‑vulnerability scan to CI.</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs.</li><li><strong>LOW</strong> – Add <code>.editorconfig</code>, <code>.gitattributes</code>, and formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>open-second-brain</code> provides a transparent, Markdown‑based memory layer that plugs directly into Hermes Agent, making context auditability trivial. The codebase is functional but concentrates risk in a few hub modules, contains duplicated logic, and lacks reproducible builds and robust CI safeguards. It is suitable for teams comfortable editing the core TypeScript/Python code and willing to address the identified hygiene gaps before production use.</p>
             </div>
 
             
@@ -100,11 +135,11 @@ Configuration gaps: The brain.yaml file is referenced but not present in the rep
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,597<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>183</b></li><li><span>JSON</span><i style="width:3%"></i><b>6</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li><li><span>Python</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>1966</b></li><li><span>Markdown</span><i style="width:28%"></i><b>555</b></li><li><span>JSON</span><i style="width:1%"></i><b>21</b></li><li><span>Python</span><i style="width:1%"></i><b>13</b></li><li><span>YAML</span><i style="width:0%"></i><b>4</b></li><li><span>TOML</span><i style="width:0%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -149,6 +184,12 @@ Configuration gaps: The brain.yaml file is referenced but not present in the rep
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1333126527">Open in Code Brain &rarr;</a>
