@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 13, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>MixTeX-Latex-OCR addresses the pain point of efficiently recognizing LaTeX formulas, tables, and mixed text in a local offline environment on Windows, without requiring GPU resources.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository provides a multimodal LaTeX recognition system, with the mixtexgui directory containing the main application code, including mixtexui.py and mixtexui.spec. The demo directory showcases the system&#39;s capabilities, while mixtexdatagen contains data generation scripts, such as gen.py. The requirements.txt files in the root and mixtexgui directories specify the dependencies required to run the application.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using MixTeX-Latex-OCR would be in an academic or research setting, where users need to recognize and convert complex LaTeX formulas or tables from images or screenshots. For example, a user could use the pyinstaller command to build the application, as specified in the mixtex_ui.spec file, and then run the resulting executable to recognize LaTeX formulas in an image.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) - No CI/CD pipeline detected, which could lead to inconsistent builds and testing - .github/ or CI config files are missing.
- Low (Risk) - Dependencies declared without a lockfile, which could result in non-reproducible builds - mixtexgui/requirements.txt and requirements.txt files do not specify exact dependency versions.
-However, the repository does contain tests (e.g., mixtexgui/examples/example.py) and documentation (e.g., README.md and User Manual&amp;Terms of Service.md), indicating a decent level of code hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MixTeX-Latex-OCR is a useful tool for recognizing LaTeX formulas and tables in a local offline environment. While it has some areas for improvement, such as the lack of a CI/CD pipeline, the repository demonstrates a good level of code organization and documentation. This project is well-suited for users who need to perform LaTeX recognition tasks without relying on internet connectivity or GPU resources.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users on Windows need a lightweight, offline OCR tool that can turn images of LaTeX formulas, tables, and mixed Chinese‑English text into editable source. Existing solutions either require a GPU, depend on cloud APIs, or lack a simple desktop UI, making them unsuitable for confidential or low‑spec environments.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>MixTeX‑Latex‑OCR</code> bundles a CPU‑only inference pipeline with a small PyQt UI. The core OCR logic lives in <code>mixtex_data_gen/gen.py</code>; the desktop front‑end is in <code>mixtexgui/mixtex_ui.py</code>.</p>
+<ul><li><code>mixtex_data_gen/gen.py</code> provides the text‑processing chain (<code>remove_non_english_characters</code>, <code>extract_latex_formulas</code>, <code>process_text</code>, <code>remove_symbols</code>, <code>format_text_with_latex</code>) and writes the final LaTeX strings to disk via <code>write_strings_to_files</code>.</li><li><code>mixtexgui/mixtex_ui.py</code> implements the UI callbacks that load images, resize them (<code>scale_size</code>), and invoke the inference routine (<code>stream_inference</code> from <code>mixtexgui/examples/mixtex_core.py</code>).</li><li><code>mixtexgui/examples/mixtex_core.py</code> houses the model loader (<code>load_model</code>), preprocessing helpers (<code>pad_image</code>, <code>check_repetition</code>), and the actual inference entry point (<code>stream_inference</code>).</li></ul>
+<p>All heavy lifting stays in these three files; the remaining scripts (<code>examples/example.py</code>, <code>example_streamlit.py</code>) are thin wrappers for demo purposes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>entry point</strong> <code>main</code> in <code>mixtex_data_gen/gen.py:162</code>. <code>main</code> orchestrates a linear pipeline:</p>
+<ol><li><strong>Read input</strong> – (not shown directly, but <code>main</code> eventually calls <code>write_strings_to_files</code>).</li><li><strong>Process text</strong> – calls <code>remove_non_english_characters</code>, <code>extract_latex_formulas</code>, <code>process_text</code>, <code>remove_symbols</code>, <code>format_text_with_latex</code>.</li><li><strong>Persist result</strong> – <code>write_strings_to_files</code> creates output directories with <code>os.makedirs</code> and writes the LaTeX strings.</li></ol>
+<p>The UI path begins in <code>mixtexgui/mixtex_ui.py</code>. The class <code>MixTeXApp</code> (<code>__init__</code>) constructs the window and registers callbacks. When a user drops an image or clicks “Run”:</p>
+<ul><li><code>show_feedback_options</code> → <code>handle_feedback</code> (4 calls) – displays status messages.</li><li><code>add_annotation</code> → <code>scale_size</code> (4 calls) – rescales the image for the model.</li><li><code>update_annotation_position</code> → <code>scale_size</code> (2 calls) – keeps UI annotations aligned after scaling.</li><li><code>update_icon</code> → <code>load_scaled_image</code> (2 calls) – loads the raster for display.</li></ul>
+<p><code>scale_size</code> is the <strong>hub</strong>: invoked from 6 distinct locations, making it the function with the widest blast radius. It ultimately feeds the pre‑processed image to <code>stream_inference</code> in <code>mixtex_core.py</code>, which loads the model (<code>load_model</code>), pads the image (<code>pad_image</code>), checks for duplicate content (<code>check_repetition</code>), and runs the inference graph.</p>
+<p>No network calls appear; the only external effect is filesystem I/O (<code>os.makedirs</code>, file writes in <code>write_strings_to_files</code>). The internal call graph contains 38 resolved edges, all confined to the three core modules, so changes to <code>scale_size</code> or <code>load_model</code> ripple through most UI actions.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/MixTeX-Latex-OCR
+cd MixTeX-Latex-OCR/mixtexgui
+
+# Create the conda environment (Python 3.10.14)
+conda create -n mixtex python=3.10.14
+conda activate mixtex
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Build the executable (optional, for distribution)
+pyinstaller mixtex_ui.spec</code></pre>
+<p>Running the UI:</p>
+<pre data-lang="bash"><code># After building, the executable is in ./dist/
+./dist/mixtex_ui.exe</code></pre>
+<p>For a quick script test, run the demo generator:</p>
+<pre data-lang="bash"><code>python ../mixtex_data_gen/gen.py</code></pre>
+<p>No environment variables or external services are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research lab processes scanned exam sheets containing handwritten equations and tables. They drop each image onto the MixTeX window; the UI rescales the bitmap (<code>scale_size</code>), runs CPU inference (<code>stream_inference</code>), and writes a <code>.tex</code> file (<code>write_strings_to_files</code>). The lab then compiles the LaTeX batch without ever sending data to the cloud.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – Dependabot missing</strong> – two manifest files (<code>requirements.txt</code>, <code>mixtexgui/requirements.txt</code>) have no automated update bot.</li><li><strong>MEDIUM – Deep nesting</strong> – <code>mixtexgui/mixtex_ui.py</code> and <code>mixtex_data_gen/gen.py</code> reach 8 levels of indentation, reducing readability.</li><li><strong>MEDIUM – File opened without context manager</strong> – <code>mixtexgui/examples/example.py</code> and <code>example_streamlit.py</code> use plain <code>open()</code>.</li><li><strong>MEDIUM – Duplicated code blocks</strong> – identical 6‑line snippets appear in the two example scripts.</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>mixtex_data_gen/gen.py</code> catches all exceptions, potentially hiding errors.</li><li><strong>MEDIUM – High branching density</strong> – <code>mixtex_data_gen/gen.py</code> contains 35 branch points in 124 lines, making future extensions error‑prone.</li></ul>
+<p>No CI pipeline, Dockerfile, or lockfile is present; the repository includes a LICENSE but no secret leakage was detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MixTeX delivers a functional, CPU‑only OCR pipeline with a usable Windows UI, suitable for teams that need offline LaTeX extraction without GPU hardware. The codebase is small but suffers from readability and maintainability issues (deep nesting, broad catches) and lacks automation for dependency updates. Engineers comfortable with Python and PyQt can adopt it quickly, but should refactor the hot‑spot functions (<code>scale_size</code>, <code>stream_inference</code>) before heavy customization.</p>
             </div>
 
             
@@ -102,7 +139,7 @@ However, the repository does contain tests (e.g., mixtexgui/examples/example.py)
                         <span class="an-lab">Composition</span>
                         <div class="an-score">28<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>5</b></li><li><span>Markdown</span><i style="width:80%"></i><b>4</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>5</b></li><li><span>Markdown</span><i style="width:80%"></i><b>4</b></li><li><span>Jupyter Notebook</span><i style="width:20%"></i><b>1</b></li>
                         </ul>
                         
                     </div>
@@ -128,7 +165,7 @@ However, the repository does contain tests (e.g., mixtexgui/examples/example.py)
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">2 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

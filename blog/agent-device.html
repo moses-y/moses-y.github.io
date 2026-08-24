@@ -79,9 +79,44 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>Controlling mobile devices with precision from the command line has long been a challenge for developers and researchers building AI agents that interact with real-world apps. Most existing solutions are either platform-specific, rely on clunky GUIs, or demand heavy dependencies and complex setups. Imagine you’re developing an AI agent that needs to navigate a mobile app, trigger alerts, or capture screenshots — all without manual intervention or fragile scripting. This is the gap agent-device aims to bridge: providing seamless, low-dependency device automation for both iOS and Android, directly from the CLI, as a foundation for higher-level agent workflows.</p><p>Agent-device distinguishes itself by focusing on minimalism and universality. Inspired by Vercel’s agent-browser, but tailored for mobile platforms, this project exposes a unified command suite covering both iOS and Android, with direct Node.js execution — no transpilation or build step required. The commands are ergonomically designed: you can open apps, simulate interactions like presses or typing, inspect UI accessibility trees, and even manipulate device settings like Wi-Fi or airplane mode. What’s compelling is the deliberate avoidance of heavy frameworks; everything is driven via platform tooling like adb for Android and simctl/devicectl for iOS, with rich snapshot and inspection features that are usually missing from open-source mobile automation tools.</p><p>Architecturally, agent-device leverages a hybrid approach to device interaction, evident from its file structure. The CLI entrypoint, bin/agent-device.mjs, is written in TypeScript and executed directly on Node 22+, which is a strategic choice for speed and maintainability. On the iOS side, you’ll find a native Swift runner (ios-runner/AgentDeviceRunner) and an AXSnapshot module — the latter exposing accessibility tree snapshots via AX and XCTest backends. The hybrid snapshot logic described in the README is implemented by first querying AX (fast but sometimes incomplete) and then supplementing with scoped XCTest queries, yielding a more reliable UI tree. The iOS runner is built as an Xcode project, including test suites (AgentDeviceRunnerUITests/RunnerTests.swift) and asset catalogs; this modularity allows for easy extension and debugging, a design pattern rarely seen in cross-platform CLI tools. Meanwhile, Android interactions are orchestrated via adb, with all device commands abstracted behind the CLI. The documentation (docs/ios-automation.md, docs/ios-runner-protocol.md) clarifies the protocol and integration points, which will be useful for contributors or those extending the tool.</p><p>Developers working on AI agents that need to interact with real devices (or simulators/emulators) will immediately see the value in agent-device. For instance, you might be building a reinforcement learning agent that adapts its strategy based on app state — the snapshot command gives you a stable, semantic map of the UI, and actions like click or type can be targeted by accessibility refs rather than brittle coordinates. Another scenario: automated regression testing workflows can use agent-device to script end-to-end flows across both Android and iOS, including capturing screenshots or toggling settings, all from a single CLI. And for those prototyping new app features, the ability to quickly open, interact, and inspect apps in diverse device contexts — without wrestling with Appium or platform-specific wrappers — is a productivity boon.</p><p>The significance of agent-device goes beyond convenience; it’s about enabling robust, agent-driven automation for mobile apps, lowering the barrier to experimentation, and facilitating reproducible interactions. The project’s modular architecture, minimalist dependency footprint, and thoughtful abstraction of platform quirks signal a new direction for open-source device tooling. As AI agents increasingly move from browser automation to mobile, having a reliable, scriptable bridge is crucial — and agent-device, even in its experimental stage, is poised to become a foundational piece in this ecosystem. Developers seeking to automate, test, or research mobile UI flows should keep a close eye on its evolution.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents need to interact with mobile devices, but existing tools don't give them a clean, scriptable interface. <code>agent-device</code> solves this by exposing device control as a CLI with a stable snapshot/ref model, so an agent can inspect a screen, target an element, and act on it without fragile coordinate math.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>agent-device</code> is a TypeScript CLI that controls iOS and Android devices via <code>adb</code>, <code>simctl</code>, and <code>devicectl</code>. It runs on Node 22+ with no build step. Core commands (<code>open</code>, <code>press</code>, <code>type</code>, <code>scroll</code>, <code>screenshot</code>) live in <code>src/cli.ts</code> and dispatch to platform implementations in <code>src/platforms/</code>.</p>
+<p>The key abstraction is the accessibility snapshot. <code>snapshot</code> returns a tree of UI nodes with stable refs (<code>@e7</code>), and interactions accept those refs instead of raw coordinates. iOS supports three backends — <code>ax</code>, <code>xctest</code>, and a <code>hybrid</code> that fills AX gaps with scoped XCTest snapshots — selected via <code>--backend</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>runCli</code> (<code>src/cli.ts</code>), which sends commands to a daemon process via <code>sendToDaemon</code> (<code>src/daemon-client.ts</code>). The daemon's <code>handleRequest</code> (<code>src/daemon.ts:111</code>) is the hub: it reaches 111 functions and is called from one place. It routes to <code>dispatchCommand</code> (<code>src/core/dispatch.ts</code>), which resolves the target device and calls platform code.</p>
+<p>The most-connected modules are <code>src/utils/errors.ts</code> (16 dependents, 0 imports — a zero-instability hub) and <code>src/utils/exec.ts</code> (11 dependents). <code>runCmd</code> in <code>exec.ts</code> is called from 34 places, so any signature change ripples widely. The daemon (<code>src/daemon.ts</code>, 1644 lines) owns session state, tracing, and filesystem effects; the Android platform (<code>src/platforms/android/index.ts</code>) is the largest platform module with 39 functions.</p>
+<p>Filesystem effects are two hops from entry: <code>runCli -&gt; sendToDaemon -&gt; ensureDaemon -&gt; readDaemonInfo</code> reads <code>fs.readFileSync</code>; <code>shutdown -&gt; writeSessionLog</code> writes session logs. No database or network I/O beyond local device tooling.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/agent-device
+cd agent-device
+pnpm install
+
+# Run directly
+npx agent-device open SampleApp
+npx agent-device snapshot
+npx agent-device click @e7</code></pre>
+<p>Configuration is flag-based (<code>--platform</code>, <code>--udid</code>, <code>--serial</code>, <code>--session</code>). No env vars or config files are required. The <code>skills/agent-device/SKILL.md</code> file documents agent-facing usage patterns.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A test agent verifying a login flow:</p>
+<pre data-lang="bash"><code>agent-device open MyApp --platform ios
+agent-device snapshot
+agent-device fill @e3 "user@example.com"
+agent-device fill @e4 "password123"
+agent-device click @e5
+agent-device wait text "Welcome"
+agent-device screenshot --out ./login.png
+agent-device close</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 14 issues: 3 high, 11 medium. The high-severity findings are:</p>
+<ul><li><strong>High - Deep nesting</strong> in <code>src/utils/args.ts</code> and <code>ios-runner/AXSnapshot/Sources/AXSnapshot/main.swift</code> (max indentation depth 11). Fix with early returns and guard clauses.</li><li><strong>High - Duplicated code blocks</strong> — 37 repeated 6-line blocks across 8 files including <code>src/core/dispatch.ts</code>, <code>src/utils/args.ts</code>, <code>src/daemon.ts</code>. Extract shared helpers.</li><li><strong>High - Oversized files</strong> — <code>src/daemon.ts</code> at 1644 lines and <code>ios-runner/.../RunnerTests.swift</code> are hard to reason about. Split by responsibility.</li></ul>
+<p>Medium findings include high branching density in <code>src/utils/device.ts</code>, <code>src/core/dispatch.ts</code>, and <code>src/cli.ts</code>, plus the <code>errors.ts</code> hub module.</p>
+<p>SDLC observations: tests exist (5 files) but there is <strong>no CI pipeline</strong> — nothing builds or tests on push. No Dependabot/Renovate for the single manifest. Missing <code>.editorconfig</code> and formatter config.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A functional, well-scoped CLI for agent-driven mobile automation with a sensible ref-based interaction model. The daemon is overloaded and the duplicated logic needs consolidation, but the core design is sound. Suitable for teams building AI agents that need iOS/Android control today; wait for CI before treating it as production infrastructure.</p>
             </div>
 
             
@@ -91,9 +126,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -146,6 +181,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1149245380">Open in Code Brain &rarr;</a>
@@ -153,12 +194,12 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">32 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding low"><div class="head"><span class="ttl">Add the repository convention files this project lacks</span><span class="chip">low</span><span class="rankchip">3 occurrences</span></div><div class="ev">missing .editorconfig, .gitattributes, a formatter config</div><div class="ev">Without them one contributor's editor writes tabs into a Python file, a shell script commits with CRLF and fails in the container, and a notebook diff is unreviewable.</div><div class="rec"><b>Fix:</b> Add .editorconfig, .gitattributes with text=auto eol=lf, and a formatter config.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
             <div class="post-actions">
-                <a href="https://github.com/yebeai/agent-device" target="_blank" rel="noopener" class="primary-btn">
+                <a href="https://github.com/moses-y/agent-device" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>

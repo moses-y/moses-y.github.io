@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 14, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,62 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Generating 3D CAD models programmatically is difficult because most deep generative models operate on meshes or voxels, not on the construction sequences that CAD software actually uses. Engineers need a way to generate valid, editable CAD models that preserve the original design intent—not just shape approximations.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>DeepCAD is an ICCV 2021 paper implementation that learns to generate CAD models as construction sequences. The pipeline uses a two-stage approach: an autoencoder (model/autoencoder.py) compresses CAD sequences into a latent space, then a latent GAN (model/latentGAN.py) generates novel sequences from random noise. The vectorized representation is defined in cadlib/macro.py and handles the core CAD operations—extrusions, sketches, and boolean operations.</p><p>Data flows from Onshape JSON files through dataset/json2vec.py for training, and results export to STEP format via utils/export2step.py. The trainer/ directory separates training logic for the autoencoder (trainerAE.py) and the latent GAN (trainerLGAN.py), with loss functions in trainer/loss.py.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A mechanical design team could train DeepCAD on their library of existing CAD models, then use the trained generator to produce novel part variations for concept exploration. The output is a construction sequence, not a mesh, so engineers can open the result in Onshape or SolidWorks and edit parameters directly.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD pipeline - No .github/ or CI config detected. No automated test gate for pull requests.
-Low - Non-reproducible builds - requirements.txt without lockfile means dependency versions may drift across environments.
-Low - Single test file - Only 1 test file found (test.py), which appears to be a runtime test script, not unit tests. Coverage is minimal.
-Med - External dependency risk - Requires pythonocc-core via conda, which is version-sensitive and platform-dependent (Linux only per README).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>DeepCAD is a well-structured research codebase that solves a real problem—generating CAD construction sequences rather than meshes. The autoencoder + latent GAN architecture is cleanly separated, and the evaluation scripts (evaluation/) provide meaningful metrics (Chamfer distance, command accuracy). It is suitable for researchers or teams who need to extend generative CAD work, but the lack of tests and CI makes it risky as a production dependency without significant hardening.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Design‑automation researchers need a reproducible pipeline to train a deep generative model that can synthesize CAD construction sequences and evaluate them against point‑cloud metrics. Existing open‑source CAD generators are either fragmented or lack the end‑to‑end training/evaluation scripts required for rapid experimentation.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements the <strong>DeepCAD</strong> pipeline described in ICCV 2021. Core components are:</p>
+<ul><li><strong><code>model/</code></strong> – autoencoder (<code>autoencoder.py</code>), latent GAN (<code>latentGAN.py</code>) and a collection of transformer‑style layers (<code>layers/</code>).</li><li><strong><code>cadlib/</code></strong> – geometric primitives and conversion helpers (<code>curves.py</code>, <code>extrude.py</code>, <code>macro.py</code>, <code>visualize.py</code>).</li><li><strong><code>trainer/</code></strong> – training loops for the autoencoder (<code>trainerAE.py</code>) and the latent GAN (<code>trainerLGAN.py</code>), plus loss utilities and a learning‑rate scheduler.</li><li><strong><code>dataset/</code></strong> – parsers that turn Onshape JSON files into point clouds (<code>json2pc.py</code>) or vectorized CAD sequences (<code>json2vec.py</code>).</li><li><strong><code>evaluation/</code></strong> – Chamfer‑distance, COV, MMD, JSD calculations (<code>evaluate_ae_cd.py</code>, <code>evaluate_gen_torch.py</code>) and a wrapper script (<code>run_eval_gen.sh</code>).</li></ul>
+<p>Configuration lives in <code>config/</code> (e.g. <code>configAE.py</code>, <code>configLGAN.py</code>). The top‑level scripts <code>train.py</code>, <code>test.py</code> and <code>lgan.py</code> orchestrate the workflow.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry points</strong></p>
+<ul><li><code>evaluation/evaluate_gen_torch.py::main</code> – reaches 52 functions, invoked by the shell script <code>run_eval_gen.sh</code>.</li><li><code>evaluation/evaluate_ae_cd.py::run</code> – reaches 36 functions, called directly from the CLI.</li></ul>
+<p><strong>Typical auto‑encoding run</strong></p>
+<ol><li><code>train.py</code> parses <code>--exp_name</code> and builds an <code>TrainerAE</code> (<code>trainer/trainerAE.py</code>).</li><li><code>TrainerAE.__init__</code> calls <code>build_net</code> (in <code>trainer/base.py</code>) which constructs the autoencoder (<code>model/autoencoder.py</code>).</li><li>During each epoch <code>TrainerAE.step</code> invokes <code>forward</code> on the autoencoder, then the loss functions in <code>trainer/loss.py</code>.</li><li>Checkpoints are saved via <code>TrainerAE.save_ckpt</code>, which uses <code>utils/file_utils.py::ensure_dir</code>.</li></ol>
+<p><strong>Typical random‑generation run</strong></p>
+<ol><li><code>lgan.py</code> builds a latent‑GAN (<code>model/latentGAN.py</code>) through <code>TrainerLGAN</code>.</li><li>After training, <code>test.py --mode dec</code> loads the saved autoencoder checkpoint (<code>model/autoencoder.py::load_ckpt</code>) and decodes latent vectors produced by the GAN.</li><li>The decoded CAD sequence is handed to <code>cadlib/visualize.py::create_CAD</code>, which ultimately calls an external OpenCASCADE command (via <code>pythonocc</code>).</li></ol>
+<p><strong>Hot‑spot functions</strong> (most distinct callers) – <code>eval</code>, <code>load_ckpt</code>, <code>ensure_dir</code>, <code>get_dataloader</code>, <code>angle_from_vector_to_x</code>, <code>transform</code>, <code>normalize</code>, <code>read_ply</code>, <code>forward</code>, <code>step</code>, <code>TrainerAE</code>. Each appears in ≥ 3 call sites, so changes here have a wide blast radius.</p>
+<p><strong>Internal call graph</strong> – 216 resolved intra‑repo edges, no circular dependencies. The most connected module is <code>utils/__init__</code> (imported by 11 modules). The deepest nesting (6 levels) occurs in <code>cadlib/macro.py</code>, <code>cadlib/extrude.py</code>, and <code>cadlib/curves.py</code>, making those files hard to follow.</p>
+<p><strong>External touch points</strong> – file I/O (<code>utils/file_utils.py</code>), external CAD kernel (<code>cadlib/visualize.py</code> invokes OpenCASCADE), and model inference (<code>test.py</code> calls <code>self.net.train</code> / <code>self.net.eval</code>). No database or network interaction is present.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/DeepCAD
+cd DeepCAD
+
+# Install Python deps
+pip install -r requirements.txt
+
+# Install OpenCASCADE via conda (required for cadlib.visualize)
+conda install -c conda-forge pythonocc-core=7.5.1
+
+# Download and unpack data as described in README
+# (expects data/ with cad_json/ and cad_vec/)
+
+# Train the autoencoder
+python train.py --exp_name myDeepCAD -g 0
+
+# Encode the whole training set (needed before latent GAN)
+python test.py --exp_name myDeepCAD --mode enc --ckpt 1000 -g 0
+
+# Train the latent GAN
+python lgan.py --exp_name myDeepCAD --ae_ckpt 1000 -g 0
+
+# Generate samples and decode them
+python test.py --exp_name myDeepCAD --mode dec \
+    --ckpt 1000 \
+    --z_path proj_log/myDeepCAD/lgan_1000/results/fake_z_ckpt200000_num9000.h5 -g 0
+
+# Evaluate generated point clouds
+cd evaluation
+sh run_eval_gen.sh ../proj_log/myDeepCAD/lgan_1000/results/fake_z_ckpt200000_num9000_dec 1000 0</code></pre>
+<p>All configuration flags are defined in <code>config/configAE.py</code> and <code>config/configLGAN.py</code>. Adjust learning rates, batch sizes, or GPU IDs there.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CAD‑research team can plug their own Onshape‑derived JSON files into <code>dataset/json2vec.py</code> to produce the vector representation expected by the autoencoder. After training, they call <code>test.py</code> to synthesize new CAD sequences, then feed the resulting <code>.h5</code> files to a downstream renderer or downstream downstream downstream (e.g., a mechanical simulation pipeline).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Add a test suite</strong> – 46 source files, only a single <code>test.py</code> that is a script, not a unit‑test framework.</li><li><strong>High – Add CI workflow</strong> – No <code>.github/</code> CI configuration; builds and tests are never gated.</li><li><strong>Medium – Enable Dependabot</strong> – Only <code>requirements.txt</code> is present; no automated dependency updates.</li></ul>
+<p>Additional hygiene notes: a <code>LICENSE</code> file exists, but there is no lockfile (e.g., <code>requirements.txt</code> without a <code>requirements.lock</code>), and no Dockerfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>DeepCAD supplies a complete research‑grade pipeline for learning generative CAD models, with clearly separated model, data‑processing, and evaluation modules. The code is functional but suffers from deep nesting, duplicated boiler‑plate, and a lack of automated testing or CI, which raises maintenance risk for production use. It is best suited for academic experimentation where the existing scripts can be run as‑is and the code can be refactored incrementally.</p>
             </div>
 
             
@@ -177,7 +228,7 @@ Med - External dependency risk - Requires pythonocc-core via conda, which is ver
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a test suite; this repository has none</span><span class="chip">high</span><span class="rankchip">46 occurrences</span></div><div class="ev">46 source files, no test files</div><div class="ev">Any change ships with no signal that existing behaviour still holds, so a regression reaches production undetected.</div><div class="rec"><b>Fix:</b> Add one test per public entry point, then a CI step that runs them.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">46 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
