@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 13, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>homelable</h1>
@@ -80,10 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing and visualizing a home lab infrastructure can be a complex and time-consuming task, especially when dealing with multiple devices, services, and networks. This complexity can lead to inefficiencies and difficulties in identifying and troubleshooting issues.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The homelable repository provides a self-hosted infrastructure visualization solution, utilizing React and Django to create an interactive network diagram with live status monitoring. The backend folder contains the core logic, with files like app/main.py and app/api/routes/init.py handling API requests and interactions. The frontend folder holds the client-side code, including index.html and App.tsx, which render the user interface.</p><p>The solution also features a network scanner, which uses nmap to discover devices and services on the network. The scanner&#39;s configuration and results are managed through the backend API, with settings stored in environment variables like SCANNERHTTPRANGES and SCANNERHTTPPROBEENABLED. The scan results are then displayed in the frontend as a list of pending devices, allowing users to approve, hide, or ignore each discovered device.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a user can trigger a network scan by clicking the &quot;Scan Network&quot; button in the sidebar, which will run nmap on the configured CIDR ranges and populate the pending devices queue. The user can then approve devices to add them to the canvas, or hide/ignore them as needed.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing input validation for user-provided CIDR ranges - backend/app/api/routes/scan.py
- Medium - Potential race condition when updating device status - backend/app/services/statuschecker.py
-Low - No clear documentation for customizing the nmap scan settings - README.md</p><p>However, the repository appears to be well-maintained, with a clear directory structure, comprehensive tests, and a configured CI/CD pipeline using GitHub Actions. The presence of tests, a LICENSE file, and a README.md with usage instructions and screenshots also suggests a clean and well-documented codebase.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The homelable repository provides a useful solution for visualizing and managing home lab infrastructures. While there are some minor issues and areas for improvement, the codebase appears to be well-structured and maintainable. This project is likely a good fit for individuals or small teams looking to streamline their infrastructure management, but may require additional customization and configuration for larger or more complex environments.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operators of a homelab need a single, up‑to‑date visual map of diverse services (Proxmox VMs, Zigbee/Z‑Wave devices, network‑scanned hosts) without manually editing diagrams. The current setup scatters discovery, import, and status monitoring across separate tools, making it hard to see which nodes are online, which services they run, and how they connect.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Homelable is a self‑hosted visualizer that combines network scanning, Proxmox/LXC import, Zigbee/Z‑Wave integration, and live status monitoring into a single interactive canvas (<code>frontend/src/components/canvas/CanvasContainer</code>). The backend (<code>backend/app/api/routes/scan.py</code>) runs <code>nmap -sV --open</code> via <code>scripts/run_scan.py</code> and writes discovered hosts as <em>Pending Devices</em> into the database. The frontend then lets users approve, hide, or ignore each device, instantly adding a node to the diagram. Pre‑built design styles and per‑node customisation are available, and the canvas can be exported as PNG or kept live‑synced with service health checks (ping, TCP, <code>/health</code> API). An MCP server (<code>mcp/app/backend_client.py</code>) exposes APIs for AI assistants to query the topology.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at two entry points:</p>
+<ul><li><strong><code>scripts/run_scan.py:24</code></strong> – invoked manually or via CI; it reaches <strong>45</strong> functions and is called from <strong>1</strong> place. It performs a network scan, writes results to the DB, and populates the <em>Pending Devices</em> queue.</li><li><strong><code>backend/app/main.py:32</code></strong> (lifespan) – reaches <strong>11</strong> functions and is called by nothing else in the repo; it loads overrides from the filesystem at start‑up.</li></ul>
+<p>The internal call graph shows <strong>post</strong> (220 callers) and <strong>patch</strong> (178 callers) as the most‑touched functions, indicating the primary write path for device state. Hubs such as <code>frontend/src/components/canvas/nodes/nodeTypes</code> (Ca 2, Ce 5, instability 0.71) and <code>mcp/app/backend_client</code> (Ca 3, Ce 1) concentrate change impact; modifying them ripples through many dependent modules.</p>
+<p>Code outside the repo: <strong>306</strong> functions make outbound network calls, <strong>83</strong> read/write the database, <strong>14</strong> read/write files, and <strong>7</strong> perform crypto/secret operations. The shortest path from an entry point to a leaving process is <code>main → run_scan [db via db.execute]</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repo (verbatim URL)
+git clone https://github.com/moses-y/homelable
+
+# Start the full stack with Docker Compose
+cd homelab
+docker compose -f docker-compose.standalone.yml up -d</code></pre>
+<p>The compose file builds the backend (<code>Dockerfile.backend</code>) and frontend (<code>Dockerfile.frontend</code>) containers.</p>
+<p><strong>Configuration</strong> Copy <code>.env.example</code> to <code>.env</code> and adjust the scanner ranges, e.g.:</p>
+<pre data-lang="env"><code>SCANNER_HTTP_RANGES=["8080","9000-9100"]
+SCANNER_HTTP_PROBE_ENABLED=true
+SCANNER_HTTP_VERIFY_TLS=false</code></pre>
+<p>These variables are read by <code>backend/app/services/scanner.py</code> and passed to the nmap invocation.</p>
+<p><strong>Running a scan</strong></p>
+<pre data-lang="bash"><code># Single CIDR (requires sudo for root‑level nmap features)
+sudo python ../scripts/run_scan.py 192.168.1.0/24</code></pre>
+<p>Results appear as <em>Pending Devices</em> in the UI sidebar; approve each to add a node to the canvas.</p>
+<p><strong>Access the UI</strong> Open <code>http://localhost:3000</code> (frontend port mapped by compose). Use the live‑status panel to see online/offline flags, or enable the MCP server for AI‑assistant queries.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A lab admin discovers a new Proxmox node and a Zigbee light bulb on the same subnet. They run the scan script, review the <em>Pending Devices</em> list, approve the Proxmox host (it appears as a VM node) and the light bulb (a Zigbee node). The admin then toggles the live‑status toggle; the canvas updates within seconds, showing the node online with a green indicator. Later, an AI assistant queried via the MCP server asks “Which devices are offline?” and receives a filtered list drawn from the same DB that the canvas reads.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis, 50 total)</strong></p>
+<ul><li><strong>7 high</strong>: deep nesting (max indent 6) in <code>frontend/src/components/canvas/nodes/BaseNode.tsx</code>, <code>frontend/src/components/modals/NodeModal.tsx</code>, <code>frontend/src/components/proxmox/ProxmoxImportModal.tsx</code>; duplicated 6‑line blocks (554 occurrences) across 66 files including <code>backend/app/api/routes/canvas.py</code> and <code>backend/app/core/scheduler.py</code>; oversized files &gt;800 lines (<code>frontend/src/components/panels/DetailPanel.tsx</code>, <code>frontend/src/stores/canvasStore.ts</code>, <code>frontend/src/App.tsx</code>); high branching density (59 branches over 206 lines) in <code>frontend/src/components/canvas/SearchBar.tsx</code>, <code>frontend/src/utils/collapseFilter.ts</code>, <code>frontend/src/utils/exportYaml.ts</code>; broad exception handling (bare <code>except</code>) in <code>backend/app/api/routes/scan.py</code>, <code>backend/app/api/routes/status.py</code>, <code>backend/app/api/routes/zigbee.py</code>.</li><li><strong>43 medium</strong>: additional cognitive‑load and resilience patterns identified but not listed as high‑severity.</li></ul>
+<p><strong>Code‑health audit (8 findings)</strong></p>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHAs (<code>.github/workflows</code> use <code>@vN</code> tags).</li><li><strong>HIGH</strong> – Commit a lockfile beside the manifest (<code>backend/pyproject.toml</code> has no lockfile).</li><li><strong>MEDIUM</strong> – Enable Dependabot/Renovate (no update bot configured).</li><li><strong>MEDIUM</strong> – Pin container base image by digest (<code>Dockerfile.backend</code> uses <code>python:3.13-slim</code> without digest).</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout (<code>docker-ci.yml</code> keeps token).</li><li><strong>MEDIUM</strong> – Add a non‑root USER to the image (<code>Dockerfile.backend</code> has no USER directive).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs (<code>docker-ci.yml</code> declares no timeout).</li><li><strong>LOW</strong> – Add convention files (missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Homelable delivers a capable, self‑hosted homelab visualizer with real‑time scanning, import, and status monitoring, all wrapped in a React canvas. The codebase is functional but suffers from deep nesting, duplicated logic, and mutable GitHub‑Action pins that risk secret leakage. It is well‑suited for hobbyists and small teams who want a single dashboard for diverse services and are comfortable tightening the identified hygiene items.</p>
             </div>
 
             
@@ -100,11 +134,11 @@ Low - No clear documentation for customizing the nmap scan settings - README.md<
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">388<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>88</b></li><li><span>TSX</span><i style="width:50%"></i><b>44</b></li><li><span>YAML</span><i style="width:11%"></i><b>10</b></li><li><span>Markdown</span><i style="width:10%"></i><b>9</b></li><li><span>TypeScript</span><i style="width:9%"></i><b>8</b></li><li><span>JSON</span><i style="width:6%"></i><b>5</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>116</b></li><li><span>Python</span><i style="width:87%"></i><b>101</b></li><li><span>TSX</span><i style="width:83%"></i><b>96</b></li><li><span>YAML</span><i style="width:9%"></i><b>10</b></li><li><span>Markdown</span><i style="width:9%"></i><b>10</b></li><li><span>JSON</span><i style="width:8%"></i><b>9</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Django</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Django</span><span>Express</span><span>Docker</span></p>
                     </div>
                 </div>
 

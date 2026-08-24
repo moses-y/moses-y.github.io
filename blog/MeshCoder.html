@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 25, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>MeshCoder addresses the challenge of converting 3D point clouds into editable Blender Python scripts, enabling programmatic reconstruction and editing of complex human-made objects. This problem is significant in fields like architecture, product design, and video game development, where precise control over 3D models is crucial.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MeshCoder is a framework that develops expressive APIs for modeling intricate geometries and trains a multimodal Large Language Model (LLM) to generate accurate, part-segmented code from point clouds. The recipes folder contains various scripts and configurations for different aspects of the project, such as inference, finetuning, and evaluation. For example, the recipes/inference/llamawebui directory includes a Streamlit app (streamlitllama2.py) for interactive inference. The src folder holds the core implementation, including custom models (src/llamarecipes/custommodels) and data processing utilities (src/llamarecipes/data).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for MeshCoder is in architectural design, where it can be used to generate 3D models of buildings from point cloud data collected by drones or laser scanners. For instance, the recipes/quickstart/RunningLlama2Anywhere directory provides examples for running the model on different platforms.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - Missing CI/CD pipeline - .github/ or CI config
- Low - Dependencies declared without a lockfile - pyproject.toml
-The codebase appears generally well-organized, with clear separation of concerns and extensive documentation. However, the lack of a CI/CD pipeline and dependency lockfile may introduce risks and inconsistencies in the build process.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MeshCoder is a well-structured and documented project that addresses a significant problem in 3D modeling. While it has some areas for improvement, such as adding a CI/CD pipeline, it is a valuable resource for researchers and practitioners working with 3D point clouds and LLMs. Its potential users include architects, product designers, and video game developers who need precise control over 3D models.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Generative 3D modeling typically outputs static meshes that are hard to edit. MeshCoder addresses this by generating <strong>Blender Python scripts</strong> from point clouds, producing editable, programmatic 3D geometry. This shifts 3D reconstruction from fixed outputs to code that can be modified, re-parameterized, and re-executed.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MeshCoder is a multimodal LLM pipeline: it takes a 3D point cloud (<code>npz</code> format) and produces a Blender script that reconstructs the object. The core logic lives in <code>src/llama_recipes/custom_models/</code> — a modified Llama-3.2-1B with custom attention modules (<code>cross_attn/</code>, <code>point_cross_attn/</code>) and a DINOv2 vision backbone for point feature extraction. The <code>recipes/</code> folder contains inference, finetuning, and benchmark examples.</p>
+<p>The training pipeline (in <code>src/llama_recipes/finetuning_shape2code.py</code> and <code>train_utils_shape2code.py</code>) uses LoRA adapters and a shape tokenizer to map point clouds to code tokens. The pretrained checkpoint and 100K paired object-code dataset are hosted on Hugging Face.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>recipes/code_llama/code_completion_example.py</code>, which reaches 118 functions. For the core shape-to-code path, the entry is <code>recipes/inference/local_inference/inference_shape2code.py</code>, which loads the LoRA adapter and shape tokenizer, then calls the model via <code>model.generate</code> (traced path: <code>main -&gt; inference</code>).</p>
+<p>The highest fan-in modules are the custom model files:</p>
+<ul><li><code>src/llama_recipes/custom_models/modeling_llama.py</code> — 51 functions, 14 classes, called from 3 files, imports 10 modules. This is the Llama core; changes here ripple through everything.</li><li><code>src/llama_recipes/blender_scripts/bpy_lib.py</code> — 54 functions, called from 9 files. It owns mesh generation primitives (<code>delete_all</code>, <code>recalculate_normals</code>, <code>get_faces</code>).</li><li><code>src/llama_recipes/custom_models/modeling_llama_3_2.py</code> — 49 functions, 16 classes, the Llama-3.2 variant.</li></ul>
+<p>The internal call graph shows 524 resolved edges. <code>array</code> is called from 23 places, <code>solidify</code> from 13, and <code>permute</code> from 9 — these are the widest blast radius functions. The module graph has no circular dependencies, which is good for maintainability. The code touches the outside world through 13 model inference calls, 7 network calls, 7 database operations, and 24 file I/O operations. The wiring for side effects (e.g., which function writes to disk) has not been fully mapped for this repository.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (from README, tested with Python 3.10, PyTorch 2.4.1, CUDA 11.8):</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/MeshCoder
+cd MeshCoder
+conda install pytorch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+pip install bpy==4.0.0
+pip install -e .</code></pre>
+<p><strong>Configuration</strong>: Download pretrained models from Hugging Face. Place <code>config.yaml</code>, <code>shape_tokenizer.pt</code>, <code>adapter_config.json</code>, <code>adapter_model.safetensors</code> into <code>MeshCoder/llama-3-models/object_to_code_model/</code>, and the base Llama-3.2-1B into <code>MeshCoder/llama-3-models/Llama3.2-1B</code>.</p>
+<p><strong>Running inference</strong>: Use <code>recipes/inference/local_inference/inference_shape2code.py</code> with an <code>npz</code> point cloud file. The README documents this but the exact CLI flags are not fully specified in the repo — you'll need to check the script's argument parser.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A product design team captures a physical object via photogrammetry, exports a point cloud, and runs MeshCoder to get a Blender script. They then edit the generated code to adjust dimensions, change topology, or create variations — all without re-scanning. The code output is the deliverable, not the mesh.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 50 issues (21 high, 26 medium, 3 low) across 9 kinds. Key findings:</p>
+<ul><li><strong>High — Duplicated code blocks</strong>: 1,293 repeated 6-line blocks across 45 files, notably in <code>recipes/benchmarks/inference_throughput/</code> (Azure/vLLM benchmark scripts). Extract shared helpers.</li><li><strong>High — Oversized files</strong>: <code>bpy_lib.py</code> (1,685 lines), <code>modeling_llama.py</code>, <code>modeling_llama_3_2.py</code>. Splitting by responsibility is warranted.</li><li><strong>High — Deep nesting</strong>: 28 instances of 10-level indentation in <code>recipes/code_llama/</code> examples.</li><li><strong>Medium — File handles without context managers</strong>: 6 cases in <code>blender_scripts/code_to_mesh.py</code>, <code>datasets/alpaca_dataset.py</code>, <code>datasets/oss_io_utils.py</code>.</li><li><strong>Medium — Broad exception handling</strong>: 8 cases in <code>bpy_lib.py</code>, <code>point_projection.py</code>, <code>craftsman_utils/base.py</code>.</li><li><strong>Low — TODO/FIXME markers</strong>: 20 total across <code>modeling_llama.py</code>, <code>modeling_llama_3_2.py</code>, <code>cross_attn/attention.py</code>.</li></ul>
+<p>SDLC observations: no CI/CD pipeline, no lockfile (non-reproducible builds), only 1 test file against 122 source files (ratio 0.008), and a 11.9MB PDF committed to the repo. A license is present; no committed secrets found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MeshCoder is a technically interesting research codebase with a novel approach — code-as-output for 3D modeling. The core model code is dense but well-structured (no circular dependencies). The practical gaps are reproducibility (no lockfile, no CI) and maintainability (large files, heavy duplication). Use it for research and prototyping; production deployment would require hardening the build and test pipeline first.</p>
             </div>
 
             
@@ -100,11 +124,11 @@ The codebase appears generally well-organized, with clear separation of concerns
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">214<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>109</b></li><li><span>Markdown</span><i style="width:22%"></i><b>24</b></li><li><span>JSON</span><i style="width:6%"></i><b>7</b></li><li><span>YAML</span><i style="width:5%"></i><b>5</b></li><li><span>Shell</span><i style="width:2%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>122</b></li><li><span>Jupyter Notebook</span><i style="width:21%"></i><b>26</b></li><li><span>Markdown</span><i style="width:20%"></i><b>25</b></li><li><span>JSON</span><i style="width:6%"></i><b>7</b></li><li><span>YAML</span><i style="width:4%"></i><b>5</b></li><li><span>Shell</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span><span>Vector store</span></p>
                     </div>
                 </div>
 

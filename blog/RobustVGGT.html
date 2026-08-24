@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Multi-view 3D reconstruction pipelines assume all input images belong to the same scene. In practice, a single unrelated image—a tourist photo, a corrupted frame, a mislabeled capture—silently degrades the entire reconstruction. Existing systems either fail outright or require an explicit outlier-detection stage, which adds complexity and failure modes of its own.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repository demonstrates that Visual Geometry Grounded Transformers (VGGT) already encode enough geometric consistency information to identify outlier views without any fine-tuning. The core contribution is robustvggt.py, which runs a VGGT forward pass and then uses the model&#39;s internal confidence signals to reject views that are inconsistent with the majority.</p><p>The implementation is a thin layer over the existing VGGT codebase. It reuses the model architecture in vggt/models/vggt.py and vggt/models/aggregator.py, the attention and block layers in vggt/layers/, and the camera and depth heads in vggt/heads/. The rejection logic lives in robustvggt.py itself, with a --rej-thresh parameter controlling how aggressive the filtering is.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The repo requires Python 3.10, PyTorch 2.5.1 with CUDA 12.1, and the packages in requirements.txt. The README recommends a conda environment. Install commands are documented verbatim:</p><p>conda create -n robustvggt python=3.10
-conda activate robustvggt</p><p>pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-pip install -r requirements.txt</p><p>Configuration: No environment variables or config files are required. The only tunable is the outlier-rejection threshold, passed as a command-line flag (--rej-thresh, default 0.5, lower values are stricter). The model weights download automatically on first run.</p><p>Running it: The entry point is robustvggt.py. It takes a directory of images and produces a reconstruction with outlier views removed:</p><p>python robustvggt.py --image-dir examples/trevi
-python robustvggt.py --image-dir examples/notredame --rej-thresh 0.3</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A photogrammetry service ingests hundreds of crowd-sourced images of a landmark. Many are duplicates, blurry, or unrelated. Running this tool as a preprocessing step produces a clean image set before passing to a full reconstruction pipeline (COLMAP, NeRF, or Gaussian Splatting). The rejected-view list is also useful as a diagnostic—it tells the operator which images were problematic and why.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No test suite - No test files exist anywhere in the repo. The rejection logic in robustvggt.py is the core contribution and has zero automated verification.
-Med - No CI pipeline - No .github/ directory or CI configuration. Nothing gates regressions or validates the install path.
-Med - No license file - The README cites a CVPR paper but no LICENSE is present. Downstream use and redistribution rights are unclear, which is a blocker for commercial adoption.
-Low - Unpinned dependencies - requirements.txt declares packages without version pins or a lockfile, so installs are not reproducible.
-Low - Incomplete deliverables - The README checklist shows evaluation and visualization code as unimplemented. Only demo inference is available.</p><p>The code structure itself is clean: the vggt/ package follows a logical layer/head/model separation, and the heavy lifting is delegated to the upstream VGGT codebase rather than reimplemented.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a focused research artifact that answers one question—can VGGT reject outlier views without retraining—and answers it convincingly with working demo code. It is not a production library: no tests, no license, no evaluation harness. Use it to validate the approach on your own data or as a reference for implementing similar rejection logic in a larger pipeline, but do not build a product directly on it without addressing the licensing and testing gaps.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Multi-view 3D reconstruction pipelines assume every input image is a valid view of the scene. In practice, users feed in blurry frames, extreme close-ups, or images of a different scene entirely. These outlier views corrupt the reconstruction. RobustVGGT detects and rejects those outlier views automatically, without fine-tuning, by exploiting an emergent property of Visual Geometry Grounded Transformers (VGGT).</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>RobustVGGT is a research prototype demonstrating that VGGT's attention mechanism produces measurable "confidence" signals that separate valid views from outliers. The core logic lives in <code>robust_vggt.py</code> (the CLI entry point) and <code>vggt/dependency/</code>, which handles distortion, projection, and tracking. The <code>vggt/models/aggregator.py</code> file manages frame attention across views.</p>
+<p>The repo provides demo inference only. Evaluation and visualization code are marked as not-yet-implemented in the README. The model weights are not bundled; the code loads a pretrained VGGT checkpoint at runtime.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>robust_vggt.py:589</code>, which reaches 18 functions. The shortest path to external side effects is <code>main -&gt; run_demo</code>, which creates an output directory (<code>self.pair_out_dir.mkdir</code>). The pipeline loads images from <code>--image-dir</code>, runs them through the VGGT backbone, and applies a rejection threshold (<code>--rej-thresh</code>, default 0.5) to filter outlier views.</p>
+<p>The most-connected modules are <code>vggt/layers/__init__</code> (imported by 3 modules, imports 5) and <code>vggt/layers/block</code> (3/4). <code>vggt/models/aggregator</code> and <code>vggt/models/vggt</code> each have high instability (0.8) — they depend on many modules but few depend on them, so changes there ripple outward. <code>apply_distortion</code> is called from 4 places and is the most reused geometry function; <code>prepare_tokens_with_masks</code> and <code>DinoVisionTransformer</code> are also called from 4 places each.</p>
+<p>There are no circular dependencies (0 modules in cycles), which keeps the import graph clean. The call graph shows 157 internal edges; changing <code>apply_distortion</code> or <code>safe_empty_cache</code> (called from 7 places in <code>_forward_once</code>) breaks the most downstream code.</p>
+<p>The wiring for evaluation, visualization, and model weight downloading is not mapped — the repo does not include those code paths yet.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (from README, verified against <code>requirements.txt</code>):</p>
+<pre data-lang="bash"><code>conda create -n robust_vggt python=3.10
+conda activate robust_vggt
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt</code></pre>
+<p><strong>Running</strong>:</p>
+<pre data-lang="bash"><code>python robust_vggt.py --image-dir examples/trevi
+python robust_vggt.py --image-dir examples/notredame --rej-thresh 0.3</code></pre>
+<p>Configuration is via CLI flags only; there is no config file. The <code>examples/</code> directory contains two test image sets (<code>trevi</code>, <code>notredame</code>) with 12–14 images each.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A photogrammetry pipeline ingests 50 tourist photos of a monument. Three are close-ups of a sign, two are motion-blurred. RobustVGGT runs as a pre-filter:</p>
+<pre data-lang="python"><code># Conceptually: reject outliers before feeding the reconstruction backend
+image_dir = "user_photos/"
+accepted_views = run_robust_vggt(image_dir, rejection_threshold=0.4)
+reconstruction_backend(accepted_views)</code></pre>
+<p>This replaces manual curation or brittle SIFT-based outlier filtering. The trade-off: rejection is binary, not weighted, so borderline views are either fully kept or fully dropped.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found 13 issues across 6 kinds:</p>
+<ul><li><strong>High - Deep nesting (x7)</strong> — <code>vggt/heads/track_head.py</code>, <code>vggt/layers/attention.py</code>, <code>robust_vggt.py</code>; max indentation depth 12, control flow is hard to follow.</li><li><strong>High - Duplicated code (x21 files)</strong> — 341 repeated 6-line blocks across <code>vggt/dependency/</code> and <code>vggt/heads/</code>; DRY extraction needed.</li><li><strong>Medium - File handle without context manager</strong> — <code>vggt/utils/load_fn.py</code>; <code>open()</code> not wrapped in <code>with</code>.</li><li><strong>Medium - Broad exception handling (x2)</strong> — <code>robust_vggt.py</code>, <code>vggt/dependency/np_to_pycolmap.py</code>; bare <code>except</code> swallows errors.</li><li><strong>Medium - High branching density</strong> — <code>vggt/utils/load_fn.py</code>; 43 branch points over 150 lines.</li><li><strong>Low - TODO/FIXME markers (x3)</strong> — <code>vggt/dependency/track_predict.py</code>.</li></ul>
+<p>SDLC gaps: no tests, no CI, no LICENSE, no lockfile. The missing LICENSE is the most urgent — with no license, all rights are reserved, which blocks legal reuse in client work.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Solid research prototype with a clean import graph and a clear, simple entry point. The lack of tests, CI, and a license makes it unsuitable for production without hardening. Use it if you need outlier-view rejection in a VGGT-based pipeline and can tolerate a research-grade codebase.</p>
             </div>
 
             

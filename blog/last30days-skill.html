@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,9 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Staying up-to-date with the latest information on a particular topic can be challenging, especially when relying on traditional search engines that may not have access to the latest data from various platforms.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The last30days-skill repository provides an AI agent-led search engine that aggregates information from multiple sources, including Reddit, X, YouTube, HN, Polymarket, and the web. The skills/last30days folder contains the core functionality, with files like briefing.py and evaluatesearchquality.py handling the search and scoring logic. The tests folder contains a comprehensive set of tests, including testbriefingv3.py and testentityextract_v3.py, to ensure the accuracy of the search results.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, running the command /last30days Peter Steinberger would return a brief summary of the latest information about Peter Steinberger, aggregated from various sources like X posts, Reddit threads, and YouTube transcripts.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing lockfile for dependencies - pyproject.toml 
-The codebase appears to be well-structured, with a clear separation of concerns and a comprehensive set of tests. However, the lack of a lockfile for dependencies may lead to non-reproducible builds.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The last30days-skill repository provides a unique and valuable solution for staying up-to-date with the latest information on a particular topic. While the codebase appears to be well-maintained, the missing lockfile for dependencies is a potential issue that should be addressed. Overall, this repository is a useful tool for anyone looking to aggregate information from multiple sources and stay informed about the latest developments in their field of interest.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams need a single, reproducible view of what happened on fast‑moving social platforms over the last 30 days. Pulling Reddit threads, X posts, YouTube transcripts, Hacker News items, Polymarket odds and the open web requires many APIs, token handling, and custom ranking logic – all of which are scattered across scripts and ad‑hoc CLI calls.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The <strong>last30days</strong> skill orchestrates parallel scrapers, scores each item against real‑world engagement signals, and hands the curated set to an LLM for a grounded brief. Core orchestration lives in <code>skills/last30days/scripts/lib/pipeline.py</code> (the <code>run</code> function) and <code>skills/last30days/scripts/briefing.py</code> (the <code>main</code> function).</p>
+<ul><li>Scrapers are in <code>skills/last30days/scripts/lib/</code> – e.g. <code>reddit.py</code>, <code>github.py</code>, <code>instagram.py</code>, <code>youtube_yt.py</code>, <code>polymarket.py</code>. Each defines a <code>search_&lt;source&gt;</code> entry point that ultimately calls the shared logger <code>_log</code> (used from 65 places).</li><li>Relevance and query handling are centralized in <code>lib/relevance.py</code> and <code>lib/query.py</code>; 43 modules import <code>lib/__init__.py</code>, making it the highest‑impact hub.</li><li>Results are rendered by <code>lib/render.py</code> (HTML/markdown) and stored via <code>store.py</code> (SQLite DB) before being fed to the LLM in <code>briefing.py</code>.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>run</code> in <code>pipeline.py:175</code> is invoked by the CLI (<code>last30days.py</code> calls <code>run_last30days</code>). It spawns the full pipeline, reaching 331 distinct functions.</li><li><strong>Source discovery</strong> – <code>available_sources</code> (in <code>pipeline.py</code>) calls each <code>search_&lt;source&gt;</code> (e.g. <code>search_reddit</code>, <code>search_github_person</code>). Those functions log via <code>_log</code> and make outbound HTTP calls through <code>lib/http.py</code> (10 functions, used by 22 callers).</li><li><strong>Data persistence</strong> – <code>store.py</code> provides <code>_connect</code>/<code>init_db</code> (called from 10 places) to open the SQLite DB; <code>add_topic</code> writes results.</li><li><strong>Scoring &amp; fusion</strong> – <code>lib/fusion.py</code> merges raw items, applying relevance weights (<code>token_overlap_relevance</code>, <code>jaccard</code>). This file is one of the “deep‑nesting” hotspots (max indentation depth 8).</li><li><strong>Rendering</strong> – <code>lib/render.py</code> (62 functions) converts the ranked list to markdown or HTML; it reads template files and writes the final brief.</li><li><strong>LLM synthesis</strong> – <code>briefing.py</code> extracts core subjects (<code>_extract_core_subject</code>) and calls the provider in <code>lib/providers.py</code> (<code>generate_text</code>). The provider reaches out to the configured LLM endpoint (network call).</li></ol>
+<p><strong>Blast radius:</strong></p>
+<ul><li><code>lib/__init__.py</code>, <code>lib/relevance.py</code>, <code>lib/query.py</code> – each imported by &gt;15 modules; any change ripples widely.</li><li><code>lib/fusion.py</code> and <code>lib/github.py</code> have high branching density (66 branches/211 lines) and deep nesting, making them error‑prone.</li><li>Broad <code>except:</code> blocks appear in <code>chrome_cookies.py</code>, <code>env.py</code>, <code>last30days.py</code> – they swallow errors that could hide integration failures.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/last30days-skill
+cd last30days-skill
+
+# Install Python dependencies (pyproject.toml)
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .   # editable install pulls all runtime deps
+
+# Install the bundled Node helper (bird‑search)
+cd skills/last30days/scripts/lib/vendor/bird-search
+npm ci            # installs from package.json
+cd ../../../..    # back to repo root
+
+# Provide API credentials (example keys, see docs/CONFIGURATION.md)
+#   REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, X_BEARER_TOKEN, YOUTUBE_API_KEY, etc.
+# Credentials are read by `lib/env.py` from a `.env` file or system env.
+
+# Run the skill (full pipeline)
+python -m skills.last30days.scripts.last30days   # invokes main → run
+# Or generate a brief directly:
+python -m skills.last30days.scripts.briefing "search term"</code></pre>
+<p>If any source should be disabled, edit <code>available_sources</code> in <code>pipeline.py</code> or set the corresponding env flag (<code>ENABLE_X=0</code>, etc.).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A sales engineer can embed the skill in a CI step:</p>
+<pre data-lang="yaml"><code>- name: Generate 30‑day brief
+  run: |
+    source .env
+    python -m skills.last30days.scripts.briefing "Acme Corp"
+  env:
+    REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+    X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}</code></pre>
+<p>The generated markdown can be attached to a meeting agenda, ensuring the team sees the latest community sentiment across all platforms.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses tags (<code>softprops/action-gh-release@v2</code>). Replace with commit SHA to avoid supply‑chain drift.</li><li><strong>High – Remove <code>continue-on-error</code></strong> – <code>.github/workflows/security.yml</code> line 41 lets failing correctness tests pass. Delete or isolate the step.</li><li><strong>Medium – Enable Dependabot</strong> – No bot configured; add <code>.github/dependabot.yml</code> for Python, npm and actions.</li><li><strong>Low – Set workflow timeouts</strong> – <code>.github/workflows/release.yml</code> lacks <code>timeout-minutes</code>; add a reasonable bound.</li><li><strong>High – Hub modules</strong> – <code>lib/__init__.py</code>, <code>lib/relevance.py</code>, <code>lib/query.py</code> each have &gt;40 downstream imports; keep them stable, extract volatile logic.</li><li><strong>High – Deep nesting</strong> – Files <code>fusion.py</code>, <code>github.py</code>, <code>reddit.py</code> reach 8‑level indentation; refactor with early returns.</li><li><strong>High – Duplicated blocks</strong> – Similar 6‑line snippets repeat across 20+ source adapters; factor into shared helpers.</li><li><strong>High – Oversized files</strong> – <code>render.py</code> and <code>github.py</code> exceed 1 400 lines; split by responsibility.</li><li><strong>Medium – Broad exception handling</strong> – Several modules use bare <code>except:</code>; replace with specific catches.</li><li><strong>Medium – File opens without context manager</strong> – <code>last30days.py</code>, <code>test_device_auth.py</code>; wrap with <code>with open(...)</code>.</li><li><strong>Medium – High branching density</strong> – <code>cluster.py</code>, <code>polymarket.py</code>; consider strategy dispatch tables.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers a functional, end‑to‑end multi‑source search‑and‑summarize pipeline, but the core modules are tightly coupled and contain several maintainability hotspots. It is suitable for teams that need rapid prototyping of cross‑platform intelligence and can allocate effort to refactor the hub and oversized files. Robust CI hygiene (pinned actions, Dependabot) should be added before production deployment.</p>
             </div>
 
             
@@ -99,9 +144,9 @@ The codebase appears to be well-structured, with a clear separation of concerns 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">235<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>126</b></li><li><span>Markdown</span><i style="width:16%"></i><b>20</b></li><li><span>JSON</span><i style="width:13%"></i><b>16</b></li><li><span>JavaScript</span><i style="width:8%"></i><b>10</b></li><li><span>YAML</span><i style="width:5%"></i><b>6</b></li><li><span>Shell</span><i style="width:4%"></i><b>5</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>160</b></li><li><span>Markdown</span><i style="width:13%"></i><b>20</b></li><li><span>JSON</span><i style="width:10%"></i><b>16</b></li><li><span>JavaScript</span><i style="width:6%"></i><b>10</b></li><li><span>YAML</span><i style="width:4%"></i><b>6</b></li><li><span>Shell</span><i style="width:3%"></i><b>5</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>

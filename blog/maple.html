@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 30, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>maple</h1>
@@ -80,11 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The lack of a comprehensive observability platform can hinder the ability of organizations to monitor and manage their systems effectively, leading to decreased performance, increased downtime, and reduced customer satisfaction.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The maple repository provides an OpenTelemetry observability platform, offering a range of tools and features to support system monitoring and management. The repository includes a variety of skills and agents, such as clickhouse-architecture-advisor and tinybird-cli-guidelines, which provide guidance on best practices for using ClickHouse and TinyBird. The context directory contains configuration files, including package.json, which defines the dependencies and scripts for the project.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a developer can use the tinybird-cli-guidelines skill to learn how to build and deploy a TinyBird project, and then use the clickhouse-architecture-advisor agent to optimize their ClickHouse database configuration. The docker-compose.yml file provides a convenient way to run the local multi-service stack, including the API, web, ingest, and OTEL collector services.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium (SDLC) - Missing LICENSE file - unclear usage/redistribution rights - root
- Low (Risk) - Dependencies declared without a lockfile - non-reproducible builds - .context/alchemy-effect/alchemy-effect/package.json
-High (Security) - Possible secrets/credentials committed to the repo - .agents/skills/tinybird-cli-guidelines/rules/secrets.md
-However, the repository also shows evidence of good practices, such as the presence of tests (1 test file found) and documentation (40 doc files found), as well as a well-structured directory layout.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The maple repository provides a useful set of tools and features for observability and system monitoring, but users should be aware of the potential issues with licensing, dependency management, and security. With careful attention to these areas, the repository can be a valuable resource for organizations looking to improve their system management capabilities.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operating an OpenTelemetry observability platform means juggling ingestion, querying, alerting, and a frontend across multiple environments. This repo attempts to bundle all of that into a monorepo with a SPA frontend, an Effect-based API, and Cloudflare-native deployment.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is a collection of 8 self-contained projects, not a single codebase. The substantial ones are <code>apps/</code> (1,236 files) with <code>web</code> (TanStack Router SPA), <code>api</code> (Effect HTTP API proxying Tinybird), <code>ingest</code> (OTLP gateway), <code>landing</code> (Astro), <code>alerting</code> (worker), and <code>chat-agent</code> (Cloudflare Worker). The <code>packages/</code> directory (536 files) holds shared domain contracts, query logic, and UI primitives.</p>
+<p>The <code>.context/</code> directory (2,671 files) is a large embedded dependency tree for "alchemy-effect" — a Cloudflare deployment framework. The <code>.agents/</code> directory (183 files) contains ClickHouse and chDB skill definitions, mostly documentation and verification scripts. The actual platform logic lives in <code>apps/</code> and <code>packages/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The only mapped entry point is <code>.github/scripts/format-ingest-benchmark-comment.py:160</code> — a <code>main</code> function that reaches 12 functions. It calls <code>load_runs</code> (twice), <code>render_runs_json</code> (twice), and <code>tail</code> (twice), which reads files via <code>path.read_text</code>. This script formats benchmark comments for CI, not the platform itself.</p>
+<p>The internal call graph is sparse: 17 resolved edges total. The most-called functions are <code>aggregate</code>, <code>fmt</code>, and <code>numeric</code> (each called from 2 places). <code>comparison_table</code> calls <code>aggregate</code>, <code>fmt</code>, and <code>delta</code>; <code>absolute_table</code> calls <code>aggregate</code>, <code>value_range</code>, <code>fmt</code>, and <code>fmt_range</code>. The <code>main</code> function routes through <code>comparison_table</code> and <code>absolute_table</code> to produce output.</p>
+<p>The platform's actual wiring — API routes, ingest flow, alert evaluation — has not been mapped by static analysis. The README describes the intended flow: ingest receives OTLP, enriches with org keys, forwards to a collector, and the API proxies Tinybird queries. But the code paths are not traced here.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Requires Bun &gt;=1.3. Install with <code>bun install</code>.</p>
+<p><strong>Configuration</strong>: Copy <code>.env.example</code> to <code>.env</code>. The API needs <code>VITE_API_BASE_URL</code>; deployments require Doppler secrets including <code>CLOUDFLARE_API_TOKEN</code>, <code>TINYBIRD_TOKEN</code>, <code>CLERK_SECRET_KEY</code>, and <code>MAPLE_INGEST_KEY_ENCRYPTION_KEY</code>.</p>
+<p><strong>Running locally</strong>:</p>
+<pre data-lang="bash"><code>bun run dev
+docker compose -f docker-compose.yml up --build</code></pre>
+<p>Services: API on <code>:3472</code>, web on <code>:3471</code>, ingest on <code>:3474</code>, OTEL collector on <code>:4317</code>/<code>:4318</code>.</p>
+<p><strong>Deploying</strong>: <code>bun run alchemy:deploy:prd</code> for production, <code>bun run alchemy:deploy:stg</code> for staging, <code>PR_NUMBER=123 bun run alchemy:deploy:pr</code> for previews.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team runs this as a self-hosted observability backend: the <code>ingest</code> app receives OTLP traces from instrumented services, enriches them with tenant keys, and forwards to a collector. The <code>api</code> app proxies queries to Tinybird, and <code>web</code> renders dashboards. Alerts flow through the <code>alerting</code> worker. CI deploys staging on push to <code>main</code>, production manually.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 7 findings (0 critical, 1 high, 4 medium, 2 low):</p>
+<ul><li><strong>High</strong> - CI never runs the 553 test files; no test command in the 4 workflows. Add a test step to <code>.github/workflows</code>.</li><li><strong>Medium</strong> - No Dependabot or Renovate across 67 manifests. Add <code>.github/dependabot.yml</code>.</li><li><strong>Medium</strong> - <code>apps/api/Dockerfile</code> uses mutable base images <code>oven/bun:1.3.8</code>. Pin by digest.</li><li><strong>Medium</strong> - No dependency vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> - Two blobs over 5MB in <code>.context/alchemy-effect/images/</code> (8.2MB and 5.1MB GIFs). Move to LFS.</li><li><strong>Low</strong> - No <code>timeout-minutes</code> on workflow jobs in <code>.github/workflows/deploy-pr-preview.yml</code>.</li><li><strong>Low</strong> - Missing <code>.editorconfig</code>, <code>.gitattributes</code>, and formatter config.</li></ul>
+<p>SDLC observation: the repo has committed secrets (flagged by the audit), 705 test files exist but are not run in CI — that is the highest-risk gap.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The monorepo structure is sensible for a multi-app observability platform, and the Cloudflare deployment story is well-documented. The critical weakness is that CI validates nothing — tests exist but never run, and dependencies are never scanned. Treat this as a solid scaffold that needs CI hardening before production trust.</p>
             </div>
 
             
@@ -94,18 +115,18 @@ However, the repository also shows evidence of good practices, such as the prese
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">4,809<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>182</b></li><li><span>JSON</span><i style="width:3%"></i><b>5</b></li><li><span>YAML</span><i style="width:2%"></i><b>4</b></li><li><span>Python</span><i style="width:1%"></i><b>2</b></li><li><span>TypeScript</span><i style="width:1%"></i><b>2</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>2610</b></li><li><span>Markdown</span><i style="width:33%"></i><b>860</b></li><li><span>TSX</span><i style="width:24%"></i><b>627</b></li><li><span>JSON</span><i style="width:10%"></i><b>268</b></li><li><span>YAML</span><i style="width:2%"></i><b>60</b></li><li><span>HTML</span><i style="width:1%"></i><b>20</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Express</span><span>Docker</span><span>Kubernetes</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -119,7 +140,7 @@ However, the repository also shows evidence of good practices, such as the prese
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>.context/alchemy-effect/alchemy-effect/package.json</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>.agents/skills/tinybird-cli-guidelines/rules/secrets.md</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>.agents/skills/tinybird-cli-guidelines/rules/secrets.md, .context/alchemy-effect/alchemy-effect/src/AWS/SecretsManager/ListSecrets.ts, packages/db/src/cloudflare-logpush-secrets.ts</code></span></li>
                     </ul>
                 </div>
 

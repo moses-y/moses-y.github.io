@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 5, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Here&#39;s a concise, professional technical briefing for the sdf repository, written in the style of a senior AI engineer consultant.</p><h3 class="post-h" id="the-problem">The Problem</h3><p>This repository addresses the need for programmatic 3D mesh generation via Signed Distance Functions (SDFs). It provides a Python library for defining, combining, and exporting 3D shapes using constructive solid geometry operations—useful for rapid prototyping, 3D printing, and computational geometry workflows without relying on CAD interfaces.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The sdf package implements core SDF logic in sdf/core.py, sdf/d3.py, and sdf/mesh.py, supporting union (&amp;), intersection (|), and difference (-) operators. It generates binary STL files natively and supports over 20 additional formats via meshio. The docs/ directory contains 68 documentation files, including rendering utilities (render.py, render.go) and an extensive image gallery of generated examples. Examples are housed in examples/ (11 files), demonstrating gears, knurling, blobs, and text extrusion. The repository is a fork of fogleman/sdf (1996 stars), indicating a mature, long-standing codebase.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repository and install in a virtual environment:</p><p>git clone https://github.com/fogleman/sdf.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Generating 3D printable meshes from signed distance functions (SDFs) is mathematically well-understood but practically tedious: you need to define shapes, combine them with boolean operations, and run a meshing algorithm. This repo packages that into a compact Python API so a user can define a shape in a few lines and get an STL file out.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>sdf</code> is a Python library for constructive solid geometry (CSG). The core API lives in <code>sdf/d2.py</code> and <code>sdf/d3.py</code> — 2D and 3D primitives (sphere, box, cylinder, torus) that support <code>&amp;</code> (intersection), <code>|</code> (union), and <code>-</code> (difference) operators. <code>sdf/dn.py</code> implements the boolean operations, <code>sdf/ease.py</code> provides 35 easing functions for transitions, and <code>sdf/mesh.py</code> handles mesh generation and bounding-box estimation.</p>
+<p>The repo includes 11 runnable examples in <code>examples/</code>, each producing a mesh file. The canonical example in the README is 5 lines of code: define a sphere, subtract three oriented cylinders, save to <code>out.stl</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>examples/mesh.py:24</code>, which reaches 16 functions. That script builds a hollowed box with cross-hatch ribs and saves it. The primary user path is simpler: call <code>f.save('out.stl')</code> on any SDF object. <code>save</code> lives in <code>sdf/d3.py</code>, which is the hub — 87 functions defined there, called from 3 files, and <code>sdf/__init__.py</code> re-exports it to 15 importing modules.</p>
+<p>The call graph shows the real hot spots. <code>slab</code> is called from 7 places, <code>_normalize</code> from 6, <code>shell</code> and <code>sdf</code> from 5 each. The <code>f</code> function (a closure wrapper) calls <code>_length</code> 26 times and <code>_vec</code> 20 times — these are the vector math primitives everything builds on. <code>sdf/__init__.py</code> is a hub with 15 dependents; changing it has high blast radius.</p>
+<p>File-by-file map: <code>sdf/d3.py</code> owns the 3D primitives and the <code>SDF3</code> class, <code>sdf/d2.py</code> the 2D equivalents, <code>sdf/dn.py</code> the boolean operations, <code>sdf/core.py</code> the marching-cubes mesher and bounds estimation, <code>sdf/mesh.py</code> mesh I/O and transformations, <code>sdf/text.py</code> text and image-to-SDF conversion (reads image files), <code>sdf/stl.py</code> binary STL writing, <code>sdf/progress.py</code> progress reporting. <code>docs/render.py</code> is the only file that runs an external command (a Go program <code>docs/render.go</code>).</p>
+<p>One structural concern: <code>sdf/__init__.py</code>, <code>sdf/d3.py</code>, and <code>sdf/core.py</code> form a circular import cycle. It works today, but it makes refactoring harder — changing any of those files requires understanding the mutual dependencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>The README documents the install path:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/sdf.git
 cd sdf
-python -m venv env
+virtualenv env
 . env/bin/activate
-pip install -e .</p><p>Configuration: No environment variables or config files are required for basic operation. OpenVDB is optional and only needed if using meshes as SDFs; the README provides a manual build script but notes it is not pip-installable.</p><p>Running it: The entry point is examples/example.py, which generates out.stl. Confirm installation works with:</p><p>python examples/example.py</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A product design team could use this library to rapidly prototype custom mechanical parts—e.g., generating a gear housing with cutouts for fasteners—by composing SDFs via the &amp;, |, and - operators in sdf/core.py. The resulting mesh can be exported to STL for 3D printing or to OBJ/PLY for further simulation preprocessing. The examples/gearlike.py and examples/knurling.py demonstrate practical CSG compositions suitable for iterative design loops.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Bugs / risks: No test files are present in the repository. SDF boundary estimation is noted as inexact for non-uniform scaling, which may cause silent failures in edge cases. The OpenVDB dependency section acknowledges manual build complexity and pip install limitations.
-SDLC &amp; code violations: No CI/CD pipeline or automated test gate is configured (.github/ or equivalent absent). No license file is detected in the root directory structure provided, though LICENSE.md appears in the file listing. Dependency hygiene is reasonable for a small scientific computing project, but the lack of automated testing and integration gates is a notable gap for production use.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a focused, well-documented SDF library that excels at rapid prototyping and educational use. It is best suited for solo developers, researchers, or hobbyists needing programmatic 3D geometry generation without the overhead of a full CAD system. Teams requiring rigorous testing, CI integration, or out-of-the-box OpenVDB support will need to supplement the stack or accept the manual operational overhead.</p>
+pip install -e .</code></pre>
+<p>Dependencies (numpy, scipy, matplotlib, meshio, Pillow, scikit-image) install automatically via <code>setup.py</code>. Verify with:</p>
+<pre data-lang="bash"><code>python examples/example.py</code></pre>
+<p>That generates <code>out.stl</code> in the repo root. The library writes binary STL natively; other formats (OBJ, PLY, VTK) work via meshio based on the output file extension.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A practical scenario: generating a custom enclosure for a PCB. Define the outer box, subtract cylinder cutouts for standoffs and a USB port, add a lid with a lip:</p>
+<pre data-lang="python"><code>from sdf import *
+
+box_body = rounded_box((60, 40, 20), 2)
+standoffs = cylinder(0.15, 1).repeat((50, 30, 0))
+usb_cutout = box((12, 6, 3)).translate((30, 0, 0))
+f = box_body - standoffs - usb_cutout
+f.save('enclosure.stl')</code></pre>
+<p>The result is a printable STL, ready for slicing.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found 11 findings: 7 high, 4 medium. The high-severity items:</p>
+<ul><li><strong>Import cycle</strong> — <code>sdf/__init__.py</code>, <code>sdf/d3.py</code>, <code>sdf/core.py</code> participate in a circular dependency. Fix: extract shared types or defer imports.</li><li><strong>Duplicated code</strong> — 14 repeated 6-line blocks across <code>sdf/d2.py</code> and <code>sdf/d3.py</code>. Fix: extract shared helpers.</li></ul>
+<p>Medium-severity: <code>sdf/__init__.py</code> is a hub module (15 dependents, high churn risk); <code>sdf/text.py</code> opens files without a context manager; <code>sdf/core.py</code> and <code>sdf/dn.py</code> use broad exception handling.</p>
+<p>SDLC gaps: no test suite, no CI configuration, no lockfile. The repo has a license (MIT) and no committed secrets. For a library with this much geometry math, the missing tests are the most serious gap — a regression in vector math would produce silently broken meshes.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a clean, well-documented implementation of SDF-based CSG with a genuinely simple API. The core design is sound, but the circular imports and complete absence of tests make it risky to modify without careful manual verification. Use it for prototyping and small production jobs; add tests before building anything critical on top of it.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 29, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Translating video content between languages typically requires multiple disjointed tools for speech recognition, translation, and dubbing. Teams waste time stitching together separate ASR, machine translation, and TTS pipelines, then manually syncing audio with video. This repo provides a single, integrated workflow for the entire pipeline.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>pyVideoTrans is a desktop application and CLI tool that takes a video in one language and produces a dubbed, subtitled version in another. The core pipeline lives in videotrans/task/job.py and videotrans/task/onlyone.py—these orchestrate the three-stage process: ASR (speech-to-text), translation, and TTS (text-to-speech). Each stage supports multiple backends. For recognition, videotrans/recognition/ contains 20+ modules including local Whisper (whisper.py), cloud APIs (google.py, azure.py), and specialized models (funasr.py). Translation is handled by videotrans/translator/ with 25+ providers from DeepSeek (deepseek.py) to local models (localllm.py). TTS backends in videotrans/tts/ range from free Edge-TTS (edgetts.py) to voice cloning via F5-TTS (f5tts.py) and CosyVoice (cosyvoice.py).</p><p>The CLI entry point is cli.py. The GUI is built with PyQt5 in videotrans/mainwin/mainwin.py. Configuration lives in videotrans/configure/. The app supports interactive editing at each pipeline stage—users can pause and correct recognition or translation before proceeding.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A content creator records a tutorial in English and needs a Spanish version. They configure the app to use Faster-Whisper for recognition, DeepSeek for translation, and Edge-TTS for Spanish dubbing. The pipeline runs automatically: the app extracts audio, transcribes it to SRT (videotrans/task/speech2text.py), translates the SRT (videotrans/task/translatesrt.py), generates dubbed audio with speaker diarization support (videotrans/recognition/stt.py handles speaker labels), and remuxes the final video. The user can review and edit the translated subtitles before dubbing via the interactive UI.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - No lockfile for dependencies - pyproject.toml declares dependencies but no uv.lock or pip freeze output is committed. Builds are non-reproducible across environments. The repo does include uv.lock, so this may be resolved—verify presence.
-Med - 200 files, unclear modular boundaries - The videotrans/ directory has 165 files across 10+ subpackages. Several modules like ai302.py appear in recognition/, translator/, and tts/ with similar naming, suggesting code duplication or cross-cutting concerns not properly abstracted.
-Low - 13 test files for 200 source files - Test coverage is thin. tests/testbaserecogn.py, tests/testbasetrans.py, and tests/testbasetts.py exist but likely test only base classes, not the 20+ provider implementations.
-Med - Hardcoded sponsor link in README - The README contains a commercial sponsorship link for Recall.ai. This is not a code issue but signals the project may prioritize sponsor visibility over code quality.
-Low - .gitignore for ffmpeg/ and models/ - These directories are gitignored, meaning binary dependencies are expected to be downloaded separately. This is standard but adds friction to setup.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>pyVideoTrans is a genuinely useful integration tool that solves a real multi-step workflow problem. Its breadth of supported backends (50+ providers across recognition, translation, and TTS) is impressive. The codebase is functional but unpolished—thin tests, potential duplication, and no reproducible builds. Teams needing a quick video translation pipeline should evaluate it, but production deployments will require hardening the dependency management and adding test coverage for their chosen providers.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that need to repurpose video assets for new markets must run a manual chain: extract audio, run speech‑to‑text, translate the transcript, synthesize a new voice track, then re‑encode the video.  Each step typically requires a separate tool, manual file handling and ad‑hoc scripting, which introduces errors and delays.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>pyvideotrans</code> delivers an end‑to‑end pipeline that automates <strong>ASR → subtitle translation → multi‑role TTS → video muxing</strong>. The core CLI lives in <code>cli.py</code> (functions <code>main</code>, <code>stt_fun</code>, <code>tts_fun</code>, <code>sts_fun</code>).  Configuration handling is centralized in <code>videotrans/configure/config.py</code>, which loads language lists, API keys and runtime options.  UI components (<code>videotrans/mainwin/*.py</code>) expose the same workflow in a Qt front‑end, while the heavy‑lifting back‑ends are under <code>videotrans/recognition/</code>, <code>videotrans/translator/</code> and <code>videotrans/tts/</code>, each providing a plug‑in style wrapper around dozens of online or local models.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>cli.py:main</code></strong> (line 14).  <code>main</code> parses command‑line arguments and then calls one of the three worker functions:</p>
+<ul><li><code>stt_fun</code> → <code>videotrans/process/stt_fun.py</code> → <code>videotrans/recognition/_base.py</code> → external ASR APIs (network) or local Whisper (subprocess).</li><li><code>tts_fun</code> → <code>videotrans/process/tts_fun.py</code> → <code>videotrans/tts/_base.py</code> → selected TTS backend (network) or local model (subprocess).</li><li><code>sts_fun</code> → orchestrates the full translate‑and‑dub flow:   1. <code>videotrans/configure/config._set_env</code> (initialises env, logs). 2. <code>videotrans/task/trans_create.py</code> builds a <code>Task</code> object that iterates over video segments. 3. For each segment the call chain is: <strong><code>runffmpeg</code></strong> (in <code>videotrans/util/help_ffmpeg.py</code>) → external <code>ffmpeg</code> binary, <strong><code>BaseRecogn</code></strong> → ASR, <strong><code>BaseTrans</code></strong> → translation, <strong><code>BaseTTS</code></strong> → synthesis, finally <code>runffmpeg</code> again to merge audio/video.</li></ul>
+<p>The most‑connected module is <code>videotrans/configure/config.py</code> (266 inbound imports, 3 outbound), making it the primary blast‑radius: any change propagates to almost the whole codebase.  A circular import involving <code>videotrans/mainwin/main_win.py</code> exists; breaking it would reduce import‑time side effects.</p>
+<p>File I/O is performed in 93 places (e.g., <code>Path(...).mkdir</code> in <code>cli.py:main</code>, <code>open</code> in various helpers).  Network calls appear in 18 locations (API wrappers in <code>recognition/</code>, <code>translator/</code>, <code>tts/</code>).  External commands are invoked via <code>subprocess.run</code> in <code>videotrans/util/help_ffmpeg.py</code> (e.g., <code>runffmpeg</code>).  Cryptographic use is limited to a MD5 helper in <code>videotrans/util/help_misc.py</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1️⃣ Clone the repo
+git clone https://github.com/moses-y/pyvideotrans
+cd pyvideotrans
+
+# 2️⃣ Install dependencies (uv is recommended)
+uv sync               # creates a virtual env and installs from pyproject.toml
+# or, with pip
+python -m venv .venv &amp;&amp; . .venv/bin/activate
+pip install -e .     # editable install
+
+# 3️⃣ Provide required config (API keys, model paths)
+#   Edit videotrans/configure/config.py or supply a JSON/YAML file referenced there.
+#   Example keys: OPENAI_API_KEY, AZURE_SPEECH_KEY, FASTER_WHISPER_MODEL_PATH
+
+# 4️⃣ Run a full translation job
+python cli.py sts_fun --src-lang en --tgt-lang zh --input path/to/video.mp4 --output out_dir</code></pre>
+<p><em><code>sts_fun</code></em> runs the complete pipeline; use <code>stt_fun</code> or <code>tts_fun</code> for isolated speech‑to‑text or text‑to‑speech testing.  The CLI options are defined in <code>cli.py</code> and surfaced via <code>argparse</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A media agency can drop a raw interview (<code>interview.mov</code>) into a watched folder, call the CLI with the source and target language, and receive a fully dubbed MP4 ready for distribution, all without manual subtitle editing.  The same code can be wrapped in a micro‑service that watches a queue and processes jobs asynchronously.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/main.yml</code>).</li><li><strong>HIGH</strong> – CI does not execute the test suite (<code>.github/workflows/main.yml</code>).</li><li><strong>MEDIUM</strong> – No least‑privilege <code>GITHUB_TOKEN</code> permissions declared (<code>.github/workflows/main.yml</code>).</li><li><strong>MEDIUM</strong> – Dependabot / Renovate not configured (no <code>dependabot.yml</code>).</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – Test coverage low (12 tests for 308 source files).</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li></ul>
+<p>Additional static findings: deep nesting (max depth 10) in <code>videotrans/configure/config.py</code> and several modules contain duplicated 6‑line blocks, which inflates maintenance cost.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>pyvideotrans</code> assembles a full video‑translation workflow in a single Python package, with clear entry points and modular back‑ends for ASR, translation and TTS.  Its biggest risk is the concentration of logic in a few hub modules and the current CI gaps; addressing those would make the codebase safer to extend.  It is suitable for teams that need a customizable, on‑premise solution and are comfortable managing the dependency and configuration complexity.</p>
             </div>
 
             
@@ -102,11 +131,11 @@ Low - .gitignore for ffmpeg/ and models/ - These directories are gitignored, mea
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">380<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>142</b></li><li><span>Markdown</span><i style="width:5%"></i><b>7</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li><li><span>JSON</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>308</b></li><li><span>JSON</span><i style="width:5%"></i><b>16</b></li><li><span>Markdown</span><i style="width:2%"></i><b>7</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 

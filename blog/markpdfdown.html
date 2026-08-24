@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 5, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,32 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#clone-and-install-in-editable-mode">Clone and install in editable mode</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#pipe-mode-useful-in-ci-or-docker">Pipe mode (useful in CI or Docker)</a><a href="#programmatic-use">Programmatic use</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams that need to extract editable, structured text from PDFs (e.g., research papers, reports, invoices) currently rely on OCR pipelines that produce noisy markdown or require manual cleanup. Inconsistent table and formula rendering adds further overhead.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>markpdfdown wraps a multimodal LLM (via LiteLLM) to transcribe PDF pages (or images) into clean Markdown. The core conversion flow lives in src/markpdfdown/core/llmclient.py, which sends image fragments to the model and assembles the response. CLI handling is in src/markpdfdown/cli.py; the entry‑point script src/markpdfdown/main.py forwards arguments to src/markpdfdown/main.py.</p><p>The repository ships a Dockerfile for containerised execution and a Makefile with typical targets (make install, make test). Configuration is driven by environment variables loaded from a .env file (sample in .env.sample).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install uv (recommended)
-curl -LsSf https://astral.sh/uv/install.sh | sh</p><h3 class="post-h" id="clone-and-install-in-editable-mode">Clone and install in editable mode</h3><p>git clone https://github.com/MarkPDFdown/markpdfdown.git
-cd markpdfdown
-uv sync          # resolves dependencies from pyproject.toml, uses uv.lock
-uv pip install -e .</p><p>Alternatively, the Docker image can be built with docker build -t markpdfdown ..</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create a .env file from the provided sample and supply at least the model name and an API key:</p><p>.env
-MODELNAME=gpt-4o
-OPENAIAPIKEY=sk-...
-optional
-TEMPERATURE=0.3
-MAXTOKENS=8192
-RETRYTIMES=3</p><p>The file is read by src/markpdfdown/config.py at runtime.</p><h3 class="post-h" id="running">Running</h3><p>CLI (file mode)</p><p>markpdfdown --input document.pdf --output document.md
-page range
-markpdfdown --input doc.pdf --output part.md --start 2 --end 5
-image input
-markpdfdown --input diagram.png --output diagram.md</p><h3 class="post-h" id="pipe-mode-useful-in-ci-or-docker">Pipe mode (useful in CI or Docker)</h3><p>cat document.pdf | markpdfdown &gt; document.md</p><h3 class="post-h" id="programmatic-use">Programmatic use</h3><p>from markpdfdown.main import convert
-markdown = convert(inputpath=&quot;doc.pdf&quot;, start=1, end=3)</p><p>The commands above are defined in src/markpdfdown/cli.py and wired through src/markpdfdown/main.py.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑processing pipeline for a market‑research firm can invoke the tool inside a Docker step:
-name: Extract markdown from PDF
-  run: |
-    docker run --rm -v $PWD:/work -e OPENAIAPIKEY=$OPENAIAPIKEY \
-      markpdfdown markpdfdown --input /work/report.pdf --output /work/report.md</p><p>The resulting report.md feeds directly into downstream NLP summarisation scripts without manual reformatting.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile for pip – pyproject.toml declares deps but no requirements.txt lock; however an uv.lock exists, mitigating reproducibility concerns.  
-Medium – API key handling – src/markpdfdown/core/llmclient.py assumes environment variables are present; missing keys raise a generic KeyError instead of a user‑friendly message.  
-Low – Limited input validation – CLI arguments for page numbers are passed directly to the PDF parser; negative or out‑of‑range values could cause uncaught exceptions.  
-Low – Test coverage – 16 test files cover CLI, config, file worker, and LLM client, but integration tests that hit the actual LLM endpoint are absent (expected due to external API).  
-Low – CI completeness – GitHub Actions run linting and tests, but no security scanning or dependency audit step is defined.  
-Low – Documentation – README provides comprehensive usage examples; additional docstrings in core modules would improve discoverability.</p><p>Overall the repository follows a modular layout, includes a CI pipeline, and provides both source and container execution paths.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>markpdfdown delivers a focused, LLM‑backed PDF‑to‑Markdown conversion with a usable CLI and Docker support. It is suitable for teams that already have access to supported LLM providers and need automated markdown extraction. Minor gaps around input validation and explicit dependency locking should be addressed before production deployment, but the codebase is otherwise clean and well‑tested.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Converting PDFs to editable Markdown is usually lossy: tables break, formulas become images, and layout is discarded. Most tools use rule-based extraction that fails on complex documents. MarkPDFDown instead sends rendered PDF pages to a multimodal LLM and asks it to transcribe what it sees, which preserves structure at the cost of an API call per page.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The package converts PDFs and images to Markdown using OpenAI or OpenRouter models through LiteLLM. Core logic lives in <code>src/markpdfdown/core/</code>: <code>file_worker.py</code> renders PDF pages to images, <code>llm_client.py</code> wraps the API call, and <code>utils.py</code> handles Markdown cleanup and input validation. The CLI in <code>src/markpdfdown/cli.py</code> supports both file arguments and stdin piping.</p>
+<p>Configuration is environment-variable driven via <code>src/markpdfdown/config.py</code> — model name, temperature, max tokens, retry count. A <code>.env.sample</code> file documents the expected keys.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>src/markpdfdown/cli.py:98</code>, which parses arguments, validates them, then dispatches to <code>convert_from_file</code> or <code>convert_from_stdin</code> in <code>src/markpdfdown/main.py</code>. Those call <code>convert_to_markdown</code>, which uses <code>FileWorker</code> to render pages to images, then <code>LLMClient.completion</code> to get the transcription. The shortest path to an external effect is <code>main -&gt; convert_from_file -&gt; convert_to_markdown -&gt; os.makedirs</code> — two hops from entry to filesystem write.</p>
+<p><code>LLMClient</code> is the hub: called from 14 places. <code>create_parser</code>, <code>detect_file_type</code>, and <code>validate_page_range</code> are each called from 10+ places, so changes to their signatures break a wide surface. The import graph is acyclic with 12 edges across 17 modules — no circular dependencies, which keeps refactoring straightforward.</p>
+<p>The module graph shows <code>core/utils.py</code> as a stable leaf (3 callers, 0 dependencies) and <code>core/llm_client.py</code> similarly stable. <code>main.py</code> sits in the middle with instability 0.67, meaning it both depends on and is depended on — the natural place to add features like new output formats.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install with uv (recommended, uv.lock is present)
+uv sync
+uv pip install -e .
+
+# Or with pip
+pip install -e .
+
+# Configure
+cp .env.sample .env
+# Edit .env: MODEL_NAME, OPENAI_API_KEY (or OPENROUTER_API_KEY)
+
+# Convert a PDF
+markpdfdown --input document.pdf --output output.md
+
+# Convert specific pages
+markpdfdown --input document.pdf --output output.md --start 1 --end 10
+
+# Pipe mode
+markpdfdown &lt; document.pdf &gt; output.md</code></pre>
+<p>A Dockerfile is present for containerized use.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>Batch-converting a document archive: loop over PDFs, call <code>markpdfdown</code> per file, store the Markdown in a content repository. The pipe mode makes this scriptable without temp files: <code>cat report.pdf | markpdfdown &gt; report.md</code>. Page-range selection lets you handle large documents in chunks to stay within context windows.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 8 issues (0 critical, 2 high, 5 medium, 1 low):</p>
+<ul><li><strong>High</strong> - Third-party GitHub Actions pinned to tags, not commit SHAs — <code>.github/workflows</code> — a moved tag can run arbitrary code with your CI secrets</li><li><strong>High</strong> - CI has 16 test files but no workflow runs them — <code>.github/workflows</code> — the green check proves nothing</li><li><strong>Medium</strong> - No <code>permissions</code> block on workflows that reference secrets — <code>.github/workflows/changelog.yml</code></li><li><strong>Medium</strong> - No Dependabot/Renovate configured — dependencies go unpatchable</li><li><strong>Medium</strong> - Docker base image <code>python:3.9-slim</code> not pinned by digest — <code>Dockerfile</code></li><li><strong>Medium</strong> - No dependency vulnerability scan in CI — <code>.github/workflows</code></li><li><strong>Medium</strong> - No non-root <code>USER</code> in the Dockerfile — container runs as root</li><li><strong>Low</strong> - No <code>timeout-minutes</code> on workflow jobs — a wedged run blocks the queue</li></ul>
+<p>One code-quality finding: <code>src/markpdfdown/core/llm_client.py</code> has nesting depth of 6 — extract guard clauses to flatten.</p>
+<p>A <code>uv.lock</code> file is present, so builds are reproducible despite no lockfile warning in the analysis.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A clean, small codebase (17 Python files) with a sensible architecture and actual tests — though CI doesn't run them. The LLM-based approach is genuinely better than rule-based PDF extraction for complex documents. The main risks are supply-chain: unpinned CI actions and base image. Suitable for anyone needing high-fidelity PDF-to-Markdown conversion and willing to pay API costs per page.</p>
             </div>
 
             

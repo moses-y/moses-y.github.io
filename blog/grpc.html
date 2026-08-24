@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 10, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,25 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building distributed systems requires a standardized, language-agnostic RPC framework. Teams often waste time writing custom HTTP APIs, managing serialization, and implementing retry logic. gRPC provides a contract-first approach where service definitions in .proto files generate client and server code across multiple languages.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This is the canonical gRPC repository containing the shared C++ core library (src/core) and language-specific implementations for C++, Ruby, Python, PHP, C#, and Objective-C. The build system supports Bazel (MODULE.bazel, bazel/), CMake (CMakeLists.txt, cmake/), and Makefile. CI/CD runs through GitHub Actions (.github/workflows/). Documentation covers protocol details (doc/PROTOCOL-HTTP2.md), security (doc/grpcsecurityaudit.pdf), and environment variables (doc/environment_variables.md).</p><p>The repository provides dependency management through language-specific package managers: pip install grpcio for Python, gem install grpc for Ruby, pecl install grpc for PHP.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A microservices team defines a user.proto service with RPC methods and types. They generate Python server code and Go client code from the same proto file. The service handles authentication, load balancing, and retries transparently through the gRPC runtime, eliminating boilerplate for each service pair.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No lockfile for Ruby dependencies (Gemfile without Gemfile.lock). Builds may produce different results across environments.
-Low - composer.json present for PHP but no lockfile. Same reproducibility concern.
-Low - Makefile at root with no documented targets. Likely legacy build path.
-Clean - CI is well-configured with multiple workflows, issue templates for all languages, stale issue management, and Dependabot. Tests exist across languages (11 test files detected). Code style enforced via .clang-format, .clang-tidy, .pylintrc.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is the production-grade gRPC monorepo used by thousands of organizations. It is well-maintained with solid CI and multi-language support. The build complexity (three build systems) and dependency on C++ core make it better suited to teams with infrastructure experience than small projects. Use this directly only if you need the C++ core; language-specific repos (grpc-go, grpc-java) are simpler for most teams.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>gRPC solves the problem of connecting distributed services: it gives client and server applications a typed, language-neutral contract (Protocol Buffers) and a high-performance transport so a Python service can call a C++ service as if it were a local function. Without it, teams hand-roll HTTP+JSON APIs with no schema enforcement, no streaming, and no built-in cancellation or deadlines.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is the main gRPC repository: the shared C++ core (<code>src/core</code>), language bindings for Python, Ruby, PHP, and Objective-C, and a large <code>examples/</code> directory. The <code>examples/python/</code> folder is effectively a portfolio of self-contained projects covering async streaming, cancellation, compression, auth, interceptors, and multiplexing. <code>py_xds_protos/</code> holds generated protobuf code for xDS (the control plane protocol for Envoy-style service discovery).</p>
+<p>The repo is a fork of <code>grpc/grpc</code> at zero stars, so it is upstream gRPC with no meaningful local changes. Static analysis shows 10,446 files, 469 functions, and 125 classes, with most logic in <code>src/</code> (4,117 files) and <code>examples/</code> (609 files).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Control flow starts in the example entry points, not in the core library. Traced paths show <code>main</code> in <code>examples/python/cancellation/server.py</code> reaching 105 functions, and <code>run</code> in <code>examples/python/async_streaming/client.py</code> reaching 39. The call graph shows the highest-fan-in functions are the generated stubs: <code>SayHello</code> is called from 7 places and <code>GreeterStub</code> from 6, meaning the generated protobuf code is the hub everything routes through. The <code>serve</code> function calls <code>add_GreeterServicer_to_server</code> 22 times and <code>Greeter</code> 20 times across examples.</p>
+<p>The only external side effect traced is in <code>examples/python/cancellation/search.py</code>: <code>main -&gt; run_streaming_client -&gt; FindRange -&gt; search -&gt; _get_hash</code>, which calls <code>hashlib.sha1</code>. That is the only cryptographic operation in the repo. No database or network calls were resolved in static analysis. The wiring has not been fully mapped for the C++ core; the call graph covers only the Python examples.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ul><li><strong>Setup</strong>: The repo uses Bazel (<code>.bazelversion</code>) and CMake (<code>CMakeLists.txt</code>). For Python examples, install the package with <code>pip install grpcio</code> per the README.</li><li><strong>Configuration</strong>: No environment variables are required for the examples. TLS certs live in <code>src/core/tsi/test_creds/</code> for tests only.</li><li><strong>Running it</strong>: Each example is a standalone server/client pair. Start with <code>python examples/python/helloworld/greeter_server.py</code>, then <code>python examples/python/helloworld/greeter_client.py</code> in a second terminal. The README does not document a single build command for the entire repo; Bazel is the canonical build system.</li></ul>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A typical deployment: a Python microservice exposes a <code>Greeter</code> service (defined in a <code>.proto</code> file, compiled to <code>helloworld_pb2_grpc.py</code>), and a C++ client calls it over the wire. The <code>examples/python/interceptors/</code> folder shows how to add auth or logging middleware without touching the service logic, and <code>examples/python/multiplexing/</code> demonstrates hosting multiple services on one port.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 9 issues (0 critical, 2 high, 6 medium, 1 low). The two high-severity findings:</p>
+<ul><li><strong>High</strong> - GitHub Actions pinned to tags, not commit SHAs - <code>.github/workflows</code> (e.g., <code>bazel-contrib/publish-to-bcr@v1.2.0</code>). A moved tag can run arbitrary code with your token. Fix: pin to 40-char SHAs.</li><li><strong>High</strong> - No lockfile committed for <code>Gemfile</code>. Unlocked dependency ranges mean the tested artifact may differ from production. Fix: commit the generated lockfile.</li></ul>
+<p>Medium findings include missing least-privilege <code>GITHUB_TOKEN</code> permissions, unpinned Docker base images, no dependency vulnerability scan in CI, and 26 generated build files committed to <code>src/</code>. The repo has tests (3,267 files), CI, a license, and a Dockerfile. The <code>.gitallowed</code> file exists, and the "committed secrets" flag is a false positive from test certs in <code>src/core/tsi/test_creds/</code>.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is upstream gRPC, unmodified. It is production-grade software with a decade of hardening, and the examples are the best way to learn the API. The hygiene issues are real but standard for a large monorepo. Use it if you need gRPC in C++, Python, Ruby, or PHP; do not expect any local innovation in this fork.</p>
             </div>
 
             
@@ -94,18 +108,18 @@ Clean - CI is well-configured with multiple workflows, issue templates for all l
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">10,446<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>63</b></li><li><span>YAML</span><i style="width:25%"></i><b>16</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li><li><span>Python</span><i style="width:6%"></i><b>4</b></li><li><span>Swift</span><i style="width:3%"></i><b>2</b></li><li><span>Shell</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>2563</b></li><li><span>C/C++ Header</span><i style="width:83%"></i><b>2135</b></li><li><span>C</span><i style="width:19%"></i><b>482</b></li><li><span>Shell</span><i style="width:13%"></i><b>337</b></li><li><span>Markdown</span><i style="width:12%"></i><b>296</b></li><li><span>PHP</span><i style="width:8%"></i><b>216</b></li>
                         </ul>
-                        <p class="an-fw"><span>Rails</span><span>Laravel</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Rails</span><span>Laravel</span><span>Docker</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -119,7 +133,7 @@ Clean - CI is well-configured with multiple workflows, issue templates for all l
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>Gemfile</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>etc/roots.pem, src/core/tsi/test_creds/badclient.pem, src/core/tsi/test_creds/badserver.pem</code></span></li>
                     </ul>
                 </div>
 

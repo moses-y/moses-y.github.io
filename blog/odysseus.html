@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations that need a private, self-hosted AI workspace often end up stitching together multiple tools—chat, email, document editing, research agents, model management—each with its own UI, auth, and data store. This creates integration overhead, security gaps, and a fragmented user experience. Existing open-source alternatives tend to focus on chat alone or require cloud dependencies.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Odysseus provides a unified, Docker-based AI workspace that combines chat with local or API-hosted models, a cookbook for hardware-aware model recommendations (routes/cookbookroutes.py, services/hwfit/), deep multi-step research (routes/researchroutes.py), a document editor (routes/documentroutes.py), email via IMAP/SMTP (routes/emailroutes.py, routes/emailpollers.py), notes and tasks (routes/noteroutes.py, routes/taskroutes.py), calendar sync, and an MCP server framework (mcpservers/). The backend is Python/Flask (98 Python files), the frontend appears React-based (detected via analysis), and deployment is handled through docker-compose.yml with GPU support (docker-compose.gpu-nvidia.yml, docker-compose.gpu-amd.yml). Authentication, session management, and 2FA are built in (core/auth.py, core/sessionmanager.py). The project also ships CLI scripts (scripts/odysseus-*), GitHub Actions CI/CD (.github/workflows/), and integrations with Claude and Codex (integrations/).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A research team can deploy Odysseus on a server with a local GPU. They use the cookbook to download a suitable model, then start a research session: the agent reads web sources, generates a report, and saves it as a document. Meanwhile, the same user triages email, checks calendar, and runs a scheduled agent task—all from one interface. The docker compose up -d --build command from the README brings up the entire stack, with the admin password printed in logs.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low test coverage (1 test file across 200 source files) — a significant risk for a project of this scope. Many routes (routes/ has 54 files) are untested.  
-CI hygiene is good: container scanning (container-trivy.yml), dependency review, secret scanning, and issue/PR description checks are configured.  
-Dependencies are pinned (requirements.txt, package-lock.json, pyproject.toml). No obvious secrets in the repository.  
-No structural red flags: license (AGPL-3.0), CODEOWNERS, CONTRIBUTING.md, SECURITY.md, THREATMODEL.md are present. The codebase is well-organized with clear separation of concerns (routes, services, core, integrations).  
-Forked from a small project (25 stars); the current repo has 0 stars, so community and external review are minimal.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Odysseus is a feature-rich, well-structured self-hosted AI workspace that covers an unusually broad set of use cases. It is suitable for teams that want an all-in-one private AI environment and are comfortable contributing tests and hardening for production. The lack of test coverage and small community are the main concerns—this is a tool for early adopters, not a drop-in replacement for mature SaaS products.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need a locally‑hosted AI assistant must cobble together separate chat, document, and tooling services, each with its own auth, persistence, and deployment model. Maintaining consistency, security, and a unified UI quickly becomes a heavy operational burden.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>odysseus</code> bundles a full AI workspace behind a single FastAPI‑style backend (<code>app.py</code>) and a React front‑end (<code>static/app.js</code>). Core persistence lives in <code>core/database.py</code>, which defines the ORM models and the <code>utcnow_*</code> helpers used throughout the stack. Feature modules such as chat, email, documents, and calendar are organized under <code>routes/</code> (e.g., <code>routes/chat_routes.py</code>, <code>routes/email_routes.py</code>) and <code>services/</code> (e.g., <code>services/docs/service.py</code>). The repository ships Docker orchestration (<code>Dockerfile</code>, <code>docker‑compose.yml</code>, GPU‑specific compose files) so the entire stack can be launched with a single command.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <code>app.py</code> at line 177 (<code>dispatch</code>) which registers the FastAPI app and mounts static assets. From there the request lifecycle follows the internal call graph:</p>
+<ol><li><strong>Request routing</strong> – each HTTP endpoint is wired in <code>routes/*</code>. For example, <code>setup_email_routes</code> (in <code>routes/email_routes.py</code>) registers a <code>POST</code> handler that ultimately calls <code>post</code> (a generic DB helper) 14 times.</li><li><strong>Core services</strong> – handlers call into <code>core/database.py</code> (<code>query</code>, <code>filter</code>, <code>commit</code>, <code>delete</code>). The <code>query</code> function is the most widely used primitive (called from 268 distinct places).</li><li><strong>Business logic</strong> – <code>src/llm_core.py</code> and <code>src/agent_loop.py</code> implement LLM interaction and agent orchestration; both are part of a circular import cycle (highlighted as a high‑risk module).</li><li><strong>External effects</strong> – the call chain <code>dispatch → create_task → db.query(...).filter(...)</code> performs a cryptographic token (<code>secrets.token_urlsafe</code>) and writes to the database. Similarly, <code>execute</code> (via <code>scripts/_lib/cli.py:run</code>) creates a session and commits changes. Outbound network calls are limited to a few helpers in <code>core/auth.py</code> and <code>routes/email_helpers.py</code>, which contact external mail providers.</li><li><strong>Blast radius</strong> – <code>core/database.py</code> is a hub (104 inbound imports, 3 outbound), so any change here can affect the entire codebase. The import cycle involving <code>src/llm_core.py</code> and <code>static/js/ui.js</code> raises instability (0.98) and makes refactoring risky.</li></ol>
+<p>Unmapped wiring: the React front‑end (<code>static/app.js</code>) interacts with the backend via the generated OpenAPI spec, but static analysis does not resolve those HTTP calls.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/odysseus.git
+cd odysseus
+
+# Prepare environment (see .env.example)
+cp .env.example .env
+
+# Build and start all containers (GPU optional)
+docker compose up -d --build          # default CPU
+# or for NVIDIA GPUs
+docker compose -f docker-compose.gpu-nvidia.yml up -d --build</code></pre>
+<p>The service listens on <strong>http://localhost:7000</strong> once containers are healthy. The first admin password appears in <code>docker compose logs odysseus</code>. For CLI tasks, invoke the bundled script:</p>
+<pre data-lang="bash"><code>python scripts/_lib/cli.py run --help</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS team can run <code>odysseus</code> on an internal VM to provide a private chat assistant that can read corporate documents, draft emails, and schedule calendar events without exposing any data to external APIs. The workflow is:</p>
+<pre data-lang="python"><code>import requests
+resp = requests.post(
+    "http://localhost:7000/api/chat",
+    json={"message": "Summarize the Q3 report"},
+    timeout=30,                     # respects the CI‑recommended timeout
+)
+print(resp.json()["reply"])</code></pre>
+<p>All persistence stays in the local SQLite/Postgres DB defined in <code>core/database.py</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Remove <code>continue-on-error</code> from correctness steps in <code>.github/workflows/ci.yml</code> (line 55).</li><li><strong>Medium</strong> – Pin Docker base image by digest in <code>Dockerfile</code>.</li><li><strong>Medium</strong> – Add explicit request timeouts to outbound calls (identified in <code>docker-compose.yml</code>).</li><li><strong>Medium</strong> – Exclude generated build output from VCS (<code>static/</code> contains six generated files).</li><li><strong>Medium</strong> – Run container as non‑root (add <code>USER</code> directive to <code>Dockerfile</code>).</li><li><strong>Low</strong> – Set <code>timeout-minutes</code> on CI jobs (<code>.github/workflows/ci.yml</code>).</li></ul>
+<p>Static analysis also flagged 620 issues: deep nesting (max depth 8) and oversized files (&gt; 1900 lines) in <code>core/database.py</code>, <code>src/llm_core.py</code>, and <code>static/js/ui.js</code>; broad <code>except:</code> blocks; and import cycles (e.g., <code>src/llm_core.py</code>). These are documented in the measured findings and should be prioritized for maintainability.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>odysseus</code> delivers a feature‑complete, self‑hosted AI workspace with a single Docker‑compose launch, but its core modules are tightly coupled and contain several high‑impact technical debts (large hub files, import cycles, deep nesting). It is suitable for teams that value on‑prem control and can allocate effort to refactor the database and LLM core layers for long‑term stability.</p>
             </div>
 
             
@@ -102,11 +134,11 @@ Forked from a small project (25 stars); the current repo has 0 stars, so communi
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,155<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>98</b></li><li><span>YAML</span><i style="width:19%"></i><b>19</b></li><li><span>Markdown</span><i style="width:19%"></i><b>19</b></li><li><span>Shell</span><i style="width:9%"></i><b>9</b></li><li><span>JSON</span><i style="width:4%"></i><b>4</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>865</b></li><li><span>JavaScript</span><i style="width:18%"></i><b>160</b></li><li><span>Markdown</span><i style="width:3%"></i><b>25</b></li><li><span>YAML</span><i style="width:2%"></i><b>19</b></li><li><span>Shell</span><i style="width:1%"></i><b>10</b></li><li><span>JSON</span><i style="width:1%"></i><b>6</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Flask</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Django</span><span>Flask</span><span>Express</span><span>Docker</span><span>Vector store</span><span>CUDA</span></p>
                     </div>
                 </div>
 

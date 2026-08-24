@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 13, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Medical imaging analysis is a complex task that requires specialized software and expertise. Current solutions often involve manual processing, which can be time-consuming and prone to errors. The MONAI framework aims to address this issue by providing a flexible and customizable platform for deep learning in healthcare imaging.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MONAI is a PyTorch-based framework that offers a range of features for medical imaging analysis, including flexible pre-processing, compositional APIs, and domain-specific implementations for networks, losses, and evaluation metrics. The monai/apps directory contains various applications, such as auto3dseg and deepedit, which provide pre-built workflows for tasks like image segmentation and editing. The docs directory contains extensive documentation, including technical highlights and release notes, which can be found in files like docs/source/highlights.rst and docs/source/whatsnew.rst.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For example, a researcher could use MONAI to develop a deep learning model for segmenting medical images. They could utilize the auto3dseg application to generate a pre-trained model and then fine-tune it using their own dataset. The monai/apps/auto3dseg/main.py file provides an entry point for this application, and the docs/source/auto3dseg.rst file contains documentation on how to use it.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing lockfile for dependencies - docs/requirements.txt
- Low - Potential for untested code paths - monai/apps directory
-Medium - Limited input validation in some applications - monai/apps/auto3dseg/transforms.py
-However, the codebase appears to be well-structured, with a clear separation of concerns and extensive documentation. The presence of tests, CI configuration, and a license file also suggests a high level of code hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MONAI is a well-designed framework for deep learning in healthcare imaging, with a strong focus on flexibility and customizability. While there are some potential issues with dependency management and input validation, the codebase appears to be well-maintained and extensively documented. Researchers and developers working in medical imaging analysis may find MONAI to be a valuable tool for their work.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Medical imaging deep learning requires specialized preprocessing, network architectures, and evaluation metrics that generic frameworks like PyTorch don't provide. Teams building segmentation, classification, or detection models for CT, MRI, or pathology images end up reimplementing the same transforms, data loaders, and loss functions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MONAI is a PyTorch-based framework for healthcare imaging deep learning. The <code>monai/transforms/</code> package provides composable preprocessing operations for multi-dimensional medical data, <code>monai/networks/</code> contains domain-specific architectures, and <code>monai/apps/auto3dseg/</code> offers automated 3D segmentation pipelines. The <code>monai/bundle/</code> module handles model packaging and configuration.</p>
+<p>The repo includes Dockerfiles for containerized deployment, a <code>pyproject.toml</code> for pip installation, and 918 test files under <code>tests/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution flows through three primary entry points. The <code>run</code> function in <code>monai/apps/auto3dseg/auto_runner.py:812</code> orchestrates automated segmentation pipelines, reaching 353 functions and touching the filesystem via <code>os.makedirs</code> in <code>convert_dataset</code>. The <code>start</code> function in <code>monai/data/dataset.py:1139</code> initializes data loading. The <code>init</code> method in <code>monai/data/image_writer.py:865</code> sets up image output.</p>
+<p>The import graph shows 4031 edges across 1305 modules, with 230 modules in circular dependencies. The heaviest hubs are <code>monai/utils/__init__.py</code> (481 importers) and <code>monai/transforms/__init__.py</code> (401 importers). Both sit in cycles, meaning changes to shared utilities ripple through hundreds of modules and can create subtle initialization-order bugs. The <code>tests/test_utils.py</code> file is the most-connected module overall (528 importers), so test infrastructure changes have the widest blast radius.</p>
+<p>Internally, <code>__call__</code> methods dominate the call graph—194 calls to <code>key_iterator</code> and 165 to <code>convert_to_tensor</code>—reflecting the transform pipeline pattern where every operation routes through these utilities. The <code>max</code>, <code>sum</code>, and <code>min</code> builtins are called from 105, 94, and 89 places respectively, making them de facto core primitives.</p>
+<p>Filesystem access appears in 61 functions, outbound network calls in 6, and model inference in 16. The <code>monai/apps/auto3dseg/bundle_gen.py</code> runs external commands, and <code>monai/data/utils.py</code> performs cryptographic operations (likely hashing for dataset caching).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/MONAI
+cd MONAI
+pip install -e .</code></pre>
+<p>Configuration happens through <code>monai/bundle/config_parser.py</code> for model bundles and <code>monai/apps/auto3dseg/</code> for pipeline settings. The <code>Dockerfile</code> provides a containerized path: <code>docker build -t monai .</code>. No lockfile exists, so pin dependencies manually for reproducible builds.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>For a 3D tumor segmentation pipeline, you'd compose transforms from <code>monai/transforms/</code>, train a network from <code>monai/networks/</code>, and evaluate with <code>monai/metrics/</code>:</p>
+<pre data-lang="python"><code>from monai.transforms import Compose, LoadImage, ScaleIntensity, EnsureChannelFirst
+from monai.networks.nets import UNet
+
+transform = Compose([LoadImage(image_only=True), EnsureChannelFirst(), ScaleIntensity()])
+model = UNet(spatial_dims=3, in_channels=1, out_channels=2, channels=(16, 32, 64), strides=(2, 2))</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 607 issues: 319 high, 283 medium, 5 low. Key findings:</p>
+<ul><li><strong>High - Import cycle members</strong> (31 instances) in <code>monai/utils/__init__.py</code>, <code>monai/transforms/__init__.py</code>, <code>monai/data/__init__.py</code>. Circular imports complicate refactoring.</li><li><strong>High - Hub modules</strong> (12 instances). <code>tests/test_utils.py</code> has 528 dependents; changes there break nearly everything.</li><li><strong>High - Oversized files</strong> (6 instances). <code>tests/test_utils.py</code> at 745 lines and <code>monai/transforms/__init__.py</code> are too large to hold in one head.</li><li><strong>Medium - Broad exception handling</strong> in <code>monai/__init__.py</code>, <code>monai/utils/misc.py</code>. Bare <code>except</code> swallows errors.</li><li><strong>Medium - File opened without context manager</strong> in <code>monai/transforms/utils.py</code>. Use <code>with open(...)</code>.</li></ul>
+<p>Security audit found one critical issue: <code>.github/workflows/blossom-ci.yml</code> exposes <code>BLOSSOM_KEY</code> and <code>CI_SERVER</code> to pull requests from forks, enabling credential exfiltration. High-severity issues include unpinned GitHub Actions (<code>NVIDIA/blossom-action@main</code>) and no lockfile for dependencies.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a mature, production-grade medical imaging framework with solid test coverage and CI. The circular dependency structure and oversized hub modules make deep refactoring risky, and the CI security posture needs hardening before accepting external contributions. For teams building medical imaging models, it's a strong foundation—just pin your dependencies and audit the workflows first.</p>
             </div>
 
             
@@ -101,11 +125,11 @@ However, the codebase appears to be well-structured, with a clear separation of 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,553<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>37</b></li><li><span>Markdown</span><i style="width:78%"></i><b>29</b></li><li><span>reStructuredText</span><i style="width:73%"></i><b>27</b></li><li><span>YAML</span><i style="width:59%"></i><b>22</b></li><li><span>C++</span><i style="width:5%"></i><b>2</b></li><li><span>TOML</span><i style="width:3%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>1305</b></li><li><span>Markdown</span><i style="width:2%"></i><b>30</b></li><li><span>reStructuredText</span><i style="width:2%"></i><b>27</b></li><li><span>YAML</span><i style="width:2%"></i><b>24</b></li><li><span>C++</span><i style="width:1%"></i><b>16</b></li><li><span>C/C++ Header</span><i style="width:1%"></i><b>15</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Docker</span><span>PyTorch</span><span>OpenCV</span><span>MLflow</span><span>CUDA</span></p>
                     </div>
                 </div>
 
