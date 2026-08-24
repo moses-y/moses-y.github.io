@@ -13,6 +13,29 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const LLM_API_KEY = process.env.NVIDIA_API_KEY || process.env.LLM_API_KEY;
 const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1/chat/completions';
 const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '240000', 10);   // 120s aborted legitimate work on large prompts
+
+/*
+ * A ceiling on how long this process will keep spending on model calls.
+ *
+ * The workflow runs on a 2-hour cron with cancel-in-progress, and measured over
+ * three days runs take 27 to 132 minutes: 8 of the last 20 were cancelled at the
+ * 120-minute line by the next scheduled run, discarding everything they had not
+ * committed. Retrying a timeout raises the worst case per repo from one 240s
+ * abort to three, so without a clock the guardrail could push a run over that
+ * line and cost more than it saves.
+ *
+ * Once past this, retries stop and the caller keeps the article it already has.
+ * A thinner article that gets committed beats a better one that gets cancelled.
+ */
+const RUN_STARTED = Date.now();
+const LLM_RETRY_BUDGET_MS = parseInt(process.env.LLM_RETRY_BUDGET_MS || '3600000', 10);
+function retryBudgetSpent() {
+  // Zero or less turns retries off outright, which is both a useful setting for a
+  // run that has to finish and the only way to test this branch without making a
+  // test wait an hour or sleep on a clock.
+  if (!(LLM_RETRY_BUDGET_MS > 0)) return true;
+  return Date.now() - RUN_STARTED > LLM_RETRY_BUDGET_MS;
+}
 const LLM_BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
 const EMBED_ENDPOINT = process.env.EMBED_ENDPOINT || `${LLM_BASE}/embeddings`;
 const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
@@ -63,4 +86,5 @@ function getNextModel() {
 }
 
 module.exports = { CONFIG, GITHUB_TOKEN, LLM_API_KEY, LLM_ENDPOINT, LLM_TIMEOUT_MS,
-  LLM_MODELS, EMBED_ENDPOINT, EMBED_MODEL, modelRateLimits, getNextModel };
+  LLM_MODELS, EMBED_ENDPOINT, EMBED_MODEL, modelRateLimits, getNextModel,
+  LLM_RETRY_BUDGET_MS, retryBudgetSpent };

@@ -169,6 +169,36 @@ const timeout = () => { const e = new Error('The operation was aborted due to ti
     JSON.stringify(r.article));
   check('each attempt used a different model', new Set(r.seen).size === 3, r.seen.join(','));
 
+  /*
+   * The wall clock. Retrying a timeout costs up to 240s a go, and the workflow
+   * runs on a 2-hour cron with cancel-in-progress: a run that crosses the
+   * boundary is killed by its successor and commits nothing, which was
+   * happening to 8 of every 20 runs. So the retry has to be bounded in time as
+   * well as in attempts - past the budget, a thin article that lands beats a
+   * better one that never gets written.
+   *
+   * Exercised at zero rather than by waiting, which is why zero means spent.
+   */
+  console.log('\nretry budget');
+  process.env.LLM_RETRY_BUDGET_MS = '0';
+  r = await runWith([timeout, completion(GOOD, 'stop')]);
+  check('a spent budget stops the retry', r.seen.length === 1, r.seen.join(','));
+  check('a spent budget keeps what it has rather than looping', r.article === null,
+    JSON.stringify(r.article));
+
+  // A typo in the workflow must not silently buy an unlimited budget: parseInt
+  // gives NaN, and every comparison against NaN is false, so a naive check would
+  // have read as "never spent".
+  process.env.LLM_RETRY_BUDGET_MS = 'twenty minutes';
+  r = await runWith([timeout, completion(GOOD, 'stop')]);
+  check('an unparseable budget is treated as spent, not as unlimited',
+    r.seen.length === 1 && r.article === null, r.seen.join(','));
+
+  delete process.env.LLM_RETRY_BUDGET_MS;
+  r = await runWith([timeout, completion(GOOD, 'stop')]);
+  check('the default budget leaves the retry alone', r.seen.length === 2 && r.article === GOOD,
+    r.seen.join(','));
+
   console.log(fail
     ? `\n  ${fail} failures`
     : `\n  quality gates hold (floor ${MIN_ARTICLE_CHARS} chars, rotation bounded at 3)`);

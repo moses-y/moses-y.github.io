@@ -11,7 +11,8 @@
  * and what to forbid.
  */
 'use strict';
-const { CONFIG, LLM_API_KEY, LLM_TIMEOUT_MS, modelRateLimits, getNextModel } = require('./lib-config.js');
+const { CONFIG, LLM_API_KEY, LLM_TIMEOUT_MS, modelRateLimits, getNextModel,
+  retryBudgetSpent } = require('./lib-config.js');
 const { factsFor } = require('./lib-facts.js');
 const { formatKnowledgeGraph } = require('./lib-knowledge-graph.js');
 const { isCollection } = require('./lib-subprojects.js');
@@ -40,6 +41,15 @@ async function generateBlogArticle(repo, readme, fileTree, knowledgeGraph, attem
   }
 
   const retry = (why) => {
+    /*
+     * The clock, checked before the counter. A run cancelled at the 2-hour cron
+     * boundary commits nothing, so past this point a thin article that lands is
+     * worth more than a better one that never gets written.
+     */
+    if (retryBudgetSpent()) {
+      console.log(`  ${why}; past the retry budget for this run, keeping what we have`);
+      return null;
+    }
     if (attempt + 1 >= CONFIG.models.available.length) {
       console.log(`  ${why}; every model in the rotation has been tried, giving up on ${repo.name}`);
       return null;
