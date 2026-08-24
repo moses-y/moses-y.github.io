@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 24, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,28 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Standard RAG pipelines retrieve chunks by embedding similarity, but they cannot answer multi-step questions that require reasoning across multiple facts. The result is a guess, not a provable chain of evidence. Teams building AI agents need a memory layer that supports traceable, fact-based queries over unstructured text.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>BrainAPI ingests raw text and runs it through a swarm of LLM-powered agents (src/core/agents/scoutagent.py, kgagent.py, janitoragent.py) that extract entities, relationships, and events into a Neo4j knowledge graph (src/lib/neo4j/client.py). The query API (client.retrieveContext) returns answers backed by the exact graph path used to derive them – not a similarity score. The project includes a React-based console (console/src/pages/), an MCP bridge written in Rust (mcp-stdio-http-bridge/src/lib.rs), and support for multiple LLM backends (src/lib/llm/clientopenai.py, client_anthropic.py, etc.). Configuration is managed through pyproject.toml and .env.example.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Feed in: &quot;Emily organized the AI Ethics Meetup in London on March 8, 2024.&quot; Then ask: &quot;Who organized AI events in London in Q1 2024?&quot; The system returns a reasoned answer with a walkable graph path, enabling compliance audits, research synthesis, and multi-hop reasoning that naive RAG cannot handle.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – No test files detected. The entire 200-file codebase lacks automated tests. This is a critical risk for any production deployment, especially given the complex agent orchestration and tool definitions (e.g., KGAgentAddNodesTool.py, JanitorAgentExecuteGraphOperationTool.py). Untested code paths will likely surface bugs under load or edge-case inputs.
-Medium – CI/CD present but untrusted. GitHub Actions workflows exist (.github/workflows/) but without tests, they only validate build steps. No regression safety net.
-Low – Dependency hygiene is reasonable. Poetry lockfiles (poetry.lock, package-lock.json) and a Makefile indicate disciplined dependency management. The Rust MCP bridge adds compile-time safety for that component.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>BrainAPI offers a genuinely different approach to structured memory for AI agents, with a well-architected agent swarm and a traceable query path. The lack of any test coverage makes it unsuitable for production without significant investment in testing and operational hardening. Best suited for teams that can commit to building that test infrastructure and are comfortable managing a multi-service stack (Neo4j, Milvus, PostgreSQL, LLM backends).</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Retrieval systems built on vector similarity return plausible-sounding answers with no way to verify the reasoning. When a user asks a multi-step question like "Who organized AI events in London in Q1 2024?", a nearest-neighbor match on embeddings gives a guess, not a traceable path. Teams need answers grounded in explicit relationships between entities—who did what, to whom, when—rather than statistical proximity.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>BrainAPI is a knowledge-graph memory layer that converts unstructured text into an event-centric graph. A swarm of agents (<code>src/core/agents/</code>) reads documents, extracts facts, and writes nodes and relationships into a graph store. Queries return answers plus the <code>result.triples</code> path used to derive them.</p>
+<p>The repo is a portfolio of five projects: the core Python service (<code>src/</code>), a TypeScript web console (<code>console/</code>), a TUI installer (<code>tui/</code>), a Rust MCP transport bridge (<code>mcp-stdio-http-bridge/</code>), and deployment scripts. The core service supports Neo4j (<code>src/lib/neo4j/client.py</code>) and PostgreSQL/NetworkX (<code>src/lib/postgresql/</code>), with embedding adapters (<code>src/adapters/embeddings.py</code>) and a caching layer (<code>src/adapters/cache.py</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution enters through the MCP server (<code>src/services/mcp/main.py</code>). <code>_search_memory_sync</code> (line 263) reaches 55 functions; <code>_search_semantically_sync</code> (line 285) reaches 63; <code>_traverse_graph_sync</code> (line 199) reaches 62. These route through <code>guard_brainpat -&gt; get_brains_list</code>, hitting the database via <code>collection.find</code> in two hops. The API lifespan (<code>src/services/api/app.py:40</code>) reaches 29 functions and publishes errors over the network via <code>client.post</code>.</p>
+<p>The highest-blast-radius functions are <code>set</code> (called from 41 places), <code>ensure_database</code> (32), <code>Node</code> (28), and <code>get_brain</code> (25). <code>src/config.py</code> is a hub with 36 modules depending on it; <code>src/adapters/graph.py</code> has 25 dependents and 724 lines. Three modules (<code>src/core/agents/architect_agent.py</code>, <code>src/workers/tasks/ingestion.py</code>, <code>src/core/agents/janitor_agent.py</code>) participate in circular imports, which makes refactoring them risky.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>The README documents the TUI workflow:</p>
+<pre data-lang="sh"><code>npm install -g brainapi-tui
+brainapi init     # clone, install deps, interactive setup
+brainapi start    # backing services + API + MCP + worker + console</code></pre>
+<p>Configuration lives in <code>.env.example</code> (copy to <code>.env</code>). The API runs on port 8000, MCP on 8001. A Dockerfile and <code>example-docker-compose.yaml</code> exist for containerized deployment. The <code>Makefile</code> and <code>pyproject.toml</code> imply <code>make</code> and <code>poetry</code>/<code>uv</code> workflows, but the README's TUI path is the documented route.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>Feed the system a sentence: <em>"Emily organized the AI Ethics Meetup in London on March 8, 2024."</em> Later, query: <code>client.retrieveContext("Who organized AI events in London in Q1 2024?")</code>. The response includes the answer and a <code>triples</code> list showing the graph path—Emily → organized → Meetup → located_in → London. That trace is auditable and explainable, which matters for compliance-heavy domains.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 122 findings (30 high, 89 medium, 3 low). Key items:</p>
+<ul><li><strong>High</strong> – Deep nesting (25 cases): <code>src/adapters/graph.py</code> reaches indentation depth 7; control flow is hard to follow.</li><li><strong>High</strong> – Oversized files: <code>src/adapters/graph.py</code> (724 lines), <code>src/core/agents/architect_agent.py</code>—changes ripple widely.</li><li><strong>High</strong> – Hub modules: 36 files depend on <code>src/config.py</code>; churn here is high-blast-radius.</li><li><strong>High</strong> – Import cycles: <code>architect_agent.py</code>, <code>ingestion.py</code>, <code>janitor_agent.py</code> are mutually reachable.</li><li><strong>Medium</strong> – Broad exception handling (16 cases) in <code>src/utils/cleanup.py</code> and others.</li><li><strong>High</strong> – CI never runs the 14 test files; a green check means nothing.</li><li><strong>High</strong> – Unpinned GitHub Actions (<code>@v3</code> tags) and wildcard CORS (<code>allow_origins=["*"]</code>) in <code>src/services/api/app.py</code>.</li><li><strong>High</strong> – <code>tokio@1</code> carries CVE-2021-45710; 12 dependencies are multiple majors behind.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>BrainAPI is a serious attempt at explainable retrieval, with a well-structured core and a real graph-based answer path. The architecture is sound but carries technical debt—deep nesting, hub modules, and circular imports will make changes painful. Use it if you need auditable, relationship-grounded answers and can invest in the CI and dependency hygiene it currently lacks.</p>
             </div>
 
             
@@ -93,18 +111,18 @@ Low – Dependency hygiene is reasonable. Poetry lockfiles (poetry.lock, package
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">358<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>138</b></li><li><span>TSX</span><i style="width:9%"></i><b>12</b></li><li><span>YAML</span><i style="width:6%"></i><b>8</b></li><li><span>TypeScript</span><i style="width:4%"></i><b>6</b></li><li><span>Rust</span><i style="width:4%"></i><b>6</b></li><li><span>JSON</span><i style="width:4%"></i><b>5</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>240</b></li><li><span>TypeScript</span><i style="width:20%"></i><b>49</b></li><li><span>TSX</span><i style="width:5%"></i><b>12</b></li><li><span>YAML</span><i style="width:5%"></i><b>11</b></li><li><span>JSON</span><i style="width:3%"></i><b>8</b></li><li><span>Rust</span><i style="width:3%"></i><b>6</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Flask</span><span>Docker</span><span>Kubernetes</span><span>Vector store</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -169,12 +187,6 @@ Low – Dependency hygiene is reasonable. Poetry lockfiles (poetry.lock, package
                 </div>
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected — untested code paths <code>repository-wide</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1310963196">Open in Code Brain &rarr;</a>

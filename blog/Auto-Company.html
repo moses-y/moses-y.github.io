@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The Auto-Company repository aims to address the challenge of creating a fully autonomous AI company that can operate 24/7 without human intervention. This problem requires a sophisticated system that can ideate products, make decisions, write code, deploy, and market, all while minimizing the need for human oversight.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The Auto-Company repository utilizes a unique architecture that leverages Agentic Workflows to orchestrate 14 autonomous AI agents. Each agent is modeled after world-class experts in their domain and works together to execute tasks. The system uses a combination of Codex CLI and Claude Code to enable the AI team to read shared consensus memory, decide on actions, form squads, execute tasks, and update consensus memory. The PROMPT.md and consensus.md files play a crucial role in this process, serving as the primary sources of information for the AI team.</p><p>The repository&#39;s structure, with folders like .claude/skills and dashboard, suggests a modular approach to organizing the various components of the system. The presence of files like requirements.txt and Makefile indicates that the project uses a combination of Python and other tools to manage dependencies and automate tasks.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using the Auto-Company repository could involve setting up a fully autonomous AI-powered startup. By leveraging the repository&#39;s architecture and tools, entrepreneurs could create a company that can operate independently, making decisions and executing tasks without the need for human intervention. For example, the deep-research skill could be used to identify market trends and opportunities, while the devops skill could be used to deploy and manage the company&#39;s infrastructure.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low — Missing input validation — .claude/skills/deep-research/scripts/research_engine.py
- Med — Potential race conditions in scripts/core/auto-loop.sh
-Low — No clear documentation for CLAUDE.md and PROMPT.md files
-The repository appears to be well-organized, with a clear structure and separation of concerns. However, there are some potential issues that could be addressed to improve the overall health and maintainability of the codebase.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The Auto-Company repository presents an innovative approach to creating a fully autonomous AI company. While there are some potential issues and areas for improvement, the project&#39;s architecture and tools demonstrate a clear understanding of the challenges involved. With further development and refinement, this repository could provide a powerful foundation for entrepreneurs and organizations looking to leverage AI to drive business growth and innovation.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises that want a “hands‑off” software shop need a reproducible, locally‑hosted automation layer.  Building that from scratch means wiring together LLM‑driven agents, a persistent memory store, and deployment tooling – all of which are scattered across scripts, containers, and a small web front‑end.  Maintaining such glue code quickly becomes a hidden cost.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Auto‑Company</code> ships a self‑contained AI “company” that runs 24/7 on a workstation (macOS, Windows WSL, or Linux).  The core loop lives in <code>scripts/core/auto-loop.sh</code> (referenced in the README) and repeatedly invokes the Claude/Codex CLI, feeding it the shared memory files (<code>PROMPT.md</code>, <code>memories/consensus.md</code>).  Four agents are instantiated per cycle, each represented by a markdown “skill” under <code>.claude/skills/…</code> and backed by Python helpers (e.g., <code>deep‑research/scripts/*</code>).</p>
+<p>The web dashboard (<code>dashboard/app.js</code> + <code>dashboard/index.html</code>) serves a tiny UI that proxies HTTP requests to <code>dashboard/server.py</code>.  That server reads static assets, launches shell commands (<code>run_powershell_script</code>, <code>run_shell_script</code>), and writes logs back to the consensus file, giving the operator visibility into each loop iteration.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong> – <code>dashboard/server.py:main</code> (line 520) is the only function that starts the system when the dashboard is launched. It creates an HTTP server, then calls a chain of 66 internal functions before returning.</li><li><strong>Primary call hub</strong> – <code>DockerfileAnalyzer</code> (called from 25 places) and its helpers <code>write_dockerfile</code> (23) / <code>load_dockerfile</code> (20) sit at the centre of the DevOps skill set (<code>.claude/skills/devops/scripts/*</code>).  Any change to these functions ripples through most deployment workflows.</li><li><strong>Network / FS side‑effects</strong> –</li><li><code>main → verify</code> reads <code>self.html_path.read_text</code> (filesystem).</li><li><code>do_GET → _serve_file</code> reads static files via <code>path.read_text</code>.</li><li><code>cloudflare_deploy.py</code> runs external commands (<code>run_command</code>) to invoke the Cloudflare CLI.</li><li><code>verify_citations.py</code> performs outbound HTTP calls to DOI/URL endpoints.</li><li><strong>Agent‑specific modules</strong> – The most imported internal module is <code>projects/snapog/src/types</code> (imported by 4 others).  Its stability (instability 0) makes it a safe abstraction point, whereas <code>projects/snapog/src/index</code> has instability 1, indicating it is a leaf that forwards calls to three other modules.</li><li><strong>Control flow depth</strong> – Several scripts (e.g., <code>security-scan.py</code>, <code>templates.ts</code>) reach eight levels of nesting, making the execution path hard to follow.</li></ul>
+<p>No circular import cycles were detected, and the static call graph resolves 273 intra‑repo edges, giving a clear picture of where the majority of runtime impact originates.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/Auto-Company
+cd Auto-Company
+
+# 2. Install Node dependencies (npm) and Python requirements
+npm ci               # creates a lockfile (currently missing)
+pip install -r .claude/skills/devops/scripts/requirements.txt
+pip install -r .claude/skills/deep-research/requirements.txt
+
+# 3. (Optional) Build the Docker environment
+docker compose -f .claude/skills/devops/references/docker-compose.md up -d
+
+# 4. Start the dashboard (the documented entry point)
+npm run dev          # runs Vite dev server per vite.config.ts
+python dashboard/server.py   # launches the HTTP API on localhost
+
+# 5. Kick off the autonomous loop
+bash scripts/core/auto-loop.sh   # runs continuously, reading PROMPT.md &amp; consensus.md</code></pre>
+<p><em>Configuration</em> – No explicit <code>.env</code> is required for core operation; the DevOps skill ships an example at <code>.claude/skills/devops/.env.example</code>.  Secrets for Cloudflare, Docker, or external APIs must be added to that file before invoking the respective skill scripts.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team could point a dedicated laptop at this repo, run the steps above, and let the AI agents prototype a micro‑SaaS: research a market, generate code (<code>snapog</code> project), spin up a Docker container, and publish a static site via Cloudflare Workers—all without manual commits.  The dashboard offers a quick status view and a manual “reset” button if the loop stalls.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – License missing</strong> – No <code>LICENSE</code> file; undefined redistribution rights.</li><li><strong>High – Lockfile missing</strong> – <code>package.json</code> exists without <code>package-lock.json</code>; version drift risk.</li><li><strong>Medium – Dependabot not configured</strong> – No <code>.github/dependabot.yml</code> for automated updates.</li><li><strong>Medium – No dependency‑vulnerability scan</strong> – CI workflow lacks a step to reject vulnerable packages.</li><li><strong>Medium – Checkout token persists</strong> – <code>.github/workflows/ar-collections-finance-gate.yml</code> runs <code>actions/checkout</code> with default credentials, exposing the token to later steps.</li><li><strong>High – Duplicated code blocks</strong> – 67 identical six‑line snippets across 11 Python files (<code>validate_report.py</code>, <code>verify_citations.py</code>, etc.).</li><li><strong>High – Deep nesting</strong> – Up to 8 indentation levels in <code>security-scan.py</code> and template generators, raising cognitive load.</li></ul>
+<p>No critical findings were reported; tests and CI are present, Dockerfile exists, and no secrets were detected in the history.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Auto‑Company</code> provides a fully wired, locally runnable AI‑agent stack with a usable dashboard, but the codebase suffers from maintainability hotspots (duplication, deep nesting) and basic release‑process gaps (missing license, lockfile, automated security checks).  It is suitable for experimentation or proof‑of‑concepts where rapid iteration outweighs production‑grade hardening; teams planning to adopt it long‑term should address the highlighted health items first.</p>
             </div>
 
             
@@ -94,16 +125,16 @@ The repository appears to be well-organized, with a clear structure and separati
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">252<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>153</b></li><li><span>Python</span><i style="width:12%"></i><b>19</b></li><li><span>JSON</span><i style="width:3%"></i><b>5</b></li><li><span>Shell</span><i style="width:2%"></i><b>3</b></li><li><span>HTML</span><i style="width:1%"></i><b>2</b></li><li><span>TypeScript</span><i style="width:1%"></i><b>2</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>155</b></li><li><span>Python</span><i style="width:13%"></i><b>20</b></li><li><span>Shell</span><i style="width:8%"></i><b>12</b></li><li><span>JSON</span><i style="width:6%"></i><b>9</b></li><li><span>TypeScript</span><i style="width:5%"></i><b>7</b></li><li><span>HTML</span><i style="width:1%"></i><b>2</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Express</span></p>
                     </div>
@@ -138,12 +169,6 @@ The repository appears to be well-organized, with a clear structure and separati
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>.claude/skills/deep-research/requirements.txt</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1306300677">Open in Code Brain &rarr;</a>

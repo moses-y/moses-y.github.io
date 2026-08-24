@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 4, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,27 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Solo founders and indie hackers waste time switching between browser tabs to research markets, audit SEO, create branding assets, and monitor social platforms. Each task requires a separate tool, API key, and manual workflow. Without automation, these repetitive tasks consume hours that could go into product development.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OPC Skills is a collection of AI agent plugins that give Claude Code, Cursor, and similar tools specialized abilities for solopreneur workflows. Each skill in skills/ is self-contained with a SKILL.md instruction file, reference docs, and Python scripts. The seo-geo skill, for example, provides 9 scripts (keywordresearch.py, serpanalysis.py, backlinks.py, etc.) that call the DataForSEO API directly from the agent.</p><p>The project ships 8 skills covering SEO research, domain hunting, logo/banner creation, Reddit and Twitter data retrieval, Product Hunt analysis, and image generation. A skills.json manifest and .claude-plugin/ configs in each skill folder enable marketplace discovery. The website/ directory hosts a blog and listing page at opc.dev.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A solopreneur building a SaaS product asks Claude Code to &quot;research demand for a calendar scheduling tool.&quot; The agent loads the requesthunt skill, runs its scripts against Reddit and Twitter APIs, and returns a structured report with competitor mentions and user pain points—all within the chat session. No context-switching to separate tools.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - API keys stored as environment variables but no validation layer: scripts like dataforseoapi.py and twitterapi.py assume credentials are set. Missing credentials will produce opaque errors at runtime.
-Low - Only 1 test file across 131 skill files. The seo-geo and twitter skills have complex API interactions with no test coverage.
-Low - No dependency lockfile (requirements.txt present but no poetry.lock or pip freeze output). Version drift could break scripts across environments.
-Low - CI pipelines exist (5 workflows) but none run tests—they handle deployment, blog publishing, and stats collection only.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A practical, well-organized toolkit for solo developers who already use AI coding agents. The skill architecture is clean and extensible. The main gap is test coverage and credential handling—production use requires wrapping each skill in proper error handling. Best suited for indie hackers comfortable with Python and API setup.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Solopreneurs and indie hackers need to automate repetitive business tasks—SEO research, demand validation, logo creation, content publishing—but each task requires different tools, APIs, and workflows. Without a structured way to package these automations, every task becomes a one-off script that's hard to reuse or hand to an AI agent.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>opc-skills</code> is a portfolio of self-contained "Agent Skills"—folders with a <code>SKILL.md</code> instruction file, Python scripts, and references that AI agents (Claude Code, Cursor, Codex) load dynamically. The repo contains 213 files across four independent projects: <code>skills/</code> (131 files, the main skill library), <code>.agents/</code> (18 files, an SEO/GEO skill variant), <code>scripts/</code> (4 files, blog and install-stats tooling), and <code>website/</code> (32 files, a React-based marketing site).</p>
+<p>The substantial skills are <code>seo-geo</code> (SEO optimization for AI search engines via DataForSEO API), <code>producthunt</code> (Product Hunt API wrapper), <code>reddit</code> (Reddit API client), <code>nanobanana</code> (Gemini image generation), and <code>logo-creator</code>/<code>banner-creator</code> (image processing pipelines). The <code>.agents/skills/seo-geo</code> folder duplicates the <code>skills/seo-geo</code> content—likely a stale copy.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Each skill is a standalone script collection. There is no central application flow; the import graph shows 76 modules with zero import edges between them, confirming these are independent tools. The most substantial entry point is <code>main</code> in <code>.agents/skills/seo-geo/scripts/autocomplete_ideas.py:12</code>, which reaches 48 functions and drives the DataForSEO API through <code>api_get</code> (network call via <code>urllib.request.Request</code>). The shared workhorse is <code>format_count</code>, called from 11 places—changing it breaks most output formatting across the skills.</p>
+<p>The <code>seo-geo</code> skills route through <code>dataforseo_api.py</code> (6 functions, called from 4 files, makes outbound network calls) and <code>seo_audit.py</code> (fetches URLs, checks robots/sitemaps). The <code>producthunt</code> skill's <code>producthunt_api.py</code> defines 14 functions including <code>graphql</code>, <code>clean_user</code>, and <code>clean_post</code>. The <code>nanobanana</code> skill's <code>generate.py</code> reads files and calls a model for inference—the only skill that touches an ML model. The <code>website/worker.js</code> (2,622 lines) is a Cloudflare Worker serving the site's API.</p>
+<p>For a typical run: <code>autocomplete_ideas.py</code> calls <code>dataforseo_api.py</code>'s <code>api_post</code>, which makes a network call to DataForSEO—two hops from entry to the external API.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone with <code>git clone https://github.com/moses-y/opc-skills</code>. No root-level dependency file exists; the only <code>package.json</code> is in <code>website/</code> (npm). Python scripts appear to use only the standard library plus <code>requests</code>-style HTTP via <code>urllib</code>.</p>
+<p><strong>Configuration</strong>: Each skill reads credentials at runtime—<code>dataforseo_api.py</code> and <code>producthunt_api.py</code> expect API keys, likely via environment variables (the <code>credential.py</code> script in <code>seo-geo</code> handles this). The README documents installation via Claude Code's marketplace plugin (<code>.claude-plugin/marketplace.json</code>).</p>
+<p><strong>Running it</strong>: Invoke individual scripts directly, e.g., <code>python .agents/skills/seo-geo/scripts/keyword_research.py</code>. No unified CLI exists; the README's quick-install instructions are the intended onboarding path.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A solopreneur building a niche product could use <code>requesthunt</code> to scan Reddit and X for demand, then <code>seo-geo</code>'s <code>keyword_research.py</code> to find target keywords, then <code>logo-creator</code> to produce branding assets. Each skill handles one step; the agent orchestrates them.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 24 issues (2 high, 22 medium). High severity: duplicated code blocks—491 repeated 6-line blocks across 36 files in the <code>seo-geo</code> scripts (the <code>.agents/</code> and <code>skills/</code> copies are near-identical); and <code>website/worker.js</code> at 2,622 lines is an oversized file. Medium issues include file handles opened without context managers (<code>crop_banner.py</code>, <code>crop_logo.py</code>), empty catch blocks and broad exception handling in <code>worker.js</code> and <code>remove_bg.py</code>/<code>vectorize.py</code>, and deep nesting (depth 6) across the <code>seo-geo</code> scripts.</p>
+<p>The SDLC audit flags 4 high findings: unpinned GitHub Actions tags (use commit SHAs), no test suite despite 76 source files, a wildcard CORS origin in <code>worker.js</code>, and a workflow pushing directly to the default branch. Medium: no least-privilege <code>GITHUB_TOKEN</code> permissions, no Dependabot, and no dependency vulnerability scan. No secrets were committed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A useful collection of practical automation scripts for AI agents, strongest in the SEO and image-generation skills. The duplication between <code>.agents/</code> and <code>skills/</code> and the absence of tests are the main maintenance risks. Worth adopting if you want ready-made agent skills for the covered domains; expect to consolidate and test before relying on it in production.</p>
             </div>
 
             
@@ -94,18 +110,18 @@ Low - CI pipelines exist (5 workflows) but none run tests—they handle deployme
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">213<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>75</b></li><li><span>Markdown</span><i style="width:67%"></i><b>50</b></li><li><span>JSON</span><i style="width:21%"></i><b>16</b></li><li><span>YAML</span><i style="width:7%"></i><b>5</b></li><li><span>HTML</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>75</b></li><li><span>Markdown</span><i style="width:69%"></i><b>52</b></li><li><span>JSON</span><i style="width:25%"></i><b>19</b></li><li><span>YAML</span><i style="width:7%"></i><b>5</b></li><li><span>HTML</span><i style="width:3%"></i><b>2</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span></p>
                     </div>
                 </div>
 

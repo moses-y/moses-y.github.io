@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 6, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Operating a computer or Android device through an LLM requires stitching together screen capture, UI element detection, and action execution—all while managing different model providers. Most solutions are locked to a single vendor or require custom glue code for each task. This repo aims to abstract that pipeline into a reusable framework.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>clickclickclick is a Python framework that turns natural-language tasks into GUI actions on macOS or Android. It splits the work into two roles: a planner (decides the next action) and a finder (locates UI elements on screen). Both are implemented as interchangeable modules under clickclickclick/planner/ and clickclickclick/finder/, with providers for OpenAI, Gemini, Anthropic, and local Ollama models.</p><p>The execution layer lives in clickclickclick/executor/ with platform-specific handlers for android.py and osx.py. Configuration is YAML-driven: clickclickclick/config/models.yaml holds model settings, prompts.yaml contains the system prompts, and functiondeclarations/ defines the tool schemas per platform. The project exposes four interfaces: a CLI (main.py), a Gradio web UI (interface.py), a REST API (api.py), and a Python API.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install dependencies with pip install -r requirements.txt after cloning. There&#39;s no lockfile, so pin versions manually if you need reproducible builds.</p><p>Configuration: Edit clickclickclick/config/models.yaml to set your model choices and export the API keys referenced there. Run python main.py setup to walk through selecting planner and finder models interactively.</p><p>Running it: Use the CLI directly:</p><p>python main.py run &quot;Open Google news&quot; --platform=android --planner-model=openai --finder-model=gemini</p><p>For local models with reduced image size:</p><p>python main.py run &quot;Open Reddit&quot; --platform=android --planner-model=ollama --finder-model=gemini --image-quality=45</p><p>The web UI starts via interface.py and the REST API via api.py, though the README doesn&#39;t document their exact invocation commands.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A support automation pipeline: a ticketing system receives &quot;check the printer queue on the office Mac,&quot; calls clickclickclick via its REST API with --platform=osx, and the framework captures screenshots, plans clicks, and executes the navigation. The same setup can run Android emulator tests for QA teams, using the same planner with a different executor.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD - No .github/ or CI config detected. There&#39;s a .pre-commit-config.yaml for local linting, but no automated test gate before merges.
-Low - No dependency lockfile - pyproject.toml and requirements.txt declare ranges, not pinned versions. Reproducible installs aren&#39;t guaranteed.
-Low - Light test coverage - Only tests/testandroid.py and tests/test_osx.py exist. The planner/finder logic, which is the core value, has no direct tests.
-Low - Experimental disclaimer - README states the code is &quot;highly experimental&quot; and best results come from a specific Gemini model, suggesting the model-agnostic claim is aspirational rather than proven.
-Low - No license file - The repo has a LICENSE file, so this is likely fine, but it wasn&#39;t verified.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A pragmatic starting point for anyone who wants to prototype LLM-driven computer use without building the plumbing themselves. The modular planner/finder/executor split is clean, and supporting local models via Ollama is a genuine plus. It&#39;s not production-ready—no CI, minimal tests, and the README&#39;s own caveats make that clear. Best suited for developers evaluating the approach or building a proof of concept, not for teams needing a reliable automation layer today.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users need a way to drive Android devices or a desktop computer through natural‑language instructions, but existing tools are either tied to a single LLM vendor or require heavyweight UI‑automation frameworks. The gap is a lightweight, pluggable bridge that lets any LLM (local or remote) control the platform via ADB or OS‑level input.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>clickclickclick</code> provides that bridge. The core CLI lives in <strong><code>main.py</code></strong> and orchestrates three layers:</p>
+<ul><li><strong>Planner</strong> – selects a model (OpenAI, Gemini, Ollama) and turns a task prompt into a sequence of actions (<code>clickclickclick/planner/*.py</code>).</li><li><strong>Finder</strong> – uses a vision model to locate UI elements in screenshots (<code>clickclickclick/finder/*.py</code>).</li><li><strong>Executor</strong> – issues the actual input events (<code>clickclickclick/executor/android.py</code> for ADB, <code>clickclickclick/executor/osx.py</code> for macOS).</li></ul>
+<p>Configuration files under <strong><code>clickclickclick/config/</code></strong> (<code>models.yaml</code>, <code>function_declarations/*.yaml</code>, <code>prompts.yaml</code>) define available actions and model credentials. Utility helpers (<code>clickclickclick/utils.py</code>) handle image encoding and resizing.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <strong><code>main.py:run</code></strong> (line 39). <code>run</code> parses CLI flags, loads the platform config via <code>get_config</code> (in <code>clickclickclick/config/__init__.py</code>), and builds a planner instance (<code>Planner</code> from <code>clickclickclick/planner/__init__.py</code>).</p>
+<p>The planner calls <code>llm_response</code> → <code>build_prompt</code> → <code>element_finder_prompt</code>, then issues <code>type_text</code>, <code>click_at_a_point</code>, <code>scroll</code>, or <code>screenshot</code>.</p>
+<ul><li><strong><code>type_text</code></strong> (in <code>clickclickclick/executor/__init__.py</code>) forwards to <code>run_adb_command</code> (Android) or the macOS equivalents; <code>run_adb_command</code> is the busiest leaf, called from 15 distinct places.</li><li><strong><code>screenshot</code></strong> captures the screen, then <code>resize</code> (in <code>clickclickclick/finder/__init__.py</code>) prepares the image for the finder model.</li><li><strong><code>find_element</code></strong> (in <code>clickclickclick/finder/__init__.py</code>) encodes the image (<code>encode_image_to_base64</code>) and invokes the selected finder (<code>clickclickclick/finder/openai.py</code>, <code>gemini.py</code>, etc.).</li></ul>
+<p>The most connected module is <code>clickclickclick/config/__init__.py</code> (imported by 13 other modules). Its instability is low (0.07), but changes here have a wide blast radius. No circular imports were detected.</p>
+<p>Deep nesting (up to 11 levels) appears in <code>clickclickclick/executor/osx.py</code>, <code>clickclickclick/finder/__init__.py</code>, and <code>clickclickclick/finder/openai.py</code>, making the control flow hard to follow. The executor also opens files without a context manager (<code>clickclickclick/executor/android.py</code>). Several small code blocks are duplicated across <code>api.py</code>, <code>main.py</code>, <code>clickclickclick/utils.py</code>, and the executors, increasing maintenance cost.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/clickclickclick
+cd clickclickclick
+
+# Recommended virtual environment
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt</code></pre>
+<p>Configure model keys in <strong><code>clickclickclick/config/models.yaml</code></strong> (e.g., <code>OPENAI_API_KEY</code>).</p>
+<pre data-lang="bash"><code># Initialise the chosen planner/finder models
+python main.py setup</code></pre>
+<p>Run a task:</p>
+<pre data-lang="bash"><code>python main.py run "Open Gmail and draft a message to rob@gmail.com" \
+    --platform=android \
+    --planner-model=gemini \
+    --finder-model=gemini \
+    --image-quality=45</code></pre>
+<p>The command triggers the flow described above, ending with ADB commands that move the cursor, type, or click.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can invoke the CLI to automate UI regression checks on a device farm. Example snippet:</p>
+<pre data-lang="python"><code>from clickclickclick.executor import AndroidExecutor
+
+executor = AndroidExecutor()
+executor.run_adb_command("adb install myapp.apk")
+executor.type_text("Open Settings")
+executor.click_at_a_point(300, 500)   # taps “Wi‑Fi”</code></pre>
+<p>This integrates the library into existing test harnesses without rewriting platform‑specific code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No lockfile</strong> – <code>pyproject.toml</code> has no accompanying lockfile; transitive dependencies are not pinned.</li><li><strong>High – No CI</strong> – Repository lacks any GitHub Actions or other pipeline; changes are not automatically built or tested.</li><li><strong>Medium – No Dependabot</strong> – No automated update bot for the two manifests.</li><li><strong>Medium – Deep nesting</strong> – Files <code>executor/osx.py</code>, <code>finder/__init__.py</code>, <code>finder/openai.py</code> reach 11 indentation levels, hurting readability.</li><li><strong>Medium – File handle leak</strong> – <code>executor/android.py</code> opens files without a <code>with</code> block.</li><li><strong>Medium – Hub module</strong> – <code>clickclickclick/config/__init__.py</code> is imported by 13 modules; volatility here impacts many callers.</li><li><strong>High – Duplicated code</strong> – Repeated 6‑line blocks across 12 files (e.g., API request wrappers) should be centralized.</li></ul>
+<p>No tests are missing; two test files exist (<code>tests/test_android.py</code>, <code>tests/test_osx.py</code>). License is present; no secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>clickclickclick</code> delivers a functional, model‑agnostic UI‑automation stack with a clear CLI entry point, but the codebase suffers from readability issues, duplicated logic, and missing production safeguards (lockfile, CI). It is suitable for teams comfortable with Python who need a quick, extensible bridge to LLM‑driven device control, provided they invest in refactoring the hot spots and add standard DevOps tooling.</p>
             </div>
 
             
@@ -171,7 +213,7 @@ Low - No license file - The repo has a LICENSE file, so this is likely fine, but
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Commit a lockfile beside the manifest</span><span class="chip">high</span></div><div class="loc">pyproject.toml</div><div class="ev">manifest with no lockfile in scope</div><div class="ev">An unlocked range means the artifact you tested and the artifact you ship can contain different transitive code, so a malicious patch release reaches production with no diff.</div><div class="rec"><b>Fix:</b> Run the package manager once and commit the generated lockfile.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">25 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">2 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

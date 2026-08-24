@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 31, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,68 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Evaluating options strategies historically is slow and error-prone. Python-only backtesters struggle with contract-level inventory, Greeks aggregation, and realistic fill/cost models across thousands of legs. Most tools either oversimplify (treating options as linear instruments) or become too slow for parameter sweeps.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This is a Rust-core backtester for options and equity portfolios, wrapped in Python for research workflows. The Rust engine in rust/obcore/src/ handles contract-level inventory (inventory.rs), fills (fillmodel.rs), costs (costmodel.rs), and risk (risk.rs). The Python layer in optionsportfoliobacktester/ exposes this through BacktestEngine, strategy presets (strategy/presets.py), and a tearsheet generator (analytics/tearsheet.py).</p><p>The repo includes research reproducing Spitznagel tail-hedge strategies (research/spitznagelspy/), with sweep scripts (fullsweep.py, parallelsweep.py) and findings documents. Data fetching (scripts/fetchdata.py) pins canonical parquet files by SHA-256 for reproducibility.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical workflow: fetch SPY data with python scripts/fetchdata.py all --symbols SPY, then run a parameter sweep across put strikes and tenures using the convexity module (convexity/backtest.py). The engine handles rebalancing at configurable frequencies, external budgets for tail hedges, and outputs a balance history plus trade log. The tearsheet produces a single HTML file with equity curves, drawdowns, and options-specific P&amp;L attribution.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - No structural red flags: CI configured, tests present (137 test files), license included, lockfile committed.
-Med - Python tests outnumber Rust tests 10:1. The Rust core at rust/ob_core/ has only one benchmark file and no unit test directory. Critical path bugs in Rust may surface late.
-Med - Data dependencies are fragile. The README warns about hash mismatches and fallback mirrors returning different bytes. Reproducibility depends on external data sources that may change without notice.
-Low - No documented performance benchmarks comparing Rust vs pure Python execution. The README claims parquet is &quot;~30x faster&quot; but doesn&#39;t specify the baseline or test conditions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a serious options backtester for quantitative researchers who need contract-level accuracy and realistic execution models. The Rust core is the right call for speed, but the sparse Rust test coverage is a risk for production use. Best suited for strategy research and parameter sweeps where reproducibility matters more than operational reliability.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Evaluating options‑and‑equity portfolio strategies over historical data demands a reproducible pipeline that handles realistic execution, Greeks‑aware risk, and tail‑risk hedging.  The repo supplies those capabilities, but its module graph contains circular imports, oversized files, and deep nesting that make changes risky and hard to reason about.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The package is a full‑stack backtester built around a Rust compute core (<code>rust/ob_core</code>) and Python orchestration (<code>options_portfolio_backtester</code>).</p>
+<ul><li><strong>Data ingestion</strong> – <code>options_portfolio_backtester/data/providers.py</code> supplies <code>HistoricalOptionsData</code> and <code>TiingoData</code>; raw parquet/CSV is fetched with <code>scripts/fetch_data.py</code>.</li><li><strong>Strategy construction</strong> – <code>options_portfolio_backtester/strategy/strategy.py</code> and <code>strategy_leg.py</code> let legs be added, filtered, and cleared; the canonical Spitznagel tail‑hedge leg is built with <code>deep_otm_put</code>.</li><li><strong>Engine execution</strong> – <code>options_portfolio_backtester/engine/engine.py</code> (<code>BacktestEngine</code>) coordinates rebalancing, cost models (<code>execution/cost_model.py</code>), and risk checks (<code>portfolio/risk.py</code>).</li><li><strong>Analysis &amp; reporting</strong> – <code>analytics/tearsheet.py</code> and <code>analytics/charts.py</code> produce HTML reports, equity curves, and options‑specific panels from <code>engine.balance</code> and <code>engine.trade_log</code>.</li></ul>
+<p>A single <code>run</code> call (entry point <code>options_portfolio_backtester/engine/engine.py:345</code>) drives the backtest from data load through trade execution to results, reaching 28 internal functions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry points</strong> – <code>setup</code> (test‑only, reaches 47 functions, called from nothing else), <code>main</code> in <code>research/spitznagel_spy/experiments/cross_underlying.py:159</code> (reaches 148 functions, invoked once), and <code>run</code> in <code>engine.py:345</code> (reaches 28 functions, called once).</li><li><strong>Call graph</strong> – 3 239 resolved edges; the most‑connected symbols are <code>_ctx</code> (116 callers), <code>from_balance</code> (105), and <code>BacktestEngine</code> (70).</li><li><strong>Hubs &amp; cycles</strong> – <code>options_portfolio_backtester/core/types</code> is imported by 59 modules (instability 0); <code>options_portfolio_backtester/engine/engine.py</code> and <code>options_portfolio_backtester/__init__.py</code> form a circular‑import cycle.</li><li><strong>Blast‑radius files</strong> – <code>engine/engine.py</code> (864 loc, 3 classes, 32 functions) and <code>engine/pipeline.py</code> (106 functions) are change‑propagation points; a modification ripples widely.</li><li><strong>Outside‑process effects</strong> – execution paths can write CSV (<code>to_csv</code>), run external commands, make a single outbound network call (traced from <code>main → to_csv</code>), and perform a cryptographic operation.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># With Nix
+nix develop
+
+# Without Nix (Python ≥ 3.12)
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+make install-dev   # installs from pyproject.toml</code></pre>
+<p><strong>Get data</strong></p>
+<pre data-lang="bash"><code>python scripts/fetch_data.py all --symbols SPY
+# pulls SPY options &amp; underlying parquet into data/processed/</code></pre>
+<p><strong>Run a first backtest</strong> (example from the README)</p>
+<pre data-lang="python"><code>from options_portfolio_backtester import (
+    BacktestEngine, Stock,
+    HistoricalOptionsData, TiingoData,
+    deep_otm_put,
+)
+
+options_data = HistoricalOptionsData("data/processed/options.parquet")
+stocks_data  = TiingoData("data/processed/stocks.csv")
+
+strategy = deep_otm_put(options_data.schema, "SPY")
+
+engine = BacktestEngine({"stocks": 1.0, "options": 0.0, "cash": 0.0},
+                        initial_capital=1_000_000)
+engine.use_external_budget(annual_pct=0.005)
+engine.stocks = [Stock("SPY", 1.0)]
+engine.stocks_data = stocks_data
+engine.options_data = options_data
+engine.options_strategy = strategy
+engine.run(rebalance_freq=1, rebalance_unit="BMS")
+
+results = engine.get_results()
+print(results.summary())
+# {'annual_return': 13.5, 'max_drawdown': -46.4, 'sharpe': 0.72, 'trades': 327, ...}</code></pre>
+<p><strong>Generate a tearsheet</strong></p>
+<pre data-lang="python"><code>from options_portfolio_backtester.analytics.tearsheet import build_tearsheet
+
+report = build_tearsheet(
+    engine.balance,
+    budget_annual_pct=0.033,
+    trade_log=engine.trade_log,
+)
+report.to_file("tearsheet.html")</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A portfolio manager seeking a tail‑hedge can instantiate the Spitznagel leg (<code>deep_otm_put</code>) and allocate a small options budget (e.g., <code>engine.use_allocation(stocks=0.99, options=0.01, cash=0.0)</code>).  The backtest then simulates monthly rebalancing, tracks premium spend against the budget, and produces a crash‑window P&amp;L attribution—all within the same framework used for equity‑only sweeps.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured analysis</strong> (static, 171 files): 66 issues across 7 categories</p>
+<ul><li><strong>High/cognitive_load</strong> – deep nesting in <code>engine/engine.py</code>, <code>strategy/strategy.py</code>, <code>portfolio/risk.py</code> (max indent 8).</li><li><strong>High/soundness</strong> – import‑cycle member in <code>engine/engine.py</code> &amp; <code>__init__.py</code>.</li><li><strong>High/clarity</strong> – hub module <code>core/types</code> (59 importers) and duplicated 6‑line blocks (173 repeats across 53 files).</li><li><strong>Medium/resilience</strong> – broad <code>except</code> in <code>engine/engine.py</code>, <code>analytics/results.py</code>, <code>analytics/tearsheet.py</code>.</li><li><strong>Medium/resource_safety</strong> – file opened without context manager in <code>tests/engine/test_rust_parity.py</code>.</li></ul>
+<p><strong>Code‑health audit</strong> (8 findings, 0 critical):</p>
+<ul><li><strong>HIGH</strong> – Pin GitHub Actions to commit SHA (<code>.github/workflows</code>, <code>dtolnay/rust-toolchain@stable</code>, <code>Swatinem/rust-cache@v2</code>).</li><li><strong>HIGH</strong> – Commit lockfile beside <code>pyproject.toml</code>.</li><li><strong>HIGH</strong> – Remove <code>continue-on-error</code> from correctness‑gating steps (<code>.github/workflows/ci.yml:40</code>).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>permissions: contents: read</code> for <code>GITHUB_TOKEN</code>.</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (cover Python, Rust, GitHub‑Actions).</li><li><strong>MEDIUM</strong> – Gate PRs on dependency vulnerability scan (add <code>dependency-review-action</code>).</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout.</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to workflow jobs.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This repo delivers a capable, reproducible options‑backtesting platform with a Rust core and rich analytics, but its module interdependencies, oversized files, and circular imports raise maintenance risk.  Teams that need fast strategy sweeps and tail‑risk hedging will find value here, provided they invest in cleaning the identified cycles and pinning CI dependencies.</p>
             </div>
 
             
@@ -101,9 +158,9 @@ Low - No documented performance benchmarks comparing Rust vs pure Python executi
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">206<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>138</b></li><li><span>Rust</span><i style="width:20%"></i><b>27</b></li><li><span>Markdown</span><i style="width:9%"></i><b>13</b></li><li><span>TOML</span><i style="width:4%"></i><b>5</b></li><li><span>YAML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>144</b></li><li><span>Rust</span><i style="width:19%"></i><b>27</b></li><li><span>Markdown</span><i style="width:9%"></i><b>13</b></li><li><span>TOML</span><i style="width:3%"></i><b>5</b></li><li><span>YAML</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
                         
                     </div>

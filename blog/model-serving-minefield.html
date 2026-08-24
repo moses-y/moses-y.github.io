@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 29, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLM serving stacks produce confidently wrong measurements—latency, throughput, accuracy—because of subtle bugs in chat templates, tool parsers, reasoning field stripping, quantization kernel paths, CUDA toolchain mismatches, KV cache allocation, and eval harness configuration. These bugs look like model problems, cost hours of debugging, and are invisible to request-shaped checks. The repository collects them so the next person loses minutes instead of an evening.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>A community registry of 103 documented serving-path traps. Each entry in traps/ (organized by subcategory: evaluation/, reasoning/, quantization/, memory/, runtime/, routing/) leads with the observable symptom, then the mechanism, affected stacks, the check that catches it, and the fix. Entries carry a status label (e.g., reproduced here) so readers know how much weight to assign.</p><p>The repository also provides structured entry points: playbooks/ (ordered checklists for common jobs like A/B testing or harness porting), stacks/ (per-server pages listing the five most likely traps and three preflight checks), and checks/ (Python probes like cachehitprobe.py, dequantfidelity.py, hiddenstatealign.py). The integrity/ directory runs automated surface verification (GitHub Action surfaces.yml) to detect drift in published figures. llms.txt routes LLM agents to the relevant content without counting entries.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team evaluating DeepSeek-V4 across vLLM and SGLang runs the before-you-publish-an-ab playbook (playbooks/before-you-publish-an-ab.md). Step 3 references trap 01-reasoning-field-two-names and suggests running checks/tokenizedlengthassert.py to verify prompt tokenization matches the target server. Without this, the A/B would compare mismatched token counts and produce a spurious winner.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low — Tests exist (18 test files) but cover only a fraction of traps and checks. Most traps are documented as Markdown, not automated. The checks/ directory has unit tests for preflightkwargs and checkcontract, but the doctor/ tests are limited.  
-Low — No structural red flags: CI configured (integrity.yml, surfaces.yml), license present, lockfile not expected (no package.json).  
-Low — The mining/ directory contains raw experiment data and scripts (e.g., 2026-07-28-trap-33-q1-data/scripts/). Data provenance is documented but not version-controlled beyond git.  
-Low — integrity/donotcite.json and sanitizeradjudicated.txt suggest manual curation; no automated enforcement of citation rules.  
-Low — No dependency or security scanning in CI (e.g., Dependabot, CodeQL). Acceptable for a documentation repo.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is the most thorough catalog of LLM serving-path measurement bugs I have seen. The symptom-first format and per-stack pages make it immediately useful for any team deploying models for evaluation or production. It is not a tool—it is a reference. Teams running A/B evaluations or building eval harnesses should read the relevant playbook and stack page before starting. Solo practitioners may find the volume overwhelming, but the structured entry points mitigate that. The integrity checks and surface verification add credibility beyond a typical wiki.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Engineers repeatedly waste hours chasing “wrong numbers” that stem from subtle serving‑stack bugs (template mismatches, quant‑kernel paths, memory‑allocation quirks, etc.). The repository collects concrete, reproducible traps so teams can spot the root cause before a measurement is trusted.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo is a <strong>registry of LLM‑serving failure patterns</strong>. Each trap lives as a markdown file under <code>traps/</code> (e.g., <code>traps/quantization/10-quant-label-is-not-the-kernel-path.md</code>) and is paired with a <strong>check</strong> that can detect the condition automatically.</p>
+<p><em>The checks</em> live in <code>checks/</code> (e.g., <code>checks/preflight_template.py</code>, <code>checks/cache_hit_probe.py</code>). They implement lightweight validators that inspect a running service, a request/response payload, or a system configuration and emit a verdict.</p>
+<p><em>The doctor</em> (<code>doctor/minefield_doctor.py</code>) orchestrates the checks, fetches remote templates, and renders a unified report that maps symptoms to the offending trap entry.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at two concrete entry points:</p>
+<div class="table-scroll"><table><thead><tr><th>Entry</th><th>File</th><th class="num">Line</th><th>Reach</th></tr></thead><tbody><tr><td><code>main</code></td><td><code>checks/cache_hit_probe.py</code></td><td class="num">147</td><td>141 functions</td></tr><tr><td><code>run</code></td><td><code>doctor/minefield_doctor.py</code></td><td class="num">2160</td><td>77 functions</td></tr></tbody></table></div>
+<p><strong>Typical flow for a check</strong></p>
+<ol><li><code>main</code> parses CLI arguments and calls <code>run_checker</code> (via the internal call graph, 43 callers).</li><li><code>run_checker</code> invokes a specific check function such as <code>check_reasoning_fields</code>.</li><li>The check may perform a <strong>network request</strong> (<code>urllib.request.Request</code> in <code>doctor/minefield_doctor.py</code>) or launch an <strong>external command</strong> (<code>subprocess.call</code> in <code>checks/cache_hit_probe.py</code>).</li><li>Results are written to the filesystem (<code>open</code> calls in various modules) and aggregated into a JSON verdict.</li></ol>
+<p><strong>Key modules and blast radius</strong></p>
+<ul><li><code>doctor/minefield_doctor.py</code> – 47 functions, makes outbound HTTP calls and runs external commands; it is the hub for all checks, so changes here affect every trap detection.</li><li><code>checks/cache_hit_probe.py</code> – 7 functions, includes the most external calls (network + subprocess) and is invoked from four other files.</li><li><code>integrity/claim_propagation.py</code> – 13 functions, read by 10 callers; handles ledger validation and is a common utility.</li></ul>
+<p>The import graph shows <strong>no circular dependencies</strong> and <strong>zero import edges</strong> between the 39 internal modules, indicating a deliberately flat package layout. The internal call graph contains 763 resolved edges, but the most‑connected modules (<code>FixtureLane</code>, <code>diagnose</code>, <code>run_checker</code>) are all confined to the <code>doctor/</code> and <code>checks/</code> directories, keeping the core logic isolated.</p>
+<p><strong>External interactions</strong></p>
+<ul><li>8 functions perform network I/O (e.g., <code>run -&gt; check_streaming</code>).</li><li>20 functions invoke shell commands via <code>subprocess</code>.</li><li>14 functions read/write files (mostly in test helpers and the doctor’s report writer).</li></ul>
+<p>No persistent secrets are stored in the repo.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/model-serving-minefield
+cd model-serving-minefield
+
+# 2. Install Python requirements (the repo uses `requests` and `transformers`)
+#    A requirements file is not present; install manually:
+pip install requests transformers
+
+# 3. Run a specific check (example: cache‑hit probe)
+python checks/cache_hit_probe.py --target http://localhost:8000
+
+# 4. Or run the full doctor suite to audit all registered traps
+python doctor/minefield_doctor.py</code></pre>
+<p><em>Configuration</em> – The doctor reads remote template URLs defined inside its own functions (<code>_req</code>, <code>get</code>, <code>post</code>). No external config files are required for a basic run.</p>
+<p><em>Running tests</em> – Test files live under <code>integrity/tests/</code> and <code>checks/tests/</code>. They can be executed with <code>pytest</code> once the dependencies above are installed.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A serving platform team integrates the doctor into their CI pipeline:</p>
+<pre data-lang="yaml"><code># .github/workflows/integrity.yml (add a test step)
+- name: Run Model‑Serving Minefield checks
+  run: python doctor/minefield_doctor.py</code></pre>
+<p>When a new container image is built, the workflow automatically flags any quant‑kernel mismatch or hidden‑state misalignment before the service is promoted to production, turning a multi‑day debugging session into a fast CI failure.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – CI never executes the test suite (<code>.github/workflows/*</code> lacks a test step).</li><li><strong>MEDIUM</strong> – GitHub token permissions are not scoped (<code>.github/workflows/integrity.yml</code>).</li><li><strong>MEDIUM</strong> – Outbound HTTP calls lack a timeout (<code>doctor/minefield_doctor.py</code>).</li><li><strong>LOW</strong> – Workflow jobs have no <code>timeout‑minutes</code> limits (<code>.github/workflows/integrity.yml</code>).</li></ul>
+<p>Additional static findings (19 high, 29 medium) include duplicated 6‑line blocks across 25 files, deep nesting (max indentation depth 10), oversized files (<code>doctor/minefield_doctor.py</code> ≈ 1900 lines), un‑guarded <code>open()</code> calls, broad exception catches, and high branching density. The repository otherwise includes a licence, tests, and a functional CI pipeline.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><em>Model‑Serving‑Minefield</em> provides a well‑organized, test‑backed catalog of LLM‑serving pitfalls and a thin Python driver that can be dropped into any CI/CD flow. The codebase is small, dependency‑light, and free of circular imports, but it suffers from poor CI coverage, missing token‑scoping, and a few maintainability hotspots (large monolithic files and duplicated helpers). Teams that need systematic guardrails against serving‑stack bugs will find it immediately useful; they should tighten the CI workflow and refactor the oversized doctor module for long‑term scalability.</p>
             </div>
 
             
@@ -102,11 +141,11 @@ Low — No dependency or security scanning in CI (e.g., Dependabot, CodeQL). Acc
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">243<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>131</b></li><li><span>Python</span><i style="width:30%"></i><b>39</b></li><li><span>Shell</span><i style="width:6%"></i><b>8</b></li><li><span>YAML</span><i style="width:5%"></i><b>6</b></li><li><span>JSON</span><i style="width:4%"></i><b>5</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>174</b></li><li><span>Python</span><i style="width:22%"></i><b>39</b></li><li><span>Shell</span><i style="width:5%"></i><b>8</b></li><li><span>YAML</span><i style="width:3%"></i><b>6</b></li><li><span>JSON</span><i style="width:3%"></i><b>5</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 

@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 31, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>forge3d</h1>
@@ -80,10 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The forge3d repository addresses the need for fast, headless 3D rendering in various applications, including geographic information systems (GIS), computer-aided design (CAD), and video game development. It provides a Python-first interface to a Rust-based, WebGPU-accelerated rendering engine, enabling efficient and interactive visualization of complex 3D scenes.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The forge3d repository offers a range of features, including interactive terrain viewing, raster overlays, vector overlays, labels, and camera automation. It also supports point-cloud loading, COG access, and native/offscreen rendering. The examples/ directory contains a collection of runnable scripts demonstrating these features, such as bosniaterrainlandcoverviewer.py and californiacigarsmokedemo.py. The docs/ directory provides extensive documentation, including a Quickstart guide and an API Reference.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using forge3d is in the development of a GIS application for visualizing and analyzing terrain data. For example, a user could utilize the openviewerasync() function to create an interactive 3D viewer, load a GeoTIFF file as a terrain overlay, and then use the setzscale() and setorbitcamera() methods to customize the viewer&#39;s perspective.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing input validation in openviewerasync() - examples/import_shim.py
- Medium - Potential memory leak in TerrainRenderer - build.rs
-The repository appears to be well-maintained, with a comprehensive test suite (12 test files) and a configured CI/CD pipeline using GitHub Actions. The presence of a LICENSE file and a Cargo.toml file suggests good dependency management and security hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>forge3d is a well-structured and feature-rich repository suitable for applications requiring fast and interactive 3D rendering. While it may have some minor issues, the overall quality and maintainability of the codebase are commendable. Developers working on GIS, CAD, or video game projects may find forge3d to be a valuable resource.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Geospatial analysts and visual‑simulation pipelines need fast, headless 3‑D terrain rendering that can be driven from Python scripts while still exploiting GPU acceleration. Existing pure‑Python stacks are CPU‑bound; pure‑Rust engines lack the rich GIS ecosystem.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>forge3d</code> bridges the gap by exposing a <strong>Rust‑implemented wgpu/WebGPU renderer</strong> as a Python package. The core resides in <code>src/</code> (e.g., <code>src/lib.rs</code>, <code>src/viewer/cmd/*.rs</code>) and is built into compiled wheels via <code>pyproject.toml</code>/<code>Cargo.toml</code>. The Python façade lives in <code>python/forge3d/</code>, with the native bridge in <code>python/forge3d/_native.py</code> (the hub module imported by 13 other Python files). High‑level helpers (<code>viewer.py</code>, <code>terrain_params.py</code>, <code>map_scene.py</code>) assemble DEMs, raster/vector overlays, point‑clouds, and cartographic decorations, then invoke the native renderer for interactive or off‑screen snapshots.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong> – <code>examples/bosnia_terrain_landcover_viewer.py</code> (line 762) calls <code>main</code>, which parses CLI args and eventually invokes <code>_render</code>.</li><li><strong>Core rendering path</strong> – <code>_render</code> (in <code>python/forge3d/map_scene.py</code>) calls <code>send_ipc</code> (85 call sites) to forward a command to the Rust process. The Rust side receives the IPC message in <code>src/viewer/cmd/ipc_command.rs</code>, routes it through <code>handler.rs</code>, and triggers the GPU pipeline defined in <code>src/terrain/renderer/</code>.</li><li><strong>Filesystem interaction</strong> – The shortest external‑touch path is <code>main → read_text</code> (via <code>Path::read_text</code> in <code>python/forge3d/_native.py</code>), used to load shader source and scene JSON. The <code>run</code> entry (in <code>python/forge3d/terrain_demo.py</code>) also reads DEMs with <code>rasterio.open</code> (<code>_load_dem</code>).</li><li><strong>Blast‑radius modules</strong> –</li><li><code>python/forge3d/_native.py</code> is the most connected hub (13 importers, 0 outgoing imports). Any change here can affect the entire Python surface.</li><li><code>python/forge3d/helpers/offscreen.py</code> imports and is imported by three modules, showing moderate coupling.</li><li><strong>Deep nesting</strong> – Functions such as <code>python/forge3d/colormaps/core.py</code> and Rust files like <code>src/terrain/render_params/decode_vt.rs</code> reach six indentation levels, making the control flow harder to follow.</li></ul>
+<p>The call graph shows ~6 000 internal edges; the most frequently invoked utilities (<code>_require_native</code>, <code>read_text</code>, <code>send_ipc</code>, <code>evaluate</code>, <code>linspace</code>, <code>to_dict</code>) are the primary glue between Python orchestration and the Rust engine.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/forge3d.git
+cd forge3d
+
+# Install the Python wheel (builds the Rust extension via maturin)
+pip install forge3d          # pulls pre‑built wheels for supported platforms
+# Optional extras for notebooks or bundled datasets
+pip install "forge3d[jupyter]"   # notebook widget support
+pip install "forge3d[datasets]"   # sample DEMs, point‑clouds</code></pre>
+<p>Running an example (the documented quick‑start) executes the Python entry point that ultimately calls the native renderer:</p>
+<pre data-lang="bash"><code>python examples/bosnia_terrain_landcover_viewer.py --help</code></pre>
+<p>The script creates a <code>ViewerHandle</code> via <code>forge3d.open_viewer_async</code>, configures camera/sun, and calls <code>viewer.snapshot(...)</code>. Internally this triggers the IPC flow described above and writes a PNG to the local filesystem.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science pipeline can generate daily terrain visualisations:</p>
+<pre data-lang="python"><code>import forge3d as f3d
+
+dem = f3d.fetch_dem("rainier")               # pulls a GeoTIFF from the bundled dataset
+with f3d.open_viewer_async(terrain_path=dem, width=1920, height=1080) as v:
+    v.set_z_scale(0.2)
+    v.set_orbit_camera(phi_deg=30, theta_deg=45, radius=5000)
+    v.snapshot("rainier_day.png")</code></pre>
+<p>The call chain mirrors the wiring section: <code>open_viewer_async</code> → native session start → IPC command → Rust GPU render → PNG write.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*.yml</code>).</li><li><strong>High</strong> – Remove <code>continue-on-error</code> from correctness steps (<code>.github/workflows/ci.yml</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>determinism-matrix.yml</code>).</li><li><strong>Medium</strong> – Enable a dependency‑update bot (Dependabot or Renovate).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on the checkout step (<code>ci.yml</code>).</li><li><strong>Low</strong> – Define <code>timeout-minutes</code> on workflow jobs (<code>determinism-matrix.yml</code>).</li></ul>
+<p>Additional observations: the repository includes a full test suite (<code>tests/</code>), CI via GitHub Actions, a LICENSE file, and a lockfile (<code>Cargo.lock</code>). No Dockerfile or container build is provided. Documentation is extensive (<code>docs/</code> and online site).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>forge3d</code> delivers a performant, Python‑friendly WebGPU renderer with a well‑structured Rust core, suitable for GIS and simulation workloads that need GPU speed without abandoning Python tooling. The main risks are the tightly coupled native bridge (<code>_native.py</code>) and several high‑severity CI hygiene issues that should be addressed before adopting the package in a production CI pipeline. Engineers comfortable with Rust‑Python interop will find the codebase approachable; teams that need strict CI security should apply the listed fixes.</p>
             </div>
 
             
@@ -100,11 +132,11 @@ The repository appears to be well-maintained, with a comprehensive test suite (1
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,627<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>97</b></li><li><span>Python</span><i style="width:11%"></i><b>11</b></li><li><span>YAML</span><i style="width:6%"></i><b>6</b></li><li><span>JSON</span><i style="width:3%"></i><b>3</b></li><li><span>Rust</span><i style="width:3%"></i><b>3</b></li><li><span>TOML</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>1141</b></li><li><span>JSON</span><i style="width:48%"></i><b>549</b></li><li><span>Python</span><i style="width:43%"></i><b>495</b></li><li><span>Markdown</span><i style="width:9%"></i><b>103</b></li><li><span>TOML</span><i style="width:2%"></i><b>24</b></li><li><span>YAML</span><i style="width:1%"></i><b>6</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Django</span><span>Express</span></p>
                     </div>
                 </div>
 

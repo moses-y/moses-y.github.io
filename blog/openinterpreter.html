@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 5, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>openinterpreter</h1>
@@ -80,11 +80,50 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most open-weight coding agents degrade quickly on low-cost models because their harness layer—the scaffolding that structures prompts, tool calls, and execution feedback—isn&#39;t optimized for those models&#39; weaker reasoning and instruction-following. Existing harnesses (Claude Code&#39;s, DeepSeek&#39;s) are tightly coupled to specific providers and don&#39;t expose a common interface, forcing teams to rebuild agent infrastructure per model.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo is a harness emulation layer that lets you swap agent scaffolding at runtime. The /harness command in README.md lists ten supported harnesses, including kimi-code, claude-code, qwen-code, and swe-agent. Under the hood, the Rust crates in codex-rs/—acp-server, agent-graph-store, agent-identity—implement the Agent Communication Protocol (ACP) and Codex exec protocol, so this works in ACP-compatible editors and can replace OpenAI&#39;s Codex SDK with a one-line override.</p><p>The .codex/skills/ directory contains structured skill definitions (e.g., babysit-pr/SKILL.md, code-review/SKILL.md) that define agent workflows as reusable, versioned files. Each skill has its own agent config (agents/openai.yaml), reference docs, and Python scripts. The build system uses Bazel (MODULE.bazel, BUILD.bazel files across the tree) with GitHub Actions CI configured in .github/workflows/ (27 workflow files).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team building a coding agent that needs to support both Kimi K3 and Qwen models. Instead of writing separate tool-calling logic for each, they configure the active harness at runtime:</p><p>The harness layer handles prompt formatting, tool schema translation, and execution loop differences. The same skill definitions in .codex/skills/ work across harnesses. For editor integration, they launch interpreter acp and point their ACP-compatible client at it.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Over-reliance on Bazel for what is primarily a Rust+Python project. The 14 Bazel files (bazel/rules/, bazel/platforms/) add build complexity that most contributors won&#39;t understand. If your team doesn&#39;t already use Bazel, expect onboarding friction.
-Med - codex-rs/Cargo.lock and MODULE.bazel.lock are checked in, which is correct, but the zstd binary in .github/workflows/zstd is a committed binary artifact. Binary files in the repo are a security and maintenance concern.
-Low - The .devcontainer/ has two Dockerfiles and a firewall script (init-firewall.sh), which suggests non-trivial sandboxing requirements. The Dockerfile.secure naming implies a production security model that isn&#39;t documented in the README.
-Low - 20 test files exist across Python, Rust, and shell, which is reasonable for a 200-file project. CI is configured. No license issues.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a serious, well-structured harness emulator for agentic coding tools. The Bazel build system will repel casual contributors, but for teams already managing multi-runtime agent infrastructure, the harness abstraction and ACP/Codex compatibility are genuinely useful. Best suited for teams running coding agents across multiple low-cost models, not for individual developers looking for a quick CLI tool.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers using low‑cost LLMs (e.g., Kimi K3) need a locally runnable “coding agent” that mimics the OpenAI Codex harness while staying compatible with existing ACP/ACP‑compatible editors. The lack of a performant, open‑source bridge forces teams to either write ad‑hoc wrappers or rely on proprietary services.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Open Interpreter supplies a Rust‑backed provider harness (<code>codex-rs/</code>) that talks the same exec protocol as Codex, exposing a CLI (<code>scripts/codex_package/cli.py</code>) and a Python SDK (<code>sdk/python/</code>). The Rust implementation (<code>codex-rs/acp-server/src/lib.rs</code>, <code>codex-rs/agent‑graph‑store/src/lib.rs</code>) delivers the heavy‑weight model I/O, while the SDK wraps it in idiomatic Python classes (<code>sdk/python/src/openai_codex/client.py</code>, <code>async_client.py</code>).</p>
+<p>Skill bundles live under <code>.codex/skills/</code> (e.g., <code>babysit-pr</code>, <code>codex‑issue‑digest</code>) and are invoked through the <code>/harness</code> command. The repository also ships a Docker devcontainer (<code>.devcontainer/Dockerfile</code>) and CI pipelines that build and test the Rust crates and Python package.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>scripts/codex_package/cli.py:152</code> (<code>main</code>). The call graph shows:</p>
+<ul><li><code>main → add</code> (58×) and <code>main → run_sbx</code> (48×) – the latter spawns a subprocess (<code>subprocess.run</code>) that launches the Rust binary (<code>interpreter</code>).</li><li><code>main → parse_args</code> (24×) builds a <code>CliArgs</code> struct used by <code>run_sbx</code>.</li><li><code>run_sbx</code> eventually calls into <code>codex-rs/acp-server</code> which starts <code>AppServerHarness</code> (called from 33 places) and processes inbound <code>/turn</code> requests.</li></ul>
+<p>The most‑central hub functions are <code>thread_start</code> (37 callers), <code>Codex</code> (34 callers), and <code>AppServerHarness</code> (33 callers). Changing any of these propagates widely across the codebase.</p>
+<p>External effects are concentrated in a few paths:</p>
+<ul><li><strong>Subprocess launch</strong> – <code>main → run_sbx</code> → Rust binary (<code>interpreter</code>).</li><li><strong>Network I/O</strong> – <code>handler</code> in <code>scripts/mock_responses_websocket_server.py</code> → <code>send_event</code> (WebSocket).</li><li><strong>File system</strong> – 154 functions read/write files; e.g., <code>sdk/python/scripts/update_sdk_artifacts.py</code> writes generated SDK artifacts.</li><li><strong>Crypto</strong> – 7 functions handle PEM certificates (<code>codex-rs/http-client/tests/fixtures/*.pem</code>).</li><li><strong>Model inference</strong> – a single function in the Rust crate calls the Kimi K3 backend.</li></ul>
+<p>Responsibility highlights (sorted by routing weight):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core responsibilities</th></tr></thead><tbody><tr><td><code>sdk/python/src/openai_codex/api.py</code> (53 func, 6 class) – client lifecycle, metadata, close.</td><td></td></tr><tr><td><code>.codex/skills/babysit-pr/scripts/gh_pr_watch.py</code> (44 func) – parses PR events, runs external git commands, signs payloads.</td><td></td></tr><tr><td><code>sdk/python/src/openai_codex/async_client.py</code> (48 func) – async wrapper, spawns subprocess via <code>subprocess.Popen</code>.</td><td></td></tr><tr><td><code>codex-rs/skills/src/assets/samples/imagegen/scripts/image_gen.py</code> (54 func) – image‑generation helper, reads prompts, invokes external API keys.</td><td></td></tr><tr><td><code>sdk/python/tests/app_server_harness.py</code> (38 func) – test harness for ACP server, file I/O for fixtures.</td><td></td></tr></tbody></table></div>
+<p>The internal call graph contains 1 993 resolved edges; cycles are limited to the harness bootstrap (e.g., <code>thread_start ↔ Codex</code>), meaning most changes stay localized unless they touch these hubs.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/openinterpreter
+cd openinterpreter
+
+# Build the Rust interpreter (requires cargo)
+cargo build --release -p interpreter   # defined in codex-rs/Cargo.toml
+
+# Install the Python SDK in editable mode
+pip install -e sdk/python
+
+# Run the CLI (entry point)
+python scripts/codex_package/cli.py   # starts the interpreter subprocess</code></pre>
+<p>Configuration files:</p>
+<ul><li><code>codex-rs/Cargo.toml</code> – selects the Kimi K3 provider (<code>kimi-code</code> harness).</li><li><code>sdk/python/src/openai_codex/client.py</code> – reads <code>~/.openinterpreter/config.toml</code> for API keys.</li><li><code>.devcontainer/Dockerfile</code> – optional container with all build tools.</li></ul>
+<p>To switch harnesses at runtime, type <code>/harness</code> in the interactive session and choose <code>kimi-code</code> (the default for K3).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI system can invoke the CLI inside a Docker step to generate code patches:</p>
+<pre data-lang="bash"><code>python scripts/codex_package/cli.py &lt;&lt;'EOF'
+/harness kimi-code
+def add(a, b): return a + b
+/add 2 3
+EOF</code></pre>
+<p>The output is a diff that can be applied automatically, letting low‑cost models produce production‑ready changes without leaving the repository.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – <code>continue-on-error</code> in <code>.github/workflows/cargo-ci.yml</code> masks test failures.</li><li><strong>Medium</strong> – No explicit <code>permissions</code> for <code>GITHUB_TOKEN</code> (potential over‑privilege).</li><li><strong>Medium</strong> – Dockerfile base image (<code>ubuntu:24.04</code>) not pinned by digest.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>Medium</strong> – <code>checkout</code> step keeps credentials; missing <code>persist-credentials: false</code>.</li><li><strong>Low</strong> – No <code>timeout-minutes</code> on CI jobs (risk of hung runs).</li></ul>
+<p>Additional observations: PEM fixtures in <code>codex-rs/http-client/tests/fixtures/</code> indicate committed secrets; the repo includes a license (<code>Apache‑2.0</code>) and lockfiles (<code>Cargo.lock</code>, <code>pnpm-lock.yaml</code>). Tests exist (1 799 files) and CI runs on GitHub Actions.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Open Interpreter delivers a functional, Rust‑backed bridge for low‑cost LLMs with a usable Python SDK and a clear exec protocol. It is modular but hinges on a few high‑traffic hub functions, so changes to those require careful impact analysis. The codebase is test‑rich but suffers from CI hygiene issues (masked failures, missing permission scoping). Teams comfortable with Rust and Python can adopt it quickly, provided they address the identified CI and secret‑handling concerns.</p>
             </div>
 
             
@@ -94,18 +133,18 @@ Low - 20 test files exist across Python, Rust, and shell, which is reasonable fo
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">7<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">6,027<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>49</b></li><li><span>Markdown</span><i style="width:63%"></i><b>31</b></li><li><span>Python</span><i style="width:41%"></i><b>20</b></li><li><span>Shell</span><i style="width:29%"></i><b>14</b></li><li><span>Rust</span><i style="width:29%"></i><b>14</b></li><li><span>TOML</span><i style="width:24%"></i><b>12</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>2851</b></li><li><span>TypeScript</span><i style="width:23%"></i><b>660</b></li><li><span>JSON</span><i style="width:12%"></i><b>343</b></li><li><span>Markdown</span><i style="width:10%"></i><b>285</b></li><li><span>TOML</span><i style="width:5%"></i><b>156</b></li><li><span>Python</span><i style="width:5%"></i><b>140</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>YOLO</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -116,6 +155,12 @@ Low - 20 test files exist across Python, Rust, and shell, which is reasonable fo
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>codex-rs/http-client/tests/fixtures/test-ca-trusted.pem, codex-rs/http-client/tests/fixtures/test-ca.pem, codex-rs/http-client/tests/fixtures/test-intermediate.pem</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1323746094">Open in Code Brain &rarr;</a>

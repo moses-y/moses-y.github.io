@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 1, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Vulnerability detection in applications is a time-consuming and labor-intensive process, often relying on manual penetration testing or static analysis tools that can produce false positives.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The strix repository provides an open-source AI penetration testing tool that uses autonomous AI agents to find and fix vulnerabilities in applications. The tool is built using a combination of Python, TypeScript, and React, with a Docker-based deployment. The strix/interface/cli.py file serves as the main entry point for the command-line interface, while the strix/interface/viewer/frontend directory contains the frontend code for the web-based interface.</p><p>The tool integrates with various LLM providers, such as OpenAI and Anthropic, and supports multiple skills and frameworks, including Django and Kubernetes. The strix/skills directory contains the implementation of these skills, with each skill having its own Markdown file (e.g., strix/skills/frameworks/django.md) that describes its functionality.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario for using strix would be to integrate it into a CI/CD pipeline to automatically scan for vulnerabilities on every pull request. For example, the strix/interface/viewer/frontend/src/components/live/tool-renderers/ScanInfoRenderer.tsx file contains the implementation of the scan information renderer, which can be used to display the results of the vulnerability scan.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Missing input validation in strix/interface/cli.py - strix/interface/cli.py
- Medium - Potential race condition in strix/runtime/sessionmanager.py - strix/runtime/sessionmanager.py
-Low - No clear separation of concerns between strix/interface/viewer/frontend and strix/interface/cli.py - strix/interface/viewer/frontend and strix/interface/cli.py
-However, the repository appears to be well-maintained, with a clear directory structure, present tests, and a configured CI pipeline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The strix repository provides a promising solution for automated vulnerability detection and penetration testing. While it may have some issues, such as missing input validation and potential race conditions, the repository appears to be well-maintained and actively developed. The tool is likely to be useful for large teams and organizations that need to automate their security testing processes.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Traditional DAST and SAST tools produce high false-positive rates and require manual triage. Security teams spend days validating findings that turn out to be noise. Strix addresses this by using AI agents to not just find vulnerabilities but validate them through working proofs-of-concept, giving developers actionable results instead of a list of suspected issues.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Strix is an autonomous AI penetration testing tool. It orchestrates multiple AI agents that act as pentesters—running reconnaissance, exploitation, and validation against your application. The system is built around a Python core (<code>strix/core/</code>) with a CLI (<code>strix/interface/cli.py</code>), a TUI (<code>strix/interface/tui/app.py</code>), and a web viewer (<code>strix/interface/viewer/</code>) built with React/TypeScript.</p>
+<p>The tool integrates with multiple LLM providers (OpenAI, Anthropic, Google, etc.) and supports various scanning modes. It generates compliance-ready pentest reports and can auto-fix found vulnerabilities. The runtime uses Docker for sandboxing, and there's a CI/CD integration path via GitHub Actions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>strix/interface/main.py</code> at the <code>main</code> function, which reaches 399 functions across the codebase. From there, control flows to the core runner (<code>strix/core/runner.py</code>), which orchestrates the agent coordination in <code>strix/core/agents.py</code>. The <code>AgentCoordinator</code> is called from 42 places, making it the central hub of the system.</p>
+<p>The most critical module is <code>strix/config/__init__.py</code> with 29 modules depending on it—changing it creates a wide blast radius. The <code>load_settings</code> function in <code>strix/config/loader.py</code> is called from 44 places and is the most heavily used function in the codebase.</p>
+<p>The system touches the outside world through: 115 functions doing file I/O, 27 making network calls, 12 performing cryptographic operations, and 9 running external commands. The shortest path from entry to external effect is <code>main -&gt; parse_arguments</code> which reads a file, and <code>action_request_quit -&gt; action_custom_quit -&gt; cleanup</code> which makes a network call.</p>
+<p>There's a circular dependency in <code>strix/interface/viewer/server.py</code> and <code>strix/interface/viewer/__init__.py</code>—two modules that mutually import each other.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/strix
+cd strix
+# Install Python dependencies
+pip install -e .
+# Install frontend dependencies
+cd strix/interface/viewer/frontend &amp;&amp; npm install
+# Run a scan (requires Docker and an LLM API key)
+strix scan --target https://your-app.com</code></pre>
+<p>Configuration lives in <code>strix/config/</code>. You'll need an LLM API key from a supported provider and Docker running. The <code>Makefile</code> provides build targets, and <code>containers/Dockerfile</code> shows the container setup.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A security team integrates Strix into their CI pipeline. Every pull request triggers a scan via GitHub Actions. The AI agents run against a staging environment, validate vulnerabilities with PoCs, and block the merge if critical issues are found—replacing a manual pentest that took weeks with an automated check that runs in hours.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 91 issues (9 high, 82 medium) across 8 categories:</p>
+<ul><li><strong>High</strong> - Hub module <code>strix/config/__init__.py</code> with 29 dependents; high blast radius on change</li><li><strong>High</strong> - Deep nesting in <code>strix/core/agents.py</code>, <code>strix/core/execution.py</code>, <code>strix/core/hooks.py</code> (max depth 7)</li><li><strong>High</strong> - Oversized files: <code>strix/interface/utils.py</code> at 1316 lines</li><li><strong>High</strong> - Import cycle in <code>strix/interface/viewer/server.py</code></li><li><strong>High</strong> - 210 duplicated 6-line blocks across 43 files</li><li><strong>Medium</strong> - 27 instances of broad exception handling in <code>strix/report/state.py</code>, <code>strix/config/models.py</code></li><li><strong>Medium</strong> - 3 files opened without context managers in <code>strix/interface/viewer/server.py</code></li></ul>
+<p>SDLC observations: CI workflows exist but never invoke the test suite (48 test files, no test command). No Dependabot/Renovate configured. Docker base image uses mutable <code>latest</code> tag. No dependency vulnerability scanning in CI.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Strix is a serious, well-structured tool for AI-driven penetration testing with real PoC validation. The architecture is sound but has maintainability debt—oversized files, deep nesting, and duplicated logic will slow future changes. Teams wanting automated security testing with fewer false positives should evaluate it, but expect to invest in refactoring if you plan to extend the codebase.</p>
             </div>
 
             
@@ -101,11 +125,11 @@ However, the repository appears to be well-maintained, with a clear directory st
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">333<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>66</b></li><li><span>TSX</span><i style="width:70%"></i><b>46</b></li><li><span>Markdown</span><i style="width:23%"></i><b>15</b></li><li><span>TypeScript</span><i style="width:23%"></i><b>15</b></li><li><span>Shell</span><i style="width:6%"></i><b>4</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>142</b></li><li><span>Markdown</span><i style="width:49%"></i><b>70</b></li><li><span>TSX</span><i style="width:32%"></i><b>46</b></li><li><span>TypeScript</span><i style="width:11%"></i><b>15</b></li><li><span>Shell</span><i style="width:3%"></i><b>4</b></li><li><span>JSON</span><i style="width:3%"></i><b>4</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Django</span><span>Flask</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Django</span><span>Flask</span><span>FastAPI</span><span>Docker</span></p>
                     </div>
                 </div>
 

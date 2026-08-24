@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 21, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running Claude Code, Codex, or Pi requires a paid Anthropic or OpenAI API key — or no key at all if you use a local model. Developers who want to experiment with multiple models, switch providers without reconfiguring their tools, or use free tiers from providers like OpenRouter or NVIDIA NIM have no clean way to do it. Each coding agent expects a specific API endpoint and auth scheme, so changing providers means changing your client setup.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>free-claude-code is a local proxy server that sits between coding agents (Claude Code, Codex, Pi) and any of 25 supported AI providers. It exposes Anthropic-compatible and OpenAI-compatible endpoints so each agent connects without modification. The proxy handles routing, model mapping, streaming, tool use, and reasoning — you pick the provider from a local Admin UI at src/freeclaudecode/api/adminroutes.py and the proxy translates requests on the fly.</p><p>The project ships three CLI launchers — fcc-claude, fcc-codex, fcc-pi — defined in src/freeclaudecode/cli/launchers/. It also provides a desktop system-tray app for Windows and macOS (src/freeclaudecode/cli/desktoptray.py). The src/freeclaudecode/core/ directory handles the Anthropic and OpenAI protocol adaptations, while src/freeclaudecode/config/providercatalog.py manages the provider registry.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Install with the provided shell or PowerShell script, run fcc-server, open the Admin UI at localhost:8080, pick a provider (e.g., OpenRouter free tier), then launch fcc-claude from the terminal. Claude Code connects to the local proxy, which routes all requests through your chosen provider. You can switch providers at any time from the Admin UI without restarting the agent.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low — No lockfile (pyproject.toml only). Builds are not reproducible across environments. CI runs tests but doesn&#39;t pin transitive dependencies.
-Low — 24 test files exist in smoke/ but they are integration-style live tests (e.g., testapiprereqlive.py). Unit test coverage for core modules like core/anthropic/streaming/ and core/openairesponses/ is absent from the visible structure.
-Low — .env.example is present, which suggests secrets (API keys) are expected in environment files. No .env is checked in, but the pattern invites accidental commits if users rename the file.
-Med — The smoke/lib/server.py entry point and src/freeclaude_code/api/app.py handle HTTP routing and proxy logic. No input sanitization or rate limiting is visible at the route level — a local proxy is low risk, but exposing this to a network would be unsafe.
-Low — Python 3.14 is required (.python-version). That&#39;s a pre-release Python version as of this writing, which limits compatibility with many package ecosystems.</p><p>The repo is cleanly structured with CI configured (tests.yml), type checking (Ty), and formatting (Ruff). The test suite exists and runs, but it&#39;s thin for a 165-file Python project.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a well-structured proxy that solves a real problem for developers who want to use multiple AI providers with existing coding agents. It&#39;s practical, has a clean architecture, and the admin UI makes provider switching painless. The dependency on Python 3.14 and the lack of a lockfile are real friction points for production use. Best suited for individual developers or small teams who want vendor flexibility without rebuilding their tooling.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want Claude Code, Codex or Pi locally must juggle separate CLI tools, browser‑only UI extensions, and ad‑hoc proxy scripts. Keeping the provider list, model routing, and voice‑note transcription in sync is error‑prone and often requires manual environment tweaks.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>free‑claude‑code</code> bundles a self‑hosted proxy that exposes the Claude, Codex and Pi APIs through a single HTTP server. The server lives in <code>src/free_claude_code/api/app.py</code> and is started by the CLI entry point <code>fcc‑server</code> (installed by the provided install scripts).</p>
+<p>Provider configuration, model catalogues and admin UI assets are defined under <code>src/free_claude_code/config/</code> and <code>src/free_claude_code/api/admin_static/</code>. The voice‑enabled workflow lives in <code>src/free_claude_code/messaging/voice.py</code> and is wired through <code>src/free_claude_code/messaging/platforms/voice_flow.py</code>.</p>
+<p>The test harness in <code>smoke/lib/e2e.py</code> validates end‑to‑end behavior, while the extensive <code>tests/</code> package supplies unit coverage for request handling, model selection and streaming logic.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <strong>entry point</strong> <code>smoke/lib/e2e.py</code> → <code>start</code> (line 319). <code>start</code> creates a temporary server (<code>run → start_server</code>) that writes log files (<code>config.results_dir.mkdir</code>) and spawns a subprocess (<code>subprocess.Popen</code>). The server process loads configuration via <code>smoke/lib/config.py</code> (calls <code>load</code>, <code>model_name</code>, <code>provider_models</code>).</p>
+<p>The HTTP service itself is defined in <code>src/free_claude_code/api/app.py</code>. The global exception handlers <code>general_error_handler</code>, <code>application_error_handler</code> and <code>validation_error_handler</code> are the only callers of the corresponding functions, limiting their blast radius.</p>
+<p>Core request handling flows through the <strong>hub modules</strong> identified by the import graph:</p>
+<ul><li><code>tests/providers/support</code> – imported by 36 modules.</li><li><code>smoke/lib/config</code> – imported by 30 modules.</li><li><code>tests/providers/request_factory</code> – imported by 24 modules.</li></ul>
+<p>These hubs host volatile test fixtures; changes here ripple widely, so keep them stable.</p>
+<p>Message processing travels <code>src/free_claude_code/messaging/workflow.py</code> → <code>src/free_claude_code/messaging/models</code> → <code>src/free_claude_code/core/anthropic/*</code>. The most‑used internal symbols are <code>Settings</code> (113 callers) and <code>create_test_app</code> (73 callers).</p>
+<p>A circular import exists among <code>src/free_claude_code/core/openai_responses/streaming/__init__.py</code>, <code>src/free_claude_code/api/web_tools/__init__.py</code> and <code>src/free_claude_code/api/web_tools/streaming.py</code>; breaking this cycle will simplify refactoring.</p>
+<p>External interactions are concentrated in a few places:</p>
+<ul><li>Filesystem I/O – 168 functions (e.g., <code>download_to</code> in <code>src/free_claude_code/messaging/platforms/voice_flow.py</code>).</li><li>Network calls – 119 functions (e.g., <code>make_request</code> in <code>src/free_claude_code/application/ports.py</code>).</li><li>Subprocess launch – <code>run → start_server</code> in <code>smoke/lib/e2e.py</code>.</li></ul>
+<p>No other external effects (e.g., database) are traced.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install / update (macOS / Linux)
+curl -fsSL "https://raw.githubusercontent.com/moses-y/free-claude-code/main/scripts/install.sh" | sh
+
+# Windows PowerShell
+&amp; ([scriptblock]::Create((irm "https://raw.githubusercontent.com/moses-y/free-claude-code/main/scripts/install.ps1")))</code></pre>
+<p>The installer registers the <code>fcc‑server</code> binary and desktop launchers (<code>fcc‑claude</code>, <code>fcc‑codex</code>, <code>fcc‑pi</code>).</p>
+<p>Configuration is read from <code>.env.example</code>; copy it to <code>.env</code> and adjust <code>FCC_ADMIN_PASSWORD</code>, <code>FCC_MODEL_CATALOG_PATH</code>, etc., as required by <code>src/free_claude_code/config/env_template.py</code>.</p>
+<p>Start the proxy:</p>
+<pre data-lang="bash"><code>fcc-server          # runs the FastAPI app on localhost:8000</code></pre>
+<p>The Admin UI is served at <code>http://localhost:8000/admin/</code> (static files in <code>src/free_claude_code/api/admin_static/</code>). CLI commands (<code>fcc-claude</code>, <code>fcc-codex</code>, <code>fcc-pi</code>) automatically target the local proxy.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can invoke <code>fcc‑claude</code> to generate code suggestions for PRs, while developers use the VS Code extension to fetch completions from the locally routed Claude model. Voice notes from a Slack bot are transcribed via <code>src/free_claude_code/messaging/voice.py</code>, sent to the proxy, and the resulting assistant reply is posted back to the channel—all without leaving the corporate network.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Dependency‑vulnerability gate missing</strong> – <code>.github/workflows/tests.yml</code> lacks a scan step.</li><li><strong>Low – Repository conventions missing</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code> or formatter config.</li></ul>
+<p>Measured static findings (29 high, 108 medium, 0 low) include:</p>
+<ul><li><strong>High/clarity – Hub modules</strong> (<code>tests/providers/support.py</code>, <code>smoke/lib/config.py</code>, <code>tests/providers/request_factory.py</code>) – each imported by &gt;30 files; keep them small.</li><li><strong>High/soundness – Import cycles</strong> – 5 modules (e.g., <code>src/free_claude_code/core/openai_responses/streaming/__init__.py</code>).</li><li><strong>High/cognitive_load – Deep nesting</strong> – 31 occurrences, max depth 7 (e.g., <code>smoke/lib/e2e.py</code>).</li><li><strong>Medium/resource_safety – Files opened without context</strong> – <code>smoke/lib/e2e.py</code>.</li><li><strong>Medium/resilience – Broad exception handling</strong> – 11 modules swallow generic <code>Exception</code>.</li></ul>
+<p>No lockfile is present; builds are non‑reproducible. The <code>openai</code> dependency is pinned to <code>&gt;=2.46.0</code> while the latest major version is 3.x.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>free‑claude‑code</code> delivers a functional, locally hosted proxy for Anthropic‑ and OpenAI‑based coding agents, with a usable admin UI and voice integration. The codebase is sizable and contains several high‑impact hubs and a few circular imports that will increase maintenance cost. It is suitable for teams comfortable managing Python environments and willing to address the missing CI security gate and repository conventions.</p>
             </div>
 
             
@@ -102,11 +134,11 @@ Low — Python 3.14 is required (.python-version). That&#39;s a pre-release Pyth
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">473<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>165</b></li><li><span>YAML</span><i style="width:4%"></i><b>6</b></li><li><span>Markdown</span><i style="width:4%"></i><b>6</b></li><li><span>Shell</span><i style="width:2%"></i><b>3</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li><li><span>CSS</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>437</b></li><li><span>YAML</span><i style="width:1%"></i><b>6</b></li><li><span>Markdown</span><i style="width:1%"></i><b>6</b></li><li><span>Shell</span><i style="width:1%"></i><b>3</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li><li><span>CSS</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Django</span><span>Flask</span></p>
+                        <p class="an-fw"><span>Django</span><span>Flask</span><span>Transformers</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -161,7 +193,7 @@ Low — Python 3.14 is required (.python-version). That&#39;s a pre-release Pyth
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile — non-reproducible builds <code>pyproject.toml</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
                     </ul>
                 </div>
 

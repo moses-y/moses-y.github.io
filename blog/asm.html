@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 29, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>asm</h1>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI coding agents like Claude Code, Codex, and Cursor each store skills in separate directories with no shared inventory. Installing the same skill across multiple tools means manual copying, version drift, and no way to audit what’s actually active. Teams waste time chasing outdated or duplicate skill files across hidden folders.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>asm is a CLI that centralizes skill management across 19 agent providers. It installs, searches, audits, and lists skills from a single command. All operations support --json and --yes flags, making the tool scriptable for CI and automation workflows. The skill catalog (4,394 entries) is stored as JSON index files under data/skill-index/, each sourced from a different repository. Actual skill definitions live in skills/, each with a SKILL.md file and optional scripts or references. The optional TUI (bin/agent-skill-manager.ts) provides local browsing.</p><p>The CLI validates skill frontmatter before install, runs a pre-install security scan (see scripts/security_check.py and .gitleaks.toml), and pins registry commits to prevent tampering. Providers and scopes are configured in a single config file, so adding or removing a tool is a one-time edit.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer wants to install the same SwiftUI skill for both Claude Code and Cursor. Instead of cloning two repos and copying folders, they run:</p><p>The command validates the skill, checks for security risks, and installs it to both provider directories. Later, asm audit flags any outdated or duplicated skills across all providers.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The repo is structurally clean: CI is configured (ci.yml, deploy-website.yml, security.yml), a license exists, and pre-commit hooks are set up. Security scanning is present via Gitleaks and a custom Python script. However, test coverage is thin — only 7 test files exist for a CLI tool with dozens of commands and complex state management (skill indexing, provider config, install logic). This raises moderate risk of regressions, especially around edge cases like malformed SKILL.md files or provider-specific path resolution. The large set of static JSON index files (64 JSON files) is not tested for schema consistency. No integration tests for the install workflow are visible.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>asm solves a real, practical problem for teams using multiple AI coding agents. Its design favors automation and security, and the catalog size is impressive. The main weakness is limited test coverage — the tool is useful today but would benefit from more thorough validation before production deployment in a team environment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents need a single source of truth for skills across many coding tools, but skills are scattered across hidden directories, version‑mismatched, and lack a unified audit path. Manual installs risk broken front‑matter, duplicated effort, and security blind spots.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>asm</code> (agent‑skill‑manager) is a CLI that unifies install, search, audit and evaluation of agent skills. The core lives in <strong><code>src/</code></strong> (116 files, 102 code files) and is orchestrated by <strong><code>scripts/security_check.py</code></strong> (entry point <code>main</code> at line 407). Skills are defined in <strong><code>skills/</code></strong> (51 files, 11 code files) and a public website UI lives in <strong><code>website-src/</code></strong> (63 files, 55 code files, Tailwind‑styled). The tool supports <code>--json</code> and <code>--yes</code> for non‑interactive pipelines, and an optional TUI for local browsing.</p>
+<p>Key flows, per the internal call graph, start at <strong><code>main</code></strong> → <strong><code>generate_html</code></strong> (called 4 times) → template rendering via <strong><code>template_path.read_text</code></strong> (filesystem I/O). <strong><code>aggregate_results</code></strong> calls <strong><code>calculate_stats</code></strong> (3 edges). <strong><code>run_check</code></strong> dispatches to <strong><code>materialize_command</code></strong>, <strong><code>command_exists</code></strong>, <strong><code>read_json_output</code></strong>, <strong><code>parse_findings</code></strong>, <strong><code>has_parser</code></strong> – each a single‑hop effect on the filesystem or an external command. The most connected module is <strong><code>src/utils/types</code></strong> (Ca 55, Ce 0, instability 0): 55 other modules import it, so changes ripple widely. By contrast <strong><code>src/cli</code></strong> (Ca 4, Ce 36, instability 0.9) is a high‑traffic entry point with many importers but also high outward degree, making it a blast‑radius hub for CLI flag handling.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong>: <code>scripts/security_check.py:407</code> (<code>main</code>) reaches 45 functions, itself called from one place.</li><li><strong>File‑system effects</strong>: 17 functions read or write files; 3 run external commands (<code>run_check → materialize_command</code>, etc.); 2 call a model for inference (<code>run_loop → print_eval_stats</code>).</li><li><strong>Hub modules</strong>: <code>src/utils/types</code>, <code>src/config</code>, <code>src/logger</code> are imported by 55, 20, 19 modules respectively – keep them small and stable.</li><li><strong>Oversized files</strong>: <code>src/evaluator.ts</code>, <code>src/formatter.ts</code>, <code>src/cli.ts</code> each exceed 1 600 lines (high cognitive load).</li><li><strong>Deep nesting</strong>: max indentation depth 11 in <code>src/cli.ts</code>, <code>website-src/src/components/SkillDetail.jsx</code>, and <code>skills/skill-creator/scripts/run_eval.py</code>.</li><li><strong>Duplicated logic</strong>: 328 repeated 6‑line blocks across ~60 files, notably in <code>scripts/build-catalog.ts</code>, <code>src/stats.ts</code>, <code>src/utils/types.ts</code>.</li><li><strong>Resource‑safety</strong>: <code>open(...)</code> without <code>with</code> in <code>skills/skill-creator/eval-viewer/generate_review.py</code> and <code>skills/skill-creator/scripts/run_loop.py</code> (2 instances).</li><li><strong>TODO/FIXME markers</strong>: 8 unresolved markers in <code>skills/skill-creator/scripts/init_skill.py</code>.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/asm
+
+# Install dependencies (npm)
+cd asm &amp;&amp; npm install</code></pre>
+<p><strong>Configuration</strong> Create a config file (e.g., <code>~/.asm/config.yaml</code>) or set environment variables referenced by <code>src/config.ts</code>. The CLI reads provider keys and registry URLs from this file; see the README for exact keys.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># List all installed skills (JSON output)
+asm list --json
+
+# Install a skill from the registry (non‑interactive)
+asm install --yes &lt;skill-id&gt;
+
+# Audit existing skills for security or version drift
+asm audit --json</code></pre>
+<p>All commands accept <code>--json</code> for machine‑readable output and <code>--yes</code> to skip prompts.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can run <code>asm audit --json</code> after each pull request to surface newly‑added or outdated skills across Claude, Codex, Cursor and 16 other providers. The JSON result can be posted to a dashboard or block merges that introduce un‑validated skills. Because <code>main</code> reaches only 45 functions and the call graph is shallow (≤ 62 edges), the audit step adds &lt; 0.3 s overhead on a typical machine.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Measured analysis</strong> (static, 49 findings): 11 high, 37 medium, 1 low across 7 kinds. Highlights: hub module <code>src/utils/types</code> (55 dependents), 25 oversized files (≥ 1 600 lines), 8 deep‑nesting instances, 8 duplicated code blocks, 2 files opened without context manager, 8 TODO/FIXME markers.</li><li><strong>Code health audit</strong> (3 medium findings):</li><li>Large binaries in <code>data/skill-index/sickn33_antigravity-awesome-skills.json</code> (6.9 MB) – move to Git LFS or external storage.</li><li><code>.github/workflows/ci.yml</code> keeps checkout token; set <code>persist-credentials: false</code> and pass explicit token only to push step.</li><li><code>package.json</code> postinstall script – migrate work to an explicit build step or disable scripts in CI (<code>ignore-scripts</code>).</li></ul>
+<p><em>All findings stem from the pipeline’s deterministic static analysis; no opinion or guesswork is included.</em></p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>asm</code> delivers a much‑needed single‑point CLI for managing AI‑agent skills across dozens of tools, with JSON‑first output and security pre‑flight checks. The codebase is modular enough that the most‑connected hubs (<code>src/utils/types</code>, <code>src/cli</code>) can be refactored without breaking the whole system, but several files exceed safe size limits and carry duplicated logic that should be extracted. The three hygiene issues (large binaries, credential handling, postinstall risk) are straightforward to remediate and should be addressed before the tool is adopted in production pipelines. Teams that need a cross‑provider skill inventory and audit workflow will find immediate value; those requiring a tightly‑curated, low‑maintenance codebase may want to invest in the outlined refactors first.</p>
             </div>
 
             
@@ -98,11 +129,11 @@
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">402<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JSON</span><i style="width:100%"></i><b>64</b></li><li><span>Markdown</span><i style="width:88%"></i><b>56</b></li><li><span>Python</span><i style="width:17%"></i><b>11</b></li><li><span>TypeScript</span><i style="width:11%"></i><b>7</b></li><li><span>YAML</span><i style="width:8%"></i><b>5</b></li><li><span>Shell</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>106</b></li><li><span>Markdown</span><i style="width:73%"></i><b>77</b></li><li><span>JSON</span><i style="width:68%"></i><b>72</b></li><li><span>JSX</span><i style="width:36%"></i><b>38</b></li><li><span>JavaScript</span><i style="width:16%"></i><b>17</b></li><li><span>Python</span><i style="width:11%"></i><b>12</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span></p>
                     </div>
                 </div>
 
