@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 2, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running a multi-stage tournament (single elimination, round-robin, swiss) with multiple courts, teams, and clubs is a logistics problem. Spreadsheets and manual scheduling break down when matches need rescheduling, rankings need recalculating, and public dashboards need updating in real time. Bracket is a self-hosted system that handles the scheduling, ranking, and public-facing dashboards for you.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Bracket is a full-stack tournament management system. The backend (backend/bracket/) is an async Python/FastAPI app with a clear separation of concerns: routes/ for API endpoints, logic/ for scheduling and ranking algorithms, sql/ for database queries, and models/db/ for ORM models. The frontend (not fully shown in this analysis) is a Vite/React app using Mantine. The repo also includes a docs/ folder with a Next.js documentation site.</p><p>The core scheduling logic lives in backend/bracket/logic/scheduling/ — round_robin.py, elimination.py, and builder.py handle the three tournament formats. Ranking calculations are in logic/ranking/calculation.py. The system supports multi-stage tournaments with multiple groups per stage, drag-and-drop match rescheduling, and public dashboard pages. A cli.py script at the repo root provides utility commands like creating a dev database.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The README documents a Docker Compose workflow. Clone the repo and run:
-git clone git@github.com:evroon/bracket.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizers need a web‑based tournament manager that can handle single‑elimination, round‑robin and Swiss formats, expose public dashboards, and let admins drag‑and‑drop matches. Existing SaaS tools are either locked‑in or lack the required scheduling flexibility, forcing teams to build ad‑hoc scripts.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>bracket</code> delivers a full‑stack, self‑hosted system. The <strong>backend</strong> lives under <code>backend/</code> and is an async FastAPI app (<code>backend/bracket/app.py</code>). It defines REST endpoints, authentication (<code>backend/bracket/routes/auth.py</code>), and a rich data model in <code>backend/bracket/models/db/</code>. The <strong>frontend</strong> under <code>frontend/</code> is a Vite‑powered React app using Mantine components; the main entry point is <code>frontend/src/main.tsx</code>, which pulls the generated OpenAPI client from <code>frontend/src/openapi/client/</code>.</p>
+<p>Key files:</p>
+<ul><li><code>backend/bracket/app.py</code> – creates the FastAPI <code>app</code> and registers routers.</li><li><code>backend/cli.py</code> – CLI with commands like <code>create-dev-db</code> (calls <code>create_dev_db</code>).</li><li><code>backend/bracket/sql/*.py</code> – thin SQL wrappers (e.g., <code>sql_get_tournament</code>, <code>sql_create_match</code>).</li><li><code>frontend/src/openapi/client/index.ts</code> – typed client used by UI components.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>backend/bracket/app.py:44</code></strong> (<code>lifespan</code> event) which runs <code>init_db_when_empty</code> → <code>create_admin_user</code> → <code>hash_password</code>. The only external effect is a bcrypt hash (<code>backend/bracket/utils/security.py</code>).</p>
+<p>The HTTP request flow:</p>
+<ol><li>FastAPI receives a request (<code>/tournaments/{id}</code>) → router in <code>backend/bracket/routes/tournaments.py</code>.</li><li>Handler calls <code>sql_get_tournament</code> (in <code>backend/bracket/sql/tournaments.py</code>).</li><li><code>sql_get_tournament</code> uses <code>fetch_one_parsed</code> from <code>backend/bracket/utils/db.py</code> → executes a DB query via <code>backend/bracket/database.py</code>.</li></ol>
+<p>The most widely used internal functions (by distinct callers) are:</p>
+<ul><li><code>send_tournament_request</code> – 48 call sites.</li><li><code>inserted_team</code> – 36 call sites.</li><li><code>SuccessResponse</code> – 32 call sites.</li></ul>
+<p>These act as blast‑radius hubs; changes here ripple across many modules.</p>
+<p>The <strong>frontend</strong> imports the OpenAPI client (<code>frontend/src/openapi/client/index.ts</code>) which ultimately calls <code>fetch</code> wrappers defined in <code>frontend/src/services/adapter.tsx</code>. That file is a hub (14 dependent modules) and therefore a stability target.</p>
+<p>No circular import cycles were detected (0). The internal call graph contains 967 resolved edges, confirming that most business logic lives in the SQL wrapper layer and the scheduling builder (<code>backend/bracket/logic/scheduling/builder.py</code>).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork (use the exact URL required)
+git clone https://github.com/moses-y/bracket.git
 cd bracket
-sudo docker compose up -d</p><p>This starts the backend, frontend, and a Postgres instance. The docker-compose.yml file at the root orchestrates the services.</p><p>Configuration: The backend reads environment variables from .env files (e.g., prod.env, dev.env) or directly from the environment. The backend/bracket/config.py file handles configuration. For a production deployment, you&#39;ll need to set database credentials and other secrets.</p><p>Running it: After docker compose up, the app is available at http://localhost:3000. Default credentials are test@example.org / aeGhoe1ahng2Aezai0Dei6Aih6dieHoo. To populate dummy data:
-docker exec bracket-backend uv run --no-dev ./cli.py create-dev-db</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A sports club runs a weekend tournament with 16 teams. An admin creates a club, a tournament, and two stages: a round-robin group stage followed by single-elimination playoffs. Teams and players are added via the API (routes/teams.py, routes/players.py). The system auto-schedules group matches across available courts (routes/courts.py), and the admin can drag-and-drop matches to different times. Public dashboard pages (routes/tournaments.py) show live standings. When the group stage ends, the admin activates the next stage, and the system seeds the elimination bracket from the group rankings.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - No dependency lockfile for Python. backend/pyproject.toml declares dependencies but the repo uses uv.lock (which is present), so builds are reproducible if you use uv rather than pip.
-Med - The repo is a fork of evroon/bracket (1,712 stars) with 0 stars on this fork. Verify that upstream fixes and security patches are being tracked; a stale fork can accumulate unpatched vulnerabilities.
-Low - 42 test files are present (unit and integration), and GitHub Actions CI is configured (.github/workflows/). That&#39;s a healthy baseline, but the integration tests depend on a live database, so CI complexity is higher than pure unit tests.
-Low - The docker-compose.yml includes a Postgres instance, but there&#39;s no visible volume mount for data persistence. Container restarts may lose tournament data unless you add a volume.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Bracket is a well-structured, feature-complete tournament system with solid scheduling logic and a clean API layer. It&#39;s a good fit for a club or small organization that wants to self-host tournament management without paying for a SaaS product. The main concerns are the fork&#39;s maintenance status and the lack of a documented persistence strategy for Docker deployments. If you need multi-format tournaments with public dashboards and are comfortable managing a Docker deployment, this is a practical choice.</p>
+
+# Build and start all services (Docker Compose uses the Dockerfiles)
+docker compose up -d</code></pre>
+<p><em>The compose file pulls a Postgres container and builds the backend (<code>backend/Dockerfile</code>) and frontend (<code>Dockerfile</code>).</em></p>
+<p>Create the initial dev database:</p>
+<pre data-lang="bash"><code>docker exec bracket-backend uv run --no-dev ./cli.py create-dev-db</code></pre>
+<p>The backend reads configuration from <code>.env</code> files (<code>backend/.env</code> or <code>backend/dev.env</code>). The repository currently commits <code>frontend/.env.development</code>; this should be removed and replaced with an example file.</p>
+<p>Run the UI at &lt;http://localhost:3000&gt;. The demo credentials are listed in the README.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A sports club can deploy the stack on an on‑premise server, point the <code>FRONTEND_URL</code> and <code>DATABASE_URL</code> environment variables to their internal network, and embed the public dashboard (<code>/tournaments/{slug}</code>) in their website via an iframe. Admins log in, create a tournament, and the scheduling service (<code>backend/bracket/logic/scheduling/*.py</code>) automatically generates Swiss rounds, which the UI updates in real time via the OpenAPI client.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>pyjwt@2.12.0</code> has CVE‑2026‑48526. Upgrade to a fixed version.</li><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*.yml</code>).</li><li><strong>High</strong> – Multiple dependencies with published advisories (e.g., <code>aiohttp@3.13.4</code>, <code>python-multipart@0.0.26</code>, <code>starlette@1.0.0</code>). Upgrade them.</li><li><strong>High</strong> – Committed development <code>.env</code> (<code>frontend/.env.development</code>). Remove, <code>.gitignore</code>, rotate secrets, add an example file.</li><li><strong>Medium</strong> – Base images are mutable (<code>node:25-alpine</code>, <code>python:3.14-alpine3.22</code>). Pin by digest.</li><li><strong>Medium</strong> – No dependency‑vulnerability gate in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – No pre‑commit secret scan. Add a hook (e.g., <code>detect-secrets</code>).</li><li><strong>Medium</strong> – Checkout step keeps token; set <code>persist-credentials: false</code> in <code>docs-build.yml</code>.</li><li><strong>Low</strong> – Jobs lack <code>timeout-minutes</code>; add reasonable limits.</li><li><strong>Low</strong> – Missing repo convention files (<code>.editorconfig</code>, formatter config). Add them.</li></ul>
+<p>Additional measured findings:</p>
+<ul><li>Oversized generated files (<code>frontend/src/openapi/types.gen.ts</code>, <code>sdk.gen.ts</code>) exceed 2 k LOC – split by responsibility.</li><li>Hub module <code>frontend/src/services/adapter.tsx</code> is imported by 14 modules – keep stable.</li><li>Repeated 6‑line blocks across 62 files – extract shared helpers.</li><li>Deep nesting (max depth 8) in several backend utilities – refactor with early returns.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>bracket</code> provides a complete, async Python + React tournament platform that can be self‑hosted with a single <code>docker compose up</code>. The architecture is clear, but several high‑severity security gaps (pinned vulnerable dependencies, leaked env file) must be fixed before production use. Suitable for teams comfortable with Docker and FastAPI who need a customizable tournament engine.</p>
             </div>
 
             
@@ -100,16 +127,16 @@ Low - The docker-compose.yml includes a Postgres instance, but there&#39;s no vi
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">433<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>162</b></li><li><span>YAML</span><i style="width:7%"></i><b>12</b></li><li><span>Markdown</span><i style="width:2%"></i><b>4</b></li><li><span>TSX</span><i style="width:2%"></i><b>3</b></li><li><span>Shell</span><i style="width:1%"></i><b>2</b></li><li><span>JSON</span><i style="width:1%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>162</b></li><li><span>TSX</span><i style="width:77%"></i><b>125</b></li><li><span>TypeScript</span><i style="width:13%"></i><b>21</b></li><li><span>JSON</span><i style="width:12%"></i><b>19</b></li><li><span>YAML</span><i style="width:9%"></i><b>15</b></li><li><span>CSS</span><i style="width:9%"></i><b>14</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Flask</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Flask</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -155,7 +182,7 @@ Low - The docker-compose.yml includes a Postgres instance, but there&#39;s no vi
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>backend/pyproject.toml</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>frontend/.env.development</code></span></li>
                     </ul>
                 </div>
 

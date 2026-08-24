@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 18, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Coffee roasters need precise, repeatable temperature tracking during roasting to consistently produce quality batches. Without specialized software, roasters rely on manual note-taking or expensive proprietary hardware, making it difficult to analyze curves, replicate successful roasts, or automate control.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Artisan is an open-source application that records, visualizes, and controls coffee roast profiles in real time. It connects to thermocouple data loggers and PID controllers via serial, Bluetooth, USB, Modbus, MQTT, and S7 protocols, reading temperature data and logging it as a roast curve. The main entry point is src/artisanlib/main.py, with device-specific drivers in files like src/artisanlib/acaia.py, src/artisanlib/aillior1.py, and src/artisanlib/giesen.py.</p><p>The software provides alarms, event annotations, curve analysis, phase detection, and batch logging through modules such as src/artisanlib/alarms.py, src/artisanlib/events.py, src/artisanlib/phases.py, and src/artisanlib/batches.py. A built-in PID controller (src/artisanlib/pid.py) can automate heat adjustments during a roast. The UI is built with PyQt, with supporting widgets in src/artisanlib/widgets.py and custom dialogs in src/artisanlib/dialogs.py.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A small roasting company connects a thermocouple probe to a laptop running Artisan. During a batch, the software displays a live temperature curve, fires an alarm when the first crack occurs, and logs the entire profile. After the roast, the roaster compares the curve against previous batches using the comparator (src/artisanlib/comparator.py) and saves the profile for replication. The PID module can then apply that profile automatically on subsequent roasts.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No lockfile for Python dependencies - doc/helpdialogs/Script/pyproject.toml declares dependencies but no poetry.lock or requirements.txt exists. Builds are not reproducible across environments.
-Low - Limited test coverage - Only 5 test files are present in a codebase of 85 Python files and 200 total files. Critical modules like pid.py, alarms.py, and device drivers appear untested.
-Low - Hardcoded CI configuration for AppVeyor - The .appveyor.yml file references a specific maintainer&#39;s repository (roasterdave), which would break if forked without modification.
-Low - Pre-release builds warned as unstable - README explicitly warns that continuous builds may not work, indicating the CI pipeline may not produce reliable artifacts.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Artisan is a mature, well-documented tool for coffee roasters that fills a genuine gap between expensive commercial software and manual logging. The codebase is large and functional, but lacks the dependency locking and test coverage expected for production-critical software. It is best suited for roasters who can tolerate some setup friction and occasional instability in exchange for free, open-source roast profiling.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Coffee roasters need to record, analyze, and control roast profiles with precision, but commercial roasting software is expensive and proprietary. Artisan provides an open-source alternative that connects to thermocouple data loggers and PID controllers, giving roasters full control over their process data without vendor lock-in.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Artisan is a PyQt-based desktop application for coffee roasting. The core logic lives in <code>src/artisanlib/</code> with <code>main.py</code> as the primary entry point. It handles real-time data acquisition from roasters (Aillio, Giesen, Ikawa, and others via <code>devices.py</code>), PID control (<code>pid.py</code>, <code>pid_control.py</code>), and roast profile visualization (<code>curves.py</code>, <code>canvas.py</code>).</p>
+<p>The <code>src/plus/</code> directory contains optional commercial features like <code>schedule.py</code> (roast scheduling) and <code>weight.py</code> (green/roasted bean tracking). The <code>doc/help_dialogs/</code> folder includes a script that converts Excel files to HTML help dialogs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/artisanlib/main.py</code> and flows through the Qt event loop. The widest blast radius sits in <code>translate</code> (called from 243 places) and <code>setText</code> (207 places) — both are UI text functions, so localization changes ripple across the entire interface. <code>PID</code> (120 callers) and <code>acquire</code>/<code>release</code> (141/146 callers) are the core control and resource-management functions.</p>
+<p>The module graph shows no import edges between the 183 internal modules — the static analysis resolved zero edges, meaning the call graph is entirely function-level. This makes the codebase unusually flat at the module level but heavily interconnected at the function level.</p>
+<p>External effects are minimal: 28 functions read/write files, 3 run external commands, 14 make network calls (including <code>start -&gt; ws_connect -&gt; ws_handle_reads</code> for WebSocket communication), and 2 perform cryptographic operations. The <code>src/artisanlib/util.py</code> file is the most widely imported (46 files depend on it) and handles file I/O.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/artisan
+cd artisan/src
+pip install -r requirements.txt
+python artisan.py</code></pre>
+<p>The <code>src/pyproject.toml</code> and <code>src/requirements.txt</code> define dependencies. Configuration is embedded in the application; no external config file or environment variables are required. The <code>src/artisan.py</code> script is the launcher. Build scripts exist for Windows (<code>build-win3-pi.bat</code>), macOS (<code>build-macos3.sh</code>), and Linux (<code>build-linux.sh</code>).</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A roaster connects a thermocouple data logger to a laptop running Artisan, starts <code>artisan.py</code>, and selects their roaster model. The software records temperature curves in real time, applies PID control to regulate the roast, and saves the profile for later analysis. The <code>src/plus/schedule.py</code> module handles roast scheduling for production environments.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 219 issues (67 high, 150 medium, 2 low) across three kinds:</p>
+<ul><li><strong>High - Duplicated code blocks</strong>: 7,912 repeated 6-line blocks across 149 files, concentrated in <code>.ci/</code> scripts and <code>src/artisanlib/</code>. Extract shared helpers.</li><li><strong>High - Deep nesting</strong>: 49 instances, worst in <code>aillio_r1.py</code> and <code>aillio_r2.py</code> at 8 levels deep. Flatten with guard clauses.</li><li><strong>High - Oversized files</strong>: 10 files exceed reasonable size; <code>comparator.py</code> has 1,860 code lines. Split by responsibility.</li></ul>
+<p>The code health audit adds seven findings: unpinned GitHub Actions tags (high), missing lockfile (high), no least-privilege GITHUB_TOKEN (medium), no dependency vulnerability scan (medium), large binaries like <code>WenQuanYiZenHei-01.ttf</code> at 11MB (medium), <code>persist-credentials: false</code> not set on checkout (medium), and no job timeouts (low). A committed secret-shaped file <code>src/includes/artisan_public_key.pem</code> was flagged but needs manual verification.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Artisan is a mature, feature-complete roasting application with a large module surface and solid test coverage (204 test files, CI via GitHub Actions). The codebase shows its age in duplicated code and oversized files, and the missing lockfile is a real supply-chain risk. For coffee roasters needing a free, full-featured roasting tool, it's the best option available; for developers, expect to navigate a large, tightly-coupled codebase.</p>
             </div>
 
             
@@ -94,16 +113,16 @@ Low - Pre-release builds warned as unstable - README explicitly warns that conti
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,004<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>85</b></li><li><span>HTML</span><i style="width:15%"></i><b>13</b></li><li><span>YAML</span><i style="width:14%"></i><b>12</b></li><li><span>Shell</span><i style="width:12%"></i><b>10</b></li><li><span>Markdown</span><i style="width:5%"></i><b>4</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>179</b></li><li><span>JSON</span><i style="width:39%"></i><b>70</b></li><li><span>TypeScript</span><i style="width:20%"></i><b>35</b></li><li><span>YAML</span><i style="width:8%"></i><b>14</b></li><li><span>HTML</span><i style="width:7%"></i><b>13</b></li><li><span>Shell</span><i style="width:6%"></i><b>10</b></li>
                         </ul>
                         <p class="an-fw"><span>Laravel</span></p>
                     </div>
@@ -119,7 +138,7 @@ Low - Pre-release builds warned as unstable - README explicitly warns that conti
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>doc/help_dialogs/Script/pyproject.toml</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>doc/help_dialogs/Script/pyproject.toml</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>src/includes/artisan_public_key.pem</code></span></li>
                     </ul>
                 </div>
 

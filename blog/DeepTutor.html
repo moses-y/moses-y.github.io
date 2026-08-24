@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 2, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#or-run-locally-with-the-provided-env-template">Or run locally with the provided env template</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#ci-tests">CI / Tests</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Students and educators need a tutoring system that can adapt to individual knowledge gaps, handle multi‑modal content (text, math, code, diagrams), and stay usable on local hardware. Existing platforms are either closed‑source, require cloud APIs, or lack an extensible agent architecture.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>DeepTutor implements a modular “agent‑native” tutoring stack. The core entry point deeptutor/main.py bootstraps a CLI that orchestrates a hierarchy of agents (chat, math‑animation, notebook analysis, question generation, research, solve, vision‑solver, visualizer). Each agent lives in its own package under deeptutor/agents/ and loads prompts from language‑specific YAML files (e.g., deeptutor/agents/chat/prompts/en/chatagent.yaml).</p><p>The architecture diagram in assets/figs/deeptutor-architecture.png shows a flow: user input → session manager → appropriate agent pipeline → response. Persistent knowledge bases, RAG indexing, and memory scratchpads are managed by utilities in agents/solve/memory/ and agents/research/utils/. Docker support (Dockerfile, .dockerignore) allows full‑stack local deployment without external services.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Build the container (Dockerfile defines the environment, Python 3.11+)
-docker build -t deeptutor:latest .</p><h3 class="post-h" id="or-run-locally-with-the-provided-env-template">Or run locally with the provided env template</h3><p>cp .env.example .env   # edit the copy with your API keys (e.g., OPENAIAPIKEY)
-python -m pip install -r requirements.txt   # requirements.txt is generated in the Docker build</p><p>If a requirements.txt is not present, extract dependencies from the Dockerfile’s RUN pip install ... line.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Key variables are documented in .env.example and .env.exampleCN. Typical entries include:
-OPENAIAPIKEY – for LLM calls
-EMBEDDINGENDPOINT – optional custom embedding service  
-Place the edited .env in the project root; the code loads it via python-dotenv (imported in various agents).</p><h3 class="post-h" id="running">Running</h3><p>Launch the CLI (the main module parses arguments and starts the session manager)
-python -m deeptutor</p><p>The CLI offers sub‑commands such as chat, solve, visualize, and tutorbot as defined in deeptutor/main.py. Use --help for details.</p><h3 class="post-h" id="ci-tests">CI / Tests</h3><p>GitHub Actions workflows (.github/workflows/tests.yml, docker-release.yml) run the single test suite located in tests/. Ensure Docker is available locally to reproduce the CI environment.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A university’s learning platform can embed DeepTutor as a microservice. After building the image, the platform starts a container, mounts a volume for persistent KB indexes (/app/data), and forwards HTTP requests to the CLI via a lightweight FastAPI wrapper (not shipped but easy to add). Example snippet:</p><p>import subprocess, json</p><p>def asktutor(question: str):
-    result = subprocess.run(
-        [&quot;python&quot;, &quot;-m&quot;, &quot;deeptutor&quot;, &quot;chat&quot;, &quot;--question&quot;, question],
-        captureoutput=True, text=True
-    )
-    return json.loads(result.stdout)</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Secrets exposure – .secrets.baseline suggests credential files may have been committed. Verify no real keys are present.  
-Med – Limited test coverage – Only one test file (tests/) for a 200‑file codebase; many agents lack unit tests.  
-Med – Dependency hygiene – No explicit requirements.txt or pyproject.toml in the repo; Dockerfile is the sole source of dependencies, making reproducibility outside Docker harder.  
-Low – Documentation gaps – README gives high‑level usage but lacks concrete CLI flag references; some agents (e.g., visionsolver) have only markdown prompts, no clear invocation guide.  
-Low – License present – Apache‑2.0 is included, satisfying legal requirements.  
-Low – CI configured – GitHub Actions runs tests and Docker builds, indicating an automated pipeline is in place.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>DeepTutor provides a well‑structured, extensible agent framework for personalized tutoring and supports local deployment via Docker. It is suitable for teams that can invest in adding tests and tightening secret management. For production use, supplement the existing CI with broader test coverage and publish a stable Python package or requirements.txt to simplify non‑Docker installations.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>DeepTutor is a collection of four semi-independent projects (deeptutor, web, deeptutor_cli, scripts) totaling 1,012 files with 779 analyzed code files. The repository functions as an agent-native personalized learning assistant, but its architecture spans multiple codebases with shared credentials, circular imports, and committed secrets that affect production readiness.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>DeepTutor provides an agent-native tutoring system with RAG capabilities, persistent chat, knowledge base management, and a CLI interface. The core <code>deeptutor</code> package (521 files, 395 code files) contains the agent orchestration, LLM configuration, and knowledge management. The <code>web</code> directory (219 files, 196 code files) is a Next.js frontend. The <code>deeptutor_cli</code> (15 files) provides agent-native CLI commands, and <code>scripts</code> (13 files) contains utility scripts.</p>
+<p>Key files and their reach:</p>
+<ul><li><code>deeptutor_cli/main.py:142</code> - <code>main</code> entry point reaching 399 functions</li><li><code>deeptutor/agents/base_agent.py</code> - 1 class, 19 functions, called from 21 files, calls into 103</li><li><code>deeptutor/services/path_service.py</code> - defines file path resolution used across the project</li><li><code>deeptutor/services/llm/config.py</code> - LLM configuration hub, called from 28 files</li><li><code>deeptutor/runtime/orchestrator.py:36</code> - <code>handle</code> entry point reaching 399 functions</li><li><code>deeptutor/agents/chat/agentic_pipeline.py:163</code> - <code>run</code> entry point reaching 402 functions</li></ul>
+<p>The <code>deeptutor/services/llm/config.py</code> module is a high-blast-radius hub: 43 modules depend on it, and it carries instability 0.1 from its own circular dependency with <code>deeptutor/services/llm/__init__.py</code> and <code>deeptutor/services/config/__init__.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution flows through a few concentrated entry points. From <code>main</code> in <code>deeptutor_cli/main.py</code>, control reaches 399 functions including <code>get_prompt</code> (called from 37 places), <code>get_llm_config</code> (33 places), and <code>stream_llm</code> (30 places). The <code>run</code> function in <code>deeptutor/agents/chat/agentic_pipeline.py:163</code> similarly reaches 402 functions and is the primary path for message processing.</p>
+<p>Traced paths from entry points to external effects:</p>
+<ul><li><code>main -&gt; fetch_github_api</code> [network via urllib.request.Request]</li><li><code>handle -&gt; _run</code> [subprocess via subprocess.run]</li><li><code>run -&gt; save_to_json</code> [filesystem via Path(filepath).parent.mkdir]</li><li><code>start -&gt; build</code> [network via session.get("compressed_summary")]</li></ul>
+<p>The internal call graph has 6000 resolved call edges. Key hub functions include <code>model_dump</code> (51 callers), <code>post</code> (44), <code>_t</code> (43), and <code>_run</code> (38). The <code>deeptutor/services/llm/config.py</code> hub has 43 importers, making changes there high-radius.</p>
+<p>Four circular dependency cycles exist involving <code>deeptutor/services/llm/__init__.py</code>, <code>deeptutor/services/config/__init__.py</code>, <code>deeptutor/book/blocks/base.py</code>, and associated modules. These increase cognitive load for any modification touching LLM or config code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: The repository uses <code>pyproject.toml</code> as the Python manifest and <code>web/package.json</code> for the frontend. No single install command covers the full stack; <code>deeptutor</code> requires Python 3.11+ dependencies resolved through the package manager, and <code>web</code> requires <code>npm</code> install.</p>
+<p><strong>Configuration</strong>: Environment variables are defined in <code>.env.example</code> and <code>.env.example_CN</code>. The <code>deeptutor/services/llm/config.py</code> file handles OpenAI-compatible binding setup via <code>_set_openai_env_vars</code> and <code>_setup_openai_env_vars_early</code>. The <code>web/.env.local</code> file is tracked despite being gitignored, containing active credentials.</p>
+<p><strong>Running it</strong>:</p>
+<pre data-lang="bash"><code># CLI entry point
+python -m deeptutor_cli.main
+
+# Or the package CLI
+deeptutor &lt;command&gt;</code></pre>
+<p>The README documents release tags from v0.2.0 through v1.3.5, with docker-compose files for development and GHCR deployment.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A tutor agent processes a user message through the pipeline: <code>_process_message</code> constructs an <code>OutboundMessage</code>, which flows through <code>execute -&gt; ToolResult</code> and <code>get_definition -&gt; ToolParameter</code>. The agent calls <code>call_llm</code> or <code>stream_llm</code> for generation, persists conversation state via <code>deeptutor/services/session/sqlite_store.py</code> (78 functions, reads/writes a database), and may invoke RAG pipelines that make outbound network calls to embedding endpoints. A complete request from message entry to database write typically traverses 5-7 resolved call hops.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis of 779 files found 411 issues across 6 kinds:</p>
+<ul><li><strong>[CRITICAL]</strong> Rotate credentials in committed <code>.env.example_CN</code> - <code>SILICONFLOW_API_KEY</code>, <code>COHERE_API_KEY</code> hold generated values loaded at boot</li><li><strong>[HIGH]</strong> Untrack <code>web/.env.local</code> though <code>.gitignore</code> excludes it - contains active credentials</li><li><strong>[HIGH]</strong> Pin GitHub Actions to commit SHAs - <code>docker/setup-qemu-action@v3</code>, <code>docker/login-action@v3</code> etc. use mutable tags</li><li><strong>[HIGH]</strong> Add lockfile for <code>pyproject.toml</code> - manifest without committed lockfile means tested and shipped artifacts can differ</li><li><strong>[HIGH]</strong> Remove committed <code>.env</code> and rotate credentials - <code>.env.example_CN</code> is tracked</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate - 3 manifests, no update bot configured</li><li><strong>[MEDIUM]</strong> Pin container base images by digest - <code>python:3.11-slim</code>, <code>node:22-slim</code> use mutable tags</li><li><strong>[MEDIUM]</strong> Gate PRs on dependency vulnerability scan - no dependency scan in CI</li><li><strong>[MEDIUM]</strong> Set <code>persist-credentials: false</code> on checkout - <code>tests.yml</code> checkout keeps the token</li></ul>
+<p>Additional measured findings: 8 import cycle members, 21 deep nesting instances across <code>base_agent.py</code>, <code>path_service.py</code>, <code>manager.py</code>, 5 oversized files (610+ lines each), and 8 hub modules with high blast radius.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>DeepTutor is a substantial, functional agent-native tutoring system with working RAG, persistent chat, and CLI capabilities across four codebases. The architecture is coherent within each project but fragile at the boundaries: circular imports between LLM and config modules, committed credentials in example files, and mutable Docker base tags introduce real production risk. The codebase will suit teams that need a personalized learning assistant out of the box and have operational bandwidth to rotate secrets and pin dependencies. Teams requiring minimal operational overhead or strict supply-chain guarantees should look elsewhere, as the current state demands credential rotation, lockfile commitment, and cycle breaking before production use.</p>
             </div>
 
             
@@ -107,18 +121,18 @@ Low – CI configured – GitHub Actions runs tests and Docker builds, indicatin
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,012<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>69</b></li><li><span>YAML</span><i style="width:80%"></i><b>55</b></li><li><span>Markdown</span><i style="width:75%"></i><b>52</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>575</b></li><li><span>TSX</span><i style="width:22%"></i><b>124</b></li><li><span>YAML</span><i style="width:19%"></i><b>108</b></li><li><span>Markdown</span><i style="width:13%"></i><b>73</b></li><li><span>TypeScript</span><i style="width:12%"></i><b>69</b></li><li><span>JSON</span><i style="width:2%"></i><b>9</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Django</span><span>Flask</span><span>Express</span><span>Tailwind</span><span>Docker</span><span>LangChain</span></p>
                     </div>
                 </div>
 
@@ -169,7 +183,7 @@ Low – CI configured – GitHub Actions runs tests and Docker builds, indicatin
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>.secrets.baseline</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>.secrets.baseline, tests/services/tutorbot/test_channel_secrets.py, web/.env.local</code></span></li>
                     </ul>
                 </div>
 

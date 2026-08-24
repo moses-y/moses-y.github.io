@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 18, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,12 +79,42 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Sim-to-real transfer for robot learning usually fails because simulators lack visual fidelity. Standard renderers produce synthetic-looking images, and physics engines struggle with contact-rich tasks at scale. Training vision-based policies requires both high-throughput rendering and physically consistent scenes—existing tools optimize for one at the expense of the other.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>GS-Playground is a photorealistic robot simulator that couples batch 3D Gaussian Splatting (3DGS) rendering with a parallel physics engine. It renders RGB and depth observations at reported rates up to 10^4 FPS at 640x480 resolution. The demo/livedemo/ folder contains a live replay system using Franka Panda and Robotiq 3DGS assets stored as .ply files per link. The benchmark/ directory includes a rendering throughput notebook (mtxbatchminimal.ipynb) and a Gaussian pruning script (scripts/prunegaussians.py).</p><p>The system binds 3DGS clusters to simulator rigid bodies, so robot motion stays visually synchronized across frames. Assets live under benchmark/assets/ and demo/livedemo/assets/, with MJCF-style XML scene files and per-link .ply and .obj meshes. The project is accepted at RSS 2026 and has a companion renderer library at GaussianRenderer.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>You would use this to train visual policies for contact-rich manipulation or locomotion at scale. The batch renderer replaces traditional mesh rasterization with 3DGS, so the agent sees realistic lighting, texture, and occlusion during training. The physics engine uses a velocity-impulse solver tuned for stable large-timestep simulation. The paper&#39;s experiments cover quadrupeds, humanoids, and arms—this repo provides the core API and benchmark suite.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - No tests detected across 200 files. There are zero test files in the repo. This means all physics and rendering code paths are untested in the public release. Integration issues are likely when adapting to new scenes or robot configurations.
-Medium - No CI/CD pipeline. No .github/ or CI config files exist. There is no automated build, lint, or test gate. Reproducibility of the benchmark results depends on manual environment setup.
-Low - Documentation is sparse. Only 3 doc files exist (README, READMECN, LICENSE). The README references external repos for the renderer, physics benchmarks, and LiDAR module, but the core API is not documented beyond the installation guide. Onboarding requires reading multiple external repositories.
-Low - Large binary asset duplication. The benchmark/ and demo/live_demo/ directories contain near-identical copies of 3DGS .ply files and mesh assets (~100 MB each). This inflates the repo and creates sync risk if assets are updated in one location but not the other.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GS-Playground is a serious research contribution—accepted at RSS 2026, with published throughput numbers and multi-embodiment experiments. The public repo is a preview: the core API and benchmarks work, but the Real2Sim pipeline, training scripts, and Hugging Face assets are not yet released. If you need a high-fidelity visual simulator for robot learning research and can tolerate a pre-release codebase with no tests and thin documentation, this is worth evaluating. It is not production-ready for deployment.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> Robotics researchers need a simulator that can generate photorealistic visual observations at the scale required for modern vision‑based reinforcement learning. Existing pipelines either sacrifice visual fidelity or run far too slowly for large‑batch training, creating a bottleneck when moving from simulation to real‑world deployment.</p>
+<p><strong>What This Does</strong> <code>gs_playground</code> delivers a lightweight preview of the full system described in the RSS 2026 paper. It couples a parallel robot physics engine with a batched 3D‑Gaussian‑Splatting (3DGS) renderer, producing RGB/depth frames at up to 10⁴ FPS for 640 × 480 images. The repository contains:</p>
+<ul><li>Core Python modules (8 files) under <code>demo/navigation/utils/</code> that implement the <strong>policy</strong>, <strong>controller</strong>, <strong>robot</strong> abstraction and a small <strong>navigation</strong> demo.</li><li>A benchmark script <code>benchmark/scripts/prune_gaussians.py</code> that illustrates how to trim 3DGS assets for memory‑efficient rendering.</li><li>A collection of pre‑built 3DGS assets (≈2 k files) used by the demos and benchmarks.</li></ul>
+<p>Key entry points:</p>
+<div class="table-scroll"><table><thead><tr><th>Entry point</th><th>File</th><th>What it launches</th></tr></thead><tbody><tr><td><code>main</code></td><td><code>benchmark/scripts/prune_gaussians.py:72</code></td><td>Parses a list of Gaussian clouds, runs <code>prune_file</code> and writes a reduced <code>.ply</code>.</td></tr><tr><td><code>demo/live_demo/replay.py</code> (run as a module)</td><td><code>demo/live_demo/replay.py</code></td><td>Starts the live‑replay demo, builds a scene, streams camera frames, and writes a video via <code>VideoWriter</code>.</td></tr></tbody></table></div>
+<p><strong>How It Is Wired</strong></p>
+<p><em>Execution flow</em> – The benchmark starts at <code>main</code> → <code>drain_capture_tasks</code> (creates <code>capture_dir.mkdir</code>). The demo starts with <code>configure_torch_cuda_arch_list</code> → <code>set_asset_root</code> → class <code>Replay</code> <code>__init__</code> → <code>add</code> → <code>report</code>, ultimately calling <code>VideoWriter</code> to persist video.</p>
+<p><em>Call‑graph hot spots</em> – <code>resolve_demo_path</code> is invoked from four places, making it the most widely referenced utility. Functions <code>step</code>, <code>get_observation</code>, and <code>apply_action</code> each appear in three distinct call sites, forming the core simulation loop (policy → observation → action → physics step).</p>
+<p><em>External impact</em> – Only two distinct filesystem writes are observed: the benchmark’s <code>prune_file</code> writes a trimmed <code>.ply</code>, and the demo’s <code>VideoWriter</code> creates a video file. No network or database calls are present.</p>
+<p><em>Complexity</em> – Three files (<code>demo/live_demo/replay.py</code>, <code>demo/navigation/nav_collect_common.py</code>, <code>demo/navigation/robot_locomotion.py</code>) contain nesting depths of six levels, making the control flow harder to follow and increasing the risk of bugs when extending the logic.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the repo (exact URL required by the brief)
+git clone https://github.com/moses-y/gs_playground
+cd gs_playground
+
+# Install dependencies with uv (the README’s recommended tool)
+uv sync        # reads pyproject.toml, creates a virtualenv and installs packages
+
+# Run the pruning benchmark (example)
+python -m benchmark.scripts.prune_gaussians \
+    --input-dir benchmark/assets/franka_emika_panda_robotiq/3dgs \
+    --output-dir benchmark/assets/pruned
+
+# Launch the live‑replay demo (requires a CUDA‑capable GPU)
+python -m demo.live_demo.replay \
+    --scene demo/live_demo/assets/models/robots/manipulation/franka_emika_panda_robotiq/3dgs</code></pre>
+<p>The <code>--input-dir</code>/<code>--output-dir</code> flags are inferred from the script’s <code>argparse</code> definitions; if they are missing, the script falls back to the hard‑coded asset paths under <code>benchmark/assets/</code> and <code>demo/live_demo/assets/</code>.</p>
+<p><strong>Real‑World Use</strong> A research team can integrate the <code>policy</code> module (<code>demo/navigation/utils/policy.py</code>) into an existing RL training loop. The loop calls <code>step</code> → <code>get_observation</code> → <code>compute_action</code> → <code>apply_action</code>. By swapping the policy class with a learned network, the same high‑throughput visual pipeline can be used for curriculum training without changing the rendering backend.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<p><em>Measured findings</em></p>
+<ul><li><strong>HIGH</strong> – No CI/CD workflow. 8 source files, no <code>.github/workflows/</code> or other CI config.</li><li><strong>MEDIUM</strong> – No dependency lockfile; only <code>pyproject.toml</code> is present, making reproducible builds difficult.</li><li><strong>MEDIUM</strong> – Large binary assets (e.g., <code>benchmark/assets/.../background.ply</code> ≈ 14 MB) are stored directly in the repo, inflating clone size.</li></ul>
+<p><em>Additional observations</em></p>
+<ul><li>Tests: a single test file exists, but test coverage is minimal.</li><li>License: <code>LICENSE</code> present, but no <code>NOTICE</code> or additional compliance docs.</li><li>No Dockerfile, so containerised builds must be added manually.</li></ul>
+<p><strong>The Bottom Line</strong> <code>gs_playground</code> provides a functional, high‑throughput visual simulator core with clear entry points and a modest Python codebase, making it approachable for robotics research. However, the lack of CI, lockfile, and proper handling of large assets hampers reproducibility and scalability for production use. Teams that need rapid prototyping and are comfortable managing their own CI pipelines will find it useful; larger engineering groups should first address the health issues before adopting it at scale.</p>
             </div>
 
             
@@ -94,18 +124,18 @@ Low - Large binary asset duplication. The benchmark/ and demo/live_demo/ directo
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,297<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>2</b></li><li><span>Python</span><i style="width:50%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>8</b></li><li><span>Markdown</span><i style="width:25%"></i><b>2</b></li><li><span>JSON</span><i style="width:25%"></i><b>2</b></li><li><span>Jupyter Notebook</span><i style="width:13%"></i><b>1</b></li><li><span>TOML</span><i style="width:13%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Spring</span></p>
+                        <p class="an-fw"><span>Spring</span><span>ONNX</span></p>
                     </div>
                 </div>
 
@@ -135,7 +165,7 @@ Low - Large binary asset duplication. The benchmark/ and demo/live_demo/ directo
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
                     </ul>
                 </div>
 

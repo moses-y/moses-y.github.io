@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 5, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,34 +80,29 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Self‑hosting a streaming radio service usually requires stitching together a media server, a database, and a custom UI. Existing solutions are either heavyweight (Icecast, Shoutcast) or require deep DevOps knowledge, making it hard for small teams or hobbyists to launch a branded station quickly.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>airstation delivers a complete, container‑ready radio stack. The Go backend (cmd/main.go, internal/http/server.go) handles HLS segment generation via FFmpeg (internal/pkg/ffmpeg/ffmpeg.go) and persists station data in SQLite (internal/storage/sqlite). The public listener UI lives in web/player (entry point web/player/src/App.tsx) while the admin console resides in web/studio (entry point web/studio/src/App.tsx).</p><p>Key files illustrate the architecture:</p><p>internal/playback/service.go – orchestrates track queue, state transitions, and SSE events (internal/pkg/sse).  
- internal/playlist/service.go and internal/queue/service.go – domain logic for playlists and the live queue.  
- web/player/src/api/index.ts – thin wrapper around the backend HTTP API, used by both player and studio.</p><p>All components are wired together by the Docker multi‑arch build (Dockerfile, Dockerfile.multiarch) and a docker‑compose.yml that spins up the Go server and a reverse proxy (if present).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Build the Docker image (Dockerfile builds the Go binary and the React assets)
-docker build -t airstation:latest .
-Start the stack – the compose file defines the Go service and mounts static assets
-docker-compose up -d
-(Optional) Run the front‑ends locally for development
-Player UI
-cd web/player &amp;&amp; npm ci &amp;&amp; npm run dev   # uses vite config in vite.config.ts
-Studio UI
-cd web/studio &amp;&amp; npm ci &amp;&amp; npm run dev   # also Vite‑based</p><p>Configuration is read from environment variables parsed in internal/config/config.go. The repo does not ship a sample .env, but the code expects at least:</p><p>PORT – HTTP port for the Go server (default 8080).  
- DBPATH – path to the SQLite file (defaults to ./data/airstation.db).</p><p>Running docker-compose up supplies these via the environment: section of the service definition (if the compose file includes them). The Go binary is started by cmd/main.go, which creates the HTTP server defined in internal/http/server.go.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A small community radio could deploy the stack on a cheap VPS:</p><p>docker-compose.override.yml (example)
-services:
-  airstation:
-    image: airstation:latest
-    ports:
-&quot;80:8080&quot;
-    volumes:
-./data:/app/data
-    environment:
-PORT=8080
-DBPATH=/app/data/airstation.db</p><p>Upload tracks via the Studio UI (/studio), arrange the queue, and embed the Player URL (/player) on the organization’s website. The HLS stream (/hls/{track}.m3u8) can be consumed by any standard media player.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing env‑sample – No .env.example or documentation of required vars; internal/config/config.go shows defaults but a starter file would aid onboarding.  
- Medium – Limited test coverage – Only internal/pkg/hls has unit tests (playlisttest.go, segmenttest.go). Core services (playback, playlist, queue) lack automated tests.  
- Low – Potential race condition – internal/playback/service.go updates shared state without explicit mutexes; concurrency safety depends on Go’s channel usage, which is not verified by tests.  
- Low – No secret scanning – No obvious secrets committed, but the repo lacks a .gitignore entry for possible credential files (e.g., .env).  
- Low – License present – LICENSE file included, satisfying legal requirements.  
-Low – CI present – GitHub Actions workflow (.github/workflows/docker-image.yml) builds and pushes the Docker image, confirming basic CI.</p><p>Overall the project follows a clean separation: Go backend, React front‑ends, Docker orchestration. Dependency files (go.mod, package-lock.json) are locked, and the Makefile provides standard build shortcuts (e.g., make build, make test – inferred from typical patterns).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>airstation offers a ready‑to‑run, Docker‑packaged radio platform with a functional UI and HLS streaming, suitable for small teams or hobbyists. It is stable enough for production but would benefit from broader test coverage and clearer environment‑variable documentation before scaling to larger deployments.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>The codebase exhibits high cognitive load and widespread duplication that increases the risk of regressions during modifications. Static analysis found maximum indentation depth of 8 in critical playback and library files, alongside 62 repeated 6-line logic blocks across a dozen files. For a self-hosted streaming application where the pipeline involves FFmpeg, SQLite, and HLS generation, these maintainability issues represent a tangible operational risk.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Airstation is a self-hosted web application for streaming music over the Internet. The frontend is split between <code>web/player</code> (a minimalistic listener interface) and <code>web/studio</code> (an upload and management dashboard). Under the hood, the system stores track metadata and queue state in SQLite, processes audio via FFmpeg (defined in <code>internal/pkg/ffmpeg/ffmpeg.go</code>), and serves streams using HTTP-based HLS segmentation. The entire stack is packaged for Docker deployment, with the Go backend (<code>internal/</code>) handling all server logic, persistence, and external command orchestration.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>cmd/main.go:18</code>, which reaches 68 functions and serves as the process entry point. From there, <code>Run</code> in <code>internal/http/server.go:59</code> acts as the central hub, reaching 54 functions and being called from 9 distinct places. This function registers request handlers (defined in <code>internal/http/handlers.go</code>, which contains 24 handlers including <code>handleTracks</code>, <code>handleHLSPlaylist</code>, and <code>handleEvents</code>) and manages the event loop via <code>listenEvents</code>.</p>
+<p>The data path typically flows from an HTTP request through the handlers into the storage layer (<code>internal/storage/sqlite/</code>), which provides the <code>New</code>, <code>Close</code>, and <code>Instance</code> functions for database interaction. Audio processing is offloaded to <code>internal/pkg/ffmpeg/ffmpeg.go</code>, which runs external commands for tasks like <code>MakeHLSPlaylist</code>, <code>TrimAudio</code>, and <code>PadAudio</code>. A traced path from the entry point to an external effect is <code>main -&gt; New -&gt; db via db.Exec</code>, and <code>Run -&gt; DeleteOldPlaybackHistory [db via ps.db.Exec]</code>.</p>
+<p>The module graph shows <code>internal/http/handlers.go</code> as a high-degree hub (24 functions, called from 1 other file, calls into 15), making it a focal point for any web-layer changes. Conversely, the <code>web/studio/src/page/Playback.tsx</code>, <code>web/studio/src/page/Playlists.tsx</code>, and <code>web/studio/src/page/TracksLibrary.tsx</code> files suffer from deep nesting (max depth 8), complicating control flow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code>docker-compose up --build</code></pre>
+<p>The <code>docker-compose.yml</code> orchestrates the services. Configuration is driven by environment variables read via <code>getEnv</code> calls throughout <code>internal/station/service.go</code> and <code>internal/http/server.go</code>. No <code>.env</code> file is committed to the repository; users must supply the required variables (details within the README or inferred from the Go code) at runtime.</p>
+<p><strong>Running it:</strong> The process starts with <code>go run cmd/main.go</code> or via the Docker entrypoint. The studio UI is typically accessible at the mapped port after containers initialize.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer wishing to add a new track upload limit modifies <code>internal/http/handlers.go</code> where <code>handleTracksUpload</code> validates inbound requests. The upload flows through the handler into <code>internal/storage/sqlite/queue.go</code> or <code>track.go</code> for persistence. Subsequently, FFmpeg processes the file via <code>internal/pkg/ffmpeg/ffmpeg.go</code> to generate HLS segments, after which the listener player (<code>web/player/src/page/CurrentTrack.tsx</code>) picks up the playlist automatically.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings from static analysis:</strong></p>
+<ul><li>[HIGH/cognitive_load] Deep nesting x12 — files: <code>web/studio/src/page/Playback.tsx</code>, <code>web/studio/src/page/Playlists.tsx</code>, <code>web/studio/src/page/TracksLibrary.tsx</code> (max indentation depth 8).</li><li>[HIGH/clarity] Duplicated code blocks — 62 repeated 6-line blocks across 12 files, including <code>internal/storage/sqlite/queue.go</code>, <code>internal/storage/sqlite/track.go</code>, <code>web/player/src/api/index.ts</code>, and <code>web/studio/src/api/index.ts</code>.</li><li>[MEDIUM/cognitive_load] High branching density x2 — files: <code>web/player/src/page/StationInformation.tsx</code>, <code>internal/station/service.go</code> (32 branch points over 94 lines).</li></ul>
+<p><strong>SDLC observations:</strong></p>
+<ul><li>GitHub Actions pins third-party actions to mutable tags (<code>@v3</code>, <code>@v5</code>), risking secret exposure if action owners update versions.</li><li>No Dependabot or Renovate configuration; 3 dependency manifests are unmonitored for updates.</li><li>Dockerfile uses mutable base image tags (<code>node:22-alpine</code>, <code>golang:1.26-alpine</code>).</li><li>Test coverage is minimal (2 test files against 102 source files, a ratio of 0.020).</li><li>No <code>USER</code> directive in the Dockerfile; processes run as root by default.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Airstation functionalizes a compact, Dockerized radio streaming stack with React and Go, but the codebase carries significant technical debt. The duplication and nesting patterns found in the playback and API layers mean that straightforward feature additions carry a higher-than-ideal risk of introducing bugs. It is suitable for hobbyists or small teams needing a quick self-hosted solution, but engineering teams prioritizing long-term maintainability should budget time for refactoring the duplicated logic and flattening the control flow before productionizing the setup.</p>
             </div>
 
             

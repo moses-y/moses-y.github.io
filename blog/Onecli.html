@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 4, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,16 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents need to interact with dozens of SaaS APIs, but each one requires OAuth flows, API key management, and platform-specific request formats. Teams end up building and maintaining custom integrations for every service their agents touch. One CLI collapses that into a single authentication and execution layer.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>One CLI is a TypeScript command-line tool that gives AI agents authenticated access to 250+ platforms through a unified interface. The src/commands/ directory contains the core command surface: login.ts, logout.ts, actions.ts, flow.ts, and connection.ts. The src/lib/api.ts module handles platform API interactions, while src/lib/flow-engine.ts and src/lib/flow-runner.ts implement a workflow engine for chaining actions across platforms.</p><p>The tool also includes a substantial memory subsystem under src/lib/memory/ with pluggable backends (pglite, embedded-postgres, postgres), a synchronization layer (src/lib/memory/sync/) that syncs data from connected platforms into a local database, and profile definitions in profiles/ that describe the data shapes for platforms like Gmail, Stripe, and Notion. A skills/one/ directory contains Markdown-based skill definitions for the agent.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install globally via npm (npm install -g @withone/cli) or run npx @withone/cli@latest init. Requires Node.js 18+.</p><p>Configuration: Authentication happens through one login, which opens a browser flow or accepts an API key from the One dashboard. No environment variables or config files need to be edited manually.</p><p>Running it:</p><p>one init                    # Set up authentication and install MCP server
-one add gmail               # Connect a platform
-one actions search gmail &quot;send email&quot; -t execute
-one actions execute gmail &lt;actionId&gt; &lt;connectionKey&gt; -d &#39;{&quot;to&quot;: &quot;jane@example.com&quot;, &quot;subject&quot;: &quot;Hello&quot;, &quot;body&quot;: &quot;Sent from my AI agent&quot;}&#39;
-one flow create welcome-customer --definition &#39;{...}&#39;   # Define multi-step workflows
-one flow execute welcome-customer -i email=jane@example.com</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A customer support agent needs to look up a Stripe customer and send a follow-up email. Instead of writing OAuth code and maintaining two API integrations, define a flow that chains the Stripe lookup to a Gmail send. The flow&#39;s conditional step (if: &quot;$.steps.find.response.data.length &gt; 0&quot;) only sends the email when a matching customer exists. Connection keys auto-resolve when there&#39;s one connection per platform, so the agent doesn&#39;t need to manage credentials.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Missing LICENSE file - No license at the repo root, which makes usage and redistribution rights unclear for a tool intended for commercial use.
-Low - Limited test coverage - 15 test files exist, mostly in src/lib/memory/ (canonical, scoring, extract, sql-guard). The flow engine (src/lib/flow-engine.ts) and command layer have no direct tests.
-Low - Single CI workflow - .github/workflows/publish.yml handles publishing but there&#39;s no evidence of a test job running in CI.
-Low - Large sync subsystem - src/lib/memory/sync/ has 25+ files including a custom SQL parser (where-parser.ts), SQL guard, and pagination logic. This is a lot of custom database code that needs ongoing maintenance.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>One CLI is a well-structured tool that solves a real problem: giving agents authenticated, multi-platform API access without per-platform integration work. The flow engine and memory subsystem are substantial features that go beyond a simple API wrapper. It&#39;s most useful for teams building agent-based automation across multiple SaaS platforms. The missing license and thin test coverage outside the memory module are the main concerns before adopting it in a production environment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents need a single, authenticated gateway to the dozens of SaaS APIs they must call (OAuth, key management, request formats). Without a unified CLI, each integration requires bespoke code, exposing secrets and increasing maintenance overhead.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Onecli</code> ships a Node‑based command‑line interface that stores platform credentials in a local “One” account and exposes them through a consistent set of commands. The core logic lives in <strong><code>src/</code></strong> (95 TypeScript files) and is invoked via the executable <strong><code>bin/cli.js</code></strong> (the npm‑published entry point).</p>
+<p>Key modules:</p>
+<ul><li><strong><code>src/lib/api.ts</code></strong> – builds HTTP requests, handles retries, and is imported by 21 other files (hub).</li><li><strong><code>src/lib/config.ts</code></strong> – reads/writes the user’s config directory and is used by 18 callers.</li><li><strong><code>src/lib/output.ts</code></strong> – central spinner and logging utilities, referenced by 26 files.</li></ul>
+<p>Commands (e.g. <code>one add</code>, <code>one actions search</code>) are thin wrappers under <strong><code>src/commands/</code></strong>, each delegating to the library layer.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>bin/cli.js</code></strong>, which loads <strong><code>src/index.ts</code></strong>. That file wires the <code>commander</code> CLI and routes sub‑commands to the appropriate handler in <code>src/commands/*.ts</code>.</p>
+<p>A typical flow (e.g. <code>one actions execute …</code>) follows:</p>
+<ol><li><strong><code>src/commands/actions.ts</code></strong> → calls <strong><code>src/lib/api.ts</code></strong> → <code>requestFull</code> (the only function that performs an outbound network call).</li><li>The request function reads the stored API key via <strong><code>src/lib/config.ts</code></strong> (<code>readConfig</code> → filesystem).</li><li>Response handling may trigger <strong><code>src/lib/output.ts</code></strong> to show a spinner (<code>createSpinner</code>).</li></ol>
+<p>The most‑connected hub is <strong><code>src/lib/output.ts</code></strong> (28 inbound imports, instability 0). Changing its public API will ripple through many commands.</p>
+<p>Database interaction occurs in the memory plugin stack. The entry <strong><code>src/lib/memory/plugins/embedded-postgres/index.ts</code></strong> defines <code>query</code>, <code>transaction</code>, and file‑based DB init (<code>init</code> → <code>ensure</code> → <code>PgliteBackend.open</code>). These functions are called from 16 other files and perform both file I/O and SQLite writes.</p>
+<p>The internal call graph shows a handful of high‑impact functions: <code>isAgentMode</code> (82 callers), <code>parse</code> (39 callers), and <code>note</code> (34 callers). They sit in <code>src/lib/output.ts</code> and <code>src/lib/config.ts</code>, meaning any change there risks breaking a large portion of the CLI.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Onecli
+cd Onecli
+
+# Install dependencies
+npm ci
+
+# Build (tsup config) – produces a bundled CLI
+npx tsup
+
+# Run the CLI (the package publishes a binary that forwards to src/index.ts)
+node bin/cli.js init   # walks through auth, creates ~/.one config
+# Or use the published package directly
+npx @withone/cli@latest init</code></pre>
+<p>Configuration lives under the user’s home directory (<code>~/.one/</code>), managed by <strong><code>src/lib/config.ts</code></strong>. No environment variables are required beyond the standard Node 18 runtime.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS startup wants its internal LLM to automate onboarding emails. After <code>one init</code> and <code>one add gmail</code>, the team defines a flow in <code>one flow create welcome …</code> (JSON definition stored in the repo). Running <code>one flow execute welcome -i email=jane@ex</code> triggers the CLI to:</p>
+<ol><li>Resolve the Gmail connection key from the local config.</li><li>Call the Gmail API via <code>src/lib/api.ts</code>.</li><li>Log progress through <code>src/lib/output.ts</code>.</li></ol>
+<p>All side‑effects (API call, file logs) are confined to the modules identified above, making the flow easy to audit.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – License missing</strong> – no <code>LICENSE</code> file; default “all rights reserved” blocks reuse.</li><li><strong>HIGH – CI does not run tests</strong> – <code>.github/workflows/publish.yml</code> lacks a test step despite 12 test files.</li><li><strong>HIGH – <code>eval</code> usage</strong> – <code>src/lib/memory/plugins/pglite/index.ts</code> executes a computed string via <code>exec()</code>.</li><li><strong>MEDIUM – Dependabot not configured</strong> – no automated dependency updates.</li><li><strong>MEDIUM – No vulnerability scan in CI</strong> – pull‑request safety missing.</li><li><strong>MEDIUM – Checkout persists token</strong> – <code>.github/workflows/publish.yml</code> should set <code>persist-credentials: false</code>.</li><li><strong>LOW – No job timeout</strong> – workflow could hang for up to six hours.</li><li><strong>LOW – Missing repo conventions</strong> – no <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<p>These findings are derived from the static analysis output and should be addressed before production deployment.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Onecli</code> provides a functional, TypeScript‑based CLI that consolidates credential management and API execution behind a small, well‑structured command set. The codebase is reasonably modular, but a few high‑impact hubs (<code>src/lib/output.ts</code>, <code>src/lib/api.ts</code>) and the presence of unsafe <code>eval</code> and missing CI safeguards mean it needs targeted refactoring and policy fixes before being considered production‑ready. Engineers comfortable with Node and SQLite can adopt it quickly, provided they remediate the highlighted health issues.</p>
             </div>
 
             

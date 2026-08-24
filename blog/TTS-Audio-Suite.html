@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running serious TTS work in ComfyUI usually means juggling several one-off custom nodes, each with its own model download locations, prompt syntax, and failure modes. Subtitle workflows make it worse: aligning generated audio to an SRT file, preserving character voices, and editing specific words after generation typically requires manual stitching across incompatible tools.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>TTS-Audio-Suite is a ComfyUI extension that consolidates twelve TTS/VC engines behind a unified node interface. The engines/adapters/ folder holds one adapter per engine (f5ttsadapter.py, qwen3ttsadapter.py, rvcadapter.py, etc.), so the rest of the suite talks to a consistent API regardless of the underlying model. The engines/chatterbox/ and engines/chatterboxofficial23lang/ directories contain full vendored model implementations, which explains the 116-file engine footprint.</p><p>Beyond generation, the suite handles the audio-production pipeline: SRT transcription and timing (docs/SRTIMPLEMENTATION.md), character grouping (engines/chatterbox/charactergrouper.py), streaming inference (engines/chatterbox/streamingmodelmanager.py), and voice conversion. It also supports inline edit tags for post-hoc speech editing and an integrated RVC training workflow.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install as a standard ComfyUI custom node by cloning into ComfyUI/customnodes/. Dependencies are managed per-engine; the suite does not ship a single requirements.txt, so expect to install engine-specific packages manually. Model files must be downloaded separately — docs/MODELDOWNLOADSOURCES.md lists sources and docs/MODELLAYOUTS.md specifies the expected folder structure.</p><p>Configuration: No central config file. Model paths are configured through node parameters in the ComfyUI graph. The engine metadata lives in docs/Dev reports/ttsaudiosuiteengines.yaml, which also generates the comparison tables in the README.</p><p>Running it: Launch ComfyUI normally. The suite registers its nodes (TTS, VC, SRT tools) into the node palette. Workflows are built visually; there is no CLI entry point.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical workflow: feed a script into the ChatterBox TTS node with a character list, generate per-character audio, run the SRT timing node to produce subtitles, then pass the result through Step Audio EditX to fix a mispronounced word in the middle of a long take. The charactergrouper.py module keeps voices consistent across segments, and the SRT node preserves control tags for downstream editing.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Vendored model code is a maintenance burden. engines/chatterbox/ and engines/chatterboxofficial23lang/ duplicate hundreds of model files. Upstream fixes require manual sync, tracked in docs/UpstreamEngineTracking/.
-Med – Six test files for 118 Python files. docs/Dev reports/pytestimplementationreport.md documents test coverage, but the ratio is thin for a project with this much engine-specific logic.
-Low – Documentation is extensive but sprawling. 72 markdown files include dev reports, refactoring summaries, and integration plans. Useful, but hard to navigate for a new user.
-Low – No lockfile. Dependency versions are unpinned, which risks breakage when engines update their model APIs.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a serious, actively-maintained TTS toolkit with real depth: twelve engines, SRT workflows, voice conversion, and editing tools all under one ComfyUI roof. The vendored model code and thin test coverage are real costs, but for anyone doing production audio work in ComfyUI, the breadth and integration quality outweigh those concerns.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>ComfyUI users need a single extension that can drive many TTS and voice‑conversion back‑ends, keep subtitle timing, and expose the results as nodes. Without a unified wrapper each engine must be wired manually, model files are scattered, and SRT handling is duplicated across projects.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>TTS‑Audio‑Suite</code> bundles <strong>12</strong> inference engines (e.g., F5‑TTS, ChatterBox, Qwen3‑TTS, CosyVoice3, VibeVoice, RVC) plus a set of audio‑processing utilities and ComfyUI nodes.</p>
+<ul><li>Engine adapters live under <code>engines/</code> – each engine has its own sub‑folder (<code>engines/f5_tts/</code>, <code>engines/chatterbox/</code>, …) containing a <code>model/</code> package, a CLI (<code>cli.py</code>), and Docker support where needed.</li><li>Shared helpers such as <code>utils/audio/processing.py</code>, <code>utils/models/unified_model_interface.py</code> and <code>utils/voice/discovery.py</code> provide a <strong>hub</strong> that 46–48 modules import; they handle model loading, device selection, and audio post‑processing.</li><li>Node definitions (<code>nodes/</code>) expose the adapters to ComfyUI, e.g. <code>nodes/chatterbox/chatterbox_srt_node.py</code> which builds an SRT from generated audio.</li></ul>
+<p>The suite therefore lets a user drop a single “TTS” node into a workflow, select an engine, and obtain timed subtitles without writing custom glue code.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the CLI entry point <code>engines/index_tts/indextts/cli.py::main</code>. The call chain is:</p>
+<ol><li><code>main</code> parses arguments and builds an <code>IndexTTS</code> engine instance.</li><li>Engine creation triggers <code>utils/models/unified_model_interface</code> (the most‑connected module, <strong>Ca = 23, Ce = 32</strong>, part of a circular import). This module discovers the appropriate model files via <code>utils/voice/discovery</code>.</li><li>Model weights are loaded (<code>load_state_dict</code>) and moved to the device selected by <code>utils/device/__init__</code>.</li><li>Input text is passed to the engine’s <code>forward</code> method, which eventually calls low‑level audio ops in <code>utils/audio/processing.py</code> (<code>stft</code>, <code>pad</code>, <code>cat</code>, <code>normalize</code>). These functions are invoked from <strong>87</strong> different places, making the file a high‑blast‑radius component.</li><li>The resulting waveform is written to disk (<code>open/write</code> in <code>utils/audio/processing.py</code>) or streamed back to ComfyUI via the node’s <code>process</code> method.</li></ol>
+<p>A separate path for subtitle generation runs <code>nodes/chatterbox/chatterbox_srt_node.py</code>, which calls <code>parse_pause_tags</code> (10 callers) and <code>print</code> (87 callers) to emit an SRT file. The only external interaction observed is a subprocess call to <code>is_available</code> (used by several wrappers) that launches engine‑specific binaries.</p>
+<p>The import graph contains <strong>14</strong> modules in cycles; the most problematic cycle involves <code>utils/models/unified_model_interface.py</code>, <code>utils/models/comfyui_model_wrapper/base_wrapper.py</code>, and <code>engines/f5_tts/model/__init__.py</code>. Breaking these cycles would reduce coupling and simplify future engine additions.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo (URL must be verbatim)
+git clone https://github.com/moses-y/TTS-Audio-Suite
+cd TTS-Audio-Suite
+
+# 2. Install Python dependencies (pip reads the top‑level pyproject.toml)
+pip install -r requirements.txt   # lockfile missing – see Code Health
+
+# 3. Build the optional Triton server for F5‑TTS (if you need GPU inference)
+cd engines/f5_tts/runtime/triton_trtllm
+docker compose up -d   # uses Dockerfile.server
+
+# 4. Run the CLI for a quick test (IndexTTS example)
+python engines/index_tts/indextts/cli.py \
+    --engine index_tts \
+    --text "Hello world, this is a test." \
+    --output out.wav</code></pre>
+<p>ComfyUI integration is automatic: after installing the extension, the nodes appear under the “TTS Audio Suite” category. No additional configuration files are required beyond placing model weights in the directories described in <code>docs/MODEL_LAYOUTS.md</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A post‑production pipeline can replace a manual subtitle‑editing step with a single node chain:</p>
+<pre data-lang="python"><code># In a ComfyUI workflow (JSON representation)
+{
+  "nodes": [
+    {"type": "TTSAudioSuite/ChatterBoxSRTNode", "engine": "chatterbox", "text": "..."},
+    {"type": "TTSAudioSuite/AudioExportNode", "format": "wav"}
+  ]
+}</code></pre>
+<p>The node sends the transcript to the selected engine, receives a waveform, writes <code>output.wav</code>, and simultaneously produces <code>output.srt</code> with accurate timestamps, ready for video editors.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin third‑party GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – Add a lockfile for <code>engines/f5_tts/pyproject.toml</code>.</li><li><strong>High</strong> – CI never runs the test suite; insert a <code>pytest</code> step.</li><li><strong>Medium</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions.</li><li><strong>Medium</strong> – Enable Dependabot (<code>.github/dependabot.yml</code>).</li><li><strong>Medium</strong> – Pin Docker base image by digest in <code>engines/f5_tts/runtime/triton_trtllm/Dockerfile.server</code>.</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI.</li><li><strong>Medium</strong> – Move large binaries (&gt;5 MiB) to Git LFS (<code>bst.t7</code>, <code>waveanalgif.gif</code>).</li><li><strong>Medium</strong> – Expand test coverage (currently 17 files for 1 270 source files).</li><li><strong>Low</strong> – Set <code>timeout-minutes</code> on workflow jobs.</li></ul>
+<p>No secrets were found; a license file exists. The repository includes a full test suite (52 files) but CI does not execute them.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>TTS‑Audio‑Suite</code> delivers a pragmatic, multi‑engine TTS/VC layer for ComfyUI, with clear node boundaries and reusable utilities. The codebase is large and tightly coupled around a few hub modules, which raises maintenance risk, and the CI pipeline needs tightening. It is suitable for teams comfortable navigating Python import cycles and willing to add missing lockfiles and CI steps.</p>
             </div>
 
             
@@ -94,18 +134,18 @@ Low – No lockfile. Dependency versions are unpinned, which risks breakage when
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,646<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>118</b></li><li><span>Markdown</span><i style="width:61%"></i><b>72</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>1269</b></li><li><span>Markdown</span><i style="width:7%"></i><b>86</b></li><li><span>JSON</span><i style="width:5%"></i><b>60</b></li><li><span>JavaScript</span><i style="width:4%"></i><b>46</b></li><li><span>YAML</span><i style="width:3%"></i><b>33</b></li><li><span>C/C++ Header</span><i style="width:0%"></i><b>6</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Django</span><span>Flask</span><span>Docker</span><span>PyTorch</span><span>Transformers</span><span>ONNX</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -159,6 +199,12 @@ Low – No lockfile. Dependency versions are unpinned, which risks breakage when
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>engines/f5_tts/pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1232857019">Open in Code Brain &rarr;</a>

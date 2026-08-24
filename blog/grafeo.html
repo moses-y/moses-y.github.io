@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 2, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>grafeo</h1>
@@ -80,16 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#build-the-rust-core">Build the Rust core</a><a href="#python-binding">Python binding</a><a href="#node-binding">Node binding</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most graph databases force a choice between embedding and server deployment, or between LPG and RDF models. Teams that need both often run two systems. Grafeo addresses this by offering a single engine that supports both data models, multiple query languages, and both embedded and standalone operation.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Grafeo is a pure-Rust graph database with a core engine under crates/ and bindings for seven languages. The bindings directory (crates/bindings/) contains implementations for Python (PyO3), Node.js (napi-rs), Go (CGO), C (FFI), C#, Dart, and WebAssembly. The Python binding includes bridges to networkx and a solvor module for algorithms, visible in crates/bindings/python/src/bridges/.</p><p>The engine supports LPG and RDF models with six query languages: GQL, Cypher, Gremlin, GraphQL, SPARQL, and SQL/PGQ. It offers MVCC transactions with snapshot isolation, in-memory or persistent storage, and vector search with HNSW indexing. The crates/bindings/common/src/ directory holds shared entity and error types used across bindings.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The repo is a Cargo workspace (Cargo.toml at root). Build the core library with cargo build --release. Each binding has its own package manager file: pyproject.toml for Python, package.json for Node, go.mod for Go, pubspec.yaml for Dart.</p><h3 class="post-h" id="build-the-rust-core">Build the Rust core</h3><p>cargo build --release</p><h3 class="post-h" id="python-binding">Python binding</h3><p>cd crates/bindings/python
-pip install .</p><h3 class="post-h" id="node-binding">Node binding</h3><p>cd crates/bindings/node
-npm install</p><p>Configuration: No environment variables are required. Storage mode (in-memory vs persistent) is selected at runtime through the database API, not config files.</p><p>Running it: As an embedded library, you instantiate a GrafeoDB object from the binding of your choice. The Python entry point is crates/bindings/python/python/grafeo/init.py; the Node entry is crates/bindings/node/index.js. A separate server component exists in a different repository (GrafeoDB/grafeo-server).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A Python service that needs both graph traversal and vector similarity search:</p><p>from grafeo import GrafeoDB</p><p>db = GrafeoDB(&quot;mygraph&quot;, storage=&quot;persistent&quot;)
-db.execute(&quot;CREATE (n:Item {name: &#39;widget&#39;})&quot;)
-results = db.query(&quot;MATCH (n:Item) WHERE n.name = &#39;widget&#39; RETURN n&quot;)
-vectors = db.query(&quot;CALL vector.search(&#39;items&#39;, 0.8, 5)&quot;)</p><p>The same database file works across bindings, so a Rust service could share data with a Node.js analytics service.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The repo is well-structured with 73 test files, CI configured in .github/workflows/ci.yml, a license, and a CHANGELOG.md. Code health is generally strong.
-Low - Go binding contains a prebuilt DLL (crates/bindings/go/libgrafeoc.dll.a), which is unusual for a source repo and should be verified against the Rust build.
-Low - The Node binding has per-platform npm packages (darwin-arm64, linux-x64-gnu, etc.) but no package.json for win32-arm64, which may limit Windows ARM support.
-Low - crates/bindings/go/grafeo_c.def suggests manual CGO exports; verify the generated header stays in sync with crates/bindings/c/grafeo.h.</p><p>No high-severity issues detected. The test coverage across bindings is substantial, and the CI pipeline includes benchmarking via CodSpeed.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Grafeo is a serious, well-engineered graph database with unusually broad language support and a dual LPG/RDF model. The multi-language binding strategy is the standout feature—few graph databases offer this breadth with a single Rust core. It suits teams that want one graph engine across heterogeneous services, though the project is young (0 stars on this fork) and the standalone server is still separate. Teams needing production-grade graph analytics with mature tooling should evaluate it against Neo4j or Memgraph first.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Applications that need sub‑millisecond graph traversals often resort to heavyweight databases (JVM‑based, Docker containers, external processes). Those runtimes add latency, memory pressure, and operational complexity, especially when the graph is embedded in a service written in Rust, Python, or JavaScript.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>grafeo</code> is a pure‑Rust graph engine that can be linked as a library or launched as a standalone server. It stores <strong>Labeled Property Graph</strong> and <strong>RDF</strong> data with MVCC snapshot isolation and supports six query languages (GQL, Cypher, Gremlin, GraphQL, SPARQL, SQL/PGQ). The core lives in <code>crates/grafeo-core</code> (not listed but part of the 781‑file <code>crates</code> tree) and is exposed through language bindings in <code>crates/bindings/*</code> (C, Python, Node, Go, C#, Dart, WASM).</p>
+<ul><li>Build artefacts* – <code>Cargo.toml</code> at the repository root drives the Rust compilation; each binding crate has its own <code>Cargo.toml</code> (e.g., <code>crates/bindings/python/Cargo.toml</code>).</li><li>Distribution* – pre‑built wheels, npm packages, and a NuGet feed are generated by the CI workflows referenced in the README badges.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the language‑specific entry points:</p>
+<ul><li><strong>Python</strong> – <code>crates/bindings/python/src/lib.rs</code> registers the <code>grafeo</code> module; the first call from user code reaches <code>create_edge</code> (the most‑called internal function, invoked from 61 places).</li><li><strong>Node</strong> – <code>crates/bindings/node/src/lib.rs</code> loads the N‑API addon; the same <code>create_edge</code> routine is used under the hood.</li><li><strong>Rust CLI / library</strong> – not listed as a distinct <code>main</code>, but the library’s public API (<code>execute_query</code>, <code>setup_random_graph</code>, etc.) is called from the test harnesses in <code>tests/</code> and from benchmark scripts in <code>crates/bindings/python/tests/bases/bench_algorithms.py</code>.</li></ul>
+<p>The <strong>internal call graph</strong> shows a tight hub around <code>create_edge</code>, <code>_assert_category</code>, and <code>benchmark</code>. Changing any of these functions has the widest blast radius because they are referenced by dozens of callers (e.g., <code>test_verify_shortest_path → create_edge</code> is exercised 24 times).</p>
+<p>File‑level responsibilities (high‑traffic examples):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core responsibility</th><th>Calls / effects</th></tr></thead><tbody><tr><td><code>crates/bindings/python/tests/lpg/gql/test_regression_external.py</code></td><td>End‑to‑end GQL regression suite</td><td>135 functions, reads/writes DB</td></tr><tr><td><code>crates/bindings/python/tests/bases/bench_storage.py</code></td><td>Benchmark harness for storage back‑ends</td><td>71 functions, invoked by 38 other files</td></tr><tr><td><code>crates/bindings/python/src/database.rs</code></td><td>Python‑side DB wrapper (oversized, 1864 lines)</td><td>Direct DB calls, high cognitive load</td></tr></tbody></table></div>
+<p>The repository contains <strong>no circular module dependencies</strong> (13 import edges, 0 cycles), which limits the risk of dead‑ends when refactoring. However, the deepest nesting reaches 9 levels in files such as <code>crates/bindings/python/src/database.rs</code>, making the control flow harder to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and build the Rust core
+git clone https://github.com/moses-y/grafeo
+cd grafeo
+cargo build --release               # builds all crates, including bindings
+
+# Python binding (local development)
+cd crates/bindings/python
+maturin develop --release          # builds the PyO3 extension in place
+python -c "import grafeo; print(grafo.version())"
+
+# Node binding (local development)
+cd crates/bindings/node/npm
+npm install                         # pulls pre‑built binaries or builds from source
+node -e "const g = require('@grafeo-db/js'); console.log(g.version())"</code></pre>
+<p>The CI workflows (<code>.github/workflows/*.yml</code>) already verify that the Rust library compiles, the Python wheel builds, and the npm packages publish, so the same commands can be used for local verification.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A microservice written in Python can embed Grafeo for real‑time recommendation:</p>
+<pre data-lang="python"><code>import grafeo
+
+db = grafeo.Database(in_memory=True)
+db.execute_query("CREATE (:User {id: 1})-[:FOLLOWS]-&gt;(:User {id: 2})")
+paths = db.execute_query("MATCH p = (a)-[:FOLLOWS*]-&gt;(b) RETURN p LIMIT 5")
+print(paths)</code></pre>
+<p>Because the engine runs in‑process, latency stays sub‑millisecond and memory usage is a fraction of comparable JVM graph stores.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – GitHub Actions use mutable tags (<code>@vN</code>). Pin each action to a commit SHA.</li><li><strong>High</strong> – Critical steps in <code>.github/workflows/release.yml</code> discard exit codes or use <code>continue-on-error</code>, masking failures. Remove those flags.</li><li><strong>High</strong> – No dependency‑vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Checkout step retains the GitHub token; set <code>persist-credentials: false</code> and pass a token only where needed.</li><li><strong>Medium</strong> – Workflow jobs lack explicit <code>timeout-minutes</code>; add reasonable limits.</li><li><strong>High</strong> – Deep nesting (57 occurrences, e.g., <code>crates/bindings/python/src/database.rs</code>). Refactor into guard clauses or smaller functions.</li><li><strong>High</strong> – Duplicated 6‑line blocks across 399 files (e.g., header definitions in <code>grafeo.h</code>). Consolidate into shared helpers.</li><li><strong>High</strong> – Oversized files (<code>database.rs</code> in C and Python bindings, each ~1864 lines). Split by responsibility.</li></ul>
+<p>No critical security findings, license (<code>Apache-2.0</code>) and lockfiles are present, and the test suite (461 files) runs in CI.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Grafeo delivers a high‑performance, embeddable graph engine with broad language support and a solid CI pipeline. The codebase is well‑tested but suffers from deep nesting, duplicated snippets, and a few CI hygiene issues that should be addressed before large‑scale production adoption. Teams comfortable with Rust and willing to invest in modest refactoring will find Grafeo a strong alternative to heavyweight graph databases.</p>
             </div>
 
             
@@ -106,11 +139,11 @@ Low - crates/bindings/go/grafeo_c.def suggests manual CGO exports; verify the ge
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,246<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>51</b></li><li><span>Rust</span><i style="width:61%"></i><b>31</b></li><li><span>C#</span><i style="width:35%"></i><b>18</b></li><li><span>Dart</span><i style="width:35%"></i><b>18</b></li><li><span>YAML</span><i style="width:29%"></i><b>15</b></li><li><span>Markdown</span><i style="width:27%"></i><b>14</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>561</b></li><li><span>Markdown</span><i style="width:39%"></i><b>218</b></li><li><span>Python</span><i style="width:24%"></i><b>133</b></li><li><span>TOML</span><i style="width:4%"></i><b>23</b></li><li><span>C#</span><i style="width:4%"></i><b>21</b></li><li><span>Dart</span><i style="width:3%"></i><b>19</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Transformers</span><span>LangChain</span><span>Neo4j</span></p>
                     </div>
                 </div>
 

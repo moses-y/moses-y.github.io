@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Hyperparameter optimization in machine learning is often handled with rigid, static search spaces that require boilerplate configuration files. Popular libraries like GridSearchCV or RandomizedSearchCV lack support for dynamic search spaces, efficient pruning of unpromising trials, and distributed execution without significant code restructuring.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Optuna is a Python framework for automated hyperparameter optimization. The core API in optuna/cli.py and optuna/init.py implements a define-by-run pattern where search spaces are constructed imperatively inside an objective function using trial.suggestfloat(), trial.suggestint(), and trial.suggestcategorical() calls. The optuna/samplers/ directory contains 12 sampling algorithms including TPE (tpe/sampler.py), CMA-ES (cmaes.py), and NSGA-II/III for multi-objective optimization. The optuna/pruners/ directory provides early-stopping strategies like Hyperband (hyperband.py) and Median pruner (median.py) that terminate low-performing trials automatically.</p><p>The visualization module in docs/visualizationexamples/ generates optimization history plots, parallel coordinate charts, and parameter importance rankings. Integration modules in optuna/integration/ support LightGBM, XGBoost, PyTorch Lightning, TensorFlow, and 15 other ML frameworks.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team training a neural network on image classification can define a search space with 8-12 hyperparameters (learning rate, layer sizes, dropout rates) and run 500 trials across 4 machines. The TPE sampler learns from completed trials to focus on promising regions, while the Median pruner stops trials that underperform after 20% of epochs. Results are stored in a SQLite or MySQL database via optuna/storages/.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The codebase is well-maintained with no structural red flags. Key observations:
-Low - Missing integration tests for artifact storage backends (optuna/artifacts/boto3.py, gcs.py). These cloud storage wrappers have no dedicated test files visible in the structure.
-Low - The Gaussian process sampler (optuna/samplers/gp/) contains a scipyblasthreadpatch.py file, suggesting workarounds for BLAS threading issues that could cause numerical instability in production.
-Low - No visible fuzzing or property-based tests for the search space transformation logic in optuna/_transform.py, which handles edge cases in parameter distributions.</p><p>Tests and CI are present across Linux, macOS, and Windows. The project has a security policy (SECURITY.md), citation file (CITATION.cff), and code of conduct.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Optuna is a mature, production-grade hyperparameter optimization framework suitable for teams running ML experiments at scale. It offers more sampling algorithms and pruning strategies than alternatives like Hyperopt or SMAC3, with cleaner API design and better visualization support. The main trade-off is complexity—small projects with simple grid searches may find Optuna&#39;s feature set excessive compared to scikit-learn&#39;s built-in tools.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Machine‑learning teams need a reproducible way to search hyper‑parameter spaces without writing boilerplate optimisation loops. Manual grid or random search quickly becomes unmanageable as models and constraints grow.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>optuna</code> supplies a Python‑first API that lets users declare search spaces inline (<code>optuna.trial.Trial.suggest_*</code>), launch studies with <code>optuna.create_study</code>, and let the library drive sampling, pruning and persistence. Core logic lives in <code>optuna/__init__.py</code>, <code>optuna/trial/__init__.py</code> and <code>optuna/study/__init__.py</code>, which together expose 187 downstream imports. The distribution layer (<code>optuna/storages/_base.py</code>, <code>optuna/storages/_rdb/storage.py</code>) abstracts SQLite, PostgreSQL or RDB‑backed storage, while the CLI (<code>optuna/cli.py</code>) offers a command‑line front‑end for common actions such as <code>create-study</code> and <code>optimize</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>optuna/cli.py</code>. The <code>main</code> function (line 977) parses arguments, builds a <code>Storage</code> via <code>_get_storage</code> (line 57) and then calls the high‑traffic helper <code>create_study</code> (called from 463 sites). <code>create_study</code> lives in <code>optuna/storages/_base.py</code>; it opens a scoped DB session (<code>_create_scoped_session</code>) and writes a new study row (outbound DB write).</p>
+<p>From there the typical optimisation loop proceeds: <code>Study.optimize</code> repeatedly invokes <code>Trial._suggest_*</code> (defined in <code>optuna/trial/_base.py</code>) which ultimately calls the sampler (<code>optuna/samplers/_tpe/sampler.py</code> for TPE, <code>optuna/samplers/_random.py</code> for random). The most frequently invoked sampler class is <code>TPESampler</code> (referenced from 54 places). Each trial records results via <code>Trial.report</code> and may be pruned through <code>Pruner</code> implementations (<code>optuna/pruners/_hyperband.py</code> is called from 32 places).</p>
+<p>All persistence routes back through the storage layer: <code>optuna/storages/_rdb/storage.py</code> performs the actual SQLAlchemy commits, while <code>optuna/storages/journal/_storage.py</code> writes replay logs to the filesystem. The CLI also writes human‑readable output via <code>_format_output</code> (line 244).</p>
+<p>The import graph shows a dense hub: <code>optuna/__init__.py</code> is imported by 187 modules and participates in a circular dependency with <code>optuna/trial/__init__.py</code> and <code>optuna/study/__init__.py</code>. This cycle inflates change impact because any modification to the hub propagates widely. The largest single file, <code>optuna/study/study.py</code> (1 280 lines), defines the public <code>Study</code> API and is called from 86 other files, making it a high‑blast‑radius target for refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork
+git clone https://github.com/moses-y/optuna
+cd optuna
+
+# Install in editable mode (pyproject.toml is the only manifest)
+pip install -e .
+
+# Run a simple optimisation from the CLI
+python -m optuna.cli create-study --storage sqlite:///example.db --study-name demo
+python -m optuna.cli optimize demo --n-trials 20</code></pre>
+<p>The CLI accepts a SQLAlchemy URL via <code>--storage</code>; no additional environment files are required. For programmatic use, import the public API:</p>
+<pre data-lang="python"><code>import optuna
+
+def objective(trial):
+    x = trial.suggest_float("x", -10, 10)
+    return (x - 2) ** 2
+
+study = optuna.create_study(storage="sqlite:///example.db")
+study.optimize(objective, n_trials=30)</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science platform can spin up a Docker container that runs the above script on each model version. The study metadata is persisted in a shared PostgreSQL instance (<code>--storage postgresql://user:pwd@host/db</code>), enabling multiple workers to pull pending trials via the same <code>Study.optimize</code> call, achieving horizontal scaling without custom orchestration.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Lockfile missing</strong> – <code>pyproject.toml</code> declares dependencies but no lockfile; reproducible builds are not guaranteed.</li><li><strong>Medium – GITHUB_TOKEN permissions</strong> – <code>.github/workflows/checks-optional.yaml</code> lacks explicit permissions, giving the default write scope.</li><li><strong>Medium – No automated dependency updater</strong> – No Dependabot or Renovate configuration.</li><li><strong>Medium – No dependency‑vulnerability gate</strong> – CI does not run a vulnerability scanner.</li><li><strong>Low – No workflow timeouts</strong> – Jobs in <code>.github/workflows/checks-optional.yaml</code> lack <code>timeout-minutes</code>.</li></ul>
+<p>Measured static findings (high confidence):</p>
+<ul><li><strong>Import cycles (32)</strong> – <code>optuna/__init__.py</code>, <code>optuna/trial/__init__.py</code>, <code>optuna/study/__init__.py</code>. Break cycles to reduce churn.</li><li><strong>Hub module (14)</strong> – Same three files import 187 modules; keep them stable.</li><li><strong>Deep nesting (9)</strong> – Functions in <code>optuna/distributions.py</code>, <code>optuna/exceptions.py</code>, <code>optuna/study/study.py</code> reach 6‑level indentation. Refactor for readability.</li><li><strong>Oversized file</strong> – <code>optuna/study/study.py</code> (1 280 lines) is a maintenance hotspot; consider splitting by responsibility.</li><li><strong>File opened without context</strong> – <code>optuna/testing/storages.py</code>, <code>optuna/artifacts/_protocol.py</code>. Use <code>with open(...)</code>.</li><li><strong>Broad exception handling</strong> – <code>optuna/storages/_rdb/storage.py</code>, <code>optuna/storages/journal/_storage.py</code>. Catch specific errors.</li></ul>
+<p>No missing license, tests, or secret leaks were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>optuna</code> delivers a mature, well‑tested hyper‑parameter optimisation stack with a clean Python API and flexible storage back‑ends. Its main drawbacks are a central import hub that creates a large change surface and the absence of a lockfile, which hampers reproducible deployments. Teams comfortable managing Python dependencies and willing to isolate the hub for future refactoring will find it a solid foundation for scalable model tuning.</p>
             </div>
 
             
@@ -101,11 +135,11 @@ Low - No visible fuzzing or property-based tests for the search space transforma
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">469<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>130</b></li><li><span>reStructuredText</span><i style="width:22%"></i><b>28</b></li><li><span>YAML</span><i style="width:16%"></i><b>21</b></li><li><span>Markdown</span><i style="width:4%"></i><b>5</b></li><li><span>HTML</span><i style="width:2%"></i><b>3</b></li><li><span>CSS</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>380</b></li><li><span>reStructuredText</span><i style="width:8%"></i><b>31</b></li><li><span>YAML</span><i style="width:6%"></i><b>21</b></li><li><span>Markdown</span><i style="width:1%"></i><b>5</b></li><li><span>HTML</span><i style="width:1%"></i><b>3</b></li><li><span>CSS</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>PyTorch</span><span>TensorFlow</span><span>MLflow</span></p>
                     </div>
                 </div>
 
@@ -152,6 +186,12 @@ Low - No visible fuzzing or property-based tests for the search space transforma
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1246419889">Open in Code Brain &rarr;</a>

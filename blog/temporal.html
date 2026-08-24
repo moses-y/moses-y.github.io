@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 5, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,28 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running long‑running, stateful application logic reliably requires a platform that can survive process crashes, network partitions, and code upgrades without losing progress. Building such durability from scratch forces teams to re‑implement consensus, persistence, and retry logic, which is error‑prone and costly.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The temporal repository contains the open‑source Temporal Server – a Go‑based, horizontally‑scalable workflow orchestration engine. Core service implementations live under api/ (e.g., api/historyservice/v1/service.pb.go, api/matchingservice/v1/service.pb.go) and are exposed via gRPC. The chasm/ package provides the internal state‑machine framework (engine.go, component.go) that powers workflow execution and persistence. Build‑related logic is in .github/actions/build-docker-images/scripts/main.go, which assembles Docker images for the server and its admin tools.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>git clone https://github.com/temporalio/temporal.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a production‑grade, fault‑tolerant engine for long‑running business logic. Building that from scratch requires a durable workflow scheduler, state persistence, and a rich RPC API – all of which are non‑trivial to get right and to keep secure.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements <strong>Temporal Server</strong>, a Go‑based execution platform that runs workflows and activities, stores state in a relational backend, and exposes gRPC services.</p>
+<ul><li>Core server code lives under <code>cmd/server/main.go</code> (the binary entry point) and the <code>service/</code> package (≈ 1 k files).</li><li>API contracts are generated in <code>api/</code> (protobuf files such as <code>api/adminservice/v1/request_response.pb.go</code>) and consumed by the server and client libraries.</li><li>Persistence schemas are defined in <code>schema/</code> (SQL files) and the server uses the <code>common/</code> utilities for logging, metrics, and retry logic.</li><li>Helper tools (e.g., <code>tools/tdbg/</code>, <code>tools/check-dependencies/</code>) aid development and CI.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Process start</strong> – Execution begins in <code>cmd/server/main.go</code>. The <code>main</code> function creates a server instance, reads configuration files (via <code>os.ReadFile</code> in the init path), and calls <code>Run</code> on the server object.</li><li><strong>Server bootstrap</strong> – <code>Run</code> (called from ~117 places) wires together the gRPC listeners, metric collectors, and persistence layer. It eventually invokes <code>startMetricsRecording</code> (71 callers) and <code>ThrottleRetryContext</code> (72 callers) to set up retry policies.</li><li><strong>gRPC dispatch</strong> – Incoming RPCs hit the generated service stubs in <code>api/adminservice/v1/service_grpc.pb.go</code>. These stubs forward calls to concrete handlers in <code>service/</code>, which frequently use the ubiquitous helper <code>Equal</code> (247 callers) for protobuf equality checks and <code>New</code> (156 callers) for constructing request/response objects.</li><li><strong>Persistence</strong> – Handlers execute SQL defined in <code>schema/</code> through the Go <code>database/sql</code> driver. The call graph shows many edges to <code>Descriptor -&gt; *rawDescGZIP</code> (≈ 100+ calls) – the protobuf descriptor loader is a hot path for every RPC.</li><li><strong>External effects</strong> –   <em> Filesystem: <code>main -&gt; organizeBinaries</code> → <code>os.Chmod</code>; <code>init -&gt; readFile</code> → <code>os.ReadFile</code>; <code>copyRecursive</code> → <code>os.Open</code>. </em> Network: <code>downloadCLIForArch -&gt; downloadFile</code> → <code>http.Get</code> (used by the GitHub‑action build script). * No long‑running background processes are launched from the server binary itself.</li></ol>
+<p>The most “blast‑radius” symbols are <code>Equal</code>, <code>append</code>, and <code>Invoke</code>, each referenced from &gt;200 distinct call sites, meaning a change there ripples through most of the codebase. The protobuf descriptor generation forms a dense hub; modifications to any <code>.proto</code> file will regenerate many of the 3 k functions listed under <strong>What Each File Is Responsible For</strong>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL required)
+git clone https://github.com/moses-y/temporal
 cd temporal
-make build      # defined in the top‑level Makefile</p><p>The Makefile includes typical Go targets (build, test, lint). Docker images can be produced locally with the GitHub Action script:
-go run .github/actions/build-docker-images/scripts/main.go \
-    --tag local/temporal:dev</p><h3 class="post-h" id="configuration">Configuration</h3><p>Runtime configuration is supplied via YAML files read by the server at startup (e.g., config/development.yaml – not present in the stripped view but referenced in the build scripts). The repository does not ship a default temporal.yaml; operators must provide database connection strings, namespace settings, and TLS credentials as documented in the official Temporal docs.</p><h3 class="post-h" id="running-it">Running it</h3><p>After a successful make build, start the server with the compiled binary:
-./temporal-server start-dev   # binary generated by make build</p><p>The start-dev flag launches an in‑memory test cluster (the same mode used by the official CLI). For production, the binary accepts --config /path/to/temporal.yaml to load the full configuration.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A typical microservice that needs reliable order processing would embed a Temporal client (Go SDK) and register a workflow:</p><p>func ProcessOrder(ctx workflow.Context, orderID string) error {
-    ao := workflow.ActivityOptions{
-        ScheduleToCloseTimeout: time.Hour,
-        RetryPolicy: &amp;temporal.RetryPolicy{MaximumAttempts: 5},
-    }
-    ctx = workflow.WithActivityOptions(ctx, ao)</p><p>var result string
-    err := workflow.ExecuteActivity(ctx, &quot;ChargeCard&quot;, orderID).Get(ctx, &amp;result)
-    if err != nil {
-        return err
-    }
-    return nil
-}</p><p>The workflow runs on the Temporal Server built from this repo, guaranteeing exactly‑once execution despite crashes.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing runtime config defaults – No temporal.yaml or example config in the tree; operators must create one from external docs.  
-Medium – Large generated protobuf surface – Over 150 generated *.pb.go files under api/; changes to proto definitions risk divergence if regeneration is omitted. No explicit go:generate scripts are visible.  
-Low – Test coverage – 19 test files exist (e.g., chasm/field_test.go), and CI includes linters.yml and run-tests.yml, indicating a healthy test pipeline.  
-Low – License present – LICENSE file is included and correctly referenced in the README.  
-Low – Dependency hygiene – go.mod/go.sum are not listed in the excerpt but are required for reproducible builds; their absence here is a documentation gap, not a code issue.</p><p>Overall, the repository follows standard Go conventions, includes CI for linting and vulnerability scanning (govulncheck.yml), and provides Docker build automation.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Temporal’s server codebase is a mature, well‑structured Go project with comprehensive gRPC APIs and a proven state‑machine core. It builds cleanly via make and can be containerized using the provided Docker build script. The main drawbacks are the lack of bundled runtime configuration examples and the heavy reliance on generated protobuf files, which require careful regeneration. Ideal for teams that need a battle‑tested workflow engine and are comfortable managing Go builds and Kubernetes/Docker deployments.</p>
+
+# Build the server binary
+make build            # target defined in the Makefile
+
+# Run a local dev cluster (Docker Compose)
+docker compose -f develop/docker-compose/docker-compose.cdc.linux.yml up -d</code></pre>
+<p><em>Configuration</em> – The server reads its YAML configuration from <code>temporal/config.yaml</code> (referenced in the <code>init</code> path). No environment variables are hard‑coded; the Docker compose files expose the usual ports (7233 for gRPC, 8233 for the Web UI).</p>
+<p><em>Running</em> – After the compose stack is up, start the binary:</p>
+<pre data-lang="bash"><code>./temporal-server start-dev   # binary produced by `make build`</code></pre>
+<p>The server will register its services, connect to the SQL persistence container, and listen for workflow submissions.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A typical client creates a workflow via the Go SDK:</p>
+<pre data-lang="go"><code>c, _ := client.NewClient(client.Options{})
+workflowID, err := client.ExecuteWorkflow(context.Background(),
+    client.StartWorkflowOptions{ID: "order-123"},
+    OrderWorkflow, orderID)</code></pre>
+<p>The SDK talks to the server’s gRPC endpoint (<code>localhost:7233</code>). The server routes the request through <code>api/adminservice/v1/service_grpc.pb.go</code> → <code>service/</code> handlers → SQL persistence, guaranteeing exactly‑once execution even across crashes.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Enable Dependabot</strong> – No <code>.github/dependabot.yml</code> present; 1 manifest (<code>go.mod</code>) lacks automated version updates.</li><li><strong>Medium – Dependency‑vulnerability gate</strong> – CI workflows (<code>.github/workflows/*.yml</code>) do not run a vulnerability scanner. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Low – Job timeouts</strong> – <code>auto-approve-cicd-release-pr.yml</code> defines three jobs without <code>timeout-minutes</code>. Set explicit limits to avoid overlapping runs.</li></ul>
+<p>Additional observations: a pair of PEM files (<code>tools/tdbg/testdata/*.pem</code>) are committed; they appear to be test certificates but should be reviewed for accidental secret leakage. CI runs, Dockerfile, and a LICENSE file are present, indicating a mature release process.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Temporal Server delivers a full‑featured, Go‑native workflow engine with a clear separation between API contracts, service logic, and persistence. The codebase is large (3 k Go files) and heavily centered on protobuf descriptors, so changes to core helpers (<code>Equal</code>, <code>New</code>) must be approached carefully. Automated dependency management and CI hardening are the most immediate gaps. Engineers familiar with Go, gRPC, and relational databases will find the project ready for extension or integration into production systems.</p>
             </div>
 
             
@@ -131,6 +144,11 @@ Low – Dependency hygiene – go.mod/go.sum are not listed in the excerpt but a
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">120 declared dependencies, none a major version behind. Resolved 0 of 120 against the registry.</p>
+                    
+                </div>
 
                 
                 <div class="an-block">

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 2, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#basic-usage-entry-point-bin-mco-js">Basic usage (entry point: bin/mco.js)</a><a href="#parallel-execution-across-providers">Parallel execution across providers</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams using AI coding agents get a single model&#39;s perspective on a task. A code review from Claude alone misses what Codex or Gemini would catch. Running agents manually in parallel is tedious and produces inconsistent output formats that are hard to compare.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MCO is a neutral orchestration layer that dispatches the same prompt to multiple coding agents (Claude Code, Codex CLI, Gemini CLI, OpenCode, Qwen Code) and synthesizes the results. It works from any IDE because it&#39;s a standalone CLI—no editor plugin required.</p><p>The core entry point is bin/mco.js (npm) with a Python distribution via pyproject.toml. Provider adapters live under docs/contracts/ which defines the JSON contract (cli-json-v0.1.x.md) and permission model (provider-permissions-v0.1.x.md). The reports/ directory contains benchmark results and dry-run artifacts showing serial vs. parallel execution data across all five providers.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via npm (npm install -g @tt-a1i/mco) or pip (pip install mco based on pyproject.toml). The repo ships with package.json and pyproject.toml for both ecosystems.</p><p>Configuration: No config file is present in the repo structure. Each provider CLI must be installed and authenticated independently (e.g., claude login, codex login). MCO discovers them from PATH.</p><p>Running it: Invoke mco from the command line with your prompt. The README shows OpenClaw using MCO as a multi-agent backend, and the workflow files in .github/workflows/ confirm CI usage patterns.</p><h3 class="post-h" id="basic-usage-entry-point-bin-mco-js">Basic usage (entry point: bin/mco.js)</h3><p>mco &quot;Review this repo for security issues&quot;</p><h3 class="post-h" id="parallel-execution-across-providers">Parallel execution across providers</h3><p>mco --providers claude,codex,gemini &quot;Refactor the auth module&quot;</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A tech lead runs a security review before merge:</p><p>mco --providers claude,codex,gemini \
-  &quot;Audit src/auth/ for OWASP Top 10 violations. Report findings with severity.&quot;</p><p>MCO dispatches the prompt to all three agents in parallel, collects their outputs, and presents a synthesized report. The lead reviews the consensus view instead of running three separate sessions and manually diffing results.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No lockfile: package.json and pyproject.toml exist without lockfiles, making builds non-reproducible. Pin dependencies or add package-lock.json/uv.lock.
-Med - Sparse source code: Only 6 Python files, 2 shell scripts, and 1 JavaScript file. The heavy lifting appears to be in the bin/mco.js entry point and provider adapters, but the core logic is thin relative to the 135 documentation files.
-Low - Test coverage: 5 test files exist but no test framework is visible in the dependency files. Tests appear to be integration-style probes (docs/probes/) rather than unit tests.
-Low - Probe artifacts committed: docs/probes/2026-02-26/ contains raw session logs, shell snapshots, and provider outputs. These are diagnostic artifacts that bloat the repo and may contain sensitive data.
-Low - CI configured: .github/workflows/ has benchmark, gate, and publish pipelines for both npm and PyPI — good practice.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MCO solves a real coordination problem for teams that already use multiple AI coding agents. The dual npm/PyPI distribution and CI pipelines indicate a maintained project. The thin source code and heavy documentation suggest this is early-stage — the orchestration logic is real but the test coverage and reproducibility need work. Suitable for teams standardizing on multi-agent workflows; solo developers may find the setup overhead unnecessary.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>One AI coding agent gives one perspective. Teams that rely on a single agent inherit its blind spots, and running several agents manually means duplicating prompts, collating outputs, and reconciling conflicting results. MCO solves this by acting as a neutral orchestration layer: one prompt in, parallel execution across multiple agents, one synthesized consensus out.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MCO dispatches the same task to Claude Code, Codex CLI, Gemini CLI, OpenCode, and Qwen Code simultaneously, then reviews and merges their outputs. It runs from any IDE or plain shell, making it a provider-agnostic tool rather than another agent to learn.</p>
+<p>The core logic lives in <code>runtime/cli.py</code> (entry point, 1,566 lines), <code>runtime/review_engine.py</code> (consensus and review orchestration), and <code>runtime/contracts.py</code> (shared data types). The <code>runtime/adapters/</code> directory handles per-provider communication, while <code>runtime/bridge/</code> connects to external tools like evermemos. A substantial <code>tests/</code> suite (77 files) and <code>docs/</code> (135 files) cover the adapter contract and design decisions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>runtime/cli.py:1412</code>, which reaches 311 functions. From there, control flows through <code>run_review</code> (called from 57 places) into the review engine, which coordinates the provider adapters. The system touches the outside world through three main paths: spawning provider subprocesses (<code>subprocess.Popen</code> from <code>runtime/acp/adapter.py</code>), reading/writing files for configuration and state, and one outbound network call.</p>
+<p>The most-connected modules are <code>runtime/cli.py</code> and <code>runtime/contracts.py</code>, each imported by 25 other modules. <code>runtime/cli.py</code> is also in a circular import cycle with <code>runtime/session/client.py</code> and <code>runtime/session/manager.py</code>, which makes changes to those files higher-risk than their line counts suggest. <code>runtime/review_engine.py</code> is the functional hub: 63 functions, called from 15 files, and it performs secret generation and file I/O.</p>
+<p>The <code>runtime/bridge/evermemos_client.py</code> handles memory persistence via MCP, <code>runtime/formatters.py</code> renders output for different channels, and <code>runtime/config.py</code> manages YAML-based configuration with fallback parsing for edge cases.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: The repo has both <code>pyproject.toml</code> (Python) and <code>package.json</code> (npm). Install with either <code>pip install .</code> or <code>npm install</code>, depending on your preferred toolchain.</p>
+<p><strong>Configuration</strong>: No environment variables are documented in the repo. Provider credentials are handled by the individual CLIs (e.g., <code>claude</code>, <code>codex</code>), which MCO shells out to.</p>
+<p><strong>Running it</strong>:</p>
+<pre data-lang="bash"><code># From the repo root
+python runtime/cli.py "your prompt here"
+# Or via the npm/bin wrapper
+./bin/mco.js "your prompt here"</code></pre>
+<p>The README shows <code>mco -h</code> for help and <code>mco "prompt"</code> for execution.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team running a security review on a codebase can invoke MCO with a single command:</p>
+<pre data-lang="bash"><code>mco "Review this repo for OWASP Top 10 vulnerabilities, focusing on injection and auth flaws"</code></pre>
+<p>MCO dispatches the prompt to Claude, Codex, and Gemini in parallel, collects their findings, runs them through the review engine for consensus, and outputs a merged report. The team gets three perspectives without managing three sessions.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found 60 issues: 15 high, 44 medium, 1 low.</p>
+<ul><li><strong>High</strong> - <code>runtime/cli.py</code> and <code>runtime/review_engine.py</code> are oversized (1,566 and 1,000+ lines), making them hard to modify safely.</li><li><strong>High</strong> - Circular import cycle involving <code>runtime/cli.py</code>, <code>runtime/session/client.py</code>, and <code>runtime/session/manager.py</code>.</li><li><strong>High</strong> - Duplicated code: 109 repeated 6-line blocks across 42 files, concentrated in <code>runtime/acp/adapter.py</code> and <code>runtime/adapters/shim.py</code>.</li><li><strong>High</strong> - GitHub Actions pinned to mutable tags (<code>pypa/gh-action-pypi-publish@release/v1</code>) instead of commit SHAs, a known supply-chain risk.</li><li><strong>Medium</strong> - 11 instances of broad exception handling that swallow errors; 5 files open without context managers.</li><li><strong>Medium</strong> - No lockfile for <code>package.json</code>, so builds are not reproducible.</li><li><strong>Medium</strong> - GITHUB_TOKEN permissions not declared in 2 workflows; no Dependabot configured.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MCO is a well-documented, tested orchestration tool for teams already using multiple AI coding agents. The architecture is sound but the core files carry too much responsibility, and the CI pipeline needs supply-chain hardening before production use. Worth adopting if you want multi-agent consensus without building the plumbing yourself.</p>
             </div>
 
             
@@ -103,9 +124,9 @@ Low - CI configured: .github/workflows/ has benchmark, gate, and publish pipelin
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">568<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JSON</span><i style="width:100%"></i><b>56</b></li><li><span>Markdown</span><i style="width:73%"></i><b>41</b></li><li><span>YAML</span><i style="width:18%"></i><b>10</b></li><li><span>Python</span><i style="width:11%"></i><b>6</b></li><li><span>Shell</span><i style="width:4%"></i><b>2</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>JSON</span><i style="width:100%"></i><b>144</b></li><li><span>Python</span><i style="width:90%"></i><b>130</b></li><li><span>Markdown</span><i style="width:47%"></i><b>67</b></li><li><span>YAML</span><i style="width:7%"></i><b>10</b></li><li><span>Shell</span><i style="width:3%"></i><b>5</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 29, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,52 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams building AI agent systems face a fragmented toolchain: separate chat UIs, workflow designers, plugin ecosystems, and provider integrations. AGNT attempts to consolidate these into a single self-hosted platform where agents, workflows, skills, and plugins live in one codebase.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>AGNT is an Electron desktop application with a Node.js/Express backend (backend/server.js) and a Vue.js frontend. The core value is the plugin system: backend/plugins/dev/ contains 25+ plugin templates covering common integrations (Slack, Discord, GitHub, Stripe, Google Drive, Notion, YouTube, and more), each with a manifest.json and API wrapper. A marketplace registry (backend/plugins/marketplace.json, backend/plugins/registry.json) lets users discover and install pre-built .agnt plugin packages.</p><p>The backend also ships with &quot;skills&quot; (backend/skills/) — markdown-based instruction sets for tasks like PDF generation and plugin building. Docker support is first-class: Dockerfile (~1.5GB full) and Dockerfile.lite (~715MB) plus a Makefile for build orchestration. CI/CD runs via GitHub Actions (.github/workflows/).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install dependencies with npm install in backend/. Docker users can run make build or docker build -f Dockerfile .. The Electron desktop build is handled by the electron-build.yml workflow.</p><p>Configuration: Copy .env.example to .env in the backend directory. The repo includes backend/.env — check whether it contains real credentials before deploying (see issues below). API keys for each plugin live in that env file.</p><p>Running it: Start the backend with node backend/server.js. The Electron app launches the desktop shell. No frontend build step is documented in the README excerpt, so verify the Vue app&#39;s build process before relying on it.</p><p>cd backend
-npm install
-cp .env.example .env
-node server.js</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team could deploy AGNT as an internal operations hub. The Slack plugin (slack-api.js, slack-receiver.js) lets agents respond to channel messages; the Google Sheets plugin (google-sheets-new-row.js) writes structured data to spreadsheets; the Stripe plugin (stripe-invoice.js) generates invoices. A workflow could chain these: a Slack command triggers a Sheets update, which fires a Stripe invoice — all orchestrated through the agent&#39;s tool loop.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Committed secrets: backend/.env is in the repo. Verify it contains only placeholders; if real keys are present, rotate them immediately and add to .gitignore.
-High – No test files: The entire repository lacks test coverage. Critical paths like server.js, plugin loaders, and OAuth flows (plaid-plugin/oauth.js) are untested.
-Med – Plugin sprawl: 25+ plugins, each with its own package.json and lockfile, creates dependency drift. build-all-plugins.js mitigates this but adds CI complexity.
-Med – Mixed language detection: The analysis flags React, but the README claims Vue.js. Confirm the actual frontend framework before investing in the UI layer.
-Low – Sparse documentation: Only 7 doc files for a 200-file project. PLUGIN-DEVELOPMENT.md and skill files exist, but no API reference or architecture doc is evident.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>AGNT is a promising self-hosted agent platform with a genuinely useful plugin template library. The lack of tests and a committed .env file are real blockers for production use. Teams wanting a customizable agent orchestration layer with Slack/Sheets/Stripe integrations will find value; solo developers should weigh the maintenance burden of 25+ plugins against the convenience.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams building AI‑driven agents need a self‑hosted runtime that can orchestrate LLM calls, manage plugins, and expose a UI without pulling in external SaaS. Maintaining such a stack locally is error‑prone: dozens of plugins, a mixed Vue/React front‑end, and a Node backend that talks to databases, files, and external APIs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The <strong>AGNT</strong> repo delivers a full‑stack “AI Agent Operating System”.</p>
+<ul><li>The <strong>backend</strong> (<code>backend/</code>) is a Node/Express service that loads plugins from <code>backend/plugins/</code>. Core services live under <code>backend/src/</code> – e.g. <code>backend/src/services/ai/LlmService.js</code> (LLM orchestration) and <code>backend/src/tools/library/BaseAction.js</code> (common action base).</li><li>The <strong>frontend</strong> (<code>frontend/</code>) is a Vue 3 SPA compiled into <code>frontend/index.html</code>. UI components such as <code>frontend/src/views/Terminal/CenterPanel/screens/Agents/Agents.vue</code> render agents, workflows, and plugin marketplaces.</li><li>Plugins are plain Node modules (<code>backend/plugins/dev/*</code>) each exposing a manifest (<code>manifest.json</code>) and entry point (e.g. <code>backend/plugins/dev/ethereum-price-checker/index.js</code>). The marketplace bundles pre‑built <code>.agnt</code> files under <code>backend/plugins/marketplace-default/</code>.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>backend/server.js</code></strong> (line 269 → <code>deferredInit</code>). The server:</p>
+<ol><li>Calls <code>deferredInit → bootstrapBuiltinSkills</code> → creates plugin directories (<code>fs.mkdir</code>).</li><li>Registers routes from <code>backend/src/routes/Middleware.js</code> (29 inbound modules).</li><li>Instantiates <code>BaseAction</code> (<code>backend/src/tools/library/BaseAction.js</code>), the most‑connected hub (48 importers, instability 0.02).</li><li>Plugin loading walks <code>backend/plugins/build-all-plugins.js</code>, which uses <code>PluginManager</code> (<code>backend/src/plugins/PluginManager.js</code>) – part of a <strong>circular import</strong> with <code>backend/src/models/database/index.js</code> and <code>backend/src/models/WebhookModel.js</code>. Breaking this cycle would reduce build‑time coupling.</li><li>When a plugin like <strong>Ethereum‑price‑checker</strong> runs, its <code>execute</code> function (entry <code>backend/plugins/dev/ethereum-price-checker/index.js:14</code>) calls <code>getValidAccessToken</code> → <code>axios.get</code> (network). The shortest outbound path is <code>execute → getValidAccessToken → axios.get</code>.</li></ol>
+<p>The <strong>internal call graph</strong> shows a few high‑fan‑out functions: <code>fetch</code> (268 callers), <code>getItem</code> (173), <code>dispatch</code> (122). These are defined in utility libraries and are called from many places, so changes ripple widely.</p>
+<p>Large files (<code>backend/src/models/database/index.js</code>, <code>backend/src/services/ai/providerConfigs.js</code>, <code>backend/src/services/auth/AuthManager.js</code>) exceed 900 lines, making them hard to review.</p>
+<p>The front‑end’s Vue components (<code>Agents.vue</code>, <code>Connectors.vue</code>) contain deep nesting (indentation depth 6) and high branching density (≈ 0.33 branches per line), which hampers readability.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone (preserve the exact URL)
+git clone https://github.com/moses-y/agnt.git
+cd agnt
+
+# Install Node deps (lockfile present)
+npm ci        # respects package-lock.json
+
+# Prepare environment – copy the example and fill secrets
+cp backend/.env.example backend/.env
+# edit backend/.env with real JWT_SECRET, SESSION_SECRET, etc.
+
+# Run the server locally
+npm run dev   # defined in backend/package.json (starts backend/server.js)
+
+# Build and run the UI (Vue)
+cd frontend
+npm ci
+npm run serve   # serves index.html on localhost:8080
+
+# Or spin up the full stack with Docker (Dockerfile provided)
+docker build -t agnt:latest -f Dockerfile .
+docker run -p 3000:3000 -p 8080:8080 --env-file backend/.env agnt:latest</code></pre>
+<p>If Docker is preferred, the <code>Makefile</code> offers <code>make docker-build</code> and <code>make docker-run</code> targets (verify in the file). No test step is present in the CI workflow; add <code>npm test</code> after installing dev dependencies.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider can embed AGNT to let customers run custom data‑extraction agents on‑premises. A CI pipeline would <code>docker build</code>, mount a customer‑specific <code>.env</code>, and expose the UI at <code>/agents</code>. The provider can ship new plugins as <code>.agnt</code> files placed in <code>backend/plugins/marketplace-default/</code> without touching core code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured static findings</strong> (258 total)</p>
+<ul><li><strong>Import cycles</strong> (12 modules) – e.g. <code>backend/src/models/database/index.js</code> ↔ <code>PluginManager.js</code>.</li><li><strong>Oversized files</strong> (9 &gt; 900 LOC) – <code>BaseAction.js</code>, <code>AuthManager.js</code>.</li><li><strong>Hub modules</strong> (10) – <code>BaseAction.js</code>, <code>AuthManager.js</code> have &gt; 40 dependents.</li><li><strong>High branching density</strong> (21 files) – <code>Middleware.js</code>, <code>LlmService.js</code>.</li><li><strong>Deep nesting</strong> (7 files) – <code>Agents.vue</code>, <code>Connectors.vue</code>.</li><li><strong>Duplicated code blocks</strong> (≈ 16 k lines across 410 files) – Discord/Dropbox API helpers.</li></ul>
+<p><strong>Code‑Health audit</strong></p>
+<ul><li><strong>Critical</strong> – Rotate and remove committed credentials in <code>backend/.env</code>.</li><li><strong>High</strong> – Untrack <code>.env</code> (already in <code>.gitignore</code>); pin GitHub Actions to commit SHAs; remove the <code>.env</code> from history and replace with an example; add a test step to CI.</li><li><strong>Medium</strong> – Enable Dependabot/Renovate; use <code>npm ci</code> in CI; pin Docker base image by digest; add a dependency‑vulnerability scan gate; install a pre‑commit secret scanner.</li></ul>
+<p>No license violations, but the repository ships a custom license file; verify compatibility for downstream use.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>AGNT provides a complete, extensible AI‑agent runtime with a ready‑made UI and plugin ecosystem, but the codebase suffers from large, tightly coupled modules, committed secrets, and incomplete CI testing. It is suitable for teams that need a self‑hosted platform and are prepared to invest in refactoring, secret management, and CI hardening.</p>
             </div>
 
             

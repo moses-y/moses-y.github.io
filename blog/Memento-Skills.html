@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 6, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,12 +79,30 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLM agents today are frozen at deployment. Adaptation requires either retraining model weights or hand-writing new tools and prompts — both expensive and slow. Memento-Skills addresses this by letting an agent learn from live interactions and continuously rewrite its own skill library, without touching the underlying model parameters.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Memento-Skills is a self-evolving agent framework. At its core is a read-write reflection loop: the agent routes a task to an existing skill or generates a new one, executes it, then reflects on the outcome and writes back to its skill memory — increasing a skill&#39;s utility score on success or rewriting the skill folder on failure.</p><p>The repo is organized into two main areas. builtin/skills/ contains 10 packaged skills (docx, pdf, pptx, xlsx, web-search, skill-creator, and others), each with a SKILL.md manifest plus Python scripts. The skill-creator skill is the meta-tool: it contains agents for analyzing, comparing, and grading skills, plus scripts like runloop.py, runeval.py, and packageskill.py that drive the creation pipeline. The 3rd/weixinsdk/ directory is a self-contained WeChat integration SDK with QR login, messaging, and media upload — presumably the IM interface layer.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README indicates v0.3.0 focuses on &quot;cleaner separation of concerns&quot; with a new infra/ layer, but the file listing shows no such directory — the repo may be mid-refactor. Entry points are bootstrap.py at the root and 3rd/weixinsdk/cli.py for the WeChat interface.</p><p>Setup: Python 3.12+ is required. The buildscripts/ directory contains downloaduv.py and buildmementos.py, suggesting uv is the intended package manager and a build step produces an executable named memento-s. No pyproject.toml or requirements.txt is visible in the listing, so exact dependency installation steps are not documented in the repo structure.</p><p>Running: The primary entry point is bootstrap.py, but the README&#39;s quick-start section is not included in the excerpt. A GUI installer is mentioned (&quot;One-Click GUI Install&quot;), and the assets/ directory contains icons (icon.icns, icon.ico, icon.png), suggesting a desktop application build. Exact run commands are not verifiable from the provided files.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A support team deploys the agent with the WeChat SDK (3rd/weixinsdk/) as its IM frontend. Users ask it to generate a slide deck; the agent routes to the pptx skill, executes add_slide.py, and delivers the file. The reflection loop then scores the outcome — if the user requests revisions, the skill folder is rewritten to encode that preference for future runs. Over weeks, the agent&#39;s skill library accumulates domain-specific knowledge without any model retraining.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No test files detected – repository-wide. Given the complexity of the skill-execution and reflection loop, untested code paths are a real risk.
-Med – No CI/CD pipeline – no .github/ or CI config visible. No automated gate for regressions.
-Low – Duplicated code – the office/ subpackage (helpers, schemas, validators) appears copied verbatim across docx and pptx skills. Shared code should be factored out.
-Low – No license file – the root listing shows .gitignore and README.md but no LICENSE, which complicates downstream use.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The core idea is sound: deployment-time learning via a skill memory is a practical alternative to fine-tuning. The built-in skill set is genuinely useful, and the self-improvement loop is well-conceived. However, the repo appears mid-refactor (the infra/ layer mentioned in the README is absent), lacks tests and CI, and has no clear install path documented. This is a promising research prototype for teams comfortable operating from source, not a drop-in production tool yet.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> Developers who want an LLM‑driven agent that can create, modify and version its own “skills” currently need to glue together many disparate pieces: a Flask‑based API, a React GUI, IM adapters, and a custom skill‑dispatch runtime. The code base is split across fifteen sub‑projects, so any change touches many files and a handful of very‑central modules, raising the risk of regressions and making onboarding costly.</p>
+<p><strong>What This Does</strong> Memento‑Skills ships a self‑contained framework that lets an agent <strong>read</strong> existing skill definitions, <strong>write</strong> new ones after execution, and <strong>reflect</strong> on outcomes to improve future routing. Core logic lives in <code>core/</code> (e.g., <code>core/memento_s/skill_dispatch/dispatcher.py</code>, <code>core/skill/gateway.py</code>), while infrastructure such as token‑counting and compacting lives in <code>infra/</code>. The GUI (<code>gui/app.py</code>) and CLI entry points (<code>cli/main.py</code>, <code>3rd/weixin_sdk/cli.py</code>) provide two ways to launch the system. Shared types and schemas (<code>shared/schema/__init__.py</code>) are used throughout, and the logger (<code>utils/logger.py</code>) is the most‑imported hub (108 importers, 1 outgoing import).</p>
+<p><strong>How It Is Wired</strong> Execution typically starts at a concrete entry point:</p>
+<ul><li><code>cli/main.py::_bootstrap_config</code> (line 67) parses the user config, creates a <code>ConfigManager</code> (in <code>middleware/config/config_manager.py</code> – 43 functions, file I/O), and then dispatches commands via the CLI parser.</li><li>The GUI entry <code>gui/app.py:_generate_conversation_title</code> (line 904) builds a conversation title, which eventually calls <code>infra/compact/utils.py:estimate_tokens_fast</code> (cryptographic hash) and <code>middleware/llm/llm_client.py</code> for LLM calls.</li></ul>
+<p>From the internal call graph, the function <code>exists</code> is invoked from 199 locations, making it a high‑impact utility. The dispatcher (<code>core/memento_s/skill_dispatch/dispatcher.py:execute</code>) reaches 227 functions but is not called elsewhere, indicating a possible dead‑path for external triggers. The <code>utils/logger</code> module sits at the hub of the import graph; any change there propagates to over a hundred modules, so it should remain stable and lightweight.</p>
+<p>Circular imports are present in three modules (<code>shared/schema/__init__.py</code>, <code>core/memento_s/skill_dispatch/__init__.py</code>, <code>middleware/llm/__init__.py</code>). These cycles increase cognitive load and can cause import‑time failures; breaking them by extracting shared types or deferring imports is recommended.</p>
+<p>Deeply nested functions (up to 8 levels) appear in <code>core/skill/gateway.py</code>, <code>middleware/llm/llm_client.py</code>, and <code>core/skill/execution/state.py</code>, making the flow hard to follow. Broad <code>except Exception</code> blocks are used in several utilities, swallowing errors that would be valuable during debugging.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Memento-Skills
+cd Memento-Skills
+
+# Install the Python package (pyproject.toml declares dependencies)
+pip install -e .</code></pre>
+<p><em>Configuration</em> – The default configuration is read by <code>middleware/config/config_manager.py</code>. Create a <code>config.yaml</code> in the project root (the manager looks for <code>self.user_config_dir</code> and creates it if missing).</p>
+<p><em>Run the CLI</em> – <code>python -m cli.main --help</code> shows the available commands; the main dispatch loop is in <code>cli/main.py</code>.</p>
+<p><em>Run the GUI</em> – <code>python -m gui.app</code> starts the React‑backed desktop client (the UI assets are under <code>gui/</code>).</p>
+<p>No Dockerfile or Makefile is present, so containerisation must be added manually if required.</p>
+<p><strong>Real‑World Use</strong> A SaaS platform can embed Memento‑Skills as a “skill‑as‑a‑service” component. The platform launches the CLI (<code>cli/main.py</code>) in a background worker, registers custom IM adapters (e.g., <code>im/feishu/cli.py</code>), and stores generated skills in a shared DB directory managed by <code>middleware/config/config_manager.py</code>. When a user submits a task via the GUI, the dispatcher routes to an existing skill or triggers <code>core/memento_s/skill_dispatch/dispatcher.py:execute</code>, which writes back a success score to the skill metadata, enabling continual improvement without retraining the underlying LLM.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>High – License missing</strong> – No <code>LICENSE</code> file; reuse is legally blocked.</li><li><strong>High – No lockfile</strong> – <code>pyproject.toml</code> declares dependencies but no <code>poetry.lock</code>/<code>uv.lock</code>; builds are non‑reproducible.</li><li><strong>High – No CI</strong> – Repository lacks any <code>.github/workflows</code> or other CI configuration; changes are not automatically built or tested.</li><li><strong>Medium – Dependabot absent</strong> – No <code>.github/dependabot.yml</code>; security updates are manual.</li><li><strong>High – Import hub</strong> – <code>utils/logger</code> (108 importers) and <code>middleware/config/__init__</code> (76 importers) have large blast radii; keep them small and stable.</li><li><strong>High – Import cycles</strong> – Three modules form cycles, increasing maintenance risk.</li><li><strong>High – Deep nesting &amp; oversized files</strong> – Files such as <code>middleware/llm/llm_client.py</code> exceed 1 000 lines and contain 8‑level indentation, hindering readability.</li><li><strong>Medium – Broad exception handling</strong> – Several utilities use bare <code>except</code> clauses, masking errors.</li></ul>
+<p><strong>The Bottom Line</strong> Memento‑Skills provides a complete, open‑source stack for self‑evolving LLM agents, with a clear separation between core skill logic, infrastructure, and UI. However, the code base suffers from architectural hotspots (import hubs, cycles), deep nesting, and missing production scaffolding (license, lockfile, CI). It is suitable for teams that need a research‑grade platform and are prepared to refactor the identified hot spots before using it in a production environment.</p>
             </div>
 
             
@@ -94,18 +112,18 @@ Low – No license file – the root listing shows .gitignore and README.md but 
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">803<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>81</b></li><li><span>Markdown</span><i style="width:26%"></i><b>21</b></li><li><span>HTML</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>644</b></li><li><span>Markdown</span><i style="width:6%"></i><b>40</b></li><li><span>JSON</span><i style="width:1%"></i><b>9</b></li><li><span>HTML</span><i style="width:0%"></i><b>2</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Flask</span></p>
                     </div>
                 </div>
 
@@ -167,7 +185,7 @@ Low – No license file – the root listing shows .gitignore and README.md but 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
                     </ul>
                 </div>
 

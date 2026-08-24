@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 3, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,31 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#evaluation">Evaluation</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Deep‑research agents quickly run out of context window or waste compute on irrelevant past observations. Existing pipelines store every interaction verbatim, forcing the executor to sift through bloated memory and leading to poor reasoning on long‑form tasks.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MIA implements a Manager‑Planner‑Executor loop that curates a non‑parametric memory store, learns retrieval strategies at test time, and hands compact, task‑focused prompts to the executor.</p><p>The core library lives under Executor-Train/Train/verl/. Key modules include:  
-   manager‑like logic in verl/interactions/ (e.g., gsm8kinteraction.py, weatherinteraction.py).  
-   Planning and continual test‑time learning in verl/experimental/agentloop/ (agentloop.py, toolagentloop.py).  
-   Model merging and distributed training utilities in verl/modelmerger/ (fsdpmodelmerger.py, megatronmodelmerger.py).</p><p>Model definitions for LLaMA, Qwen2, and multi‑modal variants are under verl/models/ with Megatron‑style parallel layers (parallelattention.py, parallelmlp.py).</p><p>Training scripts and configuration live in verl/trainer/ with YAML files such as generatedppotrainer.yaml and ppotrainer.yaml. The entry point for training is verl/trainer/mainppo.py; for evaluation, verl/trainer/maineval.py.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>cd Executor-Train/Train
-bash install.sh               # installs required packages, sets up torch distributed env
-python -m pip install -e .     # editable install registers the verl package</p><p>install.sh pulls in dependencies listed in setup.py (PyTorch, transformers, etc.).</p><h3 class="post-h" id="configuration">Configuration</h3><p>Training hyper‑parameters are in verl/trainer/config/ppotrainer.yaml.  
- Model‑specific configs live under verl/models//megatron/ (e.g., llama/megatron/checkpointutils/llamaloader.py).  
- Runtime environment is described by verl/trainer/runtimeenv.yaml.</p><p>Edit the YAML files to point to your data paths, checkpoint directories, and compute resources (e.g., FSDP or Megatron engine settings).</p><h3 class="post-h" id="running">Running</h3><p>Training (PPO)  
-  python -m verl.trainer.mainppo \
-      --config verl/trainer/config/ppotrainer.yaml \
-      --outputdir /path/to/checkpoints</p><h3 class="post-h" id="evaluation">Evaluation</h3><p>python -m verl.trainer.maineval \
-      --config verl/trainer/config/evaluation.yaml \
-      --modeldir /path/to/checkpoint
-Model merging (if using multiple checkpoints)  
-  python -m verl.modelmerger \
-      --config verl/trainer/config/model/hfmodel.yaml \
-      --output mergedmodel.pt</p><p>The main.py in verl/modelmerger/ exposes a CLI that reads the same YAML schema used by the trainer.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A research lab can plug MIA into an autonomous literature‑review pipeline. The manager stores extracted citation snippets, the planner refines a retrieval policy based on recent evaluation reward signals, and the executor generates a draft summary. Example:</p><p>from verl.experimental.agentloop.toolagentloop import ToolAgentLoop
-loop = ToolAgentLoop(planconfig=&quot;configs/mmsearchtoolconfig.yaml&quot;)
-summary = loop.run(query=&quot;latest advances in quantum error correction&quot;)
-print(summary)</p><p>The loop automatically pulls relevant memory entries, updates its retrieval policy, and produces a concise report.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No test suite – repository lacks any tests/ directory or pytest files; code paths are unverified.  
-Med – No CI/CD – no .github/, GitHub Actions, or other pipeline definitions; automated quality gates are absent.  
-Low – Missing LICENSE file – README shows an MIT badge, but the root contains no LICENSE; legal clarity is limited.  
-Low – Sparse documentation – only three Markdown docs; many modules (e.g., verl/utils/debug/metrics.py) have no docstrings, making onboarding harder.  
-Low – Heavy reliance on distributed training – modules such as fsdpmodel_merger.py assume a multi‑GPU environment; running on a single node will raise runtime errors unless guarded.</p><p>No obvious security secrets are present, and the package follows a conventional Python layout (setup.py, py.typed). Dependency hygiene cannot be fully assessed without a requirements.txt or pyproject.toml.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MIA provides a full‑stack framework for memory‑augmented agents, with concrete training/evaluation pipelines and support for large‑scale Megatron/FSDP models. It is best suited for teams that already operate distributed GPU clusters and can invest in adding tests and CI. For solo developers or production‑grade deployments, the lack of test coverage, CI, and a proper license file are significant gaps to address before adoption.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deep‑research agents quickly hit a memory bottleneck: context windows balloon, attention drifts, and the system spends most of its compute handling stale or irrelevant records. MIA aims to replace a naïve “memory dump” with a managed, strategy‑driven store that evolves during inference, keeping the agent’s reasoning focused and computationally tractable.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MIA implements a <strong>Manager‑Planner‑Executor</strong> pipeline.</p>
+<ul><li>The <strong>Manager</strong> (under <code>Memory-Serve/</code> and <code>Executor-Train/Train/verl/utils/hdfs_io.py</code>) deduplicates and prunes stored tensors.</li><li>The <strong>Planner</strong> (<code>Planner-Train/mem-plan/verl/tools/</code>) learns a retrieval policy via continual test‑time reinforcement learning.</li><li>The <strong>Executor</strong> (<code>Executor-Train/Train/verl/tools/base_tool.py</code> and the <code>agent_loop/</code> package) consumes the Planner’s blueprint and runs the task on a large language model (LLM) from the <code>models/mcore/qwen2_5_vl/</code> family.</li></ul>
+<p>Key files:</p>
+<ul><li><code>Executor-Train/Train/verl/model_merger/__main__.py</code> – CLI entry that assembles model shards and launches training.</li><li><code>Planner-Train/mem-plan/verl/model_merger/__main__.py</code> – analogous entry for Planner training.</li><li><code>TTRL/TTRL/verl/model_merger/__main__.py</code> – entry for the TTRL streaming variant.</li><li><code>Executor-Train/Train/verl/experimental/agent_loop/agent_loop.py</code> – high‑level loop that repeatedly calls the Planner and Executor.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <code>Executor-Train/Train/verl/model_merger/__main__.py</code> (line 52 → <code>main</code>). <code>main</code> parses CLI arguments, builds a configuration (<code>generate_config_from_args</code>), and creates a <code>ModelMerger</code> instance. The merger invokes the <strong>model forward</strong> path (<code>forward</code> in <code>models/mcore/qwen2_5_vl/model.py</code>), which ultimately calls <code>to</code> (torch tensor conversion) on up to 88 distinct callers.</p>
+<p>From the <strong>agent loop</strong> side, <code>run</code> (line 219 in <code>agent_loop.py</code>) drives the process:</p>
+<ol><li><code>run</code> → <code>generate</code> → <code>call_image_search</code> → <code>exists</code> (filesystem check via <code>os.path.exists</code>).</li><li><code>run</code> → <code>compute_acc_score</code> → <code>client.chat.completions.create</code> (LLM inference).</li><li><code>run</code> → <code>call_replan</code> → <code>requests.post</code> (network call to the Planner service).</li></ol>
+<p>The <strong>most‑connected internal symbols</strong> are:</p>
+<ul><li><code>to</code> – called from 88 places, central for tensor handling.</li><li><code>get_torch_device</code> – 61 callers, determines device placement.</li><li><code>create</code> – 29 callers, used for constructing model components.</li></ul>
+<p>Circular imports involve the profiler utilities (<code>utils/profiler/profile.py</code>) across all four major sub‑projects, meaning a change there can trigger recompilation of many dependent modules (15 modules participate in cycles). The <strong>hub module</strong> <code>verl/tools/schemas.py</code> is imported by 12 other modules; any API change ripples widely.</p>
+<p>File‑level responsibilities (high‑impact examples):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>External effect</th></tr></thead><tbody><tr><td><code>Executor-Train/Train/verl/protocol.py</code></td><td>Defines padding/unpadding helpers; used by 61 other files.</td><td>None directly, but many downstream tensor ops depend on it.</td></tr><tr><td><code>Executor-Train/Train/verl/utils/device.py</code></td><td>Device discovery (<code>get_torch_device</code>, <code>get_device_id</code>).</td><td>Influences all GPU/NPUs usage.</td></tr><tr><td><code>Memory-Serve/a-mem/memory.py</code></td><td>Wraps LLM calls (<code>client.chat.completions.create</code>) and a network request.</td><td>Hits external inference endpoint &amp; remote API.</td></tr><tr><td><code>Executor-Train/Train/verl/utils/hdfs_io.py</code></td><td>Filesystem I/O (<code>exists</code>, <code>makedirs</code>, external <code>hdfs</code> command).</td><td>Reads/writes files, runs external <code>hdfs</code> command.</td></tr></tbody></table></div>
+<p>The import graph shows 1,465 internal modules with 819 edges and 15 circular dependencies; 12 schema modules sit at the top of the fan‑in hierarchy, making them high‑blast‑radius change points.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL as requested)
+git clone https://github.com/moses-y/MIA
+cd MIA
+
+# Install Python dependencies for the Executor train path
+python -m pip install -e Executor-Train/Train   # runs setup.py in that directory
+
+# (Optional) Install web‑tool dependencies if UI is needed
+python -m pip install -e web_tools</code></pre>
+<p>Configuration files live under <code>Executor-Train/Train/local_search/configs/</code> (e.g., <code>mm_search_tool_config.yaml</code>). Adjust paths or model checkpoints there before launching.</p>
+<p>To start a training run for the Executor:</p>
+<pre data-lang="bash"><code>python -m Executor-Train.Train.verl.model_merger __main__ \
+    --config Executor-Train/Train/local_search/configs/mmsearch.yaml</code></pre>
+<p>For inference with the full agent loop:</p>
+<pre data-lang="bash"><code>python Executor-Train/Train/verl/experimental/agent_loop/agent_loop.py \
+    --model-dir path/to/qwen2_5_vl/checkpoint</code></pre>
+<p>The repository does not contain a Dockerfile or Makefile; containerizing would require a custom Dockerfile based on the Python version (≥3.10) and the installed packages.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research lab can embed MIA as the memory backend for an autonomous literature‑review bot. The bot calls <code>Memory-Serve/a-mem/memory.py</code> to retrieve relevant passages, the Planner (<code>Planner-Train/mem-plan/</code>) refines the retrieval policy on‑the‑fly, and the Executor runs the LLM to generate a summary. The loop runs entirely within the <code>agent_loop.run</code> call chain, persisting any new memory artifacts via <code>hdfs_io.py</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No LICENSE</strong> – repository root lacks a licence file; legal reuse is blocked.</li><li><strong>High – No lockfile</strong> – <code>web_tools/pyproject.toml</code> has no accompanying lockfile; builds are non‑reproducible.</li><li><strong>High – No CI</strong> – no <code>.github/</code> workflow; changes are not automatically built or tested.</li><li><strong>Medium – Dependabot missing</strong> – single manifest, no automated dependency updates.</li><li><strong>Medium – Large binary</strong> – <code>readme_en/MIA-OpenClaw3.mov</code> (12 MB) should be stored via Git LFS.</li><li><strong>Medium – Test coverage low</strong> – 13 test files for ~1,557 source files (≈0.4 % coverage).</li></ul>
+<p>Additional observations: broad <code>except:</code> blocks and import cycles in <code>utils/profiler/profile.py</code> increase fragility; duplicated shell scripts across <code>Memory-Serve</code> and <code>Serve</code> suggest DRY violations.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MIA delivers a concrete, modular memory framework for LLM‑based research agents, with clear separation of manager, planner, and executor responsibilities. The codebase is extensive but suffers from missing licensing, reproducibility safeguards, and limited automated testing, which raises risk for production adoption. Teams with strong Python devops capability can extract the Planner‑Executor core, but should first address the high‑severity hygiene gaps before integrating at scale.</p>
             </div>
 
             
@@ -114,18 +132,18 @@ Low – Heavy reliance on distributed training – modules such as fsdpmodel_mer
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,855<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>163</b></li><li><span>YAML</span><i style="width:19%"></i><b>31</b></li><li><span>Markdown</span><i style="width:2%"></i><b>3</b></li><li><span>Shell</span><i style="width:1%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>1602</b></li><li><span>YAML</span><i style="width:9%"></i><b>152</b></li><li><span>Markdown</span><i style="width:2%"></i><b>40</b></li><li><span>Shell</span><i style="width:2%"></i><b>35</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>PyTorch</span><span>Transformers</span><span>LangChain</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -159,7 +177,7 @@ Low – Heavy reliance on distributed training – modules such as fsdpmodel_mer
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>web_tools/pyproject.toml</code></span></li>
                     </ul>
                 </div>
 
