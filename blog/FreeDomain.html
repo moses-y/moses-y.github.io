@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 27, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">HTML</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>The cost of domain registration can be a barrier for individuals and organizations looking to establish an online presence. This repository, FreeDomain, aims to address this issue by providing free domain names.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The FreeDomain repository offers a range of free domain extensions, including .DPDNS.ORG, .US.KG, and .QZZ.IO, among others. The opensource/frontend directory contains HTML files for the registration process, such as domainreg.html and domainregcheck.html. The whoisserver directory includes a Python script, whois.py, which handles WHOIS queries. The README.md file provides a tutorial on getting started with the service.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>To register a domain, users can visit the DigitalPlat FreeDomain Dashboard and follow the registration process outlined in the documents/tutorial/index.md file. This process involves selecting a domain extension and configuring DNS settings, as shown in the documents/tutorial/getting-started/1.2-dns-hosting.md file.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium - No test files detected, indicating untested code paths - opensource/ directory
- Medium - No CI/CD pipeline detected, suggesting no automated build/test gate - .github/ directory
-The repository appears to lack comprehensive testing and continuous integration, which could lead to issues with the registration process or WHOIS queries.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The FreeDomain repository provides a valuable service by offering free domain names, but its lack of testing and continuous integration may pose risks. This project is well-suited for individuals or organizations looking for a free domain registration service, but users should be aware of the potential limitations and issues. Overall, the repository demonstrates a good intention, but its maintenance and testing practices require improvement.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>People who need a free domain often lack a simple, self‑hosted registration front‑end and a minimal WHOIS service. The repo tries to fill that gap by providing static HTML pages for user interaction and a lightweight Python WHOIS endpoint, but the code base is small, undocumented, and untested.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships a static front‑end under <code>opensource/frontend/</code> (e.g., <code>register.html</code>, <code>domain_view.html</code>) that presents registration forms and informational pages. The back‑end consists of two executable modules:</p>
+<ul><li><code>opensource/whois_server/whois.py</code> – a tiny HTTP/WHOIS server that answers queries about the free domains.</li><li><code>opensource/static/config/cookieconsent-config.js</code> – client‑side configuration for the cookie‑consent banner shown on the HTML pages.</li></ul>
+<p>All other files are markdown documentation (<code>documents/…</code>) or image assets used by the front‑end.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – The only runnable script is <code>whois.py</code>. Running it (<code>python opensource/whois_server/whois.py</code>) starts a listening socket (default port hard‑coded in the file). The script parses incoming WHOIS requests, looks up domain data from an internal (likely in‑memory) store, and returns a plain‑text response.</p>
+<ul><li><code>whois.py</code> owns all network I/O for the service. It does not import any other internal modules, so the import graph shows a single isolated node.</li><li>The HTML front‑end files are served separately (e.g., by a web server such as Nginx or Apache) and reference <code>cookieconsent-config.js</code> for the consent UI. No server‑side code links the front‑end to <code>whois.py</code>; integration must be performed by the operator.</li></ul>
+<p>Because the internal call graph contains no edges, there is <strong>no coupling</strong> between the Python WHOIS server and the static front‑end. The only “wide blast radius” is <code>whois.py</code>; any change to its request handling logic directly affects all WHOIS queries. No circular dependencies exist.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/FreeDomain
+cd FreeDomain
+
+# (Optional) Create a virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Run the WHOIS service (default port 8080, see whois.py for details)
+python opensource/whois_server/whois.py</code></pre>
+<p><em>No</em> <code>requirements.txt</code>, <code>pyproject.toml</code>, or Dockerfile is present, so any third‑party libraries used by <code>whois.py</code> must be installed manually after inspecting the source.</p>
+<p>To serve the static pages, configure an external web server to point its document root at <code>opensource/frontend/</code> and ensure it can reach the WHOIS service (e.g., via a reverse proxy or direct socket connection). No configuration files are provided for this step.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A small ISP could deploy the WHOIS script on a low‑cost VM, expose port 8080, and point a public web server to the <code>frontend/</code> directory. When a user submits a registration form (handled outside this repo), the operator would add the new domain to the in‑memory store used by <code>whois.py</code>, making the domain immediately resolvable via the WHOIS endpoint.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Deep nesting</strong> – <code>opensource/static/config/cookieconsent-config.js</code> and <code>opensource/whois_server/whois.py</code> each have a maximum indentation depth of 7, making the control flow hard to follow. Refactor with early returns or helper functions.</li><li><strong>Medium – No tests</strong> – The repository contains no test files; code paths are unverified.</li><li><strong>Medium – No CI/CD</strong> – No continuous‑integration configuration is present in <code>.github/</code> or elsewhere.</li><li><strong>Low – License present</strong> – A <code>LICENSE</code> file exists, satisfying basic legal hygiene.</li><li><strong>Low – No Dockerfile or lockfile</strong> – Build reproducibility and containerisation are missing.</li></ul>
+<p>No secrets were detected in the commit history.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>FreeDomain provides a minimal static UI and a single‑file Python WHOIS server that can be spun up quickly, but it lacks integration, testing, and automation. It is suitable only for prototyping or for operators comfortable adding the missing glue (web server config, persistence, tests). Teams needing a production‑grade free‑domain service will need to extend the code base significantly.</p>
             </div>
 
             
@@ -128,7 +155,7 @@ The repository appears to lack comprehensive testing and continuous integration,
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Checked against 39 files on 2026-08-24. Nothing was found. No language model is involved in this section.</p></section>
 
             
 

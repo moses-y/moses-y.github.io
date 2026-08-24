@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#or-build-the-official-docker-image-dockerfile-pr">Or build the official Docker image (Dockerfile present)</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#use-a-custom-preset">Use a custom preset</a><a href="#stream-results-to-neo4j">Stream results to Neo4j</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Security teams need an automated way to enumerate assets (sub‑domains, cloud buckets, code repos, etc.) across many public sources without manually stitching together dozens of scripts. Repeating this work for each engagement wastes time and often misses low‑hanging findings.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>bbot is a Python‑based reconnaissance framework that drives a large collection of modules (≈150 under bbot/modules/). Each module implements a single data source or technique (e.g., bbot/modules/dnsbrute.py, bbot/modules/githubusersearch.py, bbot/modules/bucketgoogle.py). The core orchestration lives in bbot/core/, with the event system in bbot/core/event/ and the configuration model in bbot/core/config/models.py. The CLI entry point bbot/cli.py parses command‑line arguments, loads a preset YAML (e.g., subdomain‑enum.yml shown in the README), and streams results through output plugins such as bbot/modules/output/json.py or bbot/modules/output/neo4j.py.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the stable release from PyPI
-pipx install bbot</p><h3 class="post-h" id="or-build-the-official-docker-image-dockerfile-pr">Or build the official Docker image (Dockerfile present)</h3><p>docker build -t bbot -f Dockerfile .</p><p>The repository also ships a Dockerfile.full that includes optional heavy dependencies (e.g., Neo4j driver).</p><h3 class="post-h" id="configuration">Configuration</h3><p>Global defaults are in bbot/defaults.yml.  
- API keys for modules are added under the modules section of a preset file (see the subdomain‑enum.yml example in the README).  
- Runtime options (DNS thread counts, resolver list, etc.) are configurable in the same preset or via CLI flags (-c key=value).</p><h3 class="post-h" id="running">Running</h3><p>Basic sub‑domain enumeration
-bbot -t example.com -p subdomain-enum</p><h3 class="post-h" id="use-a-custom-preset">Use a custom preset</h3><p>bbot -t example.com -c preset=custom.yml</p><h3 class="post-h" id="stream-results-to-neo4j">Stream results to Neo4j</h3><p>bbot -t example.com -p subdomain-enum -o neo4j</p><p>The command invokes bbot/cli.py, which loads the target (-t), preset (-p), and output modules (-o). Results are emitted as events (bbot/core/event/) and consumed by the selected output plugin.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A penetration testing pipeline can call bbot from a CI job to produce a JSON asset list:</p><p>.github/workflows/recon.yml
-name: Run BBOT
-  run: |
-    bbot -t $TARGET -p subdomain-enum -o json &gt; assets.json
-name: Upload artifacts
-  uses: actions/upload-artifact@v3
-  with:
-    name: assets
-    path: assets.json</p><p>The JSON can feed downstream tools (e.g., vulnerability scanners) or be imported into a Neo4j graph for visual correlation.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Hard‑coded secrets – bbot/modules/badsecrets.py contains example API keys that should be removed or masked.  
-Medium – Limited test coverage – Only 4 test files are present; many modules lack direct unit tests, increasing regression risk.  
-Medium – Dependency exposure – Dockerfile.full pulls heavyweight libraries (e.g., Neo4j driver) that may not be needed for all users, inflating image size.  
-Low – Documentation gaps – While the README covers basic usage, module‑specific configuration (e.g., required fields for bucket_google) is not fully documented.  
-Low – CI only runs static analysis – Workflows include codeql and benchmark.yml but no automated functional test suite execution on PRs.</p><p>Overall, the repository includes a CI pipeline (.github/workflows/.yml) and a pre‑commit config, indicating some process discipline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>bbot delivers a comprehensive, extensible recon engine with a clear CLI and Docker support, making it suitable for teams that need automated asset discovery across many public sources. The codebase is reasonably organized, but the presence of hard‑coded secrets and sparse test coverage suggest a need for additional hardening before deploying in high‑risk environments. Teams comfortable adding their own tests and sanitizing configuration will find it a valuable addition to a recon workflow.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Security teams need a single tool that can enumerate assets (sub‑domains, cloud buckets, code repos, etc.) and feed the results into downstream analysis pipelines. Existing scripts are fragmented, require manual stitching, and often miss passive data sources, forcing analysts to run many ad‑hoc commands.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>bbot</code> is a Python‑based reconnaissance framework that drives dozens of open‑source modules (e.g., DNS brute‑force, GitHub code search, SSL cert scraping) and normalises their output. The core lives under <code>bbot/</code> with the CLI entry point <code>bbot/cli.py</code>. Scans are defined by <em>presets</em> (YAML files in <code>bbot/defaults.yml</code> and <code>examples/</code>) that toggle module flags such as <code>subdomain‑enum</code>. Results are emitted via pluggable output modules (<code>bbot/modules/output/</code>), currently supporting CSV, JSON, Neo4j, Kafka, Slack, etc.</p>
+<p>Key files:</p>
+<ul><li><code>bbot/core/scanner/scanner.py</code> – orchestrates the scan lifecycle (<code>_prep</code>, <code>async_start</code>, event loop).</li><li><code>bbot/modules/base.py</code> – base class for all 400+ modules; defines <code>setup</code>, <code>setup_deps</code>, <code>handle_event</code>.</li><li><code>bbot/core/helpers/misc.py</code> – a utility hub (111 functions, 97 importers) used for URL parsing, domain checks, and file handling.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>bbot/cli.py:main</code> (line 420). The CLI builds a <code>BBOTConfig</code> (<code>bbot/core/config/models.py</code>), resolves the selected preset, and constructs a <code>Scanner</code> object (<code>bbot/scanner/scanner.py</code>).</p>
+<ol><li><strong>Initialisation</strong> – <code>main</code> → <code>run</code> (via <code>bbot/core/helpers/command.py</code>) → <code>Scanner.__init__</code>.</li><li><strong>Preparation</strong> – <code>Scanner._prep</code> loads modules, resolves dependencies, and registers event listeners. This path touches the hub module <code>bbot/modules/base.py</code> (97 callers) and the misc helpers (111 callers).</li><li><strong>Execution</strong> – <code>Scanner.async_start</code> launches the asynchronous event loop. Core work is performed by <code>bbot/core/helpers/web/web.py</code> (network calls) and <code>bbot/core/helpers/dns/dns.py</code> (DNS resolution).</li><li><strong>Event flow</strong> – Most internal activity funnels through <code>bbot/core/event/base.py</code> (187 functions, 46 classes). Handlers call <code>emit_event</code> (41 distinct callers) which in turn invokes <code>make_event</code> (56 callers) and <code>verbose</code> (85 callers).</li><li><strong>Output</strong> – Each module emits events that <code>bbot/modules/output/*</code> consume; e.g., <code>output/neo4j.py</code> writes to a Neo4j database via the <code>neo4j</code> driver.</li></ol>
+<p>The most connected modules (<code>bbot/core/helpers/misc.py</code>, <code>bbot/modules/base.py</code>, <code>bbot/core/event/base.py</code>) constitute the <em>blast radius</em>: changes here cascade to &gt;140 importers. A small import cycle involving <code>bbot/core/helpers/misc.py</code>, <code>bbot/core/modules.py</code>, and <code>bbot/core/__init__.py</code> adds maintenance friction.</p>
+<p>External effects:</p>
+<ul><li>Filesystem writes (81 functions) – config files, scan caches, output files.</li><li>Network I/O (5 functions) – HTTP requests, DNS queries, external API calls.</li><li>Database writes (5 functions) – Neo4j, PostgreSQL, Mongo, etc.</li><li>Subprocess execution (<code>run_benchmarks</code> → <code>subprocess.run</code>).</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (required for dev builds)
+git clone https://github.com/moses-y/bbot
+cd bbot
+
+# Install dependencies in an isolated environment
+uv venv .venv          # uv is declared in pyproject.toml
+source .venv/bin/activate
+uv pip install -e .    # editable install pulls all modules
+
+# Run a sub‑domain enumeration preset against example.com
+bbot -t example.com -p subdomain-enum</code></pre>
+<p>Configuration lives in <code>bbot/defaults.yml</code> (global defaults) and can be overridden with a custom YAML file passed via <code>-c</code>. API keys for modules such as <code>censys</code> or <code>github</code> are placed under the <code>modules:</code> section of that file. Output modules are enabled in the same preset (<code>output_modules:</code> list).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A red‑team can embed <code>bbot</code> in a CI pipeline: after a new target is added to the asset register, a GitHub Action runs <code>bbot -t $TARGET -p full-scan</code>, streams results to Neo4j (<code>output/neo4j.py</code>), and triggers Slack alerts (<code>output/slack.py</code>). The event‑driven architecture ensures each module runs only when its data is needed, reducing duplicate work.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Static analysis findings (273 total):</em> 69 high, 204 medium, 0 low across 8 categories. Notable patterns: deep nesting (24 files, max depth 10), oversized files (&gt;1 500 LOC in <code>modules/base.py</code>), broad exception catches (11 files), import‑cycle members (4 files), duplicated 6‑line blocks (≈643 occurrences).</p>
+<p><em>Code‑health audit (7 items):</em></p>
+<ul><li><strong>HIGH</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Remove <code>continue-on-error</code> from correctness steps (<code>tests.yml</code>).</li><li><strong>MED</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>distro_tests.yml</code>).</li><li><strong>MED</strong> – Pin Docker base image by digest (<code>Dockerfile</code>).</li><li><strong>MED</strong> – Add a dependency‑vulnerability scan to PRs (<code>.github/workflows/*</code>).</li><li><strong>MED</strong> – Run container as non‑root (<code>Dockerfile</code>).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs (<code>benchmark.yml</code>).</li></ul>
+<p>Additional hygiene notes: no lockfile (dependencies declared only in <code>pyproject.toml</code>), a committed test TLS certificate (<code>testsslcert.pem</code>), and CI is present (GitHub Actions).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>bbot</code> provides a comprehensive, extensible recon engine with a well‑structured CLI and modular output pipeline. Its codebase is functional but suffers from large, highly coupled core files and several maintainability hotspots that increase change risk. Teams that need an out‑of‑the‑box scanner and are comfortable managing Python dependencies and Docker hardening will find it valuable; otherwise, consider refactoring the hub modules before extensive customization.</p>
             </div>
 
             
@@ -114,11 +131,11 @@ Low – CI only runs static analysis – Workflows include codeql and benchmark.
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">604<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>177</b></li><li><span>YAML</span><i style="width:6%"></i><b>10</b></li><li><span>Markdown</span><i style="width:3%"></i><b>6</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>462</b></li><li><span>Markdown</span><i style="width:11%"></i><b>50</b></li><li><span>YAML</span><i style="width:10%"></i><b>47</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>5</b></li><li><span>JSON</span><i style="width:1%"></i><b>3</b></li><li><span>Shell</span><i style="width:0%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span><span>Neo4j</span></p>
+                        <p class="an-fw"><span>FastAPI</span><span>Docker</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -160,7 +177,7 @@ Low – CI only runs static analysis – Workflows include codeql and benchmark.
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>bbot/modules/badsecrets.py</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>bbot/modules/badsecrets.py, bbot/test/test_step_2/module_tests/test_module_badsecrets.py, bbot/test/testsslcert.pem</code></span></li>
                     </ul>
                 </div>
 

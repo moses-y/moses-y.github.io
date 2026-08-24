@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 19, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,16 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams operating across multiple cloud providers face duplicated infrastructure code, inconsistent security posture, and runaway cloud costs. Sovereign Engine attempts to unify AWS, Azure, GCP, DigitalOcean, Hetzner, and OVH under a single abstraction layer with automated cost controls and cleanup policies.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Sovereign Engine is a Go-based control plane that deploys and manages cloud resources through Crossplane compositions. The compositions/ directory contains per-provider YAML definitions for compute, storage, databases, networking, and IAM, while internal/cleanup/ implements automated resource lifecycle management with configurable TTLs and nuke policies. A CLI (cmd/cli/main.go) and web UI (cmd/ui/main.go) provide two interfaces to the same platform.</p><p>The system includes cost monitoring (internal/finops/budget.go), security verification (internal/security/verify.go), alerting (internal/alerts/alerts.go) with Slack/PagerDuty/webhook integrations (pkg/integrations/), and a plugin system (pkg/plugins/interface.go). Kubernetes manifests in k8s/ deploy the engine itself as a cluster service.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README provides a direct install path:</p><p>curl -fsSL https://raw.githubusercontent.com/nutcas3/the-engine/main/install.sh | bash
-export ENGINEMASTERKEY=&lt;yourgeneratedkey&gt;
-engine-encrypt -key AWSACCESSKEYID -value &#39;yourkey&#39; -file ~/.engine/secure.env
-engine deploy --provider aws --tier micro --region us-east-1
-engine-web</p><p>Configuration flows through config/secure.env.example for encrypted credentials, configs/providers.yaml for provider settings, and environment variables for integration backends (MONITORINGSYSTEM, CICDSYSTEM, DEPLOYMENTSYSTEM). The Makefile handles builds, and docker-compose.yml offers a containerized path. Cleanup policies are defined in YAML with defaults of 8-hour shutdown / 24-hour nuke for dev environments.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A development team could deploy Sovereign Engine to a Kubernetes cluster, define per-environment cleanup policies, and connect it to GitHub Actions via CICDSYSTEM=github. The engine would provision a test environment on AWS, monitor its cost against budget thresholds, and automatically tear it down after tests complete—with Slack notifications at each stage.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No LICENSE file - Usage and redistribution rights are unclear, which blocks enterprise adoption.
-Med - Encryption key management - internal/config/secure.go relies on a single ENGINEMASTERKEY; key rotation and loss recovery paths are undocumented.
-Low - Test coverage is uneven - 21 test files exist, but critical paths like internal/cleanup/deployments_*.go and internal/kubernetes/ have no corresponding tests.
-Med - Credential handling - The install.sh script and README imply plaintext credential handling before encryption; verify the encryption flow in cmd/encrypt/main.go before trusting it with production keys.
-Low - Documentation gaps - docs/ covers setup and monitoring but lacks a security architecture doc explaining the encryption model and threat boundaries.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Sovereign Engine is a serious attempt at multi-cloud abstraction with real automation value, particularly around cost control and environment cleanup. The composition-based approach is sound, and the Go codebase is organized. However, the missing license, uneven test coverage, and single-key encryption model make it better suited for evaluation in a sandbox than immediate production adoption. Teams already invested in Crossplane and Kubernetes will find it most relevant.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operating workloads across AWS, Azure, GCP, DigitalOcean, Hetzner and OVH forces teams to juggle disparate CLIs, IAM policies and cost‑tracking tools.  Manual stitching leads to drift, unexpected spend and fragmented security checks.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Sovereign Engine supplies a Go‑based control plane that abstracts each cloud into a common set of “providers”.  The core CLI lives in <code>cmd/cli/main.go</code> and invokes the managers defined in the <code>internal/</code> package:</p>
+<ul><li><code>internal/alerts/alerts.go</code> – creates <code>AlertManager</code> (functions <code>NewAlertManager</code>, <code>Start</code>, <code>CreateAlert</code>).</li><li><code>internal/cleanup/cleanup.go</code> – creates <code>CleanupManager</code> (functions <code>NewCleanupManager</code>, <code>Start</code>, <code>processCleanup</code>).</li><li><code>internal/finops/budget.go</code> – provides cost‑estimation helpers (<code>EstimateCost</code>, <code>GetCurrentSpend</code>).</li><li><code>internal/config/secure.go</code> – encrypts/decrypts credential files (<code>Encrypt</code>, <code>Decrypt</code>, <code>LoadSecureEnvFile</code>).</li></ul>
+<p>YAML composition files under <code>compositions/</code> describe concrete resources per provider (e.g. <code>compositions/aws/compute.yaml</code>).  Dockerfiles in <code>build/docker/</code> package the UI, function runtime and reverse‑proxy services.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>main</code> in <code>cmd/cli/main.go:33</code>.  The entry point parses sub‑commands (<code>deploy</code>, <code>list</code>, <code>cost</code>, <code>drift‑check</code>) and routes to handlers such as <code>handleDeploy</code>.  From there the flow is:</p>
+<ol><li><code>handleDeploy</code> → <code>ProcessDeployment</code> (<code>internal/function/handler.go:105</code>).</li><li><code>ProcessDeployment</code> calls <code>EstimateCost</code> (<code>internal/finops/budget.go</code>).</li><li><code>EstimateCost</code> reaches the alert system via <code>NewAlertManager.Start</code> (<code>internal/alerts/alerts.go</code>).</li><li><code>Start</code> spawns the cleanup scheduler (<code>NewScheduler</code> in <code>internal/cron/scheduler.go</code>) and the cache (<code>NewCache</code> in <code>internal/cache/cache.go</code>).</li></ol>
+<p>The most widely used symbols are:</p>
+<ul><li><code>Stop</code> – invoked from <strong>11</strong> locations.</li><li><code>NewScheduler</code> – invoked from <strong>10</strong> locations.</li><li><code>NewAlertManager</code> – invoked from <strong>9</strong> locations.</li></ul>
+<p>These hubs sit in <code>internal/alerts/alerts.go</code> and <code>internal/cron/scheduler.go</code>; changes to them have the largest blast radius because many downstream functions depend on them.  The import graph shows <strong>8</strong> internal modules with <strong>17</strong> edges and <strong>no circular dependencies</strong>, so the codebase is structurally flat, reducing the risk of hidden coupling.</p>
+<p>External interactions are limited: the only filesystem write observed is <code>updateSecureFile</code> (called from <code>main</code>), and network calls are confined to monitoring back‑ends (e.g. Prometheus, Datadog) configured via environment variables but not hard‑wired in the static call graph.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/the-engine
+cd the-engine
+
+# Build the CLI (Makefile provides a default target)
+make build        # produces ./engine binary
+
+# Generate a master key (first‑run script in README)
+export ENGINE_MASTER_KEY=$(./engine generate-key)
+
+# Encrypt cloud credentials
+./engine-encrypt -key AWS_ACCESS_KEY_ID \
+    -value 'AKIA…' -file ~/.engine/secure.env
+./engine-encrypt -key AWS_SECRET_ACCESS_KEY \
+    -value 'wJalrXU…' -file ~/.engine/secure.env
+
+# Deploy a micro tier to AWS us‑east‑1
+./engine deploy --provider aws --tier micro --region us-east-1</code></pre>
+<p>Configuration files live under <code>compositions/</code> (one folder per cloud) and are referenced automatically by the CLI.  Optional monitoring and CI/CD integrations are selected with environment variables such as <code>MONITORING_SYSTEM=prometheus</code> or <code>CICD_SYSTEM=github</code> as documented in the README.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS team runs the binary in a CI job that provisions a temporary test environment for each pull request.  The <code>CleanupManager</code> automatically shuts down idle dev stacks after 8 h and nukes them after 24 h, while the <code>AlertManager</code> posts cost warnings to a Slack webhook when spend exceeds 80 % of the configured budget.  This prevents runaway resources and gives developers immediate feedback.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions pinned to mutable tags (<code>aquasecurity/trivy-action@master</code>, etc.).</li><li><strong>HIGH</strong> – No LICENSE file; redistribution rights are undefined.</li><li><strong>MEDIUM</strong> – Base image <code>golang:1.26-alpine</code> not pinned by digest.</li><li><strong>MEDIUM</strong> – Generated build output (<code>build/</code>) committed to VCS.</li><li><strong>MEDIUM</strong> – Checkout step keeps token (<code>persist-credentials</code> not disabled).</li><li><strong>MEDIUM</strong> – Container runs as root; no non‑root USER defined.</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li><li><strong>LOW</strong> – Repository missing convention files (<code>.editorconfig</code>, formatter config).</li></ul>
+<p>Static analysis also flagged <strong>deep nesting</strong> (max depth 9) in <code>internal/docs/swagger.go</code> and <code>internal/cleanup/*</code>, <strong>duplicated cleanup code</strong> across several provider‑specific files, and <strong>high branching density</strong> in <code>internal/cleanup/rules.go</code>.  These patterns increase cognitive load and maintenance cost.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Sovereign Engine delivers a concrete multi‑cloud provisioning CLI with built‑in cost alerts and automated cleanup, backed by a clear Go module structure.  It is usable out‑of‑the‑box but requires hygiene work (license, pinned actions, non‑root containers) and some refactoring to reduce complexity in the cleanup subsystem.  Teams comfortable with Go and Kubernetes will find it a solid foundation for controlled, cost‑aware cloud deployments.</p>
             </div>
 
             

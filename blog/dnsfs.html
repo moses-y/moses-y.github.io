@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Standard cloud storage costs money per gigabyte. DNS caches are free, globally distributed, and have no per-byte billing. This project exploits that infrastructure by encoding file data into DNS queries that get cached by recursive resolvers worldwide, creating a read-only filesystem with zero hosting cost.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>dnsfs is a Go-based FUSE filesystem that stores and retrieves data through DNS resolver caches. The core logic in dnsfs/dns.go handles encoding file blocks into DNS TXT record queries, while dnsfs/http.go serves an HTTP interface for Prometheus metrics and health checks. The dnsfs/main.go entry point wires together the FUSE mount, DNS query engine, and HTTP server.</p><p>Data is split into chunks, each chunk gets a unique subdomain under a domain you control. When a recursive resolver caches the TXT response, that chunk becomes accessible globally until the TTL expires. The bulk-mmlookup/main.go tool performs mass geolocation lookups against MaxMind GeoIP2 data to measure which resolvers have cached your data. retention-check/main.go and retention-stats/main.go analyze how long data persists in various resolver caches.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Deploy a DNS server authoritatively serving your domain, run dnsfs to write a file, then query chunk123.yourdomain.com from any DNS resolver worldwide. The resolver caches the TXT record, and the file chunk is retrievable until the TTL expires. Useful for ephemeral file distribution to regions with restricted internet access, where DNS is often the only unblocked protocol.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - No test files - Zero test coverage across all four entry points (dnsfs/main.go, bulk-mmlookup/main.go, retention-check/main.go, retention-stats/main.go). The DNS query logic in dnsfs/dns.go and HTTP server in dnsfs/http.go have no unit or integration tests. This is a significant risk for a project that interacts with real network infrastructure.
-Medium - No CI/CD pipeline - No .github/ directory or CI configuration files. No automated build verification or test gate.
-Medium - No license file - The repository has no LICENSE file despite containing 188 vendored dependency files with their own licenses. Legal ambiguity for anyone wanting to use or modify the code.
-Low - Vendor directory bloat - 188 files in vendor/ (94% of repository) with vendored dependencies including Prometheus, protobuf, and MaxMind GeoIP libraries. Standard Go modules would be cleaner.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>dnsfs is a clever proof-of-concept demonstrating DNS cache exploitation for file storage. The core idea is interesting for security research and censorship circumvention, but the complete absence of tests, CI, and licensing makes it unsuitable for production use or as a dependency. Use it as a reference implementation for understanding DNS caching mechanics, not as a deployable filesystem.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Many DNS resolvers cache arbitrary data, but there is no simple way to store and retrieve user‑provided payloads using that cache. The result is a “store‑in‑the‑cloud” capability that relies only on publicly reachable DNS infrastructure, avoiding dedicated storage services.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a <strong>portfolio of six small Go utilities</strong> that together demonstrate the concept of a DNS‑backed filesystem.</p>
+<ul><li><code>dnsfs/</code> – core server implementation (<code>dns.go</code>, <code>http.go</code>, <code>main.go</code>). It runs a DNS listener, accepts upload/download requests, shards data across resolver IPs, and persists the mapping in the resolver cache.</li><li><code>bulk-mmlookup/</code> – a CLI (<code>main.go</code>) that can query many resolvers in parallel, useful for bulk look‑ups.</li><li><code>retention-check/</code> &amp; <code>version-check/</code> – small tools that read a CSV of resolver IPs (<code>ReadRes</code>) and perform simple health checks. Their code blocks are duplicated (44‑line repetition).</li><li><code>retention-stats/</code> – gathers timing statistics for the checks.</li><li><code>data/</code> – sample CSV files used by the check tools.</li></ul>
+<p>All Go source lives under <code>vendor/</code> (third‑party libraries) and the five top‑level utilities. The only build artifact is a <code>Makefile</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>dnsfs/main.go</code> defines <code>main</code>. It parses a resolver list (<code>parseIPList</code> → <code>ioutil.ReadFile</code>) and calls <code>startDNSListener</code>.</li><li><code>startDNSListener</code> (in <code>dnsfs/dns.go</code>) creates a DNS server (<code>github.com/miekg/dns</code>) and spawns <code>DNSLoop</code>.</li><li><code>DNSLoop</code> receives DNS queries, validates the NS setup (<code>verifyNSsetup</code>), and routes to either <code>uploadChunk</code> or <code>fetchFromShard</code>.</li><li>Both upload and fetch use <code>getDNSserverShard</code> to map a data key to a resolver IP; this function is the only one called from two places.</li><li><code>uploadChunk</code> writes the payload into the chosen resolver’s cache; <code>fetchFromShard</code> reads it back.</li><li>HTTP handlers (<code>handleUpload</code>, <code>handleDownload</code> in <code>dnsfs/http.go</code>) wrap the same upload/fetch logic for REST access.</li></ol>
+<p>The <strong>call graph</strong> is shallow: 9 internal edges, with <code>main</code> → <code>ReadRes</code> (used by the check tools) and <code>main</code> → <code>parseIPList</code> being the only filesystem interactions. The hub is <code>getDNSserverShard</code>, which appears in both upload and fetch paths, so changes there affect both directions. No circular dependencies are present.</p>
+<p>The <strong>check utilities</strong> (<code>retention‑check/main.go</code>, <code>version‑check/main.go</code>) each contain a duplicated <code>ReadRes</code> implementation (44 repeated lines). They read the resolver CSV and iterate over entries, but otherwise do not interact with the DNS server.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># clone the repo
+git clone https://github.com/moses-y/dnsfs
+cd dnsfs
+
+# build the server (Makefile provides a default target)
+make               # or: go build ./dnsfs
+
+# start the DNS‑FS server (requires a CSV of resolvers)
+./dnsfs -resolvers data/Resolvers-To-Internet-Users.csv</code></pre>
+<p><em>The README does not specify flags; the source shows <code>parseIPList</code> expects a path, so the binary must be invoked with that argument.</em></p>
+<p>To perform a bulk lookup:</p>
+<pre data-lang="bash"><code>go run bulk-mmlookup/main.go data/Resolvers-To-Internet-Users.csv</code></pre>
+<p>Health‑check tools are invoked similarly:</p>
+<pre data-lang="bash"><code>go run retention-check/main.go data/Resolvers-To-Internet-Users.csv
+go run version-check/main.go data/Resolvers-To-Internet-Users.csv</code></pre>
+<p>No Dockerfile or CI scripts are present, so containerisation or automated testing must be added manually.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security‑research team could embed short configuration snippets in DNS TXT records of widely used public resolvers, then retrieve them from any network without needing a separate storage endpoint. The team would run the <code>dnsfs</code> server on a host they control, upload the snippets, and distribute the resolver list to their agents, which use <code>bulk-mmlookup</code> to pull the data.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing LICENSE</strong> – No license file at the repository root; the code cannot be legally reused without clarification.</li><li><strong>High – Duplicated code</strong> – <code>retention-check/main.go</code> and <code>version-check/main.go</code> share a 44‑line block (<code>ReadRes</code>). Extracting this into a shared helper would reduce maintenance risk.</li><li><strong>Medium – No tests</strong> – No <code>_test.go</code> files; code paths are unverified.</li><li><strong>Medium – No CI/CD</strong> – No <code>.github/workflows</code> or other pipeline definitions; builds are not automatically validated.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>dnsfs</code> provides a functional proof‑of‑concept for storing data in DNS resolver caches, with a clear separation of a server component and several helper utilities. The code is lightweight but lacks test coverage, CI, and a license, and contains duplicated logic in the check tools. It is suitable for experimentation or research, but would need additional engineering (tests, CI, licensing) before production use.</p>
             </div>
 
             

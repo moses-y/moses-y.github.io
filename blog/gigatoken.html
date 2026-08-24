@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,59 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tokenization is a persistent bottleneck in large-scale NLP data pipelines. HuggingFace’s tokenizers and OpenAI’s tiktoken are already multithreaded Rust, but they still process text at tens of MB/s—far too slow for terabyte-scale corpora. Pretokenization (regex-based splitting) and BPE lookup overhead are the main culprits, and existing libraries leave significant performance on the table.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Gigatoken is a Rust tokenizer with Python bindings that achieves GB/s throughput by replacing regex-based pretokenization with hand-tuned SIMD routines (see src/pretokenize/fast/ for tokenizer-specific implementations like cl100k.rs, o200k.rs, deepseekv3.rs) and aggressively caching BPE mappings (src/bpe/pretokencache.rs). It supports most common tokenizer families—GPT-2, Llama, Qwen, DeepSeek, etc.—and can load tokenizers from HuggingFace Hub, SentencePiece, or tiktoken files (src/loadtokenizer/).</p><p>The Python package (gigatoken/) offers two modes: a drop-in compatibility layer (ashf(), astiktoken()) that matches exact output at a minor performance cost, and a native API (gt.Tokenizer, gt.TextFileSource) that bypasses Python overhead entirely for maximum speed. The CLI (gigatoken/cli.py) can also benchmark and validate tokenizers without installation.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team processing the Common Crawl or OpenWebText can replace their existing tokenization step with a single import change:</p><p>On a dual-socket EPYC, this tokenizes 12 GB of text in under half a second—over 900x faster than the equivalent HuggingFace pipeline.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The codebase is well-structured: 32 test files, CI workflows (.github/workflows/CI.yml), a lockfile (Cargo.lock), and extensive profiling data (profiling/). No obvious security or structural red flags.</p><p>Potential risks:
-Medium — Performance is highly hardware-dependent (SIMD width, cache sizes). The profiling/ directory shows deep optimization for Zen 5 and Apple M4, but results on older x86 or ARM may be lower.
-Low — The Python-Rust bridge (src/bindings/) adds overhead; the claimed 1000x speedup applies to the native API, not the compatibility mode.
-Low — Not all tokenizers are covered; unsupported ones will fall back to slower reference implementations (src/pretokenize/reference/).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Gigatoken delivers genuinely impressive performance for large-scale tokenization, backed by careful SIMD optimization and comprehensive benchmarking. It is production-ready for teams processing hundreds of gigabytes of text, provided their tokenizer and CPU are supported. The compatibility mode makes migration low-risk, but the full speed advantage requires using the native API.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Tokenizing massive text corpora is a bottleneck for large‑scale language‑model pipelines. Existing Python tokenizers (HF tokenizers, tiktoken) are fast but still limited to a few hundred MB/s, forcing costly preprocessing steps.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>gigatoken</code> provides a Rust‑backed tokenizer library exposed to Python. The core lives in <code>src/</code> (<code>src/lib.rs</code>, <code>src/main.rs</code>) and is compiled via <code>maturin</code>. Compatibility shims in <code>gigatoken/_hf_compat.py</code>, <code>gigatoken/_tiktoken_compat.py</code>, and <code>gigatoken/_load/</code> let a <code>Tokenizer</code> object behave like HuggingFace or tiktoken tokenizers while delivering GB/s throughput.</p>
+<p>Key files:</p>
+<ul><li><code>gigatoken/_tokenizer.py</code> – public API (<code>Tokenizer</code>, <code>encode_batch</code>, <code>encode_files</code>).</li><li><code>gigatoken/_load/hf.py</code>, <code>gigatoken/_load/tiktoken.py</code> – model‑specific loader helpers.</li><li><code>benchmarks/compare/measure.py</code> – a runnable benchmark that drives the whole stack.</li></ul>
+<p>The repository is a portfolio of 8 self‑contained projects (benchmarks, notebooks, examples, profiling, etc.) that all reuse the same tokenizer core.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>benchmarks/compare/measure.py:main</code></strong> (line 144). The <code>main</code> function parses CLI args, then calls <code>cpu_label</code> (a subprocess call) and proceeds to:</p>
+<ol><li>Load a tokenizer via <code>gigatoken._load.hf.load_hf</code> or <code>load_tiktoken</code>.</li><li>Build a <code>Tokenizer</code> object (<code>gigatoken._tokenizer.Tokenizer</code>).</li><li>Call <code>encode_files</code> which internally invokes <code>Tokenizer.encode_batch</code>.</li></ol>
+<p>The internal call graph shows the hottest symbols:</p>
+<ul><li><code>Tokenizer</code> – referenced by <strong>42</strong> distinct callers.</li><li><code>encode_batch</code> – also <strong>42</strong> callers.</li><li><code>_ids</code> – <strong>28</strong> callers.</li></ul>
+<p>These functions sit in <code>gigatoken/_tokenizer.py</code>, making it the <strong>blast‑radius hub</strong>; any change ripples through most of the codebase.</p>
+<p>Circular imports involve <code>gigatoken/_hf_compat.py</code>, <code>gigatoken/_tokenizer.py</code>, and <code>gigatoken/_tiktoken_compat.py</code>. The cycle forces runtime import‑time side effects and hampers refactoring.</p>
+<p>Large, deeply nested files such as <code>src/bpe/tiktoken.rs</code> (1 773 lines, nesting depth 9) and <code>src/pretokenize/fast/o200k_family.rs</code> dominate the Rust side; they are called by many high‑level functions (<code>Tokenize</code>, <code>batch</code>, <code>pretokenize</code>).</p>
+<p>External interactions are limited to:</p>
+<ul><li>Subprocess call <code>cpu_label</code> → <code>sysctl</code> (CPU model query).</li><li>File I/O in benchmarks, examples, and the loader modules (reading model files, token vocabularies).</li><li>No network calls from the core library; only test fixtures download data via <code>tests/conftest.py</code>.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/gigatoken
+cd gigatoken
+
+# Build and install the Python package (uses maturin under the hood)
+pip install .
+# or, with uv (if preferred)
+uv pip install .</code></pre>
+<p>The package installs a console script <code>gigatoken</code> that forwards to <code>gigatoken._cli._main</code>. For a quick benchmark:</p>
+<pre data-lang="bash"><code># Example from the README
+uvx --with tokenizers gigatoken bench openai-community/gpt2 owt_train.txt \
+    --validate --doc-separator "&lt;|endoftext|&gt;"</code></pre>
+<p>Running the supplied benchmark directly:</p>
+<pre data-lang="bash"><code>python benchmarks/compare/measure.py \
+    --model openai-community/gpt2 \
+    --input owt_train.txt \
+    --validate</code></pre>
+<p>The <code>examples/</code> folder contains ready‑to‑run scripts (<code>quickstart.py</code>, <code>encode_files.py</code>) that illustrate the public API.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑engineering pipeline can replace its HF tokenizer call:</p>
+<pre data-lang="python"><code>import gigatoken as gt
+
+tokenizer = gt.Tokenizer("meta-llama/Meta-Llama-3-8B")
+tokens = tokenizer.encode_files(gt.TextFileSource(["large_corpus.txt"]))
+# tokens now stream at &gt;8 GB/s on a modern 16‑core CPU</code></pre>
+<p>The token IDs are byte‑compatible with HF tokenizers, so downstream model code needs no changes.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>HIGH – Import cycle</strong> – <code>gigatoken/_hf_compat.py</code>, <code>gigatoken/_tokenizer.py</code>, <code>gigatoken/_tiktoken_compat.py</code> (mutual imports).</li><li><strong>HIGH – Deep nesting</strong> – up to 9 levels in <code>src/bpe/tiktoken.rs</code>, <code>src/pretokenize/fast/olmo3.rs</code>.</li><li><strong>HIGH – Duplicated code blocks</strong> – identical 6‑line snippets across benches and notebooks.</li><li><strong>HIGH – Oversized files</strong> – <code>src/bpe/tiktoken.rs</code>, <code>src/pretokenize/fast/o200k_family.rs</code>, <code>src/batch.rs</code> (&gt;1 700 lines each).</li><li><strong>MEDIUM – Broad exception handling</strong> – generic <code>except:</code> in <code>_load/hf.py</code>, <code>_hf_compat.py</code>, <code>notebooks/data_view.py</code>.</li><li><strong>MEDIUM – Hub module</strong> – <code>gigatoken/__init__.py</code> is imported by 20 modules; volatility here has high blast radius.</li></ul>
+<p><strong>Code‑health audit (CI/ops)</strong></p>
+<ul><li><strong>HIGH – Pin GitHub Actions</strong> – <code>.github/workflows/*.yml</code> uses <code>PyO3/maturin-action@v1</code>.</li><li><strong>HIGH – CI never runs tests</strong> – workflows list no test step despite 31 test files.</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> – no auto‑update config for Cargo or pip dependencies.</li><li><strong>MEDIUM – No dependency‑vulnerability scan</strong> – CI lacks <code>dependency-review-action</code> or similar.</li><li><strong>MEDIUM – Checkout persists token</strong> – <code>persist-credentials</code> missing in <code>wheels.yml</code>.</li><li><strong>LOW – No job timeout</strong> – CI jobs lack <code>timeout-minutes</code>.</li></ul>
+<p>No license, lockfile, or secret issues were detected beyond the above.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>gigatoken</code> delivers the advertised GB/s tokenization speed and drop‑in compatibility, but the codebase contains several maintainability pain points: import cycles, very large/complex Rust files, and incomplete CI. It is suitable for teams that need raw throughput and are prepared to manage the technical debt or contribute fixes.</p>
             </div>
 
             
@@ -105,7 +153,7 @@ Low — Not all tokenizers are covered; unsupported ones will fall back to slowe
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>63</b></li><li><span>Rust</span><i style="width:95%"></i><b>60</b></li><li><span>Markdown</span><i style="width:16%"></i><b>10</b></li><li><span>TOML</span><i style="width:6%"></i><b>4</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li><li><span>Shell</span><i style="width:5%"></i><b>3</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 

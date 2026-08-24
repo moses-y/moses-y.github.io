@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Bank statement PDFs are notoriously inconsistent. Each bank formats transactions, dates, and amounts differently, and some statements are scanned images requiring OCR. Anyone building personal finance tooling or accounting automation spends significant time writing one-off parsers per bank. Monopoly centralizes that work into a single library and CLI that normalizes any supported bank&#39;s statement into a standard CSV.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Monopoly is a Python library and CLI that extracts transactions from bank statement PDFs and writes them to CSV. The core pipeline lives in src/monopoly/pipeline.py, with bank-specific parsers in src/monopoly/banks/ — one directory per institution (e.g., src/monopoly/banks/chase/chase.py). A detector in src/monopoly/banks/detector.py auto-identifies the bank from the PDF&#39;s properties, then routes it to the correct parser.</p><p>For image-based statements, src/monopoly/ocr.py and src/monopoly/gemini.py provide OCR support, with a generic fallback parser in src/monopoly/generic/ that infers transaction patterns from unstructured text. The CLI entry point is src/monopoly/cli/cli.py, and the package is published on PyPI as monopoly-core.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pipx or pip. The repo uses pyproject.toml for dependencies and includes both pdm.lock and uv.lock for reproducible builds. System dependencies (poppler, ocrmypdf) are required per the README.</p><p>pipx install monopoly-core
-or with OCR support
-pipx install &#39;monopoly-core[ocr]&#39;</p><p>Configuration: Password-protected PDFs are handled via a .env file. Copy .env.template to .env and set PDFPASSWORDS=[&quot;password1&quot;,&quot;password2&quot;].</p><p>Running it: The CLI accepts a single PDF or a directory of PDFs. From the README:</p><p>monopoly src/monopoly/examples/examplestatement.pdf
-monopoly ./statements
-monopoly path/to/file.pdf --output ./out --preserve-filename</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A finance team receives monthly statements from multiple banks. They drop all PDFs into a statements/ directory, run monopoly ./statements, and get normalized CSVs that feed into their accounting system. The --preserve-filename flag keeps output names aligned with input files, making reconciliation straightforward. The library API in src/monopoly/ allows embedding this into a larger ingestion pipeline rather than relying solely on the CLI.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Dependency lockfiles present but inconsistent: Both pdm.lock and uv.lock exist alongside pyproject.toml. This can cause confusion about which package manager is canonical. Not a functional bug, but a maintenance smell.
-Low - OCR dependency on external service: src/monopoly/gemini.py suggests Google Gemini API usage for OCR. This introduces a network dependency and potential cost for image-based statements. Verify whether this is optional or required for certain banks.
-Low - Test fixtures are real bank statements: tests/integration/banks/ contains actual PDFs (e.g., citibank/credit/input.pdf). These may contain sensitive data and could bloat the repo. Confirm they are synthetic before distributing.
-Med - AGPL-3.0 license: The README badge indicates AGPL-3.0. That&#39;s a strong copyleft license. Any company embedding this in a proprietary product must open-source their changes. Verify this is acceptable for your use case.</p><p>The repo is otherwise well-structured: 79 test files, CI workflows in .github/workflows/ (tests, performance, publish), and a Makefile for common tasks. The bank abstraction is clean — adding a new bank is a matter of creating a parser module and registering it.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Monopoly is a practical, well-tested tool for a narrow but painful problem: normalizing bank statement PDFs. The 20-bank coverage and auto-detection make it immediately useful for personal finance automation or small accounting teams. The AGPL license and external OCR dependency are the main considerations before adopting it in a commercial product.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Financial analysts and accountants often receive bank statements as scanned PDFs. Extracting line‑item data into a structured CSV is a manual, error‑prone task, especially when statements differ per bank and may be password‑protected.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>monopoly</code> provides a Python library and a CLI that parse supported bank‑statement PDFs and emit CSV rows. The core logic lives under <code>src/monopoly/</code>, e.g.:</p>
+<ul><li><code>src/monopoly/pdf.py</code> – reads raw PDF text, extracts metadata, and builds <code>PdfPage</code> objects.</li><li><code>src/monopoly/statements/base.py</code> – implements generic line‑parsing, multiline handling, and transaction boundary detection.</li><li>Bank‑specific adapters in <code>src/monopoly/banks/&lt;bank&gt;/</code> (e.g., <code>amex.py</code>, <code>bmo.py</code>) inherit from <code>BankBase</code> and supply regex patterns for that institution.</li></ul>
+<p>The CLI entry point is <code>src/monopoly/cli/cli.py</code>. The public command <code>monopoly</code> invokes <code>process_statement</code>, which builds a <code>Pipeline</code> (see <code>src/monopoly/pipeline.py</code>) that chains PDF extraction, transformation, and CSV writing.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/monopoly/cli/cli.py</code>:</p>
+<ol><li><strong><code>process_statement</code> (line 16)</strong> – receives a file path, creates a <code>PdfDocument</code> (<code>src/monopoly/pdf.py</code>) and passes it to <code>Pipeline.extract</code>.</li><li><strong><code>Pipeline.extract</code></strong> – calls <code>PdfParser</code> (via <code>PdfDocument</code>) to produce a list of <code>PdfPage</code> objects (used in 32 distinct places).</li><li>Each <code>PdfPage</code> is fed to the bank detector (<code>src/monopoly/banks/detector.py</code>). The detector constructs a <code>BankDetector</code> that runs a lightweight model inference (the only external inference call).</li><li>The selected bank adapter runs its <code>extract</code> method, which heavily uses <code>search</code>, <code>MetadataIdentifier</code>, <code>NumberExtractor</code>, and <code>DateResolver</code> (the most called internal symbols, 28–14 occurrences).</li><li>Parsed <code>Transaction</code> objects (<code>src/monopoly/statements/transaction.py</code>) flow into <code>Pipeline.transform</code>, applying generic and bank‑specific <code>Pattern</code> handlers (<code>src/monopoly/generic/patterns.py</code>).</li><li>Finally, <code>Pipeline.convert_date</code> and <code>src/monopoly/write.py</code> serialize the transaction list to CSV.</li></ol>
+<p>The import graph shows 116 internal modules with 57 edges and no circular dependencies, so the code base is acyclic. Hub modules (<code>pdf.py</code>, <code>enums.py</code>, <code>transaction.py</code>) are touched by &gt;15 other files, making them high‑impact change locations.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/monopoly
+cd monopoly
+
+# System dependencies for PDF text extraction
+sudo apt-get install build-essential libpoppler-cpp-dev pkg-config ocrmypdf   # Debian/Ubuntu
+# or on macOS
+brew install gcc@11 pkg-config poppler ocrmypdf
+
+# Install Python package (uses pyproject.toml)
+uv pip install -e .          # or: pip install -e .
+
+# Optional OCR support
+pip install 'monopoly-core[ocr]'
+
+# Copy env template if you need passwords for protected PDFs
+cp .env.template .env
+# Edit .env to set PDF_PASSWORDS as a JSON list, e.g. PDF_PASSWORDS=["pwd1","pwd2"]</code></pre>
+<p>Run the CLI on a single file or a directory:</p>
+<pre data-lang="bash"><code>monopoly src/monopoly/examples/example_statement.pdf
+monopoly ./statements --output ./out --preserve-filename</code></pre>
+<p>The CLI flags are defined in <code>src/monopoly/cli/models.py</code> and displayed via <code>monopoly --help</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A fintech onboarding pipeline can drop incoming statement PDFs into a shared folder. A nightly cron runs:</p>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+cd /opt/monopoly
+monopoly /data/incoming --output /data/processed</code></pre>
+<p>The resulting CSVs are then ingested by the downstream accounting system without manual re‑keying.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Static findings (4 categories, 9 instances):</strong></p>
+<ul><li><strong>HIGH – Deep nesting</strong> – <code>src/monopoly/statements/base.py</code>, <code>tests/integration/banks/test_trust_transaction_pattern.py</code>, <code>src/monopoly/cli/cli.py</code> (max indent 20).</li><li><strong>HIGH – Duplicated code</strong> – identical 6‑line blocks across many bank adapters (<code>amex.py</code>, <code>trust.py</code>, <code>bmo.py</code>, <code>dbs.py</code>, …).</li><li><strong>MEDIUM – File opened without context manager</strong> – <code>tests/unit/test_bank_identifier/test_get_identifier.py</code>.</li><li><strong>MEDIUM – High branching density</strong> – <code>src/monopoly/banks/bmo/bmo.py</code>, <code>src/monopoly/banks/cibc/cibc.py</code>, <code>src/monopoly/banks/rbc/rbc.py</code>.</li></ul>
+<p><strong>CI/CD health audit (4 findings):</strong></p>
+<ul><li><strong>HIGH – Pin GitHub Actions</strong> – actions referenced by tag (<code>astral-sh/setup-uv@v7</code>, etc.) should use a commit SHA.</li><li><strong>MEDIUM – Least‑privilege <code>GITHUB_TOKEN</code></strong> – workflows lack explicit <code>permissions:</code>.</li><li><strong>MEDIUM – No dependency‑vulnerability scan</strong> – add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>LOW – Missing job timeouts</strong> – set <code>timeout-minutes:</code> in <code>.github/workflows/*.yaml</code>.</li></ul>
+<p>No lockfile is present (<code>pyproject.toml</code> only), which makes reproducible builds non‑deterministic.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>monopoly</code> delivers a functional PDF‑to‑CSV pipeline with extensive bank coverage and a usable CLI. The codebase is well‑structured but suffers from deep nesting, duplicated adapter logic, and modest CI hardening. It is suitable for teams that need quick PDF statement extraction and are comfortable tightening the CI configuration and refactoring the bank adapters for maintainability.</p>
             </div>
 
             

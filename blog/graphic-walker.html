@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams building data products often need to embed visual analytics into their applications—drag-and-drop chart builders, natural language querying, and interactive exploration. Building this from scratch is expensive. Existing open-source BI tools are monolithic, not designed for embedding as React components.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Graphic Walker is a React component library for exploratory data analysis. Users can upload CSV/JSON data, drag fields onto visual channels (rows, columns, color, size), and generate charts. It supports spatial visualization via GeoJSON/TopoJSON in packages/graphic-walker/src/components/leafletRenderer/. A data explainer module in packages/graphic-walker/src/lib/insights/ attempts to describe why patterns occur. A chat interface in packages/graphic-walker/src/components/chat/ accepts natural language queries.</p><p>The project uses web workers for computation (packages/graphic-walker/src/computation/clientComputation.ts) and provides DuckDB-WASM integration (packages/duckdb-wasm-computation/). It ships as an npm package (@kanaries/graphic-walker) and can be embedded as a standard React component.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A SaaS analytics platform needs to let customers explore their data without leaving the product. Graphic Walker can be imported as a React component: import { GraphicWalker } from &#39;@kanaries/graphic-walker&#39;. The host app passes parsed data directly, bypassing the file upload UI. Users get drag-and-drop chart building, pivot tables, and map visualizations.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - No lockfile (package-lock.json, yarn.lock, pnpm-lock.yaml) present. Builds are non-reproducible. This is a significant dependency management risk for any team consuming or contributing to this project.
-Med - 5 test files for 120 TSX + 51 TypeScript source files. Test coverage appears minimal and focused on utility functions (pagination.test.ts, array.test.ts, dateTime.test.ts, offset.test.ts, observablePlot.test.ts). No integration or component tests visible.
-Low - 4 CI workflows (auto-build, version bump, two release pipelines). CI is configured but may not enforce test passing or linting before merge.
-Low - Two license files (LICENSE, LICENSE2) in the root. This is unusual and should be verified to confirm no licensing ambiguity.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Graphic Walker fills a genuine gap: an embeddable, open-source visual analytics component for React apps. The feature set is credible—drag-and-drop, maps, natural language, and web worker compute. The missing lockfile and low test coverage are concrete risks for production adoption. Suitable for prototyping and internal tools; evaluate carefully for customer-facing products.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need embedded visual analytics face a binary: build charting from scratch or bolt a heavy BI platform into their app. Graphic Walker targets that gap with a React component that provides Tableau-style drag-and-drop exploration without the infrastructure overhead.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Graphic Walker is a React-based visual analytics library. Users upload CSV/JSON data, define dimensions and measures, then drag fields onto visual channels to build charts. It includes a data explainer for pattern analysis, spatial visualization via the <code>leafletRenderer</code> components, and a natural language query interface in <code>components/askViz</code>.</p>
+<p>The main package lives in <code>packages/graphic-walker</code>, with a companion <code>packages/duckdb-wasm-computation</code> that handles client-side query computation via web workers. The repo is a fork of <code>Kanaries/graphic-walker</code> (3218 stars upstream), so it inherits a mature codebase with 25 test files and GitHub Actions CI.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>packages/graphic-walker/src/index.tsx</code>, which mounts <code>App.tsx</code>. The App component wires together the field system (<code>fields/fieldsContext.tsx</code>), the data source layer (<code>dataSource/index.tsx</code>), and the store (<code>store/index.tsx</code>). The <code>Renderer.tsx</code> component is the visualization output path, translating the visual spec into rendered charts.</p>
+<p>The dependency graph shows 298 internal modules with 798 import edges. The <code>src/interfaces</code> module is the critical hub: 113 modules import it, making it the highest-blast-radius file in the repo. It's also part of a circular dependency cycle along with <code>src/utils/index.ts</code> and <code>src/config.ts</code>. The <code>src/store/index</code> module has 38 dependents and sits at the center of state management.</p>
+<p>The computation path routes through <code>src/computation/index.ts</code> (934 lines, flagged as oversized), which delegates to either client-side workers or a remote query service. The <code>src/App</code> component imports 39 modules, making it the widest entry point into the system.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and install
+git clone https://github.com/moses-y/graphic-walker
+cd graphic-walker
+yarn install
+
+# Run the dev server
+yarn dev</code></pre>
+<p>The package is published on npm as <code>@kanaries/graphic-walker</code>. To embed it, import the <code>GraphicWalker</code> component and pass a data source. No environment variables are required; the default configuration uses in-browser computation.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A typical integration is a data analysis dashboard where users upload a CSV, explore it visually, and export findings. The component accepts a <code>dataSource</code> prop, so you can feed it parsed data from your backend. The DuckDB WASM package lets you offload computation to web workers, keeping the UI responsive on large datasets.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 171 findings across 4 categories: 96 high, 74 medium, 1 low. The main issues:</p>
+<ul><li><strong>High - Import cycles</strong>: <code>src/interfaces.ts</code>, <code>src/utils/index.ts</code>, <code>src/config.ts</code> participate in circular dependencies. This makes changes ripple unpredictably and complicates module loading.</li><li><strong>High - Hub modules</strong>: <code>src/interfaces.ts</code> has 113 dependents; <code>src/utils/index.ts</code> has 39. Any change here has a wide blast radius.</li><li><strong>Medium - Oversized files</strong>: <code>src/interfaces.ts</code> (934 lines) and <code>src/computation/index.ts</code> are hard to reason about in one pass.</li><li><strong>High - Deep nesting</strong>: 31 files exceed 10 levels of indentation, notably <code>fields/fieldsContext.tsx</code> and <code>utils/workflow.ts</code>.</li></ul>
+<p>The CI audit found 2 high-severity issues: GitHub Actions pinned to mutable tags (<code>peter-evans/create-pull-request@v3</code>) and workflows that never invoke the test suite despite 18 test files existing.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a solid, feature-complete embedded analytics library with real-world adoption via the upstream project. The architecture is sound but the circular dependencies and hub modules will make significant refactoring painful. Teams needing a Tableau-like component in a React app should evaluate it; the CI gaps are worth fixing before relying on the green check.</p>
             </div>
 
             
@@ -94,18 +116,18 @@ Low - Two license files (LICENSE, LICENSE2) in the root. This is unusual and sho
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">346<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TSX</span><i style="width:100%"></i><b>120</b></li><li><span>TypeScript</span><i style="width:43%"></i><b>51</b></li><li><span>JSON</span><i style="width:4%"></i><b>5</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li><li><span>Markdown</span><i style="width:3%"></i><b>4</b></li><li><span>JavaScript</span><i style="width:3%"></i><b>3</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>178</b></li><li><span>TypeScript</span><i style="width:63%"></i><b>112</b></li><li><span>JSON</span><i style="width:9%"></i><b>16</b></li><li><span>JavaScript</span><i style="width:4%"></i><b>7</b></li><li><span>CSS</span><i style="width:3%"></i><b>6</b></li><li><span>Markdown</span><i style="width:3%"></i><b>5</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Tailwind</span></p>
                     </div>
                 </div>
 
@@ -140,12 +162,6 @@ Low - Two license files (LICENSE, LICENSE2) in the root. This is unusual and sho
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>package.json</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1243644272">Open in Code Brain &rarr;</a>

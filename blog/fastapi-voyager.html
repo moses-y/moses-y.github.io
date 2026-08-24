@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 2, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,9 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Ever felt like you&#39;re spelunking through someone else&#39;s API just to figure out what routes exist and where they lead? Sure, Swagger UI helps, but it’s a glorified list of endpoints—zero context about how your code modules are organized. If you’re working on a FastAPI, Django Ninja, or Litestar project, you probably want more than just &quot;here’s a GET endpoint.&quot; You want a bird’s-eye view of your API structure, tied to the actual code, not just the HTTP layer. Enter fastapi-voyager.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>fastapi-voyager gives you an interactive visualization of your API endpoints, mapped to modules in your codebase. It’s not just for FastAPI—it also supports Django Ninja and Litestar. The heavy lifting happens in src/fastapivoyager/adapters/, with framework-specific adapters like djangoninjaadapter.py and fastapiadapter.py. The core functionality is exposed through the createvoyager function in src/fastapivoyager/init.py.</p><p>You mount the Voyager UI as a sub-application (e.g., /voyager), and it shows you all your endpoints, module color-coding, and even links back to your repo for source browsing. If you’re feeling fancy, you can configure options like modulecolor to differentiate code modules visually, or swaggerurl for quick access to your Swagger docs. The CLI (src/fastapivoyager/cli.py) also lets you spin up Voyager without embedding it into a larger application—perfect for debugging.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’ve inherited a sprawling FastAPI app with routes scattered across multiple modules. First, install fastapi-voyager:</p><p>pip install fastapi-voyager</p><p>Add Voyager to your app:</p><p>from fastapi import FastAPI
-from fastapivoyager import createvoyager</p><p>app = FastAPI()</p><p>app.mount(&#39;/voyager&#39;, createvoyager(app, module_color={&#39;src.services&#39;: &#39;tomato&#39;}))</p><p>Run your app, and hit http://localhost:8000/voyager. Now, you’ve got a visual map of your endpoints, organized by code module. Bonus: link it to your repo URL and click directly into the source code for each route. For Django Ninja or Litestar, the setup is similar—just swap the adapter.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you’re working on mid-to-large projects with messy endpoint sprawl, fastapi-voyager is worth a look. It’s not perfect—sub-applications are unsupported, and it feels very early-stage (Pydantic v2-only, no stars yet). But for dev teams needing better API clarity, it’s a solid documentation tool. For solo devs on small projects? Probably overkill.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>API documentation drift is a persistent maintenance burden. Teams build endpoints but keep documentation in sync through manual effort, leading to outdated specs, mismatched expectations, and onboarding friction. FastAPI Voyager addresses this by auto-generating an interactive visual graph from your running code, eliminating the gap between implementation and documentation.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>FastAPI Voyager introspects a running FastAPI, Django Ninja, or Litestar application and renders an interactive graph of endpoints, models, and relationships. The Python core lives in <code>src/fastapi_voyager/</code> (57 files), with adapters for each framework: <code>fastapi_adapter.py</code>, <code>django_ninja_adapter.py</code>, and <code>litestar_adapter.py</code>. The Vue front-end at <code>web/vue-main</code> (<code>Ca 0, Ce 6</code>) consumes the generated DOT output. A call graph analysis runs through <code>cli.py</code> → <code>generate_visualization</code> → <code>load_app_from_module</code>, then delegates to the appropriate adapter. Each adapter calls into <code>introspectors/</code> (FastAPI, Django Ninja, Litestar) to extract route metadata, which flows through <code>type_helper.py</code> (19 functions) to normalize types into a shared schema. The result is rendered via <code>render.py</code> (19 functions) into DOT format, consumed by the JavaScript front-end for display.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/fastapi_voyager/cli.py:151</code> (<code>main</code>), which reaches 81 functions and is called from 1 place. The graph analysis path is: <code>main</code> → <code>load_app_from_module</code> → <code>_get_adapter</code> → adapter-specific introspection → <code>analysis_schemas</code> → <code>full_class_name</code> (called 12 times from <code>analysis_schemas</code>) → <code>add_to_node_set</code> / <code>add_to_link_set</code> → <code>render_template</code> (called 11 places) → <code>render_dot</code>. The most connected module is <code>src/fastapi_voyager/web/vue-main</code> with 6 outgoing edges and no incoming imports from this repo, making it a leaf consumer. The call graph has 269 resolved edges between internal functions; <code>get_core_types</code> is the most widely called function (14 call sites). Execution does not leave the process except through filesystem reads in adapter setup scripts; no outbound network calls are traced from source.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install the package:</p>
+<pre data-lang="bash"><code>uv add fastapi-voyager</code></pre>
+<p>Or via pip:</p>
+<pre data-lang="bash"><code>pip install fastapi-voyager</code></pre>
+<p><strong>Configuration</strong>: Create a FastAPI app and mount the voyager instance. Required config includes <code>module_prefix</code> and <code>module_color</code> dict; <code>ga_id</code> for analytics. Example from the codebase:</p>
+<pre data-lang="python"><code>from fastapi import FastAPI
+from fastapi_voyager import create_voyager
+
+app = FastAPI()
+
+@app.get("/hello")
+def hello():
+    return {"message": "Hello World"}
+
+app.mount("/voyager", create_voyager(
+    app,
+    module_color={"src.services": "tomato"},
+    module_prefix="src.services",
+    swagger_url="/docs",
+    ga_id="G-XXXXXXXXVL",
+    initial_page_policy="first",
+    enable_pydantic_resolve_meta=True))</code></pre>
+<p><strong>Running it</strong>: Start your app with uvicorn, then visit <code>http://localhost:8000/voyager</code>. For CLI-driven generation:</p>
+<pre data-lang="bash"><code>voyager -m path.to.your.app.module --server</code></pre>
+<p>Framework-specific wiring is in <code>src/fastapi_voyager/adapters/</code>. Django Ninja and Litestar follow the same <code>create_voyager</code> entry point but pass their own API instances.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>In a micro-service architecture with composition-oriented development, Voyager can be mounted alongside your API surface. For example, an orchestration layer can import <code>create_voyager</code> from each sub-application and mount them under a single <code>/voyager</code> path, providing a unified view across services. The <code>tests/service/schema/</code> directory demonstrates schema introspection for entity resolution, and the <code>tests/fastapi/demo.py</code> defines sample routes (<code>get_sprints</code>, <code>post_fullname</code>) that Voyager would render as nodes and edges.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> - Pin third-party GitHub Actions to commit SHA: <code>.github/workflows</code> uses <code>astral-sh/setup-uv@v4</code> and <code>softprops/action-gh-release@v2</code> without commit pins; a tag move could execute unvetted code with repo secrets.</li><li><strong>HIGH</strong> - Make CI invoke the test suite it has: 31 test files exist but no test command appears in any workflow; a green check that never runs assertions is worse than no check.</li><li><strong>MEDIUM</strong> - Enable Dependabot or Renovate: one manifest present, no update bot configured; published advisories go unpatched without automated bumps.</li><li><strong>MEDIUM</strong> - Gate pull requests on dependency vulnerability scan: no dependency scan in CI; a known-vulnerable package could reach production without detection.</li><li><strong>LOW</strong> - Set timeout-minutes on workflow jobs: <code>publish.yml</code> declares no job timeout; a wedged step runs to the six-hour platform default.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The code offers a functional, well-structured introspection engine that successfully visualizes FastAPI, Django Ninja, and Litestar endpoints with minimal configuration. The internal call graph is resolvable and the entry points are clear. However, the duplication of setup scripts (134 repeated 6-line blocks across 19 files) and the unguarded GitHub Actions pins represent real maintenance risk. Teams comfortable with auto-generated docs who can action the dependency hygiene fixes will find immediate value; others may find the operational overhead of keeping introspections in sync with a evolving codebase non-trivial.</p>
             </div>
 
             
@@ -92,9 +128,9 @@ from fastapivoyager import createvoyager</p><p>app = FastAPI()</p><p>app.mount(&
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -147,12 +183,12 @@ from fastapivoyager import createvoyager</p><p>app = FastAPI()</p><p>app.mount(&
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Pin third-party GitHub Actions to a commit SHA</span><span class="chip">high</span><span class="rankchip">2 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">astral-sh/setup-uv@v4, softprops/action-gh-release@v2</div><div class="ev">A tag can be moved, so the action running with your token and secrets is whatever its owner last pushed; this is how tj-actions/changed-files leaked secrets from thousands of repos.</div><div class="rec"><b>Fix:</b> Replace each @vN with the 40-character commit SHA, keep # vN as a comment, and let Dependabot bump the SHAs.</div></div><div class="finding high"><div class="head"><span class="ttl">Make CI invoke the test suite it has</span><span class="chip">high</span><span class="rankchip">31 occurrences</span></div><div class="loc">.github/workflows</div><div class="ev">31 test files, no test command in any workflow</div><div class="ev">A green check that never executed an assertion is worse than no check, because reviewers trust it.</div><div class="rec"><b>Fix:</b> Add a test step to the existing workflow rather than a new workflow.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span></div><div class="loc">.github/workflows/publish.yml</div><div class="ev">1 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
             <div class="post-actions">
-                <a href="https://github.com/yebeai/fastapi-voyager" target="_blank" rel="noopener" class="primary-btn">
+                <a href="https://github.com/moses-y/fastapi-voyager" target="_blank" rel="noopener" class="primary-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                     </svg>

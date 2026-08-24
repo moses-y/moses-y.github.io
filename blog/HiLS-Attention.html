@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>July 30, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,12 +79,46 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Long-context language models face a fundamental efficiency wall. Full attention scales quadratically with sequence length, making 100K+ token contexts prohibitively expensive for both training and inference. Existing sparse attention methods either require hand-crafted selection rules that miss important tokens, or cannot be trained end-to-end under the language modeling loss, limiting their effectiveness on real tasks.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>HiLS-Attention implements a chunk-wise sparse attention mechanism that learns which token chunks to attend to directly from the next-token prediction objective. The core idea is to compress chunk keys into low-dimensional surrogates, estimate chunk importance without full QK computation, and factorize attention into inter-chunk and intra-chunk softmax steps. This allows native sparse training rather than post-hoc sparsification of a dense model.</p><p>The codebase is structured around pluggable attention implementations. models/FlashHiLS/hilsattention.py contains the core HiLS mechanism, while models/ also includes baselines: full attention (FullAttn/), sliding window (HSAUltralong/), InfLLMv2, NSA, DASH, and NaiveBSA. Training scripts in scripts/pretrain/345Mexpdist/ run controlled comparisons across these methods at 345M and 1B parameter scales. Evaluation covers perplexity (eval/evalppl.py), LongBench (eval/evallongbenchv1.py), and RULER (eval/evalruler.py).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team training a 7B model for 100K+ token document understanding could continue pre-training from a full-attention checkpoint using the provided scripts. For example, pointing MODELPATH at a base OLMo 3 checkpoint and running scripts/cpt/cptolmo38KA2KHoPE_qcal.sh converts the model to HiLS attention and continues training on long-context data. The resulting model reportedly extrapolates to 4x the YaRN-extended length while maintaining comparable short-context performance.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD pipeline - No .github/ or CI config detected. No automated test gate means regressions are caught manually.
-Med - No LICENSE file - Usage and redistribution rights are unclear despite the code being publicly available.
-Low - No dependency lockfile - requirements.txt and pyproject.toml declare dependencies without pinned versions, risking non-reproducible builds across environments.
-Low - Limited unit tests - Only 6 test files exist for a codebase with 76 Python files. Core attention kernels and training loops lack automated coverage.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>HiLS-Attention is a serious research contribution with a clean, well-organized codebase that makes sparse attention training practical. It is best suited for research teams working on long-context LLMs who need a reproducible baseline to build on. Production teams should wait for the promised SGLang inference integration and expect to invest in their own testing infrastructure.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> Training or fine‑tuning very long‑context language models quickly runs into quadratic attention cost and memory limits. Existing sparse‑attention tricks either require hand‑crafted chunking or break end‑to‑end learning, making it hard to get stable ultra‑long context performance.</p>
+<p><strong>What This Does</strong> The repository implements <em>HiLS‑Attention</em> – a learned, chunk‑wise sparse attention that estimates chunk importance with compressed keys and factorises the attention into inter‑chunk and intra‑chunk softmaxes. The core logic lives in</p>
+<ul><li><code>models/FlashHiLS/hils_attention.py</code> – key class <code>HiLSAttention</code> and helper <code>chunk_attn_pool_tilelang</code>.</li><li><code>models/FlashHiLS/modeling_olmo_hils.py</code> / <code>modeling_qwen_hils.py</code> – model wrappers that plug the attention into OLMo‑3 and Qwen‑3 families.</li></ul>
+<p>Configuration files under <code>configs/hils_attention/</code> (e.g., <code>config_hils_attn_8KA2K_HoPE_345M_prop3p1_qcal_r64.json</code>) define chunk sizes, token‑landmark settings and training hyper‑parameters. Evaluation scripts in <code>eval/</code> (e.g., <code>eval_longbench_v1.py</code>) load a checkpoint, run the model on the LongBench benchmark, and write per‑task results.</p>
+<p><strong>How It Is Wired</strong> Execution starts at the entry point <code>eval/eval_longbench_v1.py:main</code> (line 648). <code>main</code> parses CLI args, calls <code>load_model</code> (which imports <code>models/FlashHiLS/modeling_olmo_hils.py</code>), then iterates over benchmark datasets. For each example it invokes <code>forward</code> on the model; <code>forward</code> routes through <code>apply_rotary_pos_emb → rotate_half</code>, then to <code>hils_attention.forward</code>. Inside <code>hils_attention.forward</code> the most‑used internal calls are:</p>
+<ul><li><code>chunk_attn_pool_tilelang</code> (12 call sites) – builds chunk‑wise attention tensors.</li><li><code>rms_norm</code> (6 call sites) – normalises hidden states.</li><li><code>assert_close</code> (13 call sites) – sanity‑checks intermediate tensors.</li></ul>
+<p>The call graph shows <code>backward</code> is invoked from 26 distinct locations, indicating that gradient‑flow code is widely shared. No circular imports were detected, but the modules <code>models/FlashHiLS/modeling_olmo_hils.py</code> and <code>ops/flex_attn_tilelang.py</code> each have &gt;10 inbound edges, making them high‑impact change points.</p>
+<p>External effects are limited to filesystem writes: <code>main → append_summary_log</code> creates output directories via <code>os.makedirs</code>. No network or database calls are present.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the original upstream repo
+git clone https://github.com/moses-y/HiLS-Attention
+cd HiLS-Attention
+
+# Recommended environment (uv)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+source .venv/bin/activate
+
+# Or pip/conda alternative (from README)
+conda create -n hils python=3.11 -y &amp;&amp; conda activate hils
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+            -f https://download.pytorch.org/whl/cu128
+pip install -r requirements.txt</code></pre>
+<p>To evaluate a pre‑trained checkpoint:</p>
+<pre data-lang="bash"><code>export MODEL_PATH=/path/to/hf_ckpt
+export OUTPUT_DIR=./eval_results
+python eval/eval_longbench_v1.py \
+    --model_path $MODEL_PATH \
+    --config configs/hils_attention/config_hils_attn_8KA2K_HoPE_345M_prop3p1_qcal_r64.json \
+    --output_dir $OUTPUT_DIR</code></pre>
+<p>Training scripts are in <code>scripts/pretrain/</code> and <code>scripts/cpt/</code>; they expect <code>CORPUS_PATH</code> and <code>OUTPUT_DIR</code> environment variables as shown in the README.</p>
+<p><strong>Real‑World Use</strong> A company that serves legal‑document search over millions of pages can replace the default dense transformer in its inference service with the HiLS‑enabled OLMo‑3 checkpoint. By loading the checkpoint (converted to HF format with <code>scripts/ckpt_transfer/dcp_hf_transfer.sh</code>) and calling the same <code>forward</code> API, they gain roughly 2× faster inference on 64 k token prompts while preserving accuracy on short‑context QA tasks.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>High – License missing</strong> – no <code>LICENSE</code> file; redistribution rights undefined.</li><li><strong>High – No CI pipeline</strong> – 76 source files, no <code>.github/workflows</code> or similar.</li><li><strong>Medium – Dependabot absent</strong> – only <code>pyproject.toml</code>/<code>requirements.txt</code>; no automated dependency updates.</li><li><strong>Medium – Large binary in repo</strong> – <code>configs/olmo3_vocab/tokenizer.json</code> (6.8 MiB) should be moved to Git LFS or external storage.</li></ul>
+<p>Measured quality concerns (static analysis):</p>
+<ul><li><strong>High – Deep nesting</strong> in <code>ops/flex_attn_tilelang.py</code>, <code>models/FlashHiLS/modeling_olmo_hils.py</code>, <code>ops/hils_fwd_bwd_head.py</code> (max depth 10).</li><li><strong>High – Oversized files</strong> (<code>ops/flex_attn_tilelang.py</code>, <code>models/FlashHiLS/modeling_olmo_hils.py</code>, <code>models/FlashHiLS/modeling_qwen_hils.py</code> &gt; 1700 LOC).</li><li><strong>High – Duplicated code blocks</strong> across several <code>eval/configs/datasets/*.py</code> files.</li><li><strong>Medium – Broad exception handling</strong> (bare <code>except:</code>) in <code>models/FlashHiLS/hils_attention.py</code> and others.</li><li><strong>Medium – High branching density</strong> in several shell scripts under <code>scripts/eval/</code>.</li></ul>
+<p>Addressing the high‑severity items (license and CI) should be the first priority; refactoring large/duplicated modules will improve maintainability for future extensions.</p>
+<p><strong>The Bottom Line</strong> HiLS‑Attention provides a functional, end‑to‑end implementation of learned sparse attention with clear entry points for training and evaluation. The code works but suffers from maintainability problems (deep nesting, huge files) and lacks basic engineering hygiene (license, CI, dependency lock). It is suitable for research teams or early‑stage product prototypes that can allocate effort to clean‑up and add proper release processes.</p>
             </div>
 
             
@@ -105,7 +139,7 @@ Low - Limited unit tests - Only 6 test files exist for a codebase with 76 Python
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>76</b></li><li><span>Shell</span><i style="width:75%"></i><b>57</b></li><li><span>JSON</span><i style="width:51%"></i><b>39</b></li><li><span>YAML</span><i style="width:8%"></i><b>6</b></li><li><span>Markdown</span><i style="width:1%"></i><b>1</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 
