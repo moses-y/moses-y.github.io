@@ -179,5 +179,45 @@ if (fs.existsSync(llms) && manifest) {
   console.log('  skip  llms.txt not built');
 }
 
+console.log('provenance is stated, not claimed');
+
+/*
+ * This section exists because of a claim that shipped and was wrong. llms.txt
+ * asserted that no language model produced any figure on the site, which was
+ * true of the grades and the audit and false of the similarity edges: those come
+ * out of a neural embedding of a text that itself contains a generated summary.
+ * A blanket honesty claim is the easiest thing in the pipeline to get wrong,
+ * because nothing breaks when it stops being true.
+ */
+if (manifest) {
+  check('both edge types declare a provenance',
+    manifest.edgeTypes && manifest.edgeTypes.stack.provenance === 'EXTRACTED' &&
+    manifest.edgeTypes.semantic.provenance === 'INFERRED');
+  check('the inferred edge names the model it came from',
+    /\S/.test((manifest.edgeTypes.semantic || {}).model || ''));
+  check('the extracted edge says what evidence it carries',
+    /names the shared packages/.test(manifest.edgeTypes.stack.evidence || ''));
+  check('clusters inherit the provenance of the edges they are built from',
+    /INFERRED/.test(manifest.clusterProvenance || ''));
+}
+
+if (fs.existsSync(llms)) {
+  const text = fs.readFileSync(llms, 'utf8');
+  // The specific regression: an unqualified site-wide no-model claim.
+  check('llms.txt makes no blanket no-model claim',
+    !/no language model produces any figure/i.test(text));
+  check('llms.txt names both provenance levels',
+    /EXTRACTED/.test(text) && /INFERRED/.test(text));
+  check('llms.txt discloses the embedding model by name', /nv-embedqa/.test(text));
+
+  const kinDir2 = path.join(DATA, 'kin');
+  if (fs.existsSync(kinDir2)) {
+    const one = readJson(path.join(kinDir2, fs.readdirSync(kinDir2)[0]));
+    check('a neighbourhood restates provenance for a reader who fetched only it',
+      one.provenance && one.provenance.semantic === 'INFERRED' &&
+      one.provenance.stack === 'EXTRACTED');
+  }
+}
+
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');
 process.exit(fail ? 1 : 0);

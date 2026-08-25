@@ -69,12 +69,17 @@ function writeLlmsTxt(index, gradesFile, manifest, sample) {
   const text = [
     '# Moses Yebei - repository estate',
     '',
-    '> ' + index.total + ' public repositories, each analysed by a deterministic pipeline:',
-    '> file census, architecture pass, dependency and advisory scan, hygiene audit,',
-    '> and an eight-category grade. No language model produces any figure on this',
-    '> site - every number is measured from a tree, a history or a manifest, and the',
-    '> same inputs give the same output. Repositories that have not been analysed are',
-    '> marked as such rather than being reported as clean.',
+    '> ' + index.total + ' public repositories, analysed and related to each other.',
+    '> Provenance is stated per fact rather than claimed for the site as a whole.',
+    '> The file census, architecture pass, dependency scan, advisory scan, hygiene',
+    '> audit, domain classification and eight-category grade are EXTRACTED: measured',
+    '> from a tree, a history or a manifest, reproducible from the same inputs, no',
+    '> model involved. The semantic similarity edges are INFERRED: cosine distance',
+    '> between neural embeddings (nvidia/nv-embedqa-e5-v5) of a text built from each',
+    '> repository description, topics and generated summary. Treat them as a strong',
+    '> hint, not as a measurement. Every edge in the relation layer carries which of',
+    '> the two it is. Repositories that have not been analysed are marked as such',
+    '> rather than being reported as clean.',
     '',
     '## Data',
     '',
@@ -99,7 +104,8 @@ function writeLlmsTxt(index, gradesFile, manifest, sample) {
     '## Notes',
     '',
     '- Domains: ' + ranked + '.',
-    '- Two edge types relate repositories. "semantic" is cosine similarity of the repository embedding and answers "solves the same problem". "stack" is IDF-weighted overlap of declared dependencies and answers "built the way you build things". A pair scoring on both is the strongest signal that one repository is a usable starting point for the other.',
+    '- Two edge types relate repositories, and they differ in how much they can be trusted. "stack" is EXTRACTED: IDF-weighted overlap of dependencies both repositories declare in a manifest, and each edge names the packages it was drawn from, so it can be checked and disagreed with. It answers "built the way you build things". "semantic" is INFERRED: cosine distance between embeddings, with no evidence attached beyond the number itself. It answers "probably solves the same problem". A pair scoring on both is the strongest signal that one repository is a usable starting point for the other, because the extracted edge corroborates the inferred one.',
+    '- Clusters in clusters.json are built from semantic edges only, so they inherit that provenance: they are INFERRED. Single-link union-find at the threshold, which chains, so the largest clusters are "reachable by strong similarity" rather than "all alike".',
     '- Stack edges exist only for the ' + manifest.counts.withDeclaredDependencies + ' repositories that declare dependencies in a manifest this pipeline reads.',
     '- Grades cover ' + graded + ' of ' + index.total + ' repositories. An absent grade means not yet audited, not a bad grade.',
     '- Generated ' + manifest.generated.slice(0, 10) + '.',
@@ -206,6 +212,13 @@ function main() {
       score: m.score,
       article: m.article,
       cluster: clusterOf.get(id) || null,
+      // The provenance of each list, restated per file so that a reader who
+      // fetched one neighbourhood and nothing else still knows which half of it
+      // is measured and which half is a guess.
+      provenance: {
+        semantic: 'INFERRED',
+        stack: 'EXTRACTED'
+      },
       semantic: sem,
       stack: stk
     }));
@@ -216,10 +229,36 @@ function main() {
   const covered = clusters.reduce((s, c) => s + c.size, 0);
   const manifest = {
     generated: new Date().toISOString(),
-    description: 'Materialised relations between repositories. Two edge types: ' +
-      '"semantic" is cosine similarity of the repository embedding, "stack" is ' +
-      'IDF-weighted overlap of declared dependencies. Both are computed, not ' +
-      'inferred by a model.',
+    description: 'Materialised relations between repositories. Two edge types, ' +
+      'differing in provenance, which is the thing to check before trusting ' +
+      'either of them.',
+    /*
+     * The distinction this file exists to make. It was originally written as
+     * "both are computed, not inferred by a model", which was simply false: the
+     * similarity edges come out of a neural embedding of text that itself
+     * includes a generated summary. Stating it per edge type is the only version
+     * of this claim that survives contact with the pipeline.
+     */
+    edgeTypes: {
+      stack: {
+        provenance: 'EXTRACTED',
+        derivedFrom: 'dependency manifests committed to both repositories',
+        method: 'IDF-weighted cosine over declared packages, ln(N/df), packages ' +
+          'above ' + MAX_DF_SHARE + ' document frequency excluded as furniture',
+        evidence: 'each edge names the shared packages that carried the most weight',
+        answers: 'built the way you build things'
+      },
+      semantic: {
+        provenance: 'INFERRED',
+        derivedFrom: 'neural embedding of the repository description, topics, ' +
+          'languages, frameworks and generated summary',
+        model: 'nvidia/nv-embedqa-e5-v5',
+        method: 'cosine similarity in the embedding space',
+        evidence: 'none beyond the similarity score itself',
+        answers: 'probably solves the same problem'
+      }
+    },
+    clusterProvenance: 'INFERRED - clusters are built from semantic edges only',
     thresholds: {
       cluster: CLUSTER_AT,
       stackMin: MIN_STACK,
