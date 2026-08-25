@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 26, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,32 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Modern AI agents need the same production guarantees as traditional services—routing, observability, auditability, and identity—yet most teams are left wiring ad‑hoc scripts together. The lack of a reusable control plane forces engineers to re‑implement orchestration, security, and scaling for each new agent.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>agentfield supplies a self‑contained control plane written in Go that turns any Python, Go, or TypeScript agent into a first‑class API. The core server lives in control-plane/cmd/agentfield-server/main.go; the CLI wrapper (control-plane/cmd/af/main.go) provides dev‑time commands such as install, run, and doctor. Configuration is driven by YAML files (control-plane/agentfield.yaml, control-plane/config/agentfield.yaml) and environment variables loaded from .env.example (copied to .env.dev for local work).</p><p>Docker support is baked in (control-plane/docker-compose.dev.yml and the docker.yml GitHub Action) so the entire stack—control plane, optional databases, and side‑car services—can be launched with a single compose command. The repository also ships a React UI (under assets/ and compiled into the binary via control-plane/internal/embedded/ui.go) for visual inspection of agents, policies, and execution logs.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone &amp; install dependencies  
-   git clone https://github.com/Agent-Field/agentfield.git
-   cd agentfield/control-plane
-   # Go modules are used; ensure Go 1.22+ is installed
-   go mod download
-Configure  
-   cp .env.example .env.dev      # edit .env.dev with your secrets (e.g., DBURL, JWTSIGNINGKEY)</p><p>The control plane reads control-plane/agentfield.yaml for runtime defaults; adjust it if you need custom ports or storage back‑ends.
-Run locally (Docker)  
-   docker compose -f docker-compose.dev.yml up -d</p><p>This starts the control plane server, a PostgreSQL instance, and the UI.</p><p>Or run the server directly:  
-   go run ./cmd/agentfield-server
-Interact  
-Use the CLI: go run ./cmd/af install &lt;agent-dir&gt; to register a new agent.  
-Call the generated REST endpoint (e.g., POST http://localhost:8080/v1/agents/&lt;nodeid&gt;/run). The OpenAPI spec is auto‑generated at /swagger.json.  
-Test  
-   make test            # invokes go test ./... (64 test files present)</p><p>All commands above are derived from the existing Makefile, Docker compose file, and Go entry points; no undocumented flags are introduced.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A fintech platform could expose a fraud‑detection agent as a microservice:</p><p>docker-compose.yml (production)
-services:
-  fraud-agent:
-    image: myorg/fraud-agent:latest
-    environment:
-AGENTFIELDURL=http://control-plane:8080
-AGENTID=fraud-detector</p><p>The platform’s transaction service calls POST http://control-plane:8080/v1/agents/fraud-detector/run with the transaction payload. The control plane logs the request, signs the decision with the agent’s DID, and stores the audit trail in PostgreSQL, making the outcome provable for regulators.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Secrets in repo – .env.dev contains example credentials; if real values are committed they pose a security risk. (control-plane/.env.dev)  
-Medium – Environment‑specific code – Windows‑only service (devservicewindows.go) may cause build failures on non‑Windows CI unless conditioned properly.  
-Medium – Limited SDK docs – The README links to external SDK docs but the repository itself lacks inline usage examples for the Go, Python, or TypeScript SDKs.  
-Low – Test coverage – 64 test files indicate good coverage, but no coverage badge is shown in the README; consider adding go test -cover output to CI.  
-Low – Dependency hygiene – No go.sum verification step shown in CI; adding go mod verify would tighten supply‑chain security.</p><p>Overall, the project follows a conventional Go layout, includes CI workflows (.github/workflows/*.yml), and ships a license (Apache 2.0). The presence of extensive unit tests and Docker integration points to a mature codebase.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>agentfield delivers a functional, Go‑native control plane that quickly converts AI agents into production‑grade services with built‑in observability and cryptographic audit trails. It is ready for teams that already use Go or containerised environments; the main caution is to audit any committed secrets and verify Windows‑specific code paths before adopting in a Linux‑only stack.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams building AI agents need backend infrastructure that treats agents as callable services rather than chatbot workflows. The repository provides the control plane and SDKs to make agents observable, auditable, and identity-aware from day one, but the codebase carries significant technical debt that affects onboarding and safety.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>AgentField consists of four projects: <code>control-plane</code> (1005 files, 922 code files) provides the HTTP API, routing, and coordination; <code>sdk</code> (413 files, 391 code files) offers Python, Go, and TypeScript kits; <code>examples</code> (213 files) contain benchmark and demo workloads; and <code>scripts</code> (19 files) handle tooling. The control-plane exposes REST endpoints for agent execution, execution record management, and configuration—every function becomes a REST endpoint, every agent gets a cryptographic identity.</p>
+<p>Key files: <code>control-plane/internal/server/server.go</code> orchestrates routing; <code>control-plane/internal/handlers/execute.go</code> defines execution handlers called from 6 other files; <code>sdk/typescript/src/agent/Agent.ts</code> is the central TypeScript agent module (1385 lines, 395 branch points, imports/imported by 41 modules). The <code>sdk/python/agentfield/agent.py</code> counterpart is equally oversized.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at two entry points: <code>control-plane/cmd/af/main.go:32</code> (<code>main</code> reaches 94 functions, called by nothing else in the repo) and <code>control-plane/internal/cli/commands/run.go:69</code> (<code>execute</code> reaches 80 functions, called by nothing else). From <code>main</code>, execution flows to <code>RegisterReasoner</code> → handler registration → API route setup. The internal call graph shows <code>Run</code> called from 419 places, <code>New</code> from 356, making these the highest-blast-radius functions.</p>
+<p>Traced paths: <code>main → Execute [filesystem via os.WriteFile]</code>; <code>Start → cleanupLoop → performCleanup → RetryStaleWorkflowExecutions [db via workflowStmt.ExecContext]</code>; <code>execute → ListInstalledPackages → loadRegistryDirect [filesystem via os.ReadFile]</code>.</p>
+<p>The module graph has 24 modules in circular dependencies, with <code>sdk/typescript/src/agent/Agent</code> participating in an import cycle with <code>sdk/typescript/src/types/agent.ts</code> and <code>sdk/typescript/src/client/AgentFieldClient.ts</code>. The hub module <code>control-plane/web/client/src/lib/utils</code> is depended on by 51 other modules—changes here have high-blast-radius impact.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: The repo uses <code>Makefile</code> for build targets; <code>control-plane/go.mod</code> pins Go dependencies; <code>control-plane/web/client/package.json</code> and <code>package-lock.json</code> manage the TypeScript frontend. No single <code>install</code> command is documented across the four projects; the <code>Makefile</code> in the root likely orchestrates them.</p>
+<p><strong>Configuration</strong>: Environment files exist but carry secrets: <code>control-plane/.env.dev</code>, <code>control-plane/web/client/.env</code>, <code>control-plane/web/client/.env.production</code> are tracked despite <code>.gitignore</code> exclusions. A <code>control-plane/.env.example.tmpl</code> template is present. No <code>pyproject.toml</code> or <code>go.mod</code> at the root implies per-project dependency management.</p>
+<p><strong>Running it</strong>: To start the server, the entry point is <code>control-plane/cmd/af/main.go</code> or <code>control-plane/cmd/agentfield-server/main.go</code>. The <code>control-plane/docker-compose.dev.yml</code> and <code>control-plane/tools/perf/Dockerfile</code> suggest <code>docker compose -f control-plane/docker-compose.dev.yml up</code> for local development.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>An insurance claims adjuster agent written in Python:</p>
+<pre data-lang="python"><code>from agentfield import Agent, AIConfig
+from pydantic import BaseModel
+
+app = Agent(
+    node_id="claims-processor",
+    version="2.1.0",
+    ai_config=AIConfig(model="anthropic/claude-sonnet-4-20250514"),
+)
+
+class Decision(BaseModel):
+    action: str  # "approve", "deny", "escalate"
+    confidence: float
+    reasoning: str
+
+@app.reasoner(tags=["insurance", "critical"])
+async def evaluate_claim(claim: dict) -&gt; dict:
+    decision = await app.ai(
+        system="Insurance claims adjuster. Evaluate and decide.",
+        user=f"Claim #{claim['id']}: ...",
+    )
+    return decision.model_dump()</code></pre>
+<p>This registers a reasoner tagged for A/B testing and blue-green deploys. The <code>evaluate_claim</code> function becomes a REST endpoint via the control-plane routing layer. Execution records are stored in a database through <code>control-plane/internal/server/knowledgebase/kb.go</code> methods (<code>Topics</code>, <code>Add</code>, <code>AddBatch</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis of 1479 files found 350 issues across 6 kinds:</p>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Oversized files: <code>sdk/typescript/src/agent/Agent.ts</code>, <code>sdk/python/agentfield/agent.py</code>, <code>sdk/python/agentfield/client.py</code> (1385 lines each, hard to hold in one head)</li><li><strong>[HIGH/soundness]</strong> Import cycle member: <code>sdk/typescript/src/agent/Agent.ts</code> participates in a circular import with types and client modules</li><li><strong>[HIGH/cognitive_load]</strong> Deep nesting: max indentation depth 12 in <code>sdk/python/agentfield/agent.py</code> and <code>control-plane/web/client/src/components/workflow/TimelineNodeCard.tsx</code></li><li><strong>[HIGH/clarity]</strong> Hub module: <code>control-plane/web/client/src/lib/utils</code> depended on by 51 modules; <code>control-plane/web/client/src/components/ui/button</code> depended on by 51 modules</li><li><strong>[MEDIUM/cognitive_load]</strong> High branching density: 395 branch points over 1385 lines in <code>sdk/typescript/src/agent/Agent.ts</code> and <code>sdk/typescript/src/memory/MemoryClient.ts</code></li><li><strong>[MEDIUM/resilience]</strong> Broad exception handling: bare <code>except</code> in <code>sdk/python/agentfield/logger.py</code>, <code>sdk/python/agentfield/types.py</code>, <code>sdk/python/agentfield/agent.py</code></li></ul>
+<p>Code Health Audit (13 findings):</p>
+<ul><li><strong>[CRITICAL]</strong> Upgrade <code>golang.org/x/crypto@0.49.0</code> carrying CVE-2026-42508 (critical) — vulnerable code installs as-pinned</li><li><strong>[HIGH]</strong> Untrack <code>control-plane/web/client/.env</code> though <code>.gitignore</code> excludes it — credentials in use are the ones actually loaded</li><li><strong>[HIGH]</strong> Pin GitHub Actions to commit SHAs: <code>docker/setup-buildx-action@v3</code>, <code>docker/build-push-action@v5</code>, etc. Tags can move, running with whatever owner last pushed</li><li><strong>[HIGH]</strong> <code>control-plane/.env.dev</code> committed with live credentials — the most common route for keys to reach public clones</li><li><strong>[HIGH]</strong> <code>control-plane/.env.dev</code> tracked although <code>.gitignore</code> says to ignore — author already decided this file must never commit</li><li><strong>[MEDIUM]</strong> <code>python:3.11-slim</code> base image in <code>control-plane/tools/perf/Dockerfile</code> not pinned by digest — mutable base means different CVE sets per build</li><li><strong>[MEDIUM]</strong> No Dependabot/Renovate configured across 7 manifests</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a functional agent control plane with good architectural intent—treating agents as APIs with cryptographic identities, audit trails, and routing infrastructure. The SDKs cover Python, Go, and TypeScript, and the examples provide concrete starting points. However, the codebase has serious maintainability and security debt: three oversized modules spanning 1385 lines each, an active import cycle, committed .env files with live credentials, and a critical Go crypto vulnerability in the pinned dependency. Teams needing to ship production agent infrastructure should plan to refactor the agent modules and rotate all committed secrets before deploying. The control-plane project is the most substantial component; the SDKs and examples are valuable but inherit the same structural issues.</p>
             </div>
 
             

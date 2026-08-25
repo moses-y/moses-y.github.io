@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 26, 2026</span>
-                    <span>4 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>NGINX solves the problem of handling high-concurrency network traffic with predictable resource usage. A typical web server process-per-connection model collapses under load; NGINX&#39;s event-driven, asynchronous architecture serves tens of thousands of simultaneous connections from a small number of worker processes. It also consolidates reverse proxying, load balancing, TLS termination, and caching into a single tool, removing the need to stitch together multiple specialized servers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This is the official NGINX open source repository. The core logic lives in src/core/ (connection handling, memory pools, hash tables, event loop primitives) and src/event/ (platform-specific I/O multiplexing: ngxepollmodule.c for Linux, ngxkqueuemodule.c for BSD/macOS). The auto/ directory contains the configure-time build system that detects the target OS and compiler, then generates the Makefile and ngxautoconfig.h header. conf/nginx.conf is the default runtime configuration.</p><p>The build is heavily modular. auto/modules and auto/options control which of the many optional modules get compiled in (SSL, PCRE, gzip, etc.). contrib/vim/ provides editor syntax files. docs/ contains the man page and changelog tooling.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Build from source. The auto/configure script is the entry point; it generates a Makefile tailored to your system.</p><p>./auto/configure --with-httpsslmodule --with-stream
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Web infrastructure needs a single component that can serve static content, terminate TLS, route requests, load-balance across upstreams, and cache responses — without the operational overhead of a full application server. NGINX solves this with an event-driven, modular architecture that handles high concurrency with predictable resource usage.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is the official NGINX open source repository — the actual web server, reverse proxy, load balancer, and cache. The codebase is almost entirely C (260 files) organized under <code>src/core/</code> (request lifecycle, memory pools, event loop), <code>src/event/</code> (epoll, kqueue, eventport drivers), and <code>src/http/</code> (request processing, upstream proxying, caching). The <code>auto/</code> directory (65 files) contains the build configuration system that generates platform-specific makefiles.</p>
+<p>The <code>conf/nginx.conf</code> is the primary configuration file, and <code>docs/html/index.html</code> is the default landing page. The <code>contrib/vim/</code> directory provides syntax highlighting for editing configs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/core/nginx.c</code> — the main entry point that parses command-line arguments, reads the config file, and initializes the event loop. From there, control flows through <code>ngx_init_cycle()</code> in <code>src/core/ngx_cycle.c</code>, which loads and validates the configuration, then <code>ngx_event_core_module</code> in <code>src/event/ngx_event.c</code> starts the accept loop.</p>
+<p>The request path: a connection arrives → <code>ngx_event_accept()</code> → <code>ngx_http_init_connection()</code> → <code>ngx_http_process_request_line()</code> → <code>ngx_http_handler()</code> → module chain (static files, proxy, cache). The <code>ngx_http_core_module</code> in <code>src/http/ngx_http_core_module.c</code> is the central dispatcher that routes requests through the configured handler chain.</p>
+<p>The module graph shows no internal modules or circular dependencies — 397 files analyzed with zero import edges. This means the codebase is cleanly separated by responsibility: <code>src/core/</code> for primitives, <code>src/event/</code> for I/O, <code>src/http/</code> for protocol handling.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Build from source requires the <code>auto/configure</code> script followed by <code>make</code>:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/nginx
+cd nginx
+./auto/configure --prefix=/usr/local/nginx
 make
-sudo make install</p><p>The configure script auto-detects dependencies (OpenSSL, PCRE, zlib) via the checks in auto/lib/. If a dependency is missing, the build fails with a clear message. Binary packages are the easier route for production; the README points to official repos for most Linux distributions.</p><p>Configuration: Edit conf/nginx.conf. The file is heavily commented and uses NGINX&#39;s own directive syntax. There are no environment variables; all runtime behavior is set in this file. The default install places it at /usr/local/nginx/conf/nginx.conf.</p><p>Running it: The compiled binary is objs/nginx during development or /usr/local/nginx/sbin/nginx after make install. Start with:</p><p>sudo /usr/local/nginx/sbin/nginx</p><p>The process daemonizes by default. nginx -s reload and nginx -s stop manage a running instance.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A common pattern: NGINX terminates TLS and serves static assets directly, while proxying API requests to a backend cluster.</p><p>server {
+sudo make install</code></pre>
+<p><strong>Configuration</strong>: Edit <code>conf/nginx.conf</code> — set <code>listen</code>, <code>server_name</code>, <code>location</code> blocks, upstream definitions, and cache paths. No environment variables needed; all runtime behavior is in the config file.</p>
+<p><strong>Running it</strong>: The compiled binary at <code>/usr/local/nginx/sbin/nginx</code> starts the server. Test config with <code>nginx -t</code>, start with <code>nginx</code>, stop with <code>nginx -s stop</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A typical deployment: NGINX terminates TLS on port 443, serves static assets from <code>/var/www</code>, and proxies API requests to a backend cluster:</p>
+<pre data-lang="nginx"><code>server {
     listen 443 ssl;
-    servername api.example.com;</p><p>sslcertificate     /etc/ssl/certs/example.crt;
-    sslcertificatekey /etc/ssl/private/example.key;</p><p>location /static/ {
+    ssl_certificate /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+
+    location /static/ {
         alias /var/www/static/;
         expires 7d;
-    }</p><p>location /api/ {
-        proxypass http://backendservers;
-        proxysetheader Host $host;
     }
-}</p><p>upstream backendservers {
-    server 10.0.0.1:8080;
-    server 10.0.0.2:8080;
-}</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No test suite in the repository - There are no unit or integration tests in src/. NGINX relies on external QA and the buildbot.yml CI workflow for validation. This is a known characteristic of the project, but it means regressions can slip through.
-Med - Monolithic C codebase - src/core/ngxstring.c, ngxcycle.c, and ngxconffile.c are large, dense files with manual memory management throughout. The code is mature and well-reviewed, but the barrier to entry for new contributors is high.
-Low - Build system is a custom shell-script framework - auto/configure and the files in auto/ are not a standard build tool (no CMake, no Autotools). It works reliably on the supported platforms but is unfamiliar to most developers.
-Low - Windows support is partial - src/event/modules/ngxiocp_module.c exists, but the primary target is Unix-like systems. The auto/lib/*/makefile.msvc files show that external libraries need manual builds on Windows.</p><p>The CI setup (.github/workflows/) is solid: it checks commit messages, whitespace, PR structure, and runs buildbot jobs. The SECURITY.md and CONTRIBUTING.md files are present and substantive.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is the reference implementation of a production-grade web server, written in careful C with over two decades of real-world hardening. It is not a codebase you fork to add features casually; the build system and internal APIs assume deep familiarity. Use it if you need to build NGINX from source for a specific platform or module set, or if you are studying how high-performance network servers are designed. For routine deployment, use the official binary packages instead.</p>
+
+    location /api/ {
+        proxy_pass http://backend;
+        proxy_cache my_cache;
+    }
+}</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 340 issues (219 high, 115 medium, 6 low), all of one kind: deep nesting (max depth 10) in <code>src/core/nginx.c</code>, <code>src/core/ngx_buf.h</code>, and <code>src/core/ngx_conf_file.c</code>. This makes control flow hard to follow; flattening with early returns would help.</p>
+<p>Security audit found:</p>
+<ul><li><strong>High</strong> — Third-party GitHub Actions pinned to <code>@main</code> instead of commit SHAs in <code>.github/workflows/</code> — a moved tag could execute arbitrary code with your CI token.</li><li><strong>High</strong> — No test suite exists (261 source files, 0 test files) — regressions ship undetected.</li><li><strong>Medium</strong> — Workflows in <code>.github/workflows/buildbot.yml</code> declare no <code>permissions</code> block, so GITHUB_TOKEN inherits repo defaults.</li><li><strong>Low</strong> — No <code>timeout-minutes</code> on CI jobs; a wedged step runs to the 6-hour platform default.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is the real NGINX codebase — production-grade, battle-tested, and the standard for high-concurrency web serving. The lack of tests and loose CI pinning are genuine concerns for anyone modifying it, but the core architecture is sound and well-documented. Use it if you need the actual server, not a wrapper.</p>
             </div>
 
             

@@ -80,34 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#trigger-from-ci-pipeline">Trigger from CI pipeline</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Software teams spend a disproportionate amount of time orchestrating repetitive engineering tasks—creating PRs, running tests, handling reviews—especially when scaling across many repositories. Manual coordination introduces latency and error‑prone hand‑offs that slow delivery of even routine changes.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SWE‑AF bundles a full autonomous engineering crew (planner, architect, coder, reviewer, tester) behind a single HTTP call. The implementation lives in the examples folder, where each sub‑directory (claude-code-haiku, claude-code-sonnet, codex, swe-af-haiku) contains a minimal Node.js agent that can be run inside the Docker‑based runtime.</p><p>The Dockerfile at the repository root builds the execution environment, installing the Node runtime and copying the examples/ payload.  
- docker-compose.yml and docker-compose.local.yml define a service exposing port 8080, matching the API endpoint shown in the README.  
- The entry point for each agent is a CLI script (examples/agent-comparison//src/cli.js or examples/agent-comparison//cli.js). These scripts parse the JSON payload, spawn the appropriate role agents, and write results back to the caller.</p><p>The repository also ships a comprehensive test suite (42 test files under examples/agent-comparison//test and examples/agent-comparison/swe-af-haiku/tests/) that validates the CLI behavior and the end‑to‑end flow.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup – Build and start the container. The presence of a Makefile suggests a make wrapper, but the concrete target can be inferred from the Docker files:</p><h2>Build the image</h2>
-<p>docker build -t swe-af:latest .</p><h2>Start the service (exposes port 8080)</h2>
-<p>docker compose -f docker-compose.yml up -d</p><p>The repository provides an .env.example; copy it to .env and fill any required values (e.g., API keys for the underlying LLM provider).  
-Configuration – No additional config files are required for the core runtime. Model selection and runtime mode are passed in the request payload, as documented in the README.  
-Running it – Issue a POST request to the local API. The README’s example is directly usable once the container is running:</p><p>curl -X POST http://localhost:8080/api/v1/execute/async/swe-planner.build \
-        -H &quot;Content-Type: application/json&quot; \
-        -d @- &lt;&lt;&#39;JSON&#39;
-   {
-     &quot;input&quot;: {
-       &quot;goal&quot;: &quot;Add JWT auth&quot;,
-       &quot;repourl&quot;: &quot;https://github.com/user/my-project&quot;,
-       &quot;config&quot;: {
-         &quot;runtime&quot;: &quot;claudecode&quot;,
-         &quot;models&quot;: { &quot;default&quot;: &quot;sonnet&quot; }
-       }
-     }
-   }
-   JSON</p><p>The request triggers the CLI in examples/agent-comparison/claude-code-haiku/src/cli.js (or the appropriate runtime folder) via the container’s entrypoint.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A micro‑service team could point SWE‑AF at their monorepo, request a feature such as “expose a new health‑check endpoint,” and receive a merged PR after automated design, coding, review, and test generation. The workflow would be:</p><h3 class="post-h" id="trigger-from-ci-pipeline">Trigger from CI pipeline</h3><p>curl -X POST http://swe-af.internal/api/v1/execute/async/swe-planner.build \
-     -H &quot;Content-Type: application/json&quot; \
-     -d &#39;{&quot;input&quot;:{&quot;goal&quot;:&quot;Expose health endpoint&quot;,&quot;repo_url&quot;:&quot;git@github.com:org/monorepo.git&quot;}}&#39;</p><p>The service returns a PR URL once the autonomous pipeline completes, allowing the team to merge with confidence.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing npm lockfile – examples/agent-comparison/claude-code-haiku/package.json (and similar) lack a package-lock.json or pnpm-lock.yaml; reproducible builds rely on the lockfile.  
-Low – Limited test coverage of failure paths – Tests focus on happy‑path CLI execution; error handling for network failures or malformed payloads is not exercised.  
-Low – No explicit license file – The root contains LICENSE but its content is not verified; ensure it matches the Apache‑2.0 badge.  
-Low – Secrets not audited – .env.example hints at required credentials; repository does not contain a secret‑scanning workflow.  
-Low – CI only runs make check – The GitHub Actions workflow (.github/workflows/ci.yml) invokes make check; without seeing the Makefile target we cannot confirm it runs the full test matrix.  
-Low – Dockerfile does not pin base image digest – Potential drift in the underlying OS/library versions across builds.</p><p>Overall the codebase is modular, with clear separation between agent runtimes and a well‑instrumented test suite. The missing lockfiles and limited failure‑path testing are the primary gaps.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SWE‑AF delivers a functional proof‑of‑concept for an autonomous engineering fleet, packaged in a reproducible Docker environment and backed by a solid test suite. It is ready for evaluation in controlled settings, but production adoption should first address lockfile hygiene, broaden error‑scenario testing, and tighten CI security checks. Suitable for teams experimenting with AI‑driven code generation and multi‑repo orchestration.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Coordinating multiple AI agents to ship production-grade code is usually ad-hoc: prompts scattered across scripts, no shared state, no defined roles, and no way to scale from a single PR to a multi-repo effort. SWE-AF replaces that with a single API call that spins up a structured engineering team—product manager, architect, coders, QA—that plans, implements, and verifies changes end to end.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SWE-AF is a Python 3.12+ runtime that orchestrates autonomous software engineering fleets. The core logic lives in <code>swe_af/</code> (45 files): <code>app.py</code> and <code>fast/app.py</code> expose the HTTP API, <code>execution/dag_executor.py</code> runs the workflow as a DAG, and <code>reasoners/execution_agents.py</code> dispatches work to model-backed agents. <code>prompts/</code> holds role-specific prompt templates for architect, coder, QA, and merger agents.</p>
+<p>The <code>examples/agent-comparison/</code> directory contains four complete runs—Claude Code Haiku, Claude Code Sonnet, Codex, and SWE-AF itself—each producing a working CLI todo app with tests and coverage reports. <code>examples/diagrams/</code> contains a full trace of a diagram-generator project built by the fleet, including per-agent JSONL logs in <code>.artifacts/logs/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the HTTP layer: <code>swe_af/app.py</code> receives a POST to <code>/api/v1/execute/async/swe-planner.build</code>, which routes through <code>swe_af/fast/executor.py</code> into the DAG executor. The module graph shows <code>swe_af/execution/schemas.py</code> as the central hub—43 modules import it, making it the highest-blast-radius file. <code>swe_af/app.py</code> (18 importers) and <code>swe_af/prompts/_utils.py</code> (19 importers) are secondary hubs.</p>
+<p>The main entry point is <code>run</code> in <code>examples/agent-comparison/codex/src/cli.js</code>, which reaches 11 functions. The shortest path to a filesystem effect is <code>run → addTodo → loadTodos</code>, which calls <code>fs.readFileSync</code>—three hops from entry to disk I/O. The call graph shows <code>createSVG</code> and <code>addTitle</code> each called from 14 places, making them the most change-sensitive functions in the example code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/SWE-AF
+cd SWE-AF
+make install   # or: pip install -e .
+make check     # run tests
+docker compose up --build   # start the API on :8080</code></pre>
+<p>Configuration lives in <code>.env.example</code>—copy to <code>.env</code> and set your model provider keys. The API accepts a JSON payload with <code>goal</code>, <code>repo_url</code> or <code>repo_path</code>, and a <code>config</code> block specifying runtime and per-role models. The README documents both single-repo and multi-repo modes via the <code>config.repos</code> array.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team maintaining a monorepo with a shared auth library can submit one goal: "Add JWT auth across API and shared-lib." SWE-AF spawns separate agents for each repository, coordinates the dependency order, runs tests in its own CI, and opens a PR with the merged result—no human orchestrating prompts or merging branches.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 89 issues (20 high, 68 medium, 1 low) across 7 kinds. The main concerns:</p>
+<ul><li><strong>High – Oversized files</strong>: <code>swe_af/execution/schemas.py</code>, <code>swe_af/app.py</code>, <code>swe_af/execution/dag_executor.py</code> exceed 676 lines each, making changes ripple widely.</li><li><strong>High – Deep nesting</strong>: max indentation depth of 9 in <code>swe_af/app.py</code> and <code>swe_af/fast/app.py</code>; control flow is hard to follow.</li><li><strong>High – Hub modules</strong>: <code>swe_af/execution/schemas.py</code> has 43 dependents; churn there is high-blast-radius.</li><li><strong>High – Duplicated code</strong>: 994 repeated 6-line blocks across 141 test files in <code>examples/agent-comparison/swe-af-haiku/tests/</code>.</li><li><strong>Medium – Broad exception handling</strong> in <code>swe_af/app.py</code> and <code>dag_executor.py</code> swallows errors indiscriminately.</li><li><strong>Medium – File handle leak</strong>: <code>open(...)</code> without context manager in <code>swe_af/prompts/merger.py</code>.</li></ul>
+<p>The audit also flags missing lockfile for <code>pyproject.toml</code>, no least-privilege GITHUB_TOKEN in CI, mutable Docker base image, and no dependency vulnerability scan. Tests and CI are present and passing.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>SWE-AF is a serious attempt at autonomous multi-agent engineering, with a clean API surface and real evidence of working end-to-end runs. The core orchestration code needs refactoring—the hub modules and deep nesting will hurt maintainability as the fleet scales. Use it if you need a programmable engineering team, not if you want a polished library.</p>
             </div>
 
             

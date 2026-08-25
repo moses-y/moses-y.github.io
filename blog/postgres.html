@@ -80,24 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#verify-it-is-running">Verify it is running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations that need a production‑ready, open‑source relational database often must compile PostgreSQL from source to meet custom build, packaging, or compliance requirements. The mirror provides the full source tree, but there is no automated build or test gate, and licensing clarity is limited to a COPYRIGHT file without a LICENSE declaration.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repository is the official PostgreSQL source distribution (postgres/). It contains the core database engine, server utilities, and a large collection of extensions under contrib/. Key structure evidence:
-Makefile and configure drive the build system; running ./configure followed by make produces the postgres binary and accompanying utilities.  
-config/ holds m4 macros (config/c-compiler.m4, config/checkmodules.pl, etc.) that configure uses to detect host‑specific features.  
-contrib/ supplies add‑on modules (e.g., contrib/bloom, contrib/btreegin, contrib/amcheck) each with their own Makefile, SQL scripts, and test suites.  
-.github/ contains only documentation (CODEOFCONDUCT.md, CONTRIBUTING.md, SECURITY.md); no CI workflows or pipeline definitions are present.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Pull the mirror
-git clone https://github.com/postgres/postgres.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repository is the PostgreSQL database management system source code. It solves the problem of providing a full-featured, open-source relational database with ACID transactions, foreign keys, subqueries, triggers, and user-defined types. The repo is a mirror of the official PostgreSQL GIT repository, not a fork for development.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>PostgreSQL is a complete database server. The core engine lives in <code>src/</code> (5,895 files), with the backend entry point at <code>src/backend/main/main.c</code>. The <code>contrib/</code> directory (1,224 files) holds optional extensions like <code>amcheck</code> (index verification), <code>bloom</code> (bloom filter indexes), and <code>auth_delay</code> (intentional authentication delays). Documentation sits in <code>doc/</code> (496 files).</p>
+<p>The build system is GNU Make and Autoconf, with <code>configure.ac</code> generating <code>configure</code>. A Meson build system is also present (<code>meson.build</code> files throughout). The README points to standard PostgreSQL build instructions at <code>https://www.postgresql.org/docs/devel/installation.html</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/backend/main/main.c</code>, which initializes the server process. From there, the backend handles connections, parses SQL, plans queries, and manages storage. The <code>contrib/</code> extensions hook into the backend via PostgreSQL's extension mechanism—each has a control file (e.g., <code>contrib/amcheck/amcheck.control</code>) and SQL upgrade scripts (e.g., <code>amcheck--1.0--1.1.sql</code>).</p>
+<p>The build system is layered: top-level <code>Makefile</code> and <code>GNUmakefile.in</code> orchestrate the whole tree, while each <code>contrib/</code> subdirectory has its own <code>Makefile</code> (e.g., <code>contrib/auto_explain/Makefile</code>). The <code>config/</code> directory holds Autoconf macros for compiler, library, and Perl/Python/Tcl detection.</p>
+<p>The <code>.cirrus.yml</code> and <code>.cirrus.tasks.yml</code> files indicate CI is configured via Cirrus CI, not GitHub Actions—the <code>.github/</code> directory only contains community files (code of conduct, contributing guide, security policy).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Build from source using the standard PostgreSQL procedure. The repo contains <code>configure</code> and <code>Makefile</code>, so:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/postgres
 cd postgres
-Configure the build (uses ./configure, pulls macros from config/)
-./configure --prefix=/usr/local/pgsql
-Build the binaries
-make -j$(nproc)
-Install
-sudo make install</p><p>Evidence: Makefile at the root and configure script orchestrate these targets; the config/ macros are invoked automatically by configure.</p><h3 class="post-h" id="configuration">Configuration</h3><p>After installation, the server’s runtime configuration lives in postgresql.conf (created during make install). The data directory is specified by the PGDATA environment variable or the -D flag to pgctl. No additional .yaml or .toml files are required for a basic deployment.</p><h3 class="post-h" id="running-it">Running it</h3><p>Start the server using the installed binary
-pgctl start -D /usr/local/pgsql/data</p><h3 class="post-h" id="verify-it-is-running">Verify it is running</h3><p>psql -U postgres -c &quot;SELECT version();&quot;</p><p>Evidence: pgctl is built by the Makefile; the contrib/ extensions can be enabled by adding sharedpreloadlibraries or CREATE EXTENSION commands in psql.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A development team needing to audit query performance can compile a custom PostgreSQL build with the autoexplain extension (contrib/autoexplain/). After make install, they set sharedpreloadlibraries = &#39;autoexplain&#39; in postgresql.conf and restart the server. Every query producing a sequential scan or index scan above the configured threshold is automatically logged to autoexplain.log, providing observability without application‑level changes.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No CI/CD pipeline – .github/ lacks workflow files; there is no automated build/test gate, so regressions can go undetected on new commits.  
-Missing LICENSE file – only a COPYRIGHT file exists at the root, leaving redistribution rights ambiguous for downstream consumers who rely on a standard open‑source license declaration.  
-Test coverage limited to contrib/ – many extensions (amcheck, btreegin, auto_explain) ship with t/ test directories, but the core source tree under src/ has no dedicated unit‑test suite visible in the mirror; functional testing relies on manual make check invocations.  
-No input‑validation guards in build scripts – configure accepts many flags; erroneous options can cause silent failures or incomplete builds if not carefully specified.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This mirror gives you the complete PostgreSQL source base for custom builds, packaging, or internal audits. It excels when you need fine‑grained control over compilation flags or want to embed extensions from contrib/. However, the absence of a LICENSE file, lack of automated CI, and sparse test coverage in the core mean it is best suited for experienced operators who can supply their own testing, licensing, and deployment pipelines. Teams that rely on out‑of‑the‑box CI/CD or need clear open‑source licensing may need to augment this mirror with additional tooling.</p>
+./configure
+make
+make install</code></pre>
+<p><strong>Configuration</strong>: No environment variables are required beyond standard PostgreSQL server configuration. The server reads <code>postgresql.conf</code> at runtime, but that file is generated during <code>make install</code>, not present in the repo.</p>
+<p><strong>Running it</strong>: After build and install, initialize a data directory and start the server:</p>
+<pre data-lang="bash"><code>initdb -D /usr/local/pgsql/data
+pg_ctl -D /usr/local/pgsql/data -l logfile start</code></pre>
+<p><strong>Note</strong>: This is a mirror. Do not submit pull requests here; follow <code>https://wiki.postgresql.org/wiki/Submitting_a_Patch</code> for contributions.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>PostgreSQL is a production-grade database used as the primary datastore for web applications, analytics workloads, and geospatial systems. A typical deployment runs the server on a dedicated host, with applications connecting via <code>libpq</code> or ODBC. The <code>contrib/</code> extensions add specialized capabilities—for example, <code>contrib/amcheck</code> verifies index integrity during maintenance windows:</p>
+<pre data-lang="sql"><code>CREATE EXTENSION amcheck;
+SELECT bt_index_check('my_table_pkey');</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found one high-severity issue:</p>
+<ul><li><strong>High</strong> - No CI/CD pipeline detected - no automated build/test gate. The <code>.github/</code> directory exists but contains only community files. However, <code>.cirrus.yml</code>, <code>.cirrus.tasks.yml</code>, and <code>.cirrus.star</code> show Cirrus CI is configured, so builds and tests do run. The static analysis missed this because it only looked at <code>.github/</code>.</li></ul>
+<p>The repo has 2,392 test files, a license (<code>COPYRIGHT</code>), and no committed secrets. The build system is mature (Autoconf + Make + Meson), which is expected for a 20+ year old codebase.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is the actual PostgreSQL source, not a derivative. It's a production-grade database with a mature build system and extensive test coverage. Use it if you need the latest development snapshot or want to build PostgreSQL from source. The lack of a GitHub-based CI workflow is irrelevant—Cirrus CI handles it, and this mirror is not the place for contributions anyway.</p>
             </div>
 
             
