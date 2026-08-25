@@ -27,9 +27,22 @@
     function langColor(l) { return LANG_COLORS[l] || '#8a93ad'; }
 
     // Domains - the "capability" framing: what the code does, not just its language.
+    /*
+     * Colours for the domains the build assigns. The names are the build's, not
+     * a second set of this file's own: the graph used to derive its own domain
+     * from its own language map, which is how the same repository could be
+     * "Web & UI" here and "Web & Interfaces" on the index page, and how 198
+     * repositories sat in a bucket that held 98 on the other side.
+     *
+     * Both older sets are kept below so a stale forks.json still colours rather
+     * than falling through to grey.
+     */
     var DOMAIN_COLORS = {
+        'AI & Data': '#a06bff', 'Web & Interfaces': '#4f7cff', 'Systems & Infra': '#f34b7d',
+        'Mobile': '#34e0c4', 'Knowledge & Content': '#d9a441',
+        'Agent Skills & Plugins': '#e0521f',
         'AI / ML & Data': '#a06bff', 'Web & UI': '#4f7cff', 'Systems': '#f34b7d',
-        'Mobile': '#34e0c4', 'Backend & Services': '#00add8', 'DevOps & Tooling': '#89e051',
+        'Backend & Services': '#00add8', 'DevOps & Tooling': '#89e051',
         'Docs & Knowledge': '#d9a441', 'Other': '#8a93ad'
     };
     var LANG_DOMAIN = {
@@ -58,7 +71,17 @@
         'JSON': 'Docs & Knowledge', 'Text': 'Docs & Knowledge', 'CSV': 'Docs & Knowledge'
     };
     var AI_TOPICS = /(^|[-_ ])(ai|ml|llm|nlp|rag|agent|agents|genai|machine-learning|deep-learning|transformer|embedding|chatbot|vision)([-_ ]|$)/i;
-    function domainOf(lang, topics) {
+    /*
+     * The domain the build already assigned, when there is one.
+     *
+     * enrichFork runs over every repository on every pass, so forks.json carries
+     * a current domain, and deriving a second opinion here only produced two
+     * answers to one question - including two different sets of names for the
+     * same six groups. The language map below is now the fallback for a
+     * repository the build has not enriched yet, and nothing else.
+     */
+    function domainOf(lang, topics, fork) {
+        if (fork && fork.domain) return fork.domain;
         if (topics && topics.some(function (t) { return AI_TOPICS.test(t); })) return 'AI / ML & Data';
         return LANG_DOMAIN[lang] || 'Other';
     }

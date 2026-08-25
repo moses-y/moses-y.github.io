@@ -309,6 +309,10 @@ const SCORERS = {
 function pickProfile(sig) {
   const kind = String(sig.kind || '').toLowerCase();
   const lang = String(sig.language || '').toLowerCase();
+  // A skills or plugin distribution is prose that an agent reads. Grading it on
+  // module coupling and a build pipeline measures nothing that exists, so it is
+  // graded the way the other document repositories are.
+  if (sig.domain === 'Agent Skills & Plugins') return 'docs';
   if (/notebook|dataset|analysis|research/.test(kind)) return 'notebook';
   if (/infra|terraform|devops|deploy|kubernetes|docker/.test(kind)) return 'infra';
   if (/\b(cli|tool)\b/.test(kind)) return 'cli';

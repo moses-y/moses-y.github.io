@@ -17,7 +17,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { domainOf, deriveLanguage, LANG_DOMAIN, CENSUS_DOMAIN, DOC_LANGS } = require('./lib-classify.js');
+const { domainOf, deriveLanguage, isSkillDistribution, skillShare,
+  LANG_DOMAIN, CENSUS_DOMAIN, DOC_LANGS } = require('./lib-classify.js');
 
 let fail = 0;
 function check(name, cond, detail) {
@@ -52,6 +53,59 @@ check('a config-dominant repo is infrastructure',
 const mixed = { languages: { Markdown: 500, Python: 12 } };
 check('code wins over prose when both are present',
   domainOf(deriveLanguage(mixed), mixed) === 'AI & Data');
+
+console.log('agent skills and plugins');
+
+/*
+ * The line this has to hold is between a repository that is a skill or plugin
+ * distribution and an application that merely ships one. Both contain
+ * .claude/skills; only the first is defined by it, and getting this wrong in
+ * the permissive direction swept in a 12,769-file design tool.
+ */
+const skillPack = {
+  totalFiles: 11, directories: { '(root)': 1, skills: 10 },
+  languages: { Markdown: 11 }, docs: ['README.md']
+};
+check('a skills pack is its own domain',
+  domainOf(null, skillPack) === 'Agent Skills & Plugins', domainOf(null, skillPack));
+
+const pluginPack = {
+  totalFiles: 57, directories: { '.claude-plugin': 1, '(root)': 7, 'startup-design': 16, 'startup-pitch': 33 },
+  languages: { Markdown: 50, YAML: 3, JSON: 1 }, docs: ['README.md']
+};
+check('a plugin marketplace is a distribution',
+  domainOf(null, pluginPack) === 'Agent Skills & Plugins', domainOf(null, pluginPack));
+
+// The false positive that mattered: a real application with a skills folder.
+const appWithSkills = {
+  totalFiles: 707, directories: { '.claude': 130, app: 34, components: 153, lib: 50, public: 165, '(root)': 175 },
+  languages: { TSX: 165, TypeScript: 90, Markdown: 261, JSON: 17 },
+  docs: ['.claude/skills/web-design-guidelines/SKILL.md']
+};
+check('an app that ships a skill is still an app',
+  domainOf('TSX', appWithSkills) === 'Web & Interfaces', domainOf('TSX', appWithSkills));
+
+const bigPlugin = {
+  totalFiles: 12769, directories: { '.claude-plugin': 2, src: 8000, app: 4000, '(root)': 767 },
+  languages: { TypeScript: 9000, Markdown: 1200 }
+};
+check('a plugin manifest alone does not reclassify a product',
+  domainOf('TypeScript', bigPlugin) === 'Web & Interfaces', domainOf('TypeScript', bigPlugin));
+
+// A course is prose with a skills folder in the corner of it, which is not the
+// same thing as a skills pack.
+const course = {
+  totalFiles: 2478, directories: { '.github': 8, skills: 40, lessons: 2430 },
+  languages: { Markdown: 1800, Python: 600 }
+};
+check('a skills folder in the corner of a course does not reclassify it',
+  domainOf('Python', course) !== 'Agent Skills & Plugins', domainOf('Python', course));
+
+check('skillShare measures the tree, not the presence',
+  skillShare(skillPack) > 0.8 && skillShare(appWithSkills) < 0.25,
+  skillShare(skillPack).toFixed(2) + ' vs ' + skillShare(appWithSkills).toFixed(2));
+check('nothing without a census is a skill distribution',
+  isSkillDistribution(null) === false && isSkillDistribution({}) === false);
 
 console.log('what Other is allowed to mean');
 
@@ -88,11 +142,12 @@ if (fs.existsSync(idx)) {
 console.log('the two taxonomies stay in step');
 
 /*
- * The graph carries its own copy of the map in assets/js/cb-dom.js, under
- * different domain names, because it colours nodes client-side from forks.json
- * rather than from the built index. Two copies is the actual defect; until they
- * are merged, the least this can do is fail when one grows a language the other
- * has never heard of.
+ * The graph now reads the domain the build assigned rather than deriving a
+ * second opinion, so the two taxonomies no longer disagree by construction. Two
+ * things still have to hold: its language map remains a working fallback for a
+ * repository the build has not enriched, and it has a colour for every domain
+ * the build can produce - a missing one renders as grey, which reads as "Other"
+ * to anyone looking at the graph.
  */
 const cb = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'cb-dom.js'), 'utf8');
 const block = (cb.match(/var LANG_DOMAIN = \{[\s\S]*?\n {4}\};/) || [''])[0];
@@ -105,6 +160,16 @@ const missingInGraph = Object.keys(LANG_DOMAIN).filter(function (l) {
 });
 check('the graph knows every language the build knows',
   missingInGraph.length === 0, missingInGraph.join(', '));
+
+check('the graph prefers the domain the build assigned',
+  /function domainOf\(lang, topics, fork\)[\s\S]{0,200}fork\.domain/.test(cb));
+
+const colours = (cb.match(/var DOMAIN_COLORS = \{[\s\S]*?\n {4}\};/) || [''])[0];
+const buildDomains = ['AI & Data', 'Web & Interfaces', 'Systems & Infra', 'Mobile',
+  'Knowledge & Content', 'Agent Skills & Plugins', 'Other'];
+const uncoloured = buildDomains.filter(function (d) { return colours.indexOf("'" + d + "'") === -1; });
+check('the graph has a colour for every domain the build emits',
+  uncoloured.length === 0, uncoloured.join(', '));
 
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');
 process.exit(fail ? 1 : 0);

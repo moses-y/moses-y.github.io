@@ -84,6 +84,10 @@ const healthy = G.grade(healthyRepo());
 check('a healthy repository grades B or better', healthy.score >= 75, healthy.score + ' ' + healthy.letter);
 check('healthy repository is not flagged partial', healthy.partial === false);
 check('profile comes from the kind', healthy.profile === 'frontend', healthy.profile);
+// A skills pack is prose an agent reads, so it must not be graded on module
+// coupling and a build pipeline it has no reason to own.
+check('a skills distribution is graded as documents',
+  G.grade(healthyRepo({ domain: 'Agent Skills & Plugins' })).profile === 'docs');
 check('categories are returned worst-first',
   healthy.categories.every(function (c, i, a) { return i === 0 || a[i - 1].score <= c.score; }));
 

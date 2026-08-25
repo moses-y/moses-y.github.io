@@ -50,6 +50,7 @@ function main() {
       id: repo.id,
       name: repo.displayName || repo.name,
       kind: repo.kind,
+      domain: repo.domain,
       language: repo.language,
       updatedAt: repo.updatedAt,
       // The audit date, not today's, so a rebuild of an unchanged estate is a

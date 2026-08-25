@@ -35,7 +35,7 @@
         var domainIds = {}, langIds = {}, langCounts = {}, domainCounts = {}, totalFiles = 0;
         forks.forEach(function (f) {
             var lang = primaryLanguage(f);
-            var domain = domainOf(lang, f.topics);
+            var domain = domainOf(lang, f.topics, f);
             var files = (f.knowledgeGraph && f.knowledgeGraph.totalFiles) || 0;
             totalFiles += files;
             langCounts[lang] = (langCounts[lang] || 0) + 1;

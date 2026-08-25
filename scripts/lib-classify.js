@@ -60,11 +60,107 @@ function deriveLanguage(kg) {
 }
 
 /*
+ * Agent skills and plugins.
+ *
+ * A category that did not exist when this taxonomy was written and now has
+ * dozens of repositories in it, filed under whatever language happened to be
+ * dominant - a skills pack landing in "Web & Interfaces" because two of its
+ * hundred and fifty files were JavaScript.
+ *
+ * The distinction that matters is between a repository that *is* a skill or
+ * plugin distribution and an application that merely ships one. Both contain
+ * .claude/skills; only the first is defined by it. So the test is share of the
+ * tree, not presence: a Next.js app with 130 skill files out of 707 is a web
+ * app, and a repository where the skills are most of what is there is not.
+ */
+/*
+ * Two sets, because they are not equally good evidence.
+ *
+ * DIST_DIRS is where a distribution keeps its payload. CONFIG_DIRS is agent
+ * configuration, which by now is in a large share of repositories that have
+ * nothing to do with publishing a skill - `.claude` is the working directory of
+ * anyone who used the tool once.
+ *
+ * Bare `agents/` and `commands/` are in neither: they are ordinary source
+ * directory names, and including them swept in a 12,769-file design tool.
+ */
+const MANIFEST_DIR = /^\.claude-plugin(\/|$)/;
+const DIST_DIRS = /^(\.claude-plugin|skills|plugins)(\/|$)/;
+const CONFIG_DIRS = /^(\.claude|\.agents|\.cursor|\.codex)(\/|$)/;
+const SKILL_DIRS = new RegExp(DIST_DIRS.source + '|' + CONFIG_DIRS.source);
+
+// Below this a skills/ or plugins/ directory is a corner of the repository
+// rather than its point: a 2,478-file course with a skills/ folder at 2% of the
+// tree is a course, and was classified as a skills pack until this floor went
+// in. A .claude-plugin manifest is exempt - it is one small directory by
+// construction, and on a prose-dominant repository it means only one thing.
+const MIN_DIST_SHARE = 0.15;
+const SKILL_NAME = /(^|[-_ ])(skills?|plugins?|mcp|mcp-server|agent-skills?)([-_ ]|$)/i;
+
+// Share of the censused tree that sits under a skill or plugin directory.
+function skillShare(kg) {
+  const dirs = (kg && kg.directories) || null;
+  if (!dirs || typeof dirs !== 'object') return 0;
+  let total = 0, skill = 0;
+  for (const name of Object.keys(dirs)) {
+    const n = Number(dirs[name]) || 0;
+    total += n;
+    if (SKILL_DIRS.test(name)) skill += n;
+  }
+  return total ? skill / total : 0;
+}
+
+// Prose-dominant: the repository is mostly documents, whatever incidental code
+// sits beside them. A skills pack is prose by construction - the skill *is* the
+// Markdown - so this separates a pack from a program that has a skill in it.
+function proseShare(kg) {
+  const census = (kg && kg.languages) || null;
+  if (!census) return 0;
+  let total = 0, prose = 0;
+  for (const name of Object.keys(census)) {
+    const n = Number(census[name]) || 0;
+    total += n;
+    if (name === 'Markdown' || name === 'reStructuredText' || name === 'Text') prose += n;
+  }
+  return total ? prose / total : 0;
+}
+
+/*
+ * Two ways in. Either the skill directories are most of the tree, or the
+ * repository is mostly prose and carries a distribution marker.
+ *
+ * A .claude-plugin manifest is deliberately not sufficient on its own. It was,
+ * for one revision, and it pulled in a 12,769-file design tool, a 2,597-file
+ * note system and a dozen other applications that merely ship a plugin
+ * alongside the product. Shipping one is not being one.
+ */
+function isSkillDistribution(kg, repo) {
+  if (!kg) return false;
+  if (skillShare(kg) >= 0.5) return true;
+  if (proseShare(kg) < 0.6) return false;
+
+  const dirs = Object.keys(kg.directories || {});
+  if (dirs.some(d => MANIFEST_DIR.test(d))) return true;
+  if (dirs.some(d => DIST_DIRS.test(d)) && skillShare(kg) >= MIN_DIST_SHARE) return true;
+
+  const files = [].concat(kg.docs || [], kg.configFiles || [], kg.entryPoints || [])
+    .map(f => String(f).toLowerCase());
+  if (files.some(f => /(^|\/)skill\.md$/.test(f))) return true;
+
+  const name = (repo && repo.name) || '';
+  const topics = ((repo && repo.topics) || []).join(' ');
+  return SKILL_NAME.test(name) || SKILL_NAME.test(topics);
+}
+
+/*
  * The domain, from the code language when there is one and from the file census
  * when there is not. "Other" is left for the case it should actually mean: a
  * repository whose tree was never censused, so nothing is known about it.
  */
-function domainOf(language, kg) {
+function domainOf(language, kg, repo) {
+  // Checked before the language, because these are precisely the repositories
+  // whose dominant language says nothing about what they are.
+  if (isSkillDistribution(kg, repo)) return 'Agent Skills & Plugins';
   if (language && LANG_DOMAIN[language]) return LANG_DOMAIN[language];
   const census = (kg && kg.languages) || null;
   if (census) {
@@ -172,7 +268,7 @@ function enrichFork(fork) {
   const cls = classifyArtifact(kg, fork);
   return Object.assign(fork, {
     language,
-    domain: domainOf(language, kg),
+    domain: domainOf(language, kg, fork),
     kind: cls.kind,
     kindEvidence: cls.evidence,
     kindConfidence: cls.confidence,
@@ -181,4 +277,5 @@ function enrichFork(fork) {
 }
 
 module.exports = { deriveLanguage, domainOf, classifyArtifact, deriveCapabilities,
-  enrichFork, DOC_LANGS, LANG_DOMAIN, CENSUS_DOMAIN, CAPABILITY_SIGNALS };
+  enrichFork, isSkillDistribution, skillShare, proseShare, DIST_DIRS,
+  DOC_LANGS, LANG_DOMAIN, CENSUS_DOMAIN, CAPABILITY_SIGNALS };
