@@ -80,31 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#or-use-the-published-binary-v1-1-0">Or use the published binary (v1.1.0)</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#inside-docker-mount-config">Inside Docker (mount config)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams often need a quick way to watch a shell‑generated metric (queue depth, DB row count, log tail) without provisioning a full monitoring stack. Setting up Prometheus, Grafana, or custom scripts can be overkill for ad‑hoc checks, especially when the metric is only needed during development or a short‑lived operation.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>sampler runs user‑defined shell commands at a configurable interval, parses the numeric output, and renders it in a terminal UI. The UI is built from reusable components found under component/ – e.g. component/gauge/gauge.go for dial‑style displays, component/sparkline/sparkline.go for rolling line graphs, and component/runchart/runchart.go for stacked bar charts.</p><p>Configuration lives in a single YAML file (example.yml) and is parsed by config/config.go, which validates the schema (config/validator.go). The main execution loop resides in main.go, which creates a data.Sampler (see data/sampler.go), wires the configured components, and starts the console driver (console/console.go). Docker support is provided via the Dockerfile that builds the binary and copies the config at runtime.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Build locally (requires Go 1.22+)
-go build -o sampler .</p><h3 class="post-h" id="or-use-the-published-binary-v1-1-0">Or use the published binary (v1.1.0)</h3><p>curl -Lo /usr/local/bin/sampler \
-  https://github.com/sqshq/sampler/releases/download/v1.1.0/sampler-1.1.0-linux-amd64
-chmod +x /usr/local/bin/sampler</p><p>A Docker image can be produced with the included Dockerfile:
-docker build -t sampler .</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create a YAML file that follows the schema in config/component.go and config/options.go. The repository ships example.yml as a minimal reference. Typical sections include:
-components:
-type: gauge
-    command: &quot;cat /proc/loadavg | awk &#39;{print $1}&#39;&quot;
-    options:
-      min: 0
-      max: 5
-      title: &quot;CPU Load&quot;</p><p>Place the file anywhere; the CLI flag -c (or --config) points to it, as defined in main.go.</p><h3 class="post-h" id="running">Running</h3><p>Local execution
-sampler -c path/to/config.yml</p><h3 class="post-h" id="inside-docker-mount-config">Inside Docker (mount config)</h3><p>docker run --rm -it -v $(pwd)/config.yml:/root/config.yml sampler -c /root/config.yml</p><p>The binary starts a full‑screen terminal UI. Interaction keys are described in README.md (e.g., q to quit, h for help).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A DevOps engineer can monitor a remote RabbitMQ queue during a deployment:
-components:
-type: barchart
-    command: &quot;ssh user@host rabbitmqctl listqueues name messages | grep myqueue | awk &#39;{print $2}&#39;&quot;
-    options:
-      title: &quot;Queue depth&quot;
-      period: 5s</p><p>Running sampler -c rabbitmq.yml shows a live bar chart; a trigger can fire a sound (via data/trigger.go) when the count drops below a threshold, allowing the engineer to proceed without constant manual checks.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Limited test coverage – Only a handful of component utilities (gaugetest.go, sparklinetest.go, parsetest.go) are exercised; core UI rendering and command execution lack unit tests.  
-Low – Platform‑specific code – Files data/intptywindows.go and data/int_pty.go handle PTY differences; on Windows the PTY implementation is experimental and may fail for complex commands.  
-Low – Hard‑coded external dependencies – The README mentions libasound2-dev for sound alerts, but the build does not enforce its presence; missing libraries will cause runtime errors on Linux.  
-Low – No Go vet/lint step – .travis.yml runs go test ./... but does not invoke go vet or static analysis, leaving potential race conditions or misuse of the sync package unchecked.  
-Low – License present – LICENSE.md includes an MIT license, satisfying open‑source compliance.  
-Low – CI status – Travis CI is configured and badge present; however, the repository is a fork with zero stars, suggesting limited community validation.</p><p>Overall, the repo compiles cleanly, has a functional CI pipeline, and ships a Dockerfile, indicating a baseline of engineering hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>sampler delivers a lightweight, terminal‑based visual monitor for any shell‑exposable metric, with a simple YAML config and out‑of‑the‑box Docker image. It is well‑suited for developers or small teams needing rapid, ad‑hoc visibility without the overhead of a full monitoring stack. The main caveats are modest test coverage and platform‑specific quirks; teams should validate PTY behavior on their target OS before production use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operators often need a quick visual for a shell‑generated metric (e.g., DB row count, MQ depth) without standing up a full monitoring stack. Building a custom dashboard for a one‑off script is time‑consuming and introduces unnecessary services.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>sampler</code> runs user‑defined shell commands at a configurable interval, parses the numeric output, and draws terminal UI components (barchart, gauge, sparkline, etc.). The YAML file <code>example.yml</code> (or any user‑supplied file) describes the commands, sampling rate, and which UI component to bind. Core code lives in Go (<code>*.go</code> files) with the entry point <code>main.go</code>. UI logic is in <code>component/</code> (23 files) and configuration handling in <code>config/</code> (6 files). The binary can also be built into a container via the provided <code>Dockerfile</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>main.go</code> at <code>main</code> (line 67). <code>main</code> builds a <code>Starter</code> that calls <code>startAll</code> (line 29) → <code>start</code> (line 58) → the UI layout (<code>component/layout/layout.go</code>). The layout creates the root <code>Block</code> (<code>component/block.go</code>) and registers components such as <code>RunChart</code> (<code>component/runchart/runchart.go</code>), <code>Gauge</code> (<code>component/gauge/gauge.go</code>), and <code>Menu</code> (<code>component/menu.go</code>).</p>
+<p>User‑defined commands are turned into <code>Consumer</code> objects (<code>data/consumer.go</code>). <code>NewConsumer</code> is invoked from ten locations (the most‑used hub) and yields a <code>Consumer</code> that runs the command, captures stdout, and forwards the numeric sample to the component via <code>HandleConsumeSuccess</code> / <code>HandleConsumeFailure</code>.</p>
+<p>Rendering follows the call chain: <code>HandleKeyboardEvent</code> (event/handler.go) → <code>draw</code> functions in each component. For example, <code>Draw</code> in <code>component/gauge/gauge.go</code> calls <code>FormatValue</code> (<code>component/util/format.go</code>) eight times, and <code>Draw</code> in <code>component/runchart/runchart.go</code> calls <code>RenderAlert</code> six times.</p>
+<p>The central formatting helper <code>FormatValue</code> is called from six distinct callers, making it a low‑coupling utility. The most‑connected functions—<code>NewBlock</code>, <code>NewConsumer</code>, <code>FormatValue</code>, <code>GetMiddlePoint</code>—have the widest blast radius (10‑6 distinct call sites) and should be changed cautiously. No circular imports were detected, and the internal call graph contains 233 edges across 206 functions and 66 types.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/sampler
+cd sampler
+
+# Build the binary (requires Go 1.22+)
+go build -o sampler .
+
+# Or build the container image
+docker build -t sampler .</code></pre>
+<p>Create a configuration file (see <code>example.yml</code>). A minimal <code>config.yml</code> might contain:</p>
+<pre data-lang="yaml"><code>components:
+  - type: gauge
+    command: "cat /proc/loadavg | awk '{print $1}'"
+    interval: 5s</code></pre>
+<p>Run the tool:</p>
+<pre data-lang="bash"><code>./sampler -c config.yml
+# or, using Docker
+docker run --rm -v $(pwd)/config.yml:/root/config.yml sampler -c /root/config.yml</code></pre>
+<p>The UI appears in the terminal; use arrow keys to select components, <code>Enter</code> to edit, and <code>Esc</code> to exit.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A DevOps engineer can monitor a nightly backup size without deploying Prometheus. The YAML defines a <code>barchart</code> that runs <code>du -sh /backups/*</code> every minute, and a <code>trigger</code> (in <code>data/trigger.go</code>) that plays a tone when the size exceeds a threshold, leveraging the bundled audio assets (<code>asset/player.go</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Build gate missing</strong> – <code>Dockerfile</code> produces an image but no CI step validates the build.</li><li><strong>Medium – Dependabot not configured</strong> – Only one manifest (<code>go.mod</code>) present; no automated dependency updates.</li><li><strong>Medium – Base image not pinned</strong> – <code>Dockerfile</code> uses <code>ubuntu:focal</code>; mutable tag can introduce untracked CVEs.</li><li><strong>Medium – No non‑root user</strong> – Container runs as root; add a dedicated user and <code>USER</code> directive.</li></ul>
+<p>Additional findings from static analysis:</p>
+<ul><li><strong>Medium – Deep nesting</strong> – <code>data/sampler.go</code> reaches six indentation levels, making control flow hard to follow.</li><li><strong>Medium – Duplicated code</strong> – Repeated six‑line blocks across five component files (<code>barchart</code>, <code>gauge</code>, <code>runchart</code>, <code>sparkline</code>, etc.) could be extracted to shared helpers.</li></ul>
+<p>The repo includes tests (<code>*_test.go</code>), a Travis CI config, a license, and a lockfile; no secrets were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>sampler</code> delivers a lightweight, terminal‑based visualization layer for arbitrary shell commands, with a clear Go codebase and container support. It is production‑ready for ad‑hoc monitoring but needs a few hygiene improvements (build gate, pinned base image, non‑root user) and modest refactoring to reduce nesting and duplication. Engineers looking for a quick, no‑service monitoring UI will find it practical; teams requiring long‑term maintainability should address the identified health issues.</p>
             </div>
 
             
