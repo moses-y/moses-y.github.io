@@ -20,7 +20,31 @@ const LANG_DOMAIN = {
   Go: 'Systems & Infra', Rust: 'Systems & Infra', C: 'Systems & Infra', 'C++': 'Systems & Infra',
   'C/C++ Header': 'Systems & Infra', Java: 'Systems & Infra', 'C#': 'Systems & Infra',
   Zig: 'Systems & Infra', Lua: 'Systems & Infra', Solidity: 'Systems & Infra', Shell: 'Systems & Infra',
-  Swift: 'Mobile', Kotlin: 'Mobile', Dart: 'Mobile', 'Objective-C': 'Mobile'
+  Swift: 'Mobile', Kotlin: 'Mobile', Dart: 'Mobile', 'Objective-C': 'Mobile',
+  // Added after 98 repositories landed in "Other": every one of these was a
+  // language the map simply did not list, not a repository nobody could place.
+  TSX: 'Web & Interfaces', JSX: 'Web & Interfaces', SCSS: 'Web & Interfaces',
+  Less: 'Web & Interfaces', Elixir: 'Web & Interfaces',
+  SQL: 'AI & Data',
+  Terraform: 'Systems & Infra', HCL: 'Systems & Infra', Dockerfile: 'Systems & Infra',
+  Makefile: 'Systems & Infra', 'C/C++ Header': 'Systems & Infra', Perl: 'Systems & Infra',
+  Scala: 'Systems & Infra', Haskell: 'Systems & Infra', Nix: 'Systems & Infra'
+};
+
+/*
+ * Repositories with no code language at all.
+ *
+ * deriveLanguage deliberately ignores prose and config file types, so a
+ * repository that is entirely Markdown - a skills pack, an awesome list, an
+ * interview-question set - returns null and used to fall through to "Other".
+ * 71 of them did. They are not unclassifiable; they are a kind of repository
+ * this estate has a lot of, and they earn their own domain rather than a bin.
+ */
+const CENSUS_DOMAIN = {
+  Markdown: 'Knowledge & Content', reStructuredText: 'Knowledge & Content',
+  Text: 'Knowledge & Content', CSV: 'Knowledge & Content',
+  YAML: 'Systems & Infra', TOML: 'Systems & Infra', INI: 'Systems & Infra',
+  JSON: 'Knowledge & Content', XML: 'Knowledge & Content', SVG: 'Web & Interfaces'
 };
 
 // GitHub leaves `language` null on forks in both the list and the repo detail
@@ -35,8 +59,22 @@ function deriveLanguage(kg) {
   return ranked.length ? ranked[0][0] : null;
 }
 
-function domainOf(language) {
-  return (language && LANG_DOMAIN[language]) || 'Other';
+/*
+ * The domain, from the code language when there is one and from the file census
+ * when there is not. "Other" is left for the case it should actually mean: a
+ * repository whose tree was never censused, so nothing is known about it.
+ */
+function domainOf(language, kg) {
+  if (language && LANG_DOMAIN[language]) return LANG_DOMAIN[language];
+  const census = (kg && kg.languages) || null;
+  if (census) {
+    const ranked = Object.entries(census).sort((a, b) => b[1] - a[1]);
+    for (const [name] of ranked) {
+      if (CENSUS_DOMAIN[name]) return CENSUS_DOMAIN[name];
+      if (LANG_DOMAIN[name]) return LANG_DOMAIN[name];
+    }
+  }
+  return 'Other';
 }
 
 // What kind of thing is this? Every rule below reads a signal we actually have,
@@ -134,7 +172,7 @@ function enrichFork(fork) {
   const cls = classifyArtifact(kg, fork);
   return Object.assign(fork, {
     language,
-    domain: domainOf(language),
+    domain: domainOf(language, kg),
     kind: cls.kind,
     kindEvidence: cls.evidence,
     kindConfidence: cls.confidence,
@@ -143,4 +181,4 @@ function enrichFork(fork) {
 }
 
 module.exports = { deriveLanguage, domainOf, classifyArtifact, deriveCapabilities,
-  enrichFork, DOC_LANGS, LANG_DOMAIN, CAPABILITY_SIGNALS };
+  enrichFork, DOC_LANGS, LANG_DOMAIN, CENSUS_DOMAIN, CAPABILITY_SIGNALS };

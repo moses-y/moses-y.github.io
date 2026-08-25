@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { domainOf } = require('./lib-classify.js');
 
 const SITE = 'https://moses-y.github.io';
 const OUT = 'data';
@@ -64,7 +65,12 @@ function main() {
       t: f.displayName || f.name,
       d: (f.description || '').slice(0, 180),
       l: f.language || null,
-      g: f.domain || null,
+      // Recomputed rather than read from the stored field. The domain is a pure
+      // function of the language and the file census, both of which are already
+      // here, so deriving it on the read side means a fix to the classifier
+      // reaches the site on the next index build instead of waiting for every
+      // repository to be re-enriched.
+      g: domainOf(f.language, kg),
       k: f.kind || null,
       s: f.stars || 0,
       y: f.type === 'original' ? 1 : 0,
@@ -104,7 +110,21 @@ function main() {
       links: (data.similarityLinks || []).length,
       withArticle: records.filter(r => r.a).length
     },
-    taxonomy: data.taxonomy || null,
+    // The stored taxonomy counts the domain that was written into forks.json
+    // when each repository was last enriched, so it disagreed with the records
+    // above the moment the classifier was fixed - 98 in "Other" on the page
+    // while only 2 were left in the data. Domains are recounted from what was
+    // actually just built; the rest of the taxonomy is unaffected by this and
+    // is carried through as it stands.
+    taxonomy: data.taxonomy
+      ? Object.assign({}, data.taxonomy, {
+        domains: records.reduce((acc, r) => {
+          const d = r.g || 'Other';
+          acc[d] = (acc[d] || 0) + 1;
+          return acc;
+        }, {})
+      })
+      : null,
     links: (data.similarityLinks || []).map(l => [l.source, l.target, +(l.similarity || l.sim || 0).toFixed(3)]),
     repos: records
   };

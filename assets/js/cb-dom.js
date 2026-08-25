@@ -30,7 +30,7 @@
     var DOMAIN_COLORS = {
         'AI / ML & Data': '#a06bff', 'Web & UI': '#4f7cff', 'Systems': '#f34b7d',
         'Mobile': '#34e0c4', 'Backend & Services': '#00add8', 'DevOps & Tooling': '#89e051',
-        'Other': '#8a93ad'
+        'Docs & Knowledge': '#d9a441', 'Other': '#8a93ad'
     };
     var LANG_DOMAIN = {
         'Python': 'AI / ML & Data', 'Jupyter Notebook': 'AI / ML & Data', 'R': 'AI / ML & Data',
@@ -41,7 +41,21 @@
         'Java': 'Backend & Services', 'C#': 'Backend & Services', 'Ruby': 'Backend & Services',
         'PHP': 'Backend & Services', 'Elixir': 'Backend & Services', 'SQL': 'Backend & Services',
         'Shell': 'DevOps & Tooling', 'Lua': 'DevOps & Tooling', 'Dockerfile': 'DevOps & Tooling',
-        'Makefile': 'DevOps & Tooling'
+        'Makefile': 'DevOps & Tooling',
+        // 198 repositories sat in "Other" and 196 of them were a language this
+        // map did not list. TSX and JSX alone were 86 of them, which is React
+        // filed as unclassifiable.
+        'TSX': 'Web & UI', 'JSX': 'Web & UI', 'SCSS': 'Web & UI', 'Less': 'Web & UI',
+        'C/C++ Header': 'Systems', 'Objective-C': 'Mobile',
+        'Terraform': 'DevOps & Tooling', 'HCL': 'DevOps & Tooling', 'YAML': 'DevOps & Tooling',
+        'Nix': 'DevOps & Tooling', 'Perl': 'DevOps & Tooling',
+        'Scala': 'Backend & Services', 'Haskell': 'Backend & Services',
+        'Julia': 'AI / ML & Data', 'Solidity': 'Systems',
+        // Prose-only repositories - skills packs, awesome lists, question sets.
+        // primaryLanguage only returns these when there is no code at all, so
+        // reaching here means the repository really is a document collection.
+        'Markdown': 'Docs & Knowledge', 'reStructuredText': 'Docs & Knowledge',
+        'JSON': 'Docs & Knowledge', 'Text': 'Docs & Knowledge', 'CSV': 'Docs & Knowledge'
     };
     var AI_TOPICS = /(^|[-_ ])(ai|ml|llm|nlp|rag|agent|agents|genai|machine-learning|deep-learning|transformer|embedding|chatbot|vision)([-_ ]|$)/i;
     function domainOf(lang, topics) {
