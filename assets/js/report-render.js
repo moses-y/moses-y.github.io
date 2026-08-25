@@ -104,6 +104,13 @@
         return out;
     }
 
+    // The scorecard lives in report-grade.js so this file stays inside the size
+    // limit. It is optional: a page that does not load it renders the report
+    // exactly as before rather than failing.
+    function gradeSection(g) {
+        return (g && global.ReportGrade) ? global.ReportGrade.section(g) : '';
+    }
+
     function body(d, meta, opts) {
         opts = opts || {};
         var name = (d && d.name) || meta.displayName || meta.name || '';
@@ -112,7 +119,9 @@
         if (!d || !d.deep || !d.nodes || !d.nodes.length) {
             if (opts.heading) h += '<h1>' + esc(name) + '</h1>';
             h += '<p class="lede">' + esc(meta.description || '') + '</p>';
-            // The audit does not depend on the deep analysis, so it still renders.
+            // Neither the grade nor the audit depends on the deep analysis, so
+            // both still render. The grade flags its own partial axes.
+            h += gradeSection(opts.grade);
             if (opts.audit) h += auditSection(opts.audit);
             h += '<hr class="rule"><p class="note">No module-level analysis is available for this repository yet. ' +
                 'It is either awaiting the next analysis pass or was skipped as too large for a module-level dive.' +
@@ -137,6 +146,8 @@
             if (links.length) h += '<div class="repolinks">' + links.join('') + '</div>';
             h += '<hr class="rule">';
         }
+
+        h += gradeSection(opts.grade);
 
         h += '<div class="sec"><span class="no">01</span> Overview</div>';
         h += '<div class="tiles">' +
