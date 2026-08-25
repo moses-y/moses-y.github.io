@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { domainOf } = require('./lib-classify.js');
+const { describe } = require('./lib-schema.js');
 
 const SITE = 'https://moses-y.github.io';
 const OUT = 'data';
@@ -130,6 +131,11 @@ function main() {
   };
   fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(index));
 
+  // The key to the single letters above, written next to the file it describes
+  // rather than left in this source. Cheap, and it is the difference between a
+  // reader being able to use data/index.json and having to guess at it.
+  fs.writeFileSync(path.join(OUT, 'schema.json'), JSON.stringify(describe(), null, 2));
+
   // ---- inverted index ---------------------------------------------------
   // token -> positions in `repos`, so a query is a set intersection rather
   // than a scan over every record.
@@ -211,6 +217,7 @@ function main() {
   const before = (Buffer.byteLength(raw) / 1048576).toFixed(1);
   console.log('=== Index build ===');
   console.log(`  data/index.json    ${kb(OUT + '/index.json')} KB  (${gz(OUT + '/index.json')} KB gzipped)`);
+  console.log(`  data/schema.json   ${kb(OUT + '/schema.json')} KB`);
   console.log(`  data/search.json   ${kb(OUT + '/search.json')} KB  (${gz(OUT + '/search.json')} KB gzipped)`);
   console.log(`  tokens indexed     ${Object.keys(postings).length} (${dropped} too common to keep)`);
   console.log(`  sitemap.xml        ${urls.length} urls (${articles.length} articles)`);
