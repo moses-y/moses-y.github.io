@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#cli-conversion-example-from-readme">CLI conversion (example from README)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Engineers and designers frequently need a lightweight tool to inspect, measure, and convert CAD data without committing to heavyweight commercial packages. Existing viewers often lack batch conversion, cross‑platform stability, or the ability to handle modern formats such as glTF and STEP‑AP242.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Mayo is a Qt‑based desktop application that wraps the OpenCascade kernel to provide interactive 3‑D visualization and format translation. Core functionality lives in the src/ hierarchy—e.g., src/app/appcontext.cpp creates the main window, while the conversion pipeline is implemented in src/app/mayoconv.cpp (referenced from the GUI and the CLI). UI resources, icons, and theme SVGs are stored under images/themes/, and internationalisation files are in i18n/. The build is driven by a single CMakeLists.txt that pulls in third‑party headers from src/3rdparty/ (fmt, gsl, magicenum, etc.) and links against the OpenCascade libraries via cmake/OpenCascadeWin.cmake.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Prerequisites (documented in README):
-Qt ≥ 5.12 (or Qt6)
-OpenCascade ≥ 7.5
-CMake ≥ 3.21
-git clone https://github.com/fougue/mayo.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Engineers working with CAD data often need to inspect or convert files across formats like STEP, IGES, STL, and glTF. Desktop tools are either proprietary, platform-locked, or lack batch conversion. Mayo addresses this with an open-source, cross-platform viewer and converter built on Qt and OpenCascade.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Mayo provides a GUI application (<code>src/app/main.cpp</code>) for interactive 3D visualization—clip planes, assembly explosion, measurement tools, and a view cube—plus a CLI tool (<code>src/cli/main.cpp</code>) for headless file conversion. The repo is a fork of <code>fougue/mayo</code> (2,131 stars upstream), carrying the same feature set.</p>
+<p>The codebase is organized into <code>src/</code> (core logic), <code>i18n/</code> (English, French, Chinese translations), and <code>images/</code> (icons and themes). Build configuration lives in <code>CMakeLists.txt</code>, with platform-specific CI workflows under <code>.github/workflows/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/app/main.cpp</code> for the GUI or <code>src/cli/main.cpp</code> for the CLI. Both initialize Qt and OpenCascade, then route through the application context (<code>src/app/app_context.cpp</code>) which manages document state, file I/O, and the model tree. The CLI path calls conversion routines directly, writing output to the filesystem. The GUI path drives the OpenCascade rendering viewport and user interactions.</p>
+<p>The import graph shows 3 internal modules with no edges between them—each operates independently. The most connected modules are the i18n files (<code>i18n/mayo_en</code>, <code>mayo_fr</code>, <code>mayo_zh</code>), which have zero dependencies in either direction. There are no circular dependencies, so changing one module won't cascade unexpectedly. The widest blast radius sits in the third-party headers under <code>src/3rdparty/</code>—<code>fast_float.h</code> and <code>fmt/base.h</code> are 3,462 lines each and heavily included.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Build with CMake. The repo includes <code>CMakeLists.txt</code> and a Windows-specific helper (<code>cmake/OpenCascadeWin.cmake</code>). You'll need Qt 5/6 and OpenCascade installed.</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/mayo
 cd mayo
-cmake -B build -S . -DCMAKEBUILDTYPE=Release
-cmake --build build --target mayo   # builds the GUI
-cmake --build build --target mayoconv # builds the CLI converter</p><p>The repository supplies CI workflows for Linux, macOS, and Windows (.github/workflows/.yml), confirming that the above commands succeed on supported platforms.</p><h3 class="post-h" id="configuration">Configuration</h3><p>No runtime configuration files are required for basic operation. Locale files (i18n/mayo.qm) are automatically loaded by Qt based on the system language. Custom OpenCascade paths can be overridden by setting OpenCASCADEROOT before invoking CMake.</p><h3 class="post-h" id="running">Running</h3><p>GUI
-./build/mayo/mayo   # launches the viewer</p><h3 class="post-h" id="cli-conversion-example-from-readme">CLI conversion (example from README)</h3><p>./build/mayo/mayoconv input.stp output.glb</p><p>The CLI respects the same format matrix shown in the README table and reports success/failure via standard exit codes.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI pipeline for a mechanical‑parts repository can validate incoming STEP files and produce lightweight glTF previews:
-name: Generate preview
-  run: |
-    ./build/mayo/mayoconv part.step part.glb
-    git add part.glb
-    git commit -m &quot;Add preview&quot;</p><p>The generated *.glb can be served directly to a web‑based viewer, enabling rapid design reviews without installing a full CAD suite.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No unit or integration tests – the repo contains no test/ directory; CI only builds the binaries. Untested conversion paths could hide edge‑case failures.  
-Low – Limited documentation for build on macOS – while CI runs, the README lacks explicit macOS OpenCascade setup steps; users must infer from ci_macos.yml.  
-Low – Hard‑coded resource paths – icons and theme files are referenced via Qt resource files (mayo.qrc); relocating the binary without the images/ directory may cause missing assets.  
-None – License present – LICENSE.txt (MIT) is included, satisfying legal distribution.  
-None – CI coverage – multiple GitHub Actions validate builds across OS/arch combinations, indicating good build hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Mayo delivers a functional, cross‑platform CAD viewer and batch converter with a straightforward CMake build and solid OpenCascade integration. The absence of automated tests is the primary risk; otherwise, the codebase is well‑structured and ready for integration into engineering workflows that need quick visual checks or format conversion without heavy dependencies. Suitable for teams that can manage the external Qt/OpenCascade prerequisites.</p>
+mkdir build &amp;&amp; cd build
+cmake .. -DCMAKE_PREFIX_PATH=/path/to/qt;/path/to/opencascade
+cmake --build . --config Release</code></pre>
+<p><strong>Running</strong>: Launch the GUI with <code>./mayo</code> (binary name per CMake config). For CLI conversion, use <code>./mayoconv &lt;input&gt; &lt;output&gt;</code>—the README documents <code>mayoconv</code> as the CLI tool. No environment variables are required beyond standard Qt/OpenCascade paths.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A manufacturing workflow: receive a STEP file from a supplier, inspect it in the GUI for geometry issues, then batch-convert a folder of IGES files to STL for downstream CAM tooling:</p>
+<pre data-lang="bash"><code>./mayoconv part.iges part.stl</code></pre>
+<p>The CLI accepts format pairs listed in the README's support table (STEP, IGES, STL, OBJ, glTF, etc.).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found 71 total issues: 34 high, 33 medium, 4 low, across 3 kinds.</p>
+<ul><li><strong>High - Deep nesting (x44)</strong>: <code>src/3rdparty/fast_float/fast_float.h</code>, <code>fmt/base.h</code>, <code>fmt/chrono.h</code> reach indentation depth 16, making control flow hard to follow. Fix: early returns and extracted blocks.</li><li><strong>High - Duplicated code blocks</strong>: 764 repeated 6-line blocks across 130 files, including <code>i18n/*.ts</code> and <code>miniply.cpp</code>. Fix: extract shared helpers.</li><li><strong>High - Oversized files (x15)</strong>: <code>fast_float.h</code> and <code>fmt/base.h</code> exceed 3,400 lines each. Fix: split by responsibility.</li></ul>
+<p>SDLC observations from file structure:</p>
+<ul><li><strong>High - Unpinned CI actions</strong>: <code>.github/workflows/</code> uses version tags (<code>@v1.0.1</code>, <code>@v2</code>, <code>@v3</code>) instead of commit SHAs. A moved tag can execute arbitrary code with your CI token. Fix: pin to 40-char SHAs.</li><li><strong>Medium - No least-privilege token</strong>: 4 workflows declare no <code>permissions</code>, inheriting repo defaults. Fix: add <code>permissions: contents: read</code>.</li><li><strong>Medium - Large binary in repo</strong>: <code>doc/screencast_1.gif</code> is 5.4MB. Fix: use Git LFS.</li><li><strong>Low - No job timeouts</strong>: workflows lack <code>timeout-minutes</code>, risking long-hanging jobs.</li><li><strong>Low - Missing convention files</strong>: no <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Mayo is a functional, well-structured CAD viewer/converter with solid cross-platform CI and clean module boundaries. The upstream project is mature, but this fork carries third-party code that needs maintenance (pinning, splitting, deduplication). Use it if you need reliable STEP/IGES/STL handling without commercial tools—just budget time to harden the CI pipeline first.</p>
             </div>
 
             
