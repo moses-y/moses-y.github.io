@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 26, 2026</span>
-                    <span>3 min read</span>
-                    
+                    <span>4 min read</span>
+                    <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>kubernetes</h1>
@@ -80,29 +80,31 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running containerized applications across many hosts requires solving scheduling, service discovery, rolling updates, and self-healing. Doing this by hand with scripts or per-host configuration breaks down at scale. Kubernetes provides a single control plane that automates placement, scaling, and recovery of container workloads.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repository is the Kubernetes source tree. It contains the core components—API server, scheduler, kubelet, and controller manager—though the code itself lives in subdirectories not shown in the truncated listing. The visible structure is dominated by LICENSES/ (148 files covering every vendored dependency) and CHANGELOG/ (37 files tracking releases from 1.2 through 1.36). The .github/ directory contains issue templates for bugs, enhancements, and flaky tests, plus a SECURITY.md and PULLREQUESTTEMPLATE.md.</p><p>The root README.md documents the build process via make and make quick-release, and the .go-version file pins the Go toolchain. This is the upstream Kubernetes project, not a fork with custom logic.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>This is source code for building Kubernetes from scratch, not a tool you install directly. End users should use a distribution like kubeadm, minikube, or a managed cloud service.</p><p>For developers, the README documents the build:</p><p>git clone https://github.com/kubernetes/kubernetes
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running containerized applications across multiple hosts requires solving scheduling, service discovery, rolling updates, and failure recovery. Kubernetes addresses these by providing a control plane that reconciles desired state (deployments, services) with cluster reality, so operators declare what they want rather than scripting how to get there.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This repository is a fork of <code>kubernetes/kubernetes</code> (125k stars upstream) containing the full Kubernetes source tree: <code>cmd/</code> holds component entry points (<code>kube-apiserver</code>, <code>kube-controller-manager</code>, <code>kubectl</code>), <code>pkg/</code> holds the core control-plane logic, <code>staging/</code> contains the versioned client libraries, and <code>vendor/</code> pins dependencies. The <code>build/</code> directory provides Dockerfiles for server images and the pause container.</p>
+<p>It is a collection of eight self-contained projects, not a single codebase. The substantial ones are the API server (<code>cmd/kube-apiserver</code>), the scheduler (<code>pkg/scheduler</code>), and the kubelet agent (<code>pkg/kubelet</code>), each with deep test coverage (15,078 test files).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>cmd/kube-apiserver/apiserver.go</code>, which initializes the API machinery in <code>staging/src/k8s.io/apiserver</code> and serves the REST API. The control flow is: API server validates and persists objects to <code>etcd</code> (external dependency), the controller manager in <code>cmd/cloud-controller-manager</code> watches those objects and acts, and the scheduler in <code>pkg/scheduler</code> assigns pods to nodes. The kubelet on each node then executes the pod spec via the container runtime.</p>
+<p>The widest blast radius is the API server: it is the single entry point for all cluster state changes, and every component depends on it. The <code>staging/src/k8s.io/api</code> directory defines the versioned object schemas that everything else imports. Changing a field there ripples through all components. The module graph shows a hub-and-spoke pattern centered on <code>staging/</code>, which is intentional: it lets the project publish client libraries independently. The cost is that local changes to <code>staging/</code> require regeneration and vendoring steps, which adds friction.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: requires a Go environment (<code>.go-version</code> present) or Docker. Build commands from the README:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/kubernetes
 cd kubernetes
-make</p><p>With a Docker environment, use make quick-release instead. Configuration lives in the cluster itself via YAML manifests; the repo does not ship a standalone config file. Development workflow details are in the linked community repository, not this tree.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A production cluster runs the API server, scheduler, and controller-manager on control-plane nodes, with kubelets on worker nodes. You deploy workloads as YAML:</p><p>apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web
-  template:
-    metadata:
-      labels:
-        app: web
-    spec:
-      containers:
-name: nginx
-        image: nginx:1.25</p><p>The scheduler places pods, the kubelet runs them, and the controller-manager maintains the desired replica count. This repo is the implementation of that control plane.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The heuristic scan flags missing CI/CD, but that is expected—the upstream project runs CI on Google&#39;s infrastructure, not in this repo. The .github/ templates and SECURITY.md are present, and the vendored license audit in LICENSES/ is thorough.
-Low - No in-repo CI config - the .github/ directory lacks workflow files, but upstream Kubernetes uses external CI. Not a defect for this project.
-Low - Truncated tree - the listing omits the actual Go source under pkg/, cmd/, and staging/. A full review of code quality requires those directories.
-Low - 8 test files in a repo this size - the visible count reflects the truncated listing, not the real test suite. Kubernetes has extensive unit and e2e tests upstream.</p><p>No obvious bugs, secrets, or unsafe patterns are visible in the files listed. The changelog coverage and license hygiene are strong.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is the canonical Kubernetes source. It is production-grade, actively maintained, and appropriate for organizations building on or contributing to Kubernetes itself. For deploying clusters, use a distribution instead. The repo is healthy but not something you run directly—it is the foundation everything else builds on.</p>
+make</code></pre>
+<p>Or with Docker: <code>make quick-release</code>.</p>
+<p><strong>Configuration</strong>: no runtime env vars are documented in the repo. Cluster configuration is YAML manifests under <code>cluster/</code> for deployment scenarios.</p>
+<p><strong>Running it</strong>: there is no single binary entry point. You build the components (<code>make</code> produces <code>kube-apiserver</code>, <code>kubelet</code>, <code>kubectl</code> under <code>_output/bin/</code>) and run them as separate processes. The <code>Makefile</code> at the root orchestrates the build. For a local cluster, <code>hack/local-up-cluster.sh</code> is the documented path, but its exact flags are not in the file structure provided.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A production scenario: you define a <code>Deployment</code> manifest specifying 3 replicas of a web service. Submit it via <code>kubectl apply -f deployment.yaml</code>. The API server persists it to etcd, the deployment controller creates a <code>ReplicaSet</code>, the scheduler assigns pods to nodes, and kubelets pull the image and start containers. If a node dies, the controller recreates the pods elsewhere. This is the standard pattern for running stateless services at scale.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 3 issues (0 critical, 1 high, 2 medium):</p>
+<ul><li><strong>High - No build gate for deployable artifacts</strong> - <code>build/pause/Dockerfile</code>. The pause container image has no CI workflow validating it builds. Add a workflow that builds the image and validates manifests.</li><li><strong>Medium - No dependency update bot</strong> - 38 manifest files, no Dependabot/Renovate configured. Advisories stay unpatched until manual audit. Commit <code>.github/dependabot.yml</code>.</li><li><strong>Medium - Large binary in repo</strong> - <code>staging/src/k8s.io/kubectl/testdata/openapi/swagger.json</code> at 5.1MB. Every clone pays for it. Move to Git LFS or object storage.</li></ul>
+<p>The repo has tests, CI (Travis), Dockerfiles, a license, a lockfile, and committed secrets flagged for audit. The fork has zero stars, so it is a personal copy of upstream rather than a maintained derivative.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a faithful snapshot of upstream Kubernetes with no substantive modifications evident. Use it as a reference or starting point for Kubernetes development; do not expect it to be a maintained fork. The codebase is enormous and complex, and the health findings are minor hygiene issues typical of a personal mirror.</p>
             </div>
 
             
@@ -112,18 +114,18 @@ Low - 8 test files in a repo this size - the visible count reflects the truncate
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">29,916<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>40</b></li><li><span>YAML</span><i style="width:13%"></i><b>5</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>16982</b></li><li><span>YAML</span><i style="width:36%"></i><b>6080</b></li><li><span>JSON</span><i style="width:7%"></i><b>1190</b></li><li><span>Markdown</span><i style="width:3%"></i><b>578</b></li><li><span>Shell</span><i style="width:2%"></i><b>312</b></li><li><span>Protocol Buffers</span><i style="width:1%"></i><b>134</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Express</span><span>Docker</span><span>Kubernetes</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -137,7 +139,7 @@ Low - 8 test files in a repo this size - the visible count reflects the truncate
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>cmd/kubeadm/app/discovery/token/testdata/ca-cert.pem, cmd/kubeadm/app/util/config/testdata/mynode.pem, cmd/kubeadm/app/util/pubkeypin/testdata/test-cert.pem</code></span></li>
                     </ul>
                 </div>
 
@@ -147,7 +149,7 @@ Low - 8 test files in a repo this size - the visible count reflects the truncate
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a build gate for the deployable artifacts here</span><span class="chip">high</span><span class="rankchip">621 occurrences</span></div><div class="loc">build/pause/Dockerfile</div><div class="ev">deployment artifacts with no workflow</div><div class="ev">Something in the repo is meant to reach a server and no automated step has ever validated it, which is the state of 125 repositories here.</div><div class="rec"><b>Fix:</b> Add a workflow that at least builds the image and validates the manifests.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">38 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span></div><div class="loc">staging/src/k8s.io/kubectl/testdata/openapi/swagger.json</div><div class="ev">1 blobs over 5MB: swagger.json 5.1MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

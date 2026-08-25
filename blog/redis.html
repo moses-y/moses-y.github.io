@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 26, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">C/C++ Header</span>
+                    <span>4 min read</span>
+                    <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>redis</h1>
@@ -80,19 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#clone-the-repo">Clone the repo</a><a href="#build-redis-default-target-builds-server-and-mod">Build Redis (default target builds server and modules)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Applications that need sub‑millisecond latency for caching, session storage, or real‑time analytics must manage a high‑throughput, in‑memory data store. Building, testing, and maintaining such a store from source can be error‑prone, especially when native dependencies (jemalloc, hiredis) and platform‑specific build flags are involved.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository is a near‑up‑to‑date fork of the official Redis server (C implementation). Core server code lives in the root directory (redis.c, server.c, networking.c, etc.) and is built with the top‑level Makefile. Native extensions and third‑party libraries are vendored under deps/:</p><p>deps/hiredis/ – lightweight C client library, compiled via its own Makefile and CMakeLists.  
- deps/jemalloc/ – memory allocator, built as part of the server build process.  
- deps/fpconv/ – fast floating‑point conversion utilities.</p><p>Documentation (README.md, INSTALL, docs/) walks users through building on Linux, macOS, and Windows. CI pipelines (.github/workflows/ci.yml, codecov.yml) run automated builds and tests on multiple OSes.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup – Build the server and its bundled dependencies with a single make invocation. The top‑level Makefile pulls in the deps/Makefile which in turn builds jemalloc, hiredis, and hdrhistogram.</p><h3 class="post-h" id="clone-the-repo">Clone the repo</h3><p>git clone https://github.com/&lt;your‑org&gt;/redis.git
-cd redis</p><h3 class="post-h" id="build-redis-default-target-builds-server-and-mod">Build Redis (default target builds server and modules)</h3><p>make -j$(nproc)</p><p>Configuration – Runtime options are supplied via the standard redis.conf file (generated from redis.conf.default in the repo). No environment‑specific files are hard‑coded; you can start the server with a custom config path:</p><p>./src/redis-server /path/to/redis.conf</p><p>Running – The executable produced by make is src/redis-server. A quick start is documented in README.md:</p><p>Start a development instance on the default port (6379)
-./src/redis-server</p><p>For TLS-enabled deployments, see TLS.md and the --tls-port flag described in the same file.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A typical microservice that needs a fast cache would launch Redis as a side‑car container, then connect using the hiredis client (deps/hiredis/hiredis.h). Example snippet (C):</p><p>#include &lt;hiredis/hiredis.h&gt;</p><p>redisContext c = redisConnect(&quot;127.0.0.1&quot;, 6379);
-redisReply *r = redisCommand(c, &quot;SET user:123 %s&quot;, jsonpayload);
-freeReplyObject(r);
-redisFree(c);</p><p>The same binary can be packaged in a Dockerfile (FROM alpine → COPY src/redis-server /usr/local/bin/) for production deployments.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile for .codespell – .codespell/requirements.txt lists a Python spell‑checker dependency without a requirements.lock; reproducible CI environments may vary.  
-Low – Limited test coverage in repo – Only four test files are present (deps/hiredis/test.c, etc.). The upstream Redis test suite is extensive, but this fork does not expose it directly; CI still runs the upstream test matrix though.  
-Low – No explicit license file at root – The repository includes LICENSE.txt, which matches the Redis source license, so licensing is clear.  
-Low – No package manager lock for C dependencies – Native libraries (jemalloc, hiredis) are vendored; version drift is controlled by the fork, but updates require manual sync.  
-Low – CI defined but no badge for build status – .github/workflows/ci.yml runs on pushes, but README lacks a build status badge; not a functional risk, just a documentation gap.</p><p>Overall the code follows standard Redis conventions, with a clean Makefile, CI, and documentation. No obvious security secrets or hard‑coded credentials are present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repo provides a production‑grade Redis server that can be built locally with a single make command, leveraging bundled dependencies for deterministic builds. It is well‑documented and CI‑tested, though the fork omits the full upstream test suite and a lockfile for the Python spell‑checker. Suitable for teams that need to compile Redis from source for custom builds, custom modules, or constrained environments; casual users may prefer the official binary releases.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizations building real-time applications need a data layer that handles caching, session storage, structured data, search, and vector queries without stitching together multiple services. Redis addresses this by providing a single in-memory data structure server with a rich command set, but running it at scale requires understanding its build system, module ecosystem, and operational constraints.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This repository is the Redis source tree, forked from <code>redis/redis</code>. It contains the core server (<code>src/</code>, 647 files), bundled dependencies (<code>deps/</code>, 681 files), and a <code>modules/</code> directory with 61 files including a <code>vector-sets</code> module for similarity search. The codebase is predominantly C (453 files) with supporting Lua scripts for server-side logic and Python tooling.</p>
+<p>The <code>src/</code> directory holds the server implementation, while <code>deps/</code> vendors third-party libraries like <code>hiredis</code> (C client), <code>jemalloc</code> (allocator), and <code>hdr_histogram</code> (latency tracking). The <code>modules/</code> directory contains loadable extensions, with <code>vector-sets</code> being the most substantial—it provides vector similarity search capabilities on top of Redis data structures.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The repository is a collection of self-contained projects rather than a single codebase. The core server builds via the root <code>Makefile</code> and <code>deps/Makefile</code>. Execution starts with the <code>redis-server</code> binary compiled from <code>src/</code>, which initializes the event loop, loads configuration, and accepts client connections on port 6379. The <code>redis-cli</code> client connects to it, and modules like <code>vector-sets</code> are loaded at runtime via the <code>MODULE LOAD</code> command.</p>
+<p>The static analysis mapped 898 code files with zero import edges between internal modules—each component is isolated. The most connected modules (by import count) are all in <code>deps/jemalloc/scripts/</code> and <code>modules/vector-sets/examples/</code>, none of which participate in circular dependencies. The <code>vector-sets</code> CLI tool at <code>modules/vector-sets/examples/cli-tool/cli.py</code> is a Python entry point for exercising the module.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Build from source (requires make and a C compiler)
+git clone https://github.com/moses-y/redis
+cd redis
+make
+
+# Start the server
+./src/redis-server
+
+# Connect and test
+./src/redis-cli ping</code></pre>
+<p>The <code>Makefile</code> handles the full build including dependencies in <code>deps/</code>. Configuration lives in <code>redis.conf</code> (not present in this structure—you'll need to create it or use defaults). TLS support requires building with <code>make BUILD_TLS=yes</code>, documented in <code>TLS.md</code>.</p>
+<p>For the vector module, build it separately and load at runtime:</p>
+<pre data-lang="bash"><code>make -C modules/vector-sets
+./src/redis-cli MODULE LOAD modules/vector-sets/vector-sets.so</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A typical deployment runs Redis as a cache in front of a primary database, with the <code>vector-sets</code> module enabling semantic search over embeddings. For example, a recommendation service stores user embeddings as vectors and queries for nearest neighbors:</p>
+<pre data-lang="lua"><code>-- Server-side Lua script for atomic vector operations
+local result = redis.call('VSIM', 'user_embeddings', 'QUERY', KEYS[1], 'TOP', 10)
+return result</code></pre>
+<p>The CLI tool at <code>modules/vector-sets/examples/cli-tool/cli.py</code> demonstrates the workflow: it indexes vectors from a file and runs recall tests against known datasets like GloVe-100.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 383 issues (198 high, 183 medium, 2 low), all of one kind: deep nesting. The worst case is <code>deps/hiredis/async.c</code> with max indentation depth of 13, making control flow hard to follow. The fix is flattening with early returns and extracting inner blocks.</p>
+<p>The SDLC audit found four issues, all in GitHub Actions workflows:</p>
+<ul><li><strong>Medium</strong> - No least-privilege <code>GITHUB_TOKEN</code> permissions declared in <code>.github/workflows/ci.yml</code> (4 workflows affected). An injected step could push commits.</li><li><strong>Medium</strong> - No dependency vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> - <code>persist-credentials: false</code> missing in <code>.github/workflows/reply-schemas-linter.yml</code>; the checkout token remains available to later steps.</li><li><strong>Low</strong> - No <code>timeout-minutes</code> on workflow jobs; a wedged step runs to the six-hour default.</li></ul>
+<p>Tests are present (575 files) and CI runs via Travis. No lockfile exists for Python dependencies, and no Dockerfile is provided.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is the Redis codebase with an added vector-sets module—production-grade core, but the module is the differentiator here. The C code is mature and battle-tested; the workflow hygiene issues are minor but worth fixing before relying on CI. Use this if you need Redis with built-in vector search and are comfortable building from source and managing modules yourself.</p>
             </div>
 
             
@@ -109,11 +133,11 @@ Low – CI defined but no badge for build status – .github/workflows/ci.yml ru
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,755<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>79</b></li><li><span>C</span><i style="width:35%"></i><b>28</b></li><li><span>YAML</span><i style="width:27%"></i><b>21</b></li><li><span>Markdown</span><i style="width:23%"></i><b>18</b></li><li><span>Shell</span><i style="width:3%"></i><b>2</b></li><li><span>C++</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>C</span><i style="width:100%"></i><b>453</b></li><li><span>JSON</span><i style="width:94%"></i><b>426</b></li><li><span>C/C++ Header</span><i style="width:66%"></i><b>297</b></li><li><span>Shell</span><i style="width:15%"></i><b>69</b></li><li><span>Python</span><i style="width:9%"></i><b>43</b></li><li><span>Markdown</span><i style="width:6%"></i><b>25</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -142,7 +166,7 @@ Low – CI defined but no badge for build status – .github/workflows/ci.yml ru
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">3</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:33%"></span></span><span class="n">1</span></div></div><div class="finding medium"><div class="head"><span class="ttl">Declare least-privilege permissions for GITHUB_TOKEN</span><span class="chip">medium</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">4 workflow(s) declare no permissions</div><div class="ev">With no declaration the token inherits the repository default, so any injected step can push commits or mint releases from inside your own CI.</div><div class="rec"><b>Fix:</b> Add permissions: contents: read at the top of the workflow and widen per job only where needed.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Set persist-credentials: false on checkout</span><span class="chip">medium</span></div><div class="loc">.github/workflows/reply-schemas-linter.yml</div><div class="ev">checkout keeps the token, then dependencies are installed</div><div class="ev">The token stays in .git/config for every later step, so a malicious postinstall script reads a pushable credential without one ever being passed to it.</div><div class="rec"><b>Fix:</b> Add with: persist-credentials: false, and pass an explicit token only to the step that pushes.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/ci.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
