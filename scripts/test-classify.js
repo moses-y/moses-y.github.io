@@ -76,6 +76,28 @@ const pluginPack = {
 check('a plugin marketplace is a distribution',
   domainOf(null, pluginPack) === 'Agent Skills & Plugins', domainOf(null, pluginPack));
 
+/*
+ * Claude is not the only harness and the rubric must not read as though it is.
+ * The estate already carries .codex-plugin and .cursor-plugin, and a list of
+ * vendor names would go stale the week a new tool ships, so the manifest test
+ * matches the shape .<harness>-plugin instead.
+ */
+['.claude-plugin', '.codex-plugin', '.cursor-plugin', '.opencode-plugin', '.brand-new-plugin']
+  .forEach(function (dir) {
+    const dirs = { '(root)': 6 };
+    dirs[dir] = 1;
+    dirs['content'] = 40;
+    const kg = { totalFiles: 47, directories: dirs, languages: { Markdown: 45, JSON: 2 } };
+    check(dir + ' is a distribution manifest',
+      domainOf(null, kg) === 'Agent Skills & Plugins', domainOf(null, kg));
+  });
+
+// A directory merely ending in the word is not a manifest, and neither is a
+// harness working directory on its own.
+check('an ordinary plugins folder is not a manifest by itself',
+  domainOf('TypeScript', { totalFiles: 400, directories: { 'my-plugin': 300, src: 100 },
+    languages: { TypeScript: 380, Markdown: 20 } }) === 'Web & Interfaces');
+
 // The false positive that mattered: a real application with a skills folder.
 const appWithSkills = {
   totalFiles: 707, directories: { '.claude': 130, app: 34, components: 153, lib: 50, public: 165, '(root)': 175 },

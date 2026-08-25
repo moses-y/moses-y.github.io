@@ -84,16 +84,46 @@ function deriveLanguage(kg) {
  * Bare `agents/` and `commands/` are in neither: they are ordinary source
  * directory names, and including them swept in a 12,769-file design tool.
  */
-const MANIFEST_DIR = /^\.claude-plugin(\/|$)/;
-const DIST_DIRS = /^(\.claude-plugin|skills|plugins)(\/|$)/;
-const CONFIG_DIRS = /^(\.claude|\.agents|\.cursor|\.codex)(\/|$)/;
+/*
+ * The manifest directory of any harness, not one vendor's.
+ *
+ * `.claude-plugin` was the first one seen here and is not the only one: the
+ * estate already contains `.codex-plugin` and `.cursor-plugin`, and the naming
+ * convention is stable enough across harnesses to match on its shape rather
+ * than on a list that goes stale the week a new tool ships. Anything of the
+ * form `.<harness>-plugin` is a distribution manifest by construction - no
+ * application creates one for its own sake.
+ */
+const MANIFEST_DIR = /^\.[a-z0-9][a-z0-9._-]*-plugin(\/|$)/;
+const DIST_DIRS = new RegExp('^(skills|plugins)(\\/|$)|' + MANIFEST_DIR.source);
+
+/*
+ * Harness working directories, enumerated because they have no shared shape.
+ *
+ * These are evidence of a repository being *used* with an agent, not of it
+ * publishing anything - `.claude` is in 144 repositories here and `.vscode` in
+ * 164, for the same reason. They count toward the share of the tree, and never
+ * decide the question on their own.
+ *
+ * Taken from what the estate actually contains, which is the only list that
+ * cannot be wrong about this codebase: .claude, .agents, .agent, .cursor,
+ * .codex, .gemini, .opencode, .zed, .windsurf, .kiro, .pi. The rest are added
+ * because they are the same category of thing and cost nothing to anticipate.
+ */
+const CONFIG_DIRS = new RegExp('^(' + [
+  '\\.claude', '\\.agents?', '\\.cursor', '\\.codex', '\\.gemini', '\\.opencode',
+  '\\.zed', '\\.windsurf', '\\.kiro', '\\.pi', '\\.continue', '\\.roo',
+  '\\.kilocode', '\\.clinerules', '\\.junie', '\\.trae', '\\.amp', '\\.goose',
+  '\\.aider', '\\.augment'
+].join('|') + ')(\\/|$)');
+
 const SKILL_DIRS = new RegExp(DIST_DIRS.source + '|' + CONFIG_DIRS.source);
 
 // Below this a skills/ or plugins/ directory is a corner of the repository
 // rather than its point: a 2,478-file course with a skills/ folder at 2% of the
 // tree is a course, and was classified as a skills pack until this floor went
-// in. A .claude-plugin manifest is exempt - it is one small directory by
-// construction, and on a prose-dominant repository it means only one thing.
+// in. A plugin manifest is exempt - it is one small directory by construction,
+// and on a prose-dominant repository it means only one thing.
 const MIN_DIST_SHARE = 0.15;
 const SKILL_NAME = /(^|[-_ ])(skills?|plugins?|mcp|mcp-server|agent-skills?)([-_ ]|$)/i;
 
