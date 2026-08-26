@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>You&#39;re running a local dev server, and you need to share it with others, test webhooks, or debug APIs. Sure, you could use ngrok or one of its clones, but most of them are either rate-limited, paid, or run on someone else&#39;s infrastructure. If you&#39;re already paying for a VPS, why rely on third-party services when you could just roll your own?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>pgrok is like ngrok, except the infrastructure is yours. It uses SSH reverse tunnels and Caddy to expose local ports to the internet with automatic HTTPS. No weird proprietary protocols, no hidden servers—just good old SSH and a bit of clever scripting.</p><p>The server directory sets up your VPS. setup-vps.sh installs Caddy and some lightweight Python scripts (pgrok-ask and pgrok-tunnel) to dynamically manage routes and SSL certs. Meanwhile, the client directory, specifically the tui folder, gives you a slick terminal UI to monitor tunnels, inspect HTTP requests, and track connection stats in real-time. It&#39;s built on OpenTUI, and files like src/ui/connections.ts and src/ui/requests.ts handle the visuals like request logs and connection details.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you&#39;re building a webhook for Stripe. You need a public HTTPS endpoint for testing, but you&#39;re sick of spinning up new ngrok instances every time. With pgrok, you&#39;d just:
-Install the client (setup.sh makes this ridiculously easy).
-Run pgrok stripe 3000.
-Get a custom HTTPS URL (e.g., https://stripe.yourdomain.com) that forwards traffic to your local localhost:3000.</p><p>The TUI dashboard shows live traffic in color-coded logs. Spot the 400 errors immediately, debug your handler, and call it a day. No subscription fees, no random subdomains, no BS.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>pgrok is perfect if you’ve got a VPS gathering dust and want a no-nonsense, self-hosted tunnel solution. The TUI is a nice touch, and the setup script is straightforward. The trade-off? You’re in charge of maintenance—if your VPS goes down, so do your tunnels. If you&#39;re the type who doesn&#39;t mind a bit of DIY for full control, this is a solid tool. If not, stick with ngrok.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers exposing local services to the internet face a choice between paid tunneling services (ngrok, Cloudflare Tunnel) or complex self-hosted reverse proxy setups. pgrok attempts to bridge this by offering automatic HTTPS with on-demand TLS through a VSS, but the implementation shows significant SDLC gaps that affect production readiness.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>pgrok is a personal ngrok alternative that exposes local ports to the internet with automatic HTTPS. The architecture splits between a TypeScript TUI client and a server component running on a VPS:</p>
+<ul><li><strong>Client</strong> (<code>client/tui/</code>): 13 files, 10 TypeScript modules. Built with OpenTUI, provides an interactive dashboard with request inspection, connection stats, and color-coded HTTP logs. The entry point is <code>createApp</code> in <code>client/tui/src/app.ts:22</code>, which reaches 5 functions including <code>destroy</code>, <code>App</code> class, and panels for connections/requests/sessions.</li></ul>
+<ul><li><strong>Server</strong> (<code>server/</code>): 8 files. Deploys Caddy with on-demand TLS, SSH tunneling infrastructure, and <code>pgrok-ask</code> for certificate verification. Uses Docker Compose with <code>network_mode: host</code> and <code>privileged: true</code> (see security concerns below).</li></ul>
+<ul><li><strong>Tunnel flow</strong>: SSH reverse tunnels carry traffic from the VPS to the local client. When a tunnel connects, a Python script dynamically configures Caddy routes. The TUI client triggers cert provisioning during tunnel setup.</li></ul>
+<ul><li><strong>Key functions</strong>: <code>stripHopByHop</code> in <code>client/tui/src/proxy.ts</code> filters HTTP headers; <code>spawnTunnel</code> in <code>client/tui/src/tunnel.ts</code> manages the SSH tunnel lifecycle; <code>recordRequest</code> in <code>client/tui/src/stats.ts</code> tracks request metadata; <code>prune</code> (called from 2 places) cleanup stale connections.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>createApp</code> in <code>client/tui/src/app.ts:22</code>, which instantiates the App class and mounts three panels: <code>createSessionPanel</code>, <code>createConnectionsPanel</code>, and <code>createRequestsPanel</code>. The call graph shows <code>createApp</code> delegates to <code>createHeader</code>, <code>createSessionPanel</code> (which calls <code>makeRow</code> 4 times), and the two panel creators.</p>
+<p>From the panels, user interactions flow through <code>update</code> (in both <code>connections.ts</code> and <code>session.ts</code>) which calls <code>fmtF</code> 4 times and <code>fmtI</code> 2 times for formatting. HTTP requests traverse <code>fetch</code> in <code>proxy.ts</code>, which calls <code>stripHopByHop</code> twice to filter hop-by-hop headers. Tunnel setup calls <code>spawnTunnel</code>, which invokes <code>readStream</code> twice for SSH stream handling. Request recording flows through <code>recordRequest</code> → <code>prune</code> (the only function called from 2 distinct call sites).</p>
+<p>The module graph has <code>client/tui/index</code> as a leaf node (Ca=0, Ce=5, instability=1) and <code>client/tui/src/app</code> as the central hub (Ca=1, Ce=4, instability=0.8). No circular dependencies exist across 13 resolved modules, but the duplicated code blocks in <code>connections.ts</code>, <code>session.ts</code>, <code>server/setup-vps.sh</code>, and <code>setup.sh</code> (6 repeated lines across 4 files) indicate copy-paste development that should be extracted to shared helpers before production use.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (from README and repo structure):</p>
+<pre data-lang="bash"><code># Client install (requires VPS with ports 80/443 open)
+curl -fsSL https://raw.githubusercontent.com/R44VC0RP/pgrok/main/install.sh | bash -s client
+# Prompted for: VPS IP, domain, SSH key auto-detection
+
+# Server setup (run on VSS)
+curl -fsSL https://raw.githubusercontent.com/R44VC0RP/pgrok/main/install.sh | sudo bash -s server
+# Installs Caddy, configures SSH tunneling, adds SSH key, starts services
+
+# Build after pulling updates
+./setup.sh client --rebuild</code></pre>
+<p><strong>Running it</strong>:</p>
+<pre data-lang="bash"><code>pgrok myapp 4000    # Exposes localhost:4000 as https://myapp.yourdomain.com
+pgrok api 3000      # Exposes API on https://api.yourdomain.com
+pgrok staging 8080  # Any subdomain works instantly
+pgrok myapp 4000 --print-logs  # Debug mode dumps tunnel logs on exit</code></pre>
+<p><strong>Configuration</strong>: Requires a VSS with Docker + Docker Compose, a domain you control with wildcard DNS A record pointing to the VSS IP, and an SSH key. No environment files are committed - <code>server/.env.example</code> exists but is not included in the repo.</p>
+<p><strong>Entry point</strong>: The <code>pgrok</code> CLI binary is installed via the install script; the TUI launches from <code>client/tui/src/app.ts</code> via the <code>createApp</code> function.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A development team working on a local API server at <code>localhost:3000</code> runs <code>pgrok api 3000</code> on their workstation. The TUI dashboard launches showing the session provisioning Let's Encrypt cert (falling back to ZeroSSL if rate-limited), the public URL <code>api.theirdomain.com</code>, and real-time request stats. As team members make API calls, the dashboard logs each request with color coding: POST requests in purple, 2xx statuses in green, responses under 100ms in green. When they press Ctrl+C, the tunnel cleans up automatically and the Caddy route is removed.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>The static analysis found 8 findings (0 critical, 6 high, 2 medium, 0 low):</p>
+<ul><li><strong>[HIGH]</strong> Add a LICENSE - no licence file at repository root; default is all rights reserved, code cannot be legally reused</li><li><strong>[HIGH]</strong> Add a test suite - 10 source files, no test files; any change ships with no signal existing behavior holds</li><li><strong>[HIGH]</strong> Commit a lockfile beside <code>client/tui/package.json</code> - manifest with no lockfile; unlocked ranges mean tested artifact can differ from shipped artifact</li><li><strong>[HIGH]</strong> Add CI workflow - 10 source files, no CI configuration; every change merges with nobody having run the build</li><li><strong>[HIGH]</strong> Drop privileged mode and host networking - <code>server/docker-compose.yml</code> uses <code>network_mode: host</code> and <code>privileged: true</code>, which hands the container every capability including direct device access and removes the network boundary</li><li><strong>[HIGH]</strong> Add build gate for deployable artifacts - <code>server/Dockerfile</code> uses mutable tag <code>caddy:latest</code>; today's build and last month's contain different libc and a different CVE set with no record of which shipped</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate - 1 manifest, no update bot configured; without a bot a published advisory sits unpatched until hand-audited</li><li><strong>[MEDIUM]</strong> Duplicated code blocks - <code>client/tui/src/ui/connections.ts</code>, <code>client/tui/src/ui/session.ts</code>, <code>server/setup-vps.sh</code>, <code>setup.sh</code> share 2 repeated 6-line blocks; extract shared helpers</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>pgrok functionalizes a useful niche - automatic HTTPS for local development tunnels without relying on third-party services. The SSH-tunnel + Caddy approach is clever and avoids ngrok's per-session pricing. However, the repository's SDLC gaps are significant for any production adoption: no license means unclear redistribution rights, no tests or CI means regressions reach undetected, privileged Docker networking is a security liability, and the mutable Caddy base image means build reproducibility is undefined. Teams comfortable self-hosting infrastructure and willing to address the hygiene findings can benefit from this; others should consider established hosted alternatives until the repository matures.</p>
             </div>
 
             
@@ -96,7 +130,7 @@ Get a custom HTTPS URL (e.g., https://stripe.yourdomain.com) that forwards traff
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -144,6 +178,12 @@ Get a custom HTTPS URL (e.g., https://stripe.yourdomain.com) that forwards traff
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>client/tui/package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1155539414">Open in Code Brain &rarr;</a>

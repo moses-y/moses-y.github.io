@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 13, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Shell</span>
+                    <span>5 min read</span>
+                    <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>wifi densepose</h1>
@@ -80,10 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tracking human poses in real-time without using cameras is a massive pain point, especially in privacy-sensitive environments. Traditional methods rely on visual data, risking privacy invasion and security concerns. What if you could get full-body tracking through walls using just WiFi signals? That&#39;s where this repo comes in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The wifi-densepose repo implements a WiFi-based dense human pose estimation system, drawing on Channel State Information (CSI) data. It’s built on a solid foundation, with a production-ready API that handles authentication and rate limiting, all in dev-backend-api.md. You can find the configuration settings in config.yaml, which allows you to tweak how the application runs without diving into the code.</p><p>For those who care about performance, the Rust implementation lives in /rust-port/wifi-densepose-rs/. If you run cargo bench from there, you’ll see how much faster it is than the Python version. We&#39;re talking about speedups of up to 810x for the full pipeline. Yeah, it’s that good.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine deploying this in a smart home. You set up the mesh router, configure it with config.yaml, and start tracking family members&#39; movements. You can write a small script to connect to the WebSocket stream and process pose data in real-time. Here’s a quick snippet to get you started:</p><p>import websocket</p><p>def onmessage(ws, message):
-    print(&quot;Pose Data: &quot;, message)</p><p>ws = websocket.WebSocketApp(&quot;ws://localhost:8000/ws/pose&quot;, onmessage=onmessage)
-ws.runforever()</p><p>With this setup, you can monitor activity or detect falls without cameras. It’s not just tech for tech’s sake; it has real applications in healthcare and security.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is excellent for anyone needing privacy-preserving pose estimation—think healthcare providers or smart home developers. The Rust implementation is a big win for performance, but honestly, if you’re a solo developer or a small team, this might feel like overkill. If you don&#39;t need the complexity of real-time tracking through walls, stick with simpler solutions.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying Wi‑Fi‑based human‑pose estimation in production requires a pipeline that can ingest raw CSI data, run high‑throughput signal processing, expose a low‑latency API, and optionally stream results to a web UI. Existing research prototypes are single‑language and lack containerisation, CI, or robust error handling, making them fragile for on‑prem or edge deployments.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo ships <strong>five self‑contained projects</strong> that together cover the full stack:</p>
+<ul><li><strong><code>v1/</code></strong> – a Python FastAPI service (<code>v1/src/services/pose_service.py</code>) that wraps the original CSI‑processing code, adds authentication, rate‑limiting, and WebSocket streaming (<code>v1/src/api/websocket/connection_manager.py</code>).</li><li><strong><code>rust-port/</code></strong> – a high‑performance Rust implementation (<code>rust-port/wifi-densepose-rs/crates/wifi-densepose-cli/src/main.rs</code>) that reproduces the signal pipeline with µ‑second latency and provides a CLI (<code>wifi-densepose-cli</code>) and a library (<code>wifi-densepose-api</code>).</li><li><strong><code>ui/</code></strong> – a React front‑end (e.g., <code>ui/components/LiveDemoTab.js</code>) that connects to the WebSocket endpoint and renders pose skeletons in the browser.</li><li><strong><code>references/</code></strong> – minimal demo scripts (<code>references/app.js</code>, <code>references/index.html</code>) that launch the FastAPI server and the UI together for quick validation.</li><li><strong><code>.claude/</code></strong> – a collection of analysis agents and documentation assets; not part of the runtime but useful for internal research.</li></ul>
+<p>Common techniques include <strong>CSI preprocessing</strong>, <strong>phase unwrapping</strong>, <strong>feature extraction</strong>, and <strong>deep‑learning inference</strong> (Python) or <strong>deterministic signal math</strong> (Rust). The Rust port re‑exports the same public API, so the Python service can optionally load the compiled library via <code>ctypes</code> (not shown in the tree but referenced in <code>v1/src/services/pose_service.py</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <strong>entry point</strong> you invoke:</p>
+<ul><li><strong>Rust CLI</strong> – <code>cargo run --release</code> in <code>rust-port/wifi-densepose-rs</code>. <code>main.rs</code> parses CLI args, calls <code>wifi_densepose_cli::run()</code>, which forwards to <code>wifi_densepose_api::process_csi()</code> (defined in <code>lib.rs</code>). The API crate exposes <code>process_csi</code>, <code>extract_features</code>, and <code>detect_pose</code>. Tests (<code>rust-port/wifi-densepose-rs/crates/wifi-densepose-cli/tests/</code>) verify each stage.</li></ul>
+<ul><li><strong>Python FastAPI</strong> – <code>uvicorn v1.src.main:app --host 0.0.0.0 --port 8000</code> (the <code>app</code> object is created in <code>v1/src/main.py</code>). Incoming HTTP requests hit the router defined in <code>v1/src/api/routers/pose.py</code>, which calls <code>pose_service.process()</code> in <code>v1/src/services/pose_service.py</code>. That function either invokes the pure‑Python pipeline (<code>v1/src/services/signal.py</code>) or loads the Rust library via <code>ctypes.CDLL</code> and calls <code>process_csi</code>. The WebSocket manager (<code>v1/src/api/websocket/connection_manager.py</code>) broadcasts pose frames to any client that opened <code>ws://…/ws/pose</code>.</li></ul>
+<ul><li><strong>React UI</strong> – <code>ui/app</code> (bundled by the Dockerfile) opens a WebSocket to <code>/ws/pose</code>. Incoming JSON frames are handed to <code>ui/services/pose.service</code> (most‑connected module) which updates the <code>LiveDemoTab</code> canvas. The UI does not perform signal work; it only visualises the stream.</li></ul>
+<p>The <strong>internal call graph</strong> shows a clear funnel: <code>ui/app → ui/services/websocket.service → FastAPI → pose_service → (Rust lib)</code>. The most connected module is <code>ui/services/pose.service</code> (5 incoming, 3 outgoing imports). No circular dependencies were detected, keeping the blast radius limited to these hubs.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository (preserve the exact URL)
+git clone https://github.com/moses-y/wifi-densepose.git
+cd wifi-densepose
+
+# Build and run the Rust CLI (quick sanity check)
+cd rust-port/wifi-densepose-rs
+cargo build --release
+cargo test --workspace          # 107 tests, 100% coverage reported
+cargo run --release -- --input samples/csi.bin   # example CLI usage
+
+# Start the Python service in a container (Dockerfile present)
+docker build -t wifi-densepose .
+docker run -p 8000:8000 wifi-densepose   # launches FastAPI + WebSocket
+
+# In a separate terminal, launch the demo UI
+docker exec -it $(docker ps -qf "ancestor=wifi-densepose") npm start   # runs UI from /ui
+# Open http://localhost:3000 (or the port exposed by the UI) to see live pose overlay.</code></pre>
+<p><em>Configuration</em> – The FastAPI service reads <code>PYTHONPATH</code> and optional <code>RUST_LIB_PATH</code> environment variables (set automatically by the Dockerfile). No secret files are required for a local run; production deployment must supply the secrets referenced in <code>.github/workflows/cd.yml</code> (e.g., <code>KUBE_CONFIG_DATA</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A warehouse operator could deploy the Docker image on an edge gateway. The gateway streams CSI from commodity mesh routers to the FastAPI service, which forwards pose updates over WebSocket to a monitoring dashboard (the React UI). An alert pipeline could subscribe to the same WebSocket, detect falls via the <code>pose_service.detect_fall()</code> helper, and push notifications to Slack (the Slack webhook URL is stored as a secret in the CI workflow).</p>
+<pre data-lang="python"><code># Example: subscribe to pose stream and trigger an alert
+import websockets, json, os
+
+async def monitor():
+    async with websockets.connect("ws://gateway:8000/ws/pose") as ws:
+        async for msg in ws:
+            data = json.loads(msg)
+            if data["fall"]:
+                # POST to Slack (secret injected at runtime)
+                await aiohttp.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": "Fall detected"})</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Secrets (<code>KUBE_CONFIG_DATA</code>, <code>SLACK_WEBHOOK_URL</code>) are stored in <code>.github/workflows/cd.yml</code>; a malicious PR could exfiltrate them. Fix: move secret‑using steps to a <code>workflow_run</code> job or require reviewer approval.</li><li><strong>High</strong> – GitHub Actions are not pinned to commit SHAs; tag drift could expose the same secrets. Fix: replace <code>@vN</code> with full SHA.</li><li><strong>High</strong> – No lockfile for Python (<code>pyproject.toml</code> without <code>poetry.lock</code>/<code>requirements.txt</code> lock). Fix: generate and commit the lockfile.</li><li><strong>High</strong> – <code>continue-on-error</code> on correctness steps in CI (<code>.github/workflows/ci.yml</code>). Fix: remove or isolate advisory steps.</li><li><strong>Medium</strong> – Broad exception handling in several Python modules (<code>v1/src/api/websocket/connection_manager.py</code>, etc.). Fix: catch specific exceptions and log others.</li><li><strong>Medium</strong> – Empty <code>catch {}</code> in <code>.claude/helpers/metrics-db.mjs</code>. Fix: log or rethrow.</li><li><strong>Medium</strong> – Oversized UI components (<code>ui/components/LiveDemoTab.js</code>, <code>PoseDetectionCanvas.js</code>, <code>SettingsPanel.js</code>). Fix: split into smaller, responsibility‑focused modules.</li><li><strong>Medium</strong> – Unpinned Docker base image (<code>python:3.11-slim</code>). Fix: use digest.</li><li><strong>Low</strong> – No job timeouts in CI workflows; could cause overlapping runs. Fix: add <code>timeout-minutes</code>.</li><li><strong>Low</strong> – Repository lacks formatting conventions (<code>.editorconfig</code>, etc.). Fix: add standard config files.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a complete, containerised stack for Wi‑Fi‑based dense pose estimation, with a high‑performance Rust core and a Python API that can be extended or replaced. Production readiness is hampered by serious secret‑handling lapses and several maintainability issues (deep nesting, duplicated helpers, oversized UI files). Teams that need a proven Wi‑Fi pose pipeline can adopt the Rust core quickly, but must address the highlighted security and hygiene problems before exposing the system in a live environment.</p>
             </div>
 
             
@@ -93,18 +137,18 @@ ws.runforever()</p><p>With this setup, you can monitor activity or detect falls 
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">605<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>180</b></li><li><span>Shell</span><i style="width:6%"></i><b>11</b></li><li><span>JSON</span><i style="width:2%"></i><b>3</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>2</b></li><li><span>YAML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>295</b></li><li><span>Python</span><i style="width:34%"></i><b>100</b></li><li><span>Rust</span><i style="width:23%"></i><b>67</b></li><li><span>Shell</span><i style="width:11%"></i><b>31</b></li><li><span>JavaScript</span><i style="width:8%"></i><b>23</b></li><li><span>YAML</span><i style="width:6%"></i><b>18</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Django</span><span>Flask</span><span>Express</span><span>Docker</span><span>Kubernetes</span><span>Terraform</span></p>
                     </div>
                 </div>
 
@@ -144,6 +188,12 @@ ws.runforever()</p><p>With this setup, you can monitor activity or detect falls 
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>k8s/secrets.yaml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1157345569">Open in Code Brain &rarr;</a>

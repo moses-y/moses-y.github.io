@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>If you’ve ever tried to reconstruct dense 4D geometry and motion from basic videos, you know the agony: most solutions need tons of post-processing, calibration, or multi-view setups. Getting a clean, frame-by-frame point map and scene flow from a single video is a mess—especially if you want everything lined up in a consistent world coordinate system.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MotionCrafter tackles the headache head-on. Feed in a monocular video (yep, just one camera), and it spits out dense geometry and motion estimates for every frame—all mapped together, no Frankenstein post-optimization required. Under the hood, the motioncrafter/geometrymotionvae.py file is the brains for the 4D VAE, while the motioncrafter/unet.py deals with diffusion-based prediction. The main script, run.py, glues the pipeline together: you call it, it loads models, runs inference, and saves results.</p><p>Configs live in the configs/ folder, split by training type (unettrain for diffusion, vaetrain for geometry, etc.). Dataset handling happens in datasets/video.py and datasets/videotransforms.py, which means you don’t have to write your own loader unless you’re a masochist. Visualization is handled separately—just call visualize/visualize.py if you want to see your outputs without hacking matplotlib.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’ve got a pile of drone footage and want to reconstruct moving objects for simulation or AR. Install the dependencies (requirements.txt), throw your video at run.py:</p><p>python run.py --videopath myvideo.mp4 --save_folder output</p><p>Need to tweak things? Change resolution, number of frames, or swap in your own model weights via command line flags. Training is pretty standard: organize your dataset as outlined in DATASET.md, then use train.py. The configs in configs/ are ready for tweaking—no hiding settings in some obscure class.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MotionCrafter does one thing well: turn boring videos into dense geometry and motion maps, no fuss. Documentation is straightforward, code isn’t buried under layers of abstraction, and it’s not beginner-friendly unless you know your way around PyTorch and video data. If you need high-quality 4D reconstructions, this is solid. If you just want simple optical flow, look elsewhere—this is overkill.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Monocular video streams lack dense 3‑D geometry and per‑pixel motion, forcing downstream tasks (AR, robotics, simulation) to rely on expensive multi‑view capture or manual reconstruction. Developers need a single‑pass model that consumes an ordinary video and outputs a point cloud plus scene‑flow field aligned in a common world frame.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>MotionCrafter</code> implements a 4‑D variational auto‑encoder that jointly predicts dense point maps and scene flow. The core pipeline lives in <strong><code>motioncrafter/</code></strong>:</p>
+<ul><li><code>base_ppl.py</code> orchestrates preprocessing, VAE encoding (<code>encode_vae_video</code>), point‑map decoding (<code>decode_point_map</code>), and post‑processing of latent representations.</li><li><code>geometry_motion_vae.py</code> defines the VAE architecture (<code>encode</code>, <code>encode_2</code>, <code>decode</code>).</li><li><code>unet.py</code> supplies the UNet backbone with optional gradient checkpointing.</li></ul>
+<p>Training utilities sit under <strong><code>trainers/</code></strong>; the most complex is <code>unet_base.py</code> (680 LOC) which builds the UNet, handles data loading, and defines loss helpers (<code>rand_log_normal</code>, <code>filter_low_quality_frame</code>). Configuration files in <strong><code>configs/</code></strong> (GIN, YAML, JSON) describe accelerator, DeepSpeed, and model hyper‑parameters.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>run.py:22</code></strong> (<code>main</code>). The entry point:</p>
+<ol><li>Parses CLI args (video path, output folder, model checkpoints).</li><li>Calls <code>TrainerConfig</code> (from <code>trainers/__init__.py</code>) to assemble a trainer object.</li><li>Invokes <code>train</code> (or inference path inside <code>run.py</code>) which eventually reaches <code>motioncrafter/base_ppl.py</code> → <code>encode_vae_video</code> → VAE forward pass.</li><li>The decoded latent is fed to <code>decode_point_map</code>, which uses <code>utils/losses.py</code> for weighted losses and <code>utils/geo_utils.py</code> for geometric ops.</li><li>The final point map and scene flow are saved via <code>shutil.rmtree</code> in <code>trainers/base.py::save_checkpoint</code>.</li></ol>
+<p>Key call‑graph hotspots:</p>
+<ul><li><code>train_iter → check_isnan</code> (11 calls) – validates numeric stability.</li><li><code>forward → create_custom_forward</code> (10 calls) – builds the custom UNet forward pass.</li><li><code>decode_point_map → decode_2</code> (4 calls) – reconstructs per‑frame point clouds.</li></ul>
+<p>Modules with the widest blast radius:</p>
+<ul><li><code>motioncrafter/base_ppl.py</code> (7 functions, called from 2 places, no inbound imports) – any change here alters both training and inference.</li><li><code>trainers/unet_base.py</code> (25 functions, reads/writes files) – central to model construction and loss computation.</li></ul>
+<p>No circular imports were detected, and the internal import graph is shallow (27 edges across 24 modules), making static reasoning tractable.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the original upstream repo (the fork we are reviewing)
+git clone https://github.com/moses-y/MotionCrafter
+cd MotionCrafter
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run inference on a sample video
+python run.py \
+  --video_path examples/video.mp4 \
+  --save_folder examples_output</code></pre>
+<p>Configuration files (e.g., <code>configs/unet_train/unet_determ_unify_vae_train.gin</code>) can be edited to change training hyper‑parameters. The visualizer (<code>visualize/visualize.py</code>) consumes the generated <code>*.npz</code> and renders point maps.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A robotics perception stack can invoke <code>run.py</code> on live camera feeds, store the resulting <code>video.npz</code>, and feed the point cloud to a SLAM module. The minimal external footprint (only file I/O via <code>shutil</code> and <code>numpy.savez</code>) means the component can run inside a Docker container or on an edge device with the provided HuggingFace weights.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 24 source files, zero tests.</li><li><strong>HIGH – No CI pipeline</strong> – repository lacks <code>.github/workflows</code>.</li><li><strong>MEDIUM – No dependency lockfile</strong> – only <code>requirements.txt</code>.</li><li><strong>MEDIUM – Large binary in repo</strong> – <code>assets/teaser.png</code> (~4.8 MB) should be moved to Git LFS or external storage.</li></ul>
+<p>Additional findings from static analysis:</p>
+<ul><li>Deep nesting (max depth 8) in <code>trainers/unet_base.py</code>, <code>motioncrafter/base_ppl.py</code>, <code>motioncrafter/unet.py</code>.</li><li>Files opened without context managers in <code>trainers/unet_base.py</code> and <code>trainers/wmap_vaekl.py</code>.</li><li>Repeated 6‑line code blocks across 11 files – extract to shared helpers.</li><li>Broad <code>except:</code> in <code>visualize/visualize.py</code> masks errors.</li></ul>
+<p>Addressing the high‑severity items (tests and CI) will provide regression safety; adding a lockfile and moving large assets will improve reproducibility and clone performance.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>MotionCrafter</code> delivers a functional 4‑D VAE pipeline for dense geometry and motion from a single video, with a clear entry point and modest external dependencies. However, the codebase suffers from poor test coverage, missing CI, and some maintainability hotspots (deep nesting, duplicated logic). It is suitable for research or prototype integration, but production teams should prioritize adding tests, CI, and refactoring the large trainer modules before extensive customization.</p>
             </div>
 
             
@@ -91,9 +126,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -156,6 +191,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1156291061">Open in Code Brain &rarr;</a>

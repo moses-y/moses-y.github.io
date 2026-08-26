@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Building an AI That Plays Pokémon FireRed: A Deep Dive into gpt-play-pokemon-firered</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Let’s face it: AI playing games isn&#39;t new. But most of the time, it’s either a bot brute-forcing its way through or a glorified decision tree. What if you could throw a large language model (LLM) into the mix and have it think its way through a game as complex as Pokémon FireRed? That’s the problem this project tries to solve — building an autonomous AI agent that interacts with a live game environment, makes decisions, and learns from its actions. Oh, and there’s even a live web dashboard to watch it stumble through Viridian Forest.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>At its core, gpt-play-pokemon-firered connects OpenAI’s LLM to a Pokémon FireRed emulator running in mGBA. Here’s how it’s glued together:
-The Emulator: The Lua script (mgba/scripts/FireRedBridgeSocketServer.lua) runs inside mGBA, exposing the game state and accepting inputs via a socket server. It’s like a translator between the emulator and the AI.
-The Bridge: fireredmgbabridge.py is a FastAPI server that talks to the emulator. It reads memory (thanks to a bunch of Python in firered_bridge/) to parse game state — like the player’s location, party, and even the fog of war. It also sends back button presses based on what the AI decides.
-The AI Agent: The magic happens in server/index.js. This is where the LLM decides what to do next. It uses a bunch of pre-written prompts (server/prompts/) to make decisions, plan moves, and critique its own performance. There&#39;s even a server/src/core/gameLoop.js to keep everything running in real-time.
-The Dashboard: The HTML/JS frontend (frontend/) is your live window into the AI’s thought process. Want to see what the AI is thinking or what’s in its bag? Open the dashboard in your browser.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re tired of playing FireRed for the 20th time and want to see what happens if you give an AI free rein. After setting up the environment (yes, you’ll need Python, Node.js, and a FireRed ROM), start the emulator, load the Lua script, and fire up the bridge and server. The AI will begin playing, and you can watch the chaos unfold in the browser.</p><p>Here’s a snippet from the prompts (server/prompts/game.txt) to see how the AI “thinks”:</p><p>You are playing Pokémon FireRed. Your goal is to defeat all gym leaders and become the champion. Use your knowledge of the game to navigate, battle, and make decisions.</p><p>Combine that with server/src/core/openaiClient.js to feed game state into the LLM, and you’ve got yourself an AI Ash Ketchum.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a nerdy, over-engineered experiment — and it’s awesome. The integration of Python, Node.js, and Lua is clean, and the dashboard is a fun way to watch the AI in action. That said, it’s not for the faint of heart. If you aren’t comfortable debugging mGBA sockets or tweaking .env files, this might not be for you. But if you love AI, emulators, and Pokémon, grab your ROM and get ready to laugh at your AI struggling to get out of Pallet Town.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running a Game Boy Advance title under full programmatic control is difficult because the emulator exposes only raw input/output, while the game logic lives in memory addresses that change across versions. Developers need a reliable bridge to read state, a decision engine that can act in real time, and a way to monitor progress without digging into the emulator each frame.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository stitches three components together:</p>
+<ul><li><strong><code>mgba/scripts/FireRedBridgeSocketServer.lua</code></strong> runs inside mGBA and streams memory reads / input commands over a TCP socket.</li><li><strong><code>firered_mgba_bridge.py</code></strong> (FastAPI) wraps that socket in a REST API. It imports the <strong><code>firered_bridge/</code></strong> package – e.g. <code>firered_bridge/memory/reader.py</code>, <code>firered_bridge/game_state.py</code>, <code>firered_bridge/ui/dialog.py</code> – to translate raw bytes into high‑level game objects (player party, map, fog‑of‑war).</li><li><strong><code>server/index.js</code></strong> hosts the AI loop (<code>server/src/core/gameLoop.js</code>) and a WebSocket hub (<code>server/src/core/socketHub.js</code>). It pulls the latest state from the Python bridge, builds an OpenAI prompt (<code>server/src/ai/promptBuilder.js</code>), receives the LLM’s action, and posts the corresponding input back through the bridge.</li></ul>
+<p>A minimal front‑end (<code>frontend/app.js</code> + <code>frontend/index.html</code>) connects to the WebSocket and displays logs, a minimap, and inventory.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – start the Node server with <code>node server/index.js</code>. It creates an HTTP server, enables CORS, and launches the WebSocket hub.</li><li><strong>Game loop</strong> – <code>server/src/core/gameLoop.js</code> (13 outgoing imports) repeatedly calls <code>server/src/core/openaiClient.js</code> to send the current snapshot (built from <code>server/src/services/pythonService.js</code> → HTTP GET <code>/state</code> on the FastAPI bridge).</li><li><strong>Bridge request</strong> – <code>pythonService.js</code> contacts <code>http://127.0.0.1:8000/state</code> (FastAPI). The FastAPI endpoint in <code>firered_mgba_bridge.py</code> invokes <code>firered_bridge/game_state.py</code>, which aggregates data from: <em> <code>firered_bridge/memory/reader.py</code> (reads raw bytes via the socket client in <code>firered_bridge/memory/mgba.py</code>), </em> <code>firered_bridge/constants/addresses.py</code> (hub: 19 modules import it, 1 module imports it), * <code>firered_bridge/ui/dialog.py</code> (high cognitive load, 652 lines) for UI‑related state. The import graph shows <strong>60 internal modules</strong> with <strong>175 edges</strong> and <strong>no cycles</strong>, so the data path is linear.</li><li><strong>Decision</strong> – <code>promptBuilder.js</code> formats the snapshot, <code>openaiClient.js</code> calls the OpenAI API, and the response is parsed back into a concrete controller command.</li><li><strong>Action</strong> – <code>pythonService.js</code> POSTs the command to the FastAPI bridge, which forwards it to the Lua socket via <code>firered_bridge/memory/control.py</code>.</li><li><strong>Dashboard</strong> – The WebSocket hub pushes the same snapshot and the AI’s chosen action to <code>frontend/app.js</code>, which renders the UI.</li></ol>
+<p>The widest blast radius belongs to <code>firered_bridge/constants/addresses.py</code> (19 dependents) and <code>server/src/config.js</code> (11 dependents). Changing those files can affect most of the codebase.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone (use the exact URL)
+git clone https://github.com/moses-y/gpt-play-pokemon-firered
+cd gpt-play-pokemon-firered
+
+# 2. Install Python deps
+python -m pip install -r requirements.txt
+
+# 3. Install Node deps
+cd server &amp;&amp; npm install &amp;&amp; cd ..
+
+# 4. Copy environment templates
+cp .env.example .env
+cp server/.env.example server/.env
+#   Edit server/.env → set OPENAI_API_KEY
+#   Edit .env if you need to change MGBA socket ports
+
+# 5. Start the emulator with the Lua script
+#    (open mGBA → load FireRed ROM → Tools → Scripting → load mgba/scripts/FireRedBridgeSocketServer.lua)
+
+# 6. Run the Python bridge
+uvicorn firered_mgba_bridge:app --host 127.0.0.1 --port 8000
+
+# 7. Launch the AI server
+node server/index.js</code></pre>
+<p>Open <code>frontend/index.html</code> in a browser; it will connect to <code>ws://localhost:9885</code> and display live status.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A QA team can spin up the stack on a CI runner, point it at a known ROM, and let the LLM explore the game automatically. The dashboard provides a visual log of routes taken, items collected, and failures, enabling rapid regression testing of ROM hacks or AI‑driven speed‑run strategies.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 61 source files, no test files.</li><li><strong>HIGH – Missing lockfile</strong> – <code>server/package.json</code> has no accompanying <code>package-lock.json</code> or <code>yarn.lock</code>.</li><li><strong>HIGH – No CI pipeline</strong> – No <code>.github/workflows</code> or other CI config.</li><li><strong>HIGH – Wildcard CORS</strong> – <code>server/index.js</code> uses <code>cors()</code> with default (allow any origin) while credentials are enabled.</li><li><strong>MEDIUM – Dependabot not enabled</strong> – Two manifest files, no update bot config.</li><li><strong>LOW – Missing convention files</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<p>Additional static findings (not in the health audit) include oversized modules (<code>addresses.py</code>, <code>snapshot.py</code>, <code>dialog.py</code> &gt; 600 lines), broad <code>except:</code> blocks, deep nesting (up to 6 levels), duplicated code blocks across player and world modules, and a file opened without a context manager (<code>firered_bridge/ui/menus.py</code>).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a functional end‑to‑end pipeline that lets an LLM control FireRed in real time, with a clear separation between emulator bridge, AI loop, and UI. However, the codebase suffers from high cognitive load, no automated testing or CI, and security‑related CORS settings. It is suitable for experimentation or research but requires refactoring and process improvements before production or extensive community use.</p>
             </div>
 
             

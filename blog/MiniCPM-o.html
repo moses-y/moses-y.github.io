@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#full-duplex-demo-requires-webcam-microphone">Full‑duplex demo (requires webcam &amp; microphone)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Deploying a multimodal LLM that can ingest video, audio, and images while generating synchronized text‑to‑speech on a mobile device typically requires stitching together several separate models and custom pipelines. The engineering effort and runtime overhead make on‑device real‑time interaction difficult for most teams.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MiniCPM-o bundles vision, speech, and text capabilities into a single 9 B‑parameter model that runs end‑to‑end on‑device. The repository ships the model weights (via HuggingFace links) and a lightweight inference framework:</p><p>Core inference code lives in chat.py, which loads the model and provides a simple CLI for text, image, audio, or video inputs.  
- The evalmm/vlmevalkit/ package contains a full evaluation harness (vlmeval/) with dataset adapters (e.g., imagevqa.py, mmbenchvideo.py) and a thin API wrapper (api/gpt.py) that the demo script uses to query the model.  
- Documentation (docs/ and README.md) describes the full‑duplex streaming mode, where input video/audio streams and output speech/text streams operate concurrently.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the evaluation toolkit dependencies
-pip install -r evalmm/vlmevalkit/requirements.txt
-(Optional) install additional runtime deps for on‑device inference
-pip install torch torchvision torchaudio transformers</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create a copy of evalmm/vlmevalkit/.env (present in the repo) and fill in any required keys such as HFTOKEN for private model access.  
-The model checkpoint URL is referenced in chat.py; replace it with your own HuggingFace path if needed.</p><h3 class="post-h" id="running">Running</h3><p>Text‑only interaction
-python chat.py --text &quot;Describe the scene in the attached image.&quot; --image assets/inputexamples/assistantfemalevoice.wav</p><h3 class="post-h" id="full-duplex-demo-requires-webcam-microphone">Full‑duplex demo (requires webcam &amp; microphone)</h3><p>python chat.py --live</p><p>chat.py parses command‑line flags, loads the model via transformers.AutoModelForCausalLM, and streams audio output through the system speaker.</p><p>If you only need evaluation, run the built‑in suite:
-python evalmm/vlmevalkit/run.py --benchmark mmbenchvideo</p><p>The script uses the dataset classes under vlmeval/dataset/ to feed inputs to the model and report scores.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A mobile health‑assistant could embed MiniCPM-o to answer patient questions while simultaneously monitoring a video feed of a medication label. The app would call chat.py in a background thread for speech synthesis, while the main UI streams live video to the model for OCR and context extraction, achieving a seamless conversational loop without separate services.</p><p>from subprocess import Popen
-launch background speech generation
-speechproc = Popen([&quot;python&quot;, &quot;chat.py&quot;, &quot;--live&quot;])
-feed video frames from camera to the same process via stdin or shared memory</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No automated tests – repository lacks any tests/ folder or pytest configuration.  
-Medium – No CI pipeline – .github/ only contains issue templates; no workflow YAML for builds or linting.  
-Low – Missing lockfile – dependencies are listed in eval_mm/vlmevalkit/requirements.txt without a requirements.lock or pipfile.lock, risking non‑reproducible environments.  
-High – Potential secret exposure – .env file is tracked in the repo; it may contain API keys or tokens.  
-Low – Limited documentation for inference – README shows usage examples, but chat.py lacks inline docstrings and argument validation, increasing the chance of runtime errors.  
-Low – License present – LICENSE is included, satisfying legal distribution requirements.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MiniCPM-o delivers a ready‑to‑run multimodal LLM with real‑time full‑duplex streaming, suitable for teams that need an on‑device solution and are comfortable handling a thin CLI wrapper. The codebase is functional but minimal: it lacks tests, CI, and a proper lockfile, and it ships a raw .env that should be sanitized. Expect to add your own validation, testing, and deployment automation before using it in production.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need an on‑device multimodal LLM that can ingest image, video, audio and text while producing simultaneous speech and text output. Existing open‑source MLLMs either lack full‑duplex streaming or require heavyweight servers, making real‑time phone deployment impractical.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>MiniCPM‑o</code> ships four self‑contained projects:</p>
+<ul><li><strong>eval_mm</strong> – evaluation toolkit (<code>eval_mm/vlmevalkit/</code>) with dataset loaders, metric helpers and a CLI (<code>eval_mm/vlmevalkit/run.py</code>).</li><li><strong>web_demos</strong> – a browser‑based demo (<code>web_demos/minicpm‑o_2.6/web_server/</code>) that runs the model through a WebRTC‑enabled UI.</li><li><strong>omnilmm</strong> – core model utilities (<code>omnilmm/model/</code>, <code>omnilmm/conversation.py</code>) that expose inference APIs.</li><li><strong>finetune</strong> – scripts for further model fine‑tuning (<code>finetune/</code>).</li></ul>
+<p>Common code lives in Python (118 files) and the front‑end uses Vue/React with pnpm as the package manager. Docker is used for the demo server.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><em>Execution starts</em> at <code>eval_mm/vlmevalkit/run.py:main</code>. The <code>main</code> function (reaches 317 functions) parses CLI args, builds a prompt via <code>eval_mm/vlmevalkit/vlmeval/smp/file.py::build_prompt</code>, loads a dataset (<code>eval_mm/vlmevalkit/vlmeval/dataset/...</code>), and calls <code>evaluate</code>.</p>
+<p><em>Key call chain</em> (high blast‑radius nodes are bold):</p>
+<pre><code>main → evaluate → load (x117) → build_prompt (x114) → dump (x92) → track_progress_rich (x24)</code></pre>
+<p><code>load</code> reads files from disk; <code>build_prompt</code> constructs model input; <code>dump</code> writes results; <code>track_progress_rich</code> prints progress via Rich.</p>
+<p><code>evaluate</code> also invokes <code>model.generate</code> (28 calls) which lives in <code>omnilmm/model/utils.py</code>. This is the only place that contacts the inference backend (CPU/GPU or ONNX runtime).</p>
+<p><em>Web demo</em> starts with <code>web_demos/minicpm‑o_2.6/web_server/src/apis/index.js</code>, which imports <code>omnilmm/model/utils.py</code> through a Python‑backed HTTP endpoint defined in <code>web_demos/.../index.html</code>. The Dockerfile builds a container that installs pnpm dependencies (<code>pnpm install</code>) and the Python environment (<code>pip install -r requirements.txt</code>).</p>
+<p><em>Circular import</em> warning: <code>eval_mm/vlmevalkit/vlmeval/dataset/__init__.py</code> participates in a 7‑module cycle, raising the risk of import‑time side effects when refactoring.</p>
+<p><em>Hub modules</em> – <code>eval_mm/vlmevalkit/vlmeval/smp/__init__.py</code> is imported by 57 other modules; changes here propagate widely.</p>
+<p><em>External effects</em> – 50 functions perform filesystem I/O, 3 launch subprocesses, 28 call the model for inference, and 1 performs a cryptographic operation. The only outbound network call is in <code>eval_mm/vlmevalkit/vlmeval/api/base.py</code> when contacting a remote service for content checking.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/MiniCPM-o
+cd MiniCPM-o
+
+# Install Python deps (base environment)
+pip install -r requirements.txt   # includes eval_mm, finetune, omnilmm
+
+# Run an evaluation (example VQA)
+python -m eval_mm.vlmevalkit.run \
+    --dataset vqa --model MiniCPM-o-4.5 \
+    --output results.json</code></pre>
+<p>To launch the web demo locally:</p>
+<pre data-lang="bash"><code># Install front‑end deps
+cd web_demos/minicpm-o_2.6/web_server
+pnpm install
+
+# Build and run the Docker image
+docker build -t minicpm-o-demo .
+docker run -p 8080:80 minicpm-o-demo</code></pre>
+<p><strong>Configuration</strong> – The demo and evaluation scripts read environment variables from <code>.env</code> files (<code>eval_mm/vlmevalkit/.env</code>, <code>web_demos/.../.env.*</code>). Replace placeholder keys (e.g., <code>OPENAI_API_KEY</code>) with your own credentials or remove the files after creating <code>.env.example</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A mobile app can embed the ONNX‑exported <code>MiniCPM‑o</code> model, stream video/audio to a backend running <code>omnilmm/model/utils.py</code>, and receive simultaneous transcription and response audio. The evaluation toolkit can be used to benchmark the on‑device model against VQA, OCR, and speech benchmarks before deployment.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Critical</em> – Rotate and remove committed credentials in <code>eval_mm/vlmevalkit/.env</code>.</p>
+<p><em>High</em> – No test suite; add tests for each public entry point. <em>High</em> – No CI workflow; add GitHub Actions to build and test. <em>High</em> – Deployable Dockerfile lacks a build gate; add a CI step that builds the image. <em>High</em> – Remove committed <code>.env</code> files and replace with <code>.env.example</code>.</p>
+<p><em>Medium</em> – Enable Dependabot for Python, npm, and Docker manifests. <em>Medium</em> – Pin Docker base images by digest. <em>Medium</em> – Add a pre‑commit secret‑scan hook. <em>Medium</em> – Move large binary assets (e.g., <code>assets/minicpmv4_5/MiniCPM-V 4.5-8.26.mp4</code>) to Git LFS or external storage.</p>
+<p><em>Low</em> – Add repository convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</p>
+<p>Additional static findings: 25 files with deep nesting (max indentation 6), 7 import cycles, 6 “open without context manager”, 13 broad exception handlers, duplicated 6‑line code blocks across 68 files, and two oversized modules (&gt;1 400 lines). These are documented in the measured analysis and should be prioritized for refactoring.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>MiniCPM‑o</code> provides a functional on‑device multimodal LLM with full‑duplex streaming, backed by a concrete evaluation suite and a ready‑to‑run web demo. The codebase is functional but suffers from missing tests, CI, and several maintainability hotspots (import cycles, large modules, duplicated code). It is suitable for research or prototype integration, but production teams should first address the critical credential leak and add automated testing and CI pipelines.</p>
             </div>
 
             
@@ -107,18 +137,18 @@ Low – License present – LICENSE is included, satisfying legal distribution r
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">389<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>29</b></li><li><span>Python</span><i style="width:90%"></i><b>26</b></li><li><span>YAML</span><i style="width:21%"></i><b>6</b></li><li><span>HTML</span><i style="width:3%"></i><b>1</b></li><li><span>Shell</span><i style="width:3%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>118</b></li><li><span>Markdown</span><i style="width:28%"></i><b>33</b></li><li><span>Vue</span><i style="width:17%"></i><b>20</b></li><li><span>JavaScript</span><i style="width:15%"></i><b>18</b></li><li><span>JSON</span><i style="width:7%"></i><b>8</b></li><li><span>YAML</span><i style="width:6%"></i><b>7</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Docker</span><span>ONNX</span></p>
                     </div>
                 </div>
 
@@ -160,7 +190,7 @@ Low – License present – LICENSE is included, satisfying legal distribution r
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>eval_mm/vlmevalkit/requirements.txt</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>eval_mm/vlmevalkit/.env</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>eval_mm/vlmevalkit/.env, web_demos/minicpm-o_2.6/web_server/.env.development, web_demos/minicpm-o_2.6/web_server/.env.production</code></span></li>
                     </ul>
                 </div>
 

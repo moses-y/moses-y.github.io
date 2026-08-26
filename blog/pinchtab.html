@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,20 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Browser automation for AI agents is a hot mess. Most tools are either tightly coupled to their own frameworks (hi, OpenClaw, Playwright), or they rely on heavy solutions like full-page screenshots or bloated DOM snapshots that rack up token usage and costs. If you want something lightweight, framework-agnostic, and easy to integrate with your existing setup, you’re usually out of luck.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>pinchtab is a self-contained, 12MB Go binary that spins up an HTTP server and a Chrome instance for browser automation. No external dependencies, no bloated frameworks. It’s designed for AI agents but works with anything that can make HTTP requests — even curl.</p><p>The magic happens in main.go, which initializes the HTTP server and Chrome bridge. The file bridge.go sets up the communication between the server and Chrome, leveraging Chrome DevTools Protocol (CDP) to interact with web pages. Key files like handlers.go and handler_snapshot.go handle API routes, such as GET /snapshot for accessibility trees or POST /action for interactions like clicks and typing.</p><p>The project is packed with thoughtful features: intelligent text extraction (/text endpoint), stealth mode (stealth.js spoofs bot detection signals), and persistent sessions stored at ~/.pinchtab/chrome-profile. If you’re tired of logging in every time you restart your browser tool, this one’s got you covered.</p><p>Oh, and it’s dirt cheap on token usage. Instead of dumping the entire DOM, Pinchtab’s /text endpoint extracts clean, readable content — up to 13x fewer tokens compared to full snapshots.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re building an AI agent that needs to scrape product listings and click “Add to Cart” buttons. Here’s how you’d do it with pinchtab:
-Fire up the server:
-   bash
-   ./pinchtab
-   
-Open Chrome, log in to your site, and let Pinchtab handle session persistence.
-Use the /snapshot API to grab a structured accessibility tree:
-   bash
-   curl localhost:9867/snapshot?filter=interactive
-   
-Find the button’s reference ID and tell Pinchtab to click it:
-   bash
-   curl -X POST localhost:9867/action -d &#39;{&quot;kind&quot;:&quot;click&quot;,&quot;ref&quot;:&quot;e5&quot;}&#39;</p><p>No fancy SDKs or vendor lock-in. Just clean HTTP calls.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>pinchtab is like the Swiss Army knife of browser automation: simple, efficient, and versatile. It’s perfect for developers who want lightweight tools that don’t dictate how you should build your system. The trade-off? It’s not a feature circus like Playwright, so if you need deep browser testing or hyper-specific actions, look elsewhere. But for AI-driven browser tasks? It’s a steal.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Agents that need to drive a browser are forced into proprietary SDKs (OpenClaw, Playwright‑MCP, etc.). Switching agents or scripting from a shell requires rewriting large amounts of code or abandoning the tool entirely. A lightweight, language‑agnostic HTTP bridge to Chrome would let any AI agent or script issue clicks, reads, and navigation without a heavy dependency stack.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>pinchtab</code> ships a single 12 MB Go binary that starts Chrome, exposes an HTTP API, and returns accessibility‑oriented snapshots. Core files are in the repository root:</p>
+<ul><li><code>main.go</code> – parses flags, creates the HTTP router, and launches the server.</li><li><code>bridge.go</code> &amp; <code>cdp.go</code> – wrap Chrome DevTools Protocol (CDP) calls; <code>bridge.go</code> starts Chrome with the appropriate profile and headless flag, while <code>cdp.go</code> marshals JSON requests/responses.</li><li><code>handlers.go</code>, <code>handler_snapshot.go</code>, <code>handler_test.go</code> – implement the <code>/snapshot</code>, <code>/text</code>, <code>/action</code>, <code>/screenshot</code>, etc. endpoints, delegating to <code>snapshot.go</code> and <code>state.go</code>.</li><li><code>readability.js</code> &amp; <code>stealth.js</code> – JavaScript snippets injected into pages for content extraction and bot‑detection evasion.</li><li><code>config.go</code> – reads runtime options (e.g., <code>BRIDGE_HEADLESS</code>) from environment variables.</li></ul>
+<p>The Go code is a single package; the static import graph shows two internal modules with <strong>no import edges</strong> and <strong>no circular dependencies</strong>, meaning each file is largely self‑contained.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>main.go</code> calls <code>config.Load()</code> (config.go) then <code>bridge.Start()</code> (bridge.go).</li><li><code>bridge.Start()</code> launches Chrome (<code>exec.Command</code>) with the user profile under <code>~/.pinchtab/chrome-profile/</code> and returns a CDP client.</li><li>The HTTP router (net/http) registers handlers from <code>handlers.go</code>. Each handler receives the request, extracts parameters, and calls a core function:   <em> <code>/snapshot</code> → <code>snapshot.Get()</code> (snapshot.go) → CDP <code>Page.getLayoutMetrics</code> &amp; <code>DOM.getDocument</code>. </em> <code>/text</code> → <code>snapshot.ReadableText()</code> which injects <code>readability.js</code> via CDP <code>Runtime.evaluate</code>. * <code>/action</code> → <code>state.ApplyAction()</code> (state.go) → CDP <code>Input.dispatchMouseEvent</code> / <code>Runtime.evaluate</code>.</li><li>Responses are marshaled to JSON and written back to the client.</li></ol>
+<p>The widest blast‑radius files are <code>handlers.go</code> (995 lines, all endpoint routing) and <code>cdp.go</code> (low‑level CDP plumbing). Because the import graph has <strong>0 edges</strong>, changes in one file rarely affect others, but the monolithic <code>handlers.go</code> concentrates most routing logic, so refactoring it reduces risk. No external database or filesystem writes occur beyond Chrome’s profile directory.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and build
+git clone https://github.com/moses-y/pinchtab
+cd pinchtab
+go build -o pinchtab .
+
+# Run directly (headful)
+./pinchtab
+
+# Run headless (environment flag)
+BRIDGE_HEADLESS=true ./pinchtab</code></pre>
+<p>Docker alternative (image built from the provided <code>Dockerfile</code>):</p>
+<pre data-lang="bash"><code>docker build -t pinchtab .
+docker run -d -p 9867:9867 --security-opt seccomp=unconfined pinchtab
+curl http://localhost:9867/health</code></pre>
+<p>Configuration is read from environment variables defined in <code>config.go</code> (e.g., <code>BRIDGE_HEADLESS</code>, <code>BRIDGE_PORT</code>). The README demonstrates basic <code>curl</code> calls against <code>/text</code> and <code>/action</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>An LLM‑driven assistant can keep a persistent login session by launching <code>pinchtab</code> once, logging in via the Chrome window, and then issuing:</p>
+<pre data-lang="bash"><code>curl -X POST localhost:9867/action -d '{"kind":"click","ref":"e5"}'
+curl localhost:9867/text?tabId=1</code></pre>
+<p>The assistant receives a concise accessibility tree (~800 tokens) instead of a full DOM dump, enabling cheaper token usage while still interacting with the page.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>Medium – Deep nesting</strong> – <code>cdp.go</code>, <code>handlers.go</code>; max indentation depth 7.</li><li><strong>Medium – Duplicated code</strong> – <code>handler_snapshot.go</code>, <code>handlers.go</code>; identical 6‑line block.</li><li><strong>Medium – Oversized file</strong> – <code>handlers.go</code> (995 LOC).</li></ul>
+<p><strong>Health audit</strong></p>
+<ul><li><strong>High – Pin third‑party actions</strong> – <code>.github/workflows/*</code> uses <code>@vN</code> tags.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>.github/workflows/ci.yml</code> lacks explicit permissions.</li><li><strong>Medium – Enable Dependabot</strong> – No dependabot config present.</li><li><strong>Medium – Pin Docker base images</strong> – <code>Dockerfile</code> uses mutable <code>golang:1.25-alpine</code>, <code>alpine:latest</code>.</li><li><strong>Medium – Add vulnerability scan</strong> – No dependency‑review step in CI.</li><li><strong>Medium – Checkout persist‑credentials</strong> – <code>.github/workflows/ci.yml</code> keeps token in <code>.git/config</code>.</li><li><strong>Low – Job timeouts</strong> – <code>.github/workflows/ci.yml</code> lacks <code>timeout-minutes</code>.</li></ul>
+<p>Repository hygiene: tests (<code>*_test.go</code>) exist, CI via GitHub Actions, Dockerfile present, MIT license, no committed secrets, lockfile (<code>go.sum</code>) committed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>pinchtab</code> delivers a compact, language‑agnostic browser bridge that fits well into AI‑agent pipelines, with a clear separation between CDP plumbing and HTTP routing. The codebase is functional but suffers from a single, very large handler file and some duplicated logic, which hampers maintainability. Teams comfortable with Go can quickly adopt it, but should refactor <code>handlers.go</code> and tighten CI/CD security before using it in production.</p>
             </div>
 
             

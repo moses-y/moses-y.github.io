@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Standard browsers render web pages as visual layouts, but AI tools consume content as structured text. When developers need to see what an AI actually reads from a URL—whether for prompt engineering, content extraction, or debugging—they&#39;re forced to copy-paste HTML through conversion tools. That workflow is slow, error-prone, and doesn&#39;t reflect how content flows to LLMs in practice.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>md-browse is a markdown-first desktop browser built on Electrobun. It requests pages with an Accept: text/markdown header first, so servers that support native markdown (like Vercel&#39;s docs) return it directly. For regular HTML, it runs the page through turndown with settings tuned to match what Copilot and Claude see—stripping scripts, navigation, and footers while preserving structure.</p><p>The app has two processes: a Bun main process (src/bun/index.ts) handles HTTP requests, markdown conversion, tab state, and RPC. A Svelte toolbar view (src/toolbar-svelte/) provides the UI: tab bar, navigation controls, URL bar, and a toggle between raw markdown and rendered preview. The conversion logic lives in src/shared/turndown.ts, shared across both sides.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README documents the setup. You&#39;ll need Bun and macOS for native development.</p><p>Setup and run:
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Most browsers render HTML, which is fine for humans but noisy for anyone trying to read the web as structured text. AI tools strip pages down to markdown before processing them; there's no easy way to see that same clean view while browsing. <code>md-browse</code> closes that gap: a browser whose primary output is markdown, not rendered HTML.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>md-browse</code> is a markdown-first desktop browser built on Electrobun (a Bun-based Electron alternative). It sends <code>Accept: text/markdown</code> headers when fetching pages and falls back to HTML-to-markdown conversion via Turndown when servers don't support native markdown. The UI lives in <code>src/toolbar-svelte/</code> (Svelte + Vite), and the main process runs in <code>src/bun/index.ts</code>.</p>
+<p>It supports multiple tabs with navigation history, back/forward, reload, and a toggle between raw markdown and rendered preview. The conversion pipeline in <code>src/shared/turndown.ts</code> is tuned to match what Copilot and Claude see: it strips scripts, styles, and navigation, extracts <code>&lt;main&gt;</code>/<code>&lt;article&gt;</code> content, and normalizes headings, links, and code blocks.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/bun/index.ts</code>. The entry points are <code>fetchPage</code> (line 197), <code>sendNavigationState</code> (line 346), and <code>sendTabs</code> (line 355). <code>fetchPage</code> reaches 6 functions and is called from 5 places; it fetches over HTTP, decodes the response body via <code>decodeResponseBody</code>, and runs content through the Turndown service from <code>src/shared/turndown.ts</code>. The Bun process owns all network I/O and state; it communicates with the Svelte toolbar over RPC (<code>src/toolbar-svelte/lib/rpc.ts</code>, 28 functions).</p>
+<p>The highest-blast-radius functions are <code>getElectroview</code> (called from 12 places), <code>sendNavigationState</code> (10), and <code>sendTabs</code> (9) — all in <code>src/bun/index.ts</code>. Change any of these and a dozen call sites ripple. The module graph shows no circular dependencies (16 files, 15 edges), but <code>src/shared/start-page.ts</code> is a stable hub (5 importers, 0 dependencies) and <code>src/bun/index.ts</code> is an unstable sink (0 importers, 3 dependencies), so the main process is where most change concentrates.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install dependencies
 bun install
-bun run start</p><p>Build for current platform:
-bun run build</p><p>Build Windows artifacts:
-bun run build:stable:win</p><p>There&#39;s no configuration file to edit—the app runs out of the box. Tests exist in scripts/turndown.test.ts and scripts/turndown-comparison.test.ts, runnable via Bun&#39;s test runner.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer building an LLM-powered documentation assistant can use md-browse to verify what their model will actually receive. Point it at a target URL, toggle to raw markdown view, and see the exact content that would flow into a prompt. The comparison test file (scripts/turndown-comparison.test.ts) suggests the author has been validating output against reference conversions—the same check you&#39;d run before trusting the output in production.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No CI/CD pipeline: No .github/ or CI config exists, so there&#39;s no automated build or test gate. The two test files exist but nothing runs them in a pipeline.
-Med – Single-platform assumption: The README states macOS is required for native development. Windows builds are possible, but Linux support isn&#39;t mentioned. This limits the contributor base.
-Low – Dependency lockfile duplication: Both bun.lock and package-lock.json are present. That&#39;s redundant—Bun uses bun.lock, npm uses package-lock.json. One should be removed to avoid drift.
-Low – Heuristic-only issue detection: The analysis flags no CI, but the codebase is small, well-organized, and includes tests. The shared types.ts and RPC layer (src/toolbar-svelte/lib/rpc.ts) suggest deliberate separation of concerns.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a focused, well-scoped tool that solves a real problem for anyone working with LLM content pipelines. The dual-view approach and markdown-priority fetching are thoughtful design choices. It&#39;s early-stage (no CI, macOS-only for dev), but the architecture is clean and the tests cover the core conversion logic. Worth using if you&#39;re building AI content workflows on macOS; wait for broader platform support if you&#39;re not.</p>
+
+# Run in development mode
+bun run start
+
+# Build the application (current platform)
+bun run build</code></pre>
+<p>Requires Bun and macOS for native development. No environment variables or config files are needed beyond <code>electrobun.config.ts</code>. The README documents these commands verbatim; no other setup steps are evidenced in the repo.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>Documentation-heavy workflows: a developer reading Vercel's docs, which serve native markdown, gets the clean source immediately. For sites that only serve HTML, the Turndown pipeline in <code>src/shared/turndown.ts</code> produces a feed-ready markdown view — useful for content extraction, LLM prompt building, or archiving pages as text without scraping tools.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (deterministic, not opinion) found 5 issues across 4 kinds:</p>
+<ul><li><strong>High – duplicated code blocks</strong>: 73 repeated 6-line blocks across 6 files including <code>src/bun/index.ts</code>, <code>scripts/turndown.test.ts</code>, and <code>src/toolbar-svelte/lib/rpc.ts</code>. Extract shared helpers.</li><li><strong>Medium – high branching density</strong>: <code>src/shared/turndown.ts</code> has 35 branch points over 73 lines; consider table/strategy dispatch.</li><li><strong>Medium – oversized files ×2</strong>: <code>src/toolbar-svelte/App.svelte</code> and <code>src/bun/index.ts</code> at 1,184 code lines; split by responsibility.</li><li><strong>Medium – deep nesting</strong>: <code>src/bun/index.ts</code> reaches indentation depth 6; flatten with guard clauses.</li></ul>
+<p>SDLC observations: no CI pipeline exists (15 source files, no workflow — every change merges unbuilt), no Dependabot/Renovate for the single manifest, and no <code>.editorconfig</code>/<code>.gitattributes</code>/formatter config. Tests are present (2 files) and a license exists; no committed secrets were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A focused, well-scoped tool that solves a real problem for markdown-centric browsing and AI-assisted reading. The architecture is clean — two processes, no circular deps — but <code>src/bun/index.ts</code> carries too much responsibility and the duplication across test and RPC files will slow future changes. Worth adopting if you work with LLM pipelines or documentation-heavy research; add CI before trusting it in a shared workflow.</p>
             </div>
 
             

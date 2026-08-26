@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 15, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Swift</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Editing code on iOS sucks. Apple&#39;s UITextView is a joke for anything beyond plain text: no syntax highlighting, no line numbers, and zero awareness of invisible characters or indentation. If you want a real code editor on iOS, you usually end up cobbling together hacks or relying on garbage webviews. Runestone fixes this.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Runestone is a Swift framework for making an actual code editor on iOS. It uses GitHub&#39;s Tree-sitter (see Example/Languages/Sources/TreeSitterJavaScript/) for fast, incremental parsing and syntax highlighting. You get line numbers, invisible character display, code-aware insertion (auto-pairing quotes/brackets), and customizable themes. The core lives in Sources/Runestone, with docs in Documentation.docc and demo code in Example/.</p><p>Customization isn&#39;t just a checkbox—want your own theme? Check out the Example/Themes/Sources/RunestoneOneDarkTheme/OneDarkTheme.swift. Adding languages is straightforward: look at highlights.scm and injections.scm in the JavaScript example. All the little editor features (line wrapping, page guide, overscroll, regex search) are handled in the framework, not bolted on.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you want a SwiftUI app that edits JavaScript. You’d drop in the Runestone package, set up a TextView (see MainViewController.swift in the example), and wire up a TreeSitterLanguage for JS. Themes are just Swift structs—grab TomorrowNightTheme.swift, tweak colors, and set it as your editor theme. Invisible characters and line numbers are one-liners. You can even detect indentation style automatically, so your editor stops mangling tabs and spaces.</p><p>textView.language = TreeSitterLanguage.javascript
-textView.theme = TomorrowNightTheme()
-textView.showLineNumbers = true</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Runestone is what Apple should&#39;ve shipped for code editing. It&#39;s fast, flexible, and actually respects developer needs. If you&#39;re building an iOS code editor or need a solid text input for dev tools, use it. For simple note apps, it&#39;s overkill. For anything code-related, it&#39;s the best option unless you hate Swift or want to reinvent the wheel.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a fast, feature‑rich plain‑text editor for iOS that can handle code (syntax highlighting, line numbers, invisible‑character rendering, etc.) without pulling in heavyweight UI frameworks. Existing options are either heavy, lack Tree‑sitter‑based incremental parsing, or are tied to macOS only.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Runestone</code> delivers a Swift‑native editor component built on <strong>Tree‑sitter</strong> for incremental parsing. The core UI lives in <code>Sources/Runestone/TextView/Core/</code>, e.g. <code>TextView.swift</code> (the primary <code>UIView</code> subclass) and <code>TextInputView.swift</code> (handles input, cursor, and selection). Syntax‑highlighting rules are defined in language packages under <code>Example/Languages/Sources/</code>, such as <code>RunestoneJavaScriptLanguage/TreeSitterLanguage.swift</code>. Themes are pure‑Swift assets in <code>Example/Themes/Sources/</code>, e.g. <code>RunestoneOneDarkTheme/OneDarkTheme.swift</code>. The sample iOS app (<code>Example/Example.xcodeproj</code>) wires the editor in <code>Example/Example/Application/SceneDelegate.swift</code> and demonstrates usage of helpers like <code>TextView+Helpers.swift</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><em>Entry point</em> – the iOS launch sequence starts in <code>Example/Example/Application/SceneDelegate.swift</code>, which creates a <code>UIWindow</code> and sets <code>MainViewController</code> as root. <code>MainViewController</code> imports <code>Runestone</code> and instantiates <code>Runestone.TextView</code> (implemented in <code>Sources/Runestone/TextView/Core/TextView.swift</code>).</p>
+<p><em>Parsing</em> – <code>TextView</code> holds a <code>TreeSitterLanguage</code> instance (see <code>Example/Languages/Sources/RunestoneJavaScriptLanguage/TreeSitterLanguage.swift</code>). On text changes, <code>TextEditHelper.swift</code> (in <code>Sources/Runestone/Library/</code>) batches edits and forwards them to the language’s <code>tree_sitter</code> parser (C source <code>Example/Languages/Sources/TreeSitterJavaScript/src/parser.c</code>). The parser returns a syntax tree that drives the <code>RedBlackTree</code>‑based line model (<code>Sources/Runestone/RedBlackTree/RedBlackTree.swift</code>).</p>
+<p><em>Rendering</em> – <code>TextView</code> walks the syntax tree, applying <code>HighlightName</code> definitions from theme files (<code>RunestoneThemeCommon/HighlightName.swift</code>) to generate <code>NSAttributedString</code> fragments. The view also consults <code>TextView+Helpers.swift</code> for invisible‑character rendering and line‑number drawing.</p>
+<p><em>Effect scope</em> – The editor component does not perform I/O itself; all side effects (file saving, network sync) are expected to be handled by the host app. The widest blast radius within the repo is <code>TextView.swift</code> (≈1,500 LOC) and <code>TextInputView.swift</code>, because they own the view hierarchy, edit batching, and interaction with the parser.</p>
+<p>No circular import edges were detected; the internal module graph is flat, simplifying future refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># clone the repo
+git clone https://github.com/moses-y/Runestone
+cd Runestone
+
+# build the example app (SwiftPM)
+swift build -c release
+
+# open the Xcode project to run on a simulator/device
+open Example/Example.xcodeproj</code></pre>
+<p>Add the package to another project by pointing Xcode to <code>Package.swift</code>. Import <code>Runestone</code> and create a <code>Runestone.TextView</code> in a view controller. Configure a language by adding a <code>TreeSitterLanguage</code> subclass (see <code>RunestoneJavaScriptLanguage/TreeSitterLanguage.swift</code>) and a theme by conforming to <code>EditorTheme</code> (see <code>OneDarkTheme.swift</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A note‑taking app can embed <code>Runestone.TextView</code> to provide code‑aware editing. The host app registers <code>TreeSitterLanguage</code> for each supported language, then persists the editor’s <code>text</code> property to iCloud. Because parsing is incremental, scrolling through a 10 k‑line source file remains smooth on iPhone 12.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Static analysis findings (48 total, 20 high / 28 medium):</em></p>
+<ul><li><strong>Deep nesting</strong> – up to 8 levels in <code>Example/Languages/Sources/RunestoneJavaScriptLanguage/TreeSitterLanguage.swift</code>, <code>Example/Languages/Sources/TreeSitterJavaScript/src/scanner.c</code>, <code>Sources/Runestone/Library/TextEditHelper.swift</code>.</li><li><strong>Duplicated code blocks</strong> – 528‑line fragments repeated across 77 files (e.g., <code>SceneDelegate.swift</code> in both Example and UITests).</li><li><strong>Oversized files</strong> – <code>Sources/Runestone/TextView/Core/TextView.swift</code>, <code>Sources/Runestone/TextView/Core/TextInputView.swift</code>, <code>Sources/TestTreeSitterLanguages/html/parser.c</code> each exceed 1,400 lines.</li><li><strong>High branching density</strong> – 38 branches in 85 lines in <code>Sources/Runestone/RedBlackTree/RedBlackTree.swift</code> and similar files.</li></ul>
+<p><em>CI/CD hygiene (5 audit findings):</em></p>
+<ul><li><strong>HIGH</strong> – Pin third‑party actions to commit SHAs in <code>.github/workflows/*</code>.</li><li><strong>HIGH</strong> – Remove <code>continue-on-error</code> from correctness steps in <code>build_and_test.yml</code>.</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code>.</li><li><strong>MEDIUM</strong> – Move large binary <code>Design/Tutorials.sketch</code> (28 MB) to Git LFS.</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to workflow jobs.</li></ul>
+<p>All tests (<code>89</code> files) and documentation (<code>9</code> doc files) are present, and a license is included.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Runestone</code> provides a solid, Tree‑sitter‑backed iOS text editor with rich code‑editing features, but the core UI files are large and contain deep nesting, making future maintenance non‑trivial. It is well‑suited for teams that need a performant in‑app code editor and are comfortable refactoring the identified hotspots.</p>
             </div>
 
             

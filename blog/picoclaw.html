@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 10, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Ever tried running an AI assistant on a $10 device? Spoiler: It usually ends with a sad face emoji. Most AI solutions are memory-hungry beasts that demand top-notch hardware and a wallet to match. PicoClaw aims to squash that issue by fitting a capable AI assistant into a compact package that runs on less than 10MB of RAM.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PicoClaw is built in Go and is reimagined to be lightweight and efficient. The core logic lives in the pkg/agent directory, where you&#39;ll find context.go and loop.go managing the AI&#39;s operations. It supports various channels like Discord and Telegram, thanks to files like pkg/channels/discord.go and pkg/channels/telegram.go. The whole thing is bundled into a single binary, making deployment a breeze across architectures like RISC-V, ARM, and x86.</p><p>The Makefile is your best friend here. Just run make build and you’re set to go. The included config.example.json gives you a blueprint for any necessary configurations without the headache of deciphering cryptic settings.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re working on a low-budget IoT project. You fire up your PicoClaw on a $10 LicheeRV-Nano and set it up to manage your home automation. A quick glance at the cmd/picoclaw/main.go file shows how straightforward it is to kick off the assistant. Need it to log your daily tasks? Just tap into the logging functions in pkg/bus/bus.go. Voilà, you have a mini AI assistant keeping your life organized without breaking the bank.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PicoClaw is a solid option for those who want to dip their toes into AI without shelling out for expensive hardware. It&#39;s fast, lightweight, and surprisingly capable for its size. On the downside, the features may feel limited if you’re coming from more established solutions like OpenClaw, but hey, for $10, what do you expect? If you’re a hobbyist or tinkerer looking to experiment, this could be your new best friend.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want a conversational AI on $10‑class SBCs (RISC‑V, ARM, x86) lack a Go‑native, sub‑10 MB runtime. Existing agents are heavyweight Python/TS stacks that exceed the memory budget of cheap boards, making on‑device inference impractical.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>picoclaw</code> is a Go program that bundles a voice‑to‑text transcriber, a set of “skills” (GitHub, weather, tmux, etc.), and multiple chat channels (Discord, Telegram, Feishu, MaixCam). The binary lives in <code>cmd/picoclaw/main.go</code> and pulls configuration from <code>config.example.json</code>. Core logic resides in the <code>pkg/</code> tree:</p>
+<ul><li><code>pkg/agent/loop.go</code> – the agent event loop (<code>NewAgentLoop</code>, <code>Run</code>, <code>Stop</code>).</li><li><code>pkg/channels/manager.go</code> – creates and starts channel implementations (<code>NewManager</code>, <code>StartAll</code>, <code>StopAll</code>).</li><li><code>pkg/skills/loader.go</code> – discovers and loads skill packages (<code>LoadSkillsForContext</code>, <code>BuildSkillsSummary</code>).</li></ul>
+<p>The repository is pure Go (33 source files) with a small shell helper (<code>skills/tmux/scripts/find‑sessions.sh</code>). Assets are only media for the README.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>main</code> in <code>cmd/picoclaw/main.go:70</code> is the only top‑level start. It parses CLI flags, calls <code>loadConfig</code> (via <code>getConfigPath</code>) and then <code>initChannels</code>.</li><li><strong>Configuration</strong> – <code>loadConfig</code> (pkg/config/config.go) reads <code>config.example.json</code> into a <code>Config</code> struct used by every module.</li><li><strong>Channel manager</strong> – <code>initChannels</code> (cmd/picoclaw/main.go) constructs a <code>Manager</code> (<code>pkg/channels/manager.go</code>). It registers concrete channel types (<code>discord.go</code>, <code>telegram.go</code>, <code>maixcam.go</code>, …) and invokes <code>StartAll</code>. Each channel’s <code>Start</code> (e.g., <code>pkg/channels/discord.go:48</code>) spawns a goroutine that calls <code>SetTranscriber</code> and begins message handling.</li><li><strong>Agent loop</strong> – <code>NewAgentLoop</code> (pkg/agent/loop.go) creates the core loop; <code>Run</code> is called from <code>main</code> after channels are up. <code>Run</code> processes inbound messages, routes them through the skill loader (<code>LoadSkillsForContext</code>), and uses <code>pkg/voice/transcriber.go</code> to turn audio into text.</li><li><strong>Logging hub</strong> – <code>logMessage</code> (pkg/logger/logger.go) is the highest‑fan‑in function (called from 20 places) and therefore the widest blast‑radius for any change. Other frequently used utilities are <code>Close</code> (13 callers) and <code>InfoC</code>/<code>ErrorCF</code> (≈9 callers each).</li><li><strong>Shutdown</strong> – <code>Stop</code> on the manager and agent loop propagate <code>setRunning(false)</code> and close all channel connections.</li></ol>
+<p>The internal call graph contains 337 intra‑repo edges; no circular imports are present, but deep nesting (max depth 8) and duplicated 6‑line blocks appear in <code>main.go</code>, <code>loader.go</code>, and several channel files, making those modules harder to modify safely.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/picoclaw
+cd picoclaw
+
+# Build the binary (Makefile provides a build target)
+make build          # or: go build -o picoclaw ./cmd/picoclaw
+
+# Copy the example config and edit as needed
+cp config.example.json config.json
+# Edit config.json – set API keys, channel tokens, etc.
+
+# Run the assistant
+./picoclaw --config config.json</code></pre>
+<p>The binary reads <code>config.json</code> at startup; missing keys will cause early termination with a logged error.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A home‑automation hub on a LicheeRV‑Nano can run <code>./picoclaw</code> as a systemd service. The Discord channel receives voice commands via a connected microphone, the transcriber converts them, the skill loader matches “turn on lights” to a custom HTTP provider, and the response is posted back to Discord—all without exceeding the 10 MB memory ceiling.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – cognitive load</strong> – deep nesting (max depth 8) in <code>cmd/picoclaw/main.go</code>, <code>pkg/skills/loader.go</code>, <code>pkg/channels/discord.go</code>.</li><li><strong>High – duplicated code</strong> – 19 similar 6‑line blocks across 6 files (e.g., <code>main.go</code>, <code>installer.go</code>).</li><li><strong>Medium – oversized file</strong> – <code>cmd/picoclaw/main.go</code> holds 941 lines.</li><li><strong>Medium – high branching</strong> – <code>skills/tmux/scripts/find‑sessions.sh</code> has 26 branches in 90 lines.</li><li><strong>High – CI missing</strong> – no <code>.github/workflows</code> or other CI config for 33 source files.</li><li><strong>Medium – Dependabot missing</strong> – only <code>go.mod</code> present, no auto‑update bot.</li><li><strong>Medium – large binary asset</strong> – <code>assets/picoclaw_detect_person.mp4</code> (5 MB) should be moved to Git LFS or external storage.</li><li><strong>Medium – test coverage</strong> – 1 test file vs 33 source files (≈3 % coverage).</li></ul>
+<p>All findings are derived from static analysis; no additional issues were inferred.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>picoclaw</code> delivers a functional, Go‑native AI assistant that fits on ultra‑low‑cost hardware, but the codebase suffers from maintainability problems (deep nesting, duplicated logic) and lacks production safeguards (CI, dependency bots, adequate tests). It is suitable for teams comfortable refactoring Go code and willing to add the missing DevOps tooling.</p>
             </div>
 
             
@@ -91,9 +121,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +143,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1154564007">Open in Code Brain &rarr;</a>

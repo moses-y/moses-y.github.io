@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,21 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#clone-into-the-appropriate-skills-folder">Clone into the appropriate skills folder</a><a href="#install-bun-required-for-the-cli">Install Bun (required for the CLI)</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#retrieve-a-user-s-recent-tweets">Retrieve a user’s recent tweets</a><a href="#pull-a-full-thread">Pull a full thread</a><a href="#add-an-account-to-the-watchlist">Add an account to the watchlist</a><a href="#real-world-use">Real‑World Use</a><a href="#0-6-cd-skills-x-research">0 6    cd ~/skills/x-research &amp;&amp; \</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams that need up‑to‑date public sentiment from X (Twitter) must manually craft API calls, handle pagination, de‑duplicate results, and format the output for downstream tools (e.g., Claude Code or OpenClaw). The repetitive plumbing consumes developer time and incurs unnecessary API costs.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>x-research-skill wraps the X v2 API in a small TypeScript library (lib/api.ts) and a Bun‑based CLI (x-search.ts). The CLI implements the research loop used by Claude: decompose a query, call the API, filter/sort by engagement, and synthesize a markdown briefing.</p><p>Key files:</p><p>lib/api.ts – thin wrapper around the X endpoints (search, profile, thread, tweet).  
- lib/cache.ts – file‑based cache with a 15‑minute TTL, referenced by the CLI to avoid duplicate reads.  
- lib/format.ts – helpers that produce Telegram‑compatible markdown and plain markdown.  
- x-search.ts – command dispatcher (search, profile, thread, tweet, watchlist) that wires the API, cache, and format layers together.</p><p>The skill also ships a SKILL.md that Claude reads directly, allowing the same functionality without the CLI.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><h3 class="post-h" id="clone-into-the-appropriate-skills-folder">Clone into the appropriate skills folder</h3><p>git clone https://github.com/rohunvora/x-research-skill.git x-research</p><h3 class="post-h" id="install-bun-required-for-the-cli">Install Bun (required for the CLI)</h3><p>curl -fsSL https://bun.sh/install | bash</p><p>Install project dependencies (none beyond Bun’s standard library)
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that want Claude Code or OpenClaw to answer X/Twitter‑related questions must manually craft API calls, handle pagination, and de‑duplicate results. The friction adds latency, costs API credits, and makes prompt‑level research noisy.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>x-research-skill</code> bundles a thin X‑API wrapper (<code>lib/api.ts</code>) with a 15‑minute file cache (<code>lib/cache.ts</code>) and output formatters (<code>lib/format.ts</code>). The CLI driver <code>x-search.ts</code> orchestrates the research loop: parse CLI flags → build a query → call the API → filter/sort → format for Telegram or Markdown.</p>
+<p>Key files:</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>lib/api.ts</code></td><td>HTTP calls (<code>apiGet</code>), token handling (<code>getToken</code>), raw tweet parsing (<code>parseTweets</code>, <code>parseSince</code>).</td></tr><tr><td><code>lib/cache.ts</code></td><td>Simple disk cache (<code>ensureDir</code>, <code>cacheKey</code>, <code>get</code>, <code>set</code>, <code>prune</code>).</td></tr><tr><td><code>lib/format.ts</code></td><td>Presentation helpers (<code>compactNumber</code>, <code>formatTweetTelegram</code>, <code>formatResultsTelegram</code>).</td></tr><tr><td><code>x-search.ts</code></td><td>CLI entry point, flag parsing, high‑level commands (<code>cmdSearch</code>, <code>cmdProfile</code>, <code>cmdThread</code>, <code>cmdWatchlist</code>).</td></tr></tbody></table></div>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <code>main</code> function in <strong><code>x-search.ts:367</code></strong>. <code>main</code> dispatches sub‑commands; the most common path is <code>cmdSearch</code>.</p>
+<ol><li><strong>Flag processing</strong> – <code>cmdSearch</code> repeatedly invokes <code>getOpt</code> (3 callers) and <code>getFlag</code> (3 callers) to build an <code>options</code> object.</li><li><strong>Query construction</strong> – <code>cmdSearch</code> calls <code>search</code> (defined in the same file).</li><li><strong>Search flow</strong> – <code>search</code> calls:   <em> <code>parseSince</code> → normalises the <code>--since</code> flag. </em> <code>apiGet</code> (from <code>lib/api.ts</code>) → performs the HTTP request, which itself calls <code>getToken</code> and <code>sleep</code>. <em> <code>parseTweets</code> → turns the raw JSON into <code>Tweet</code> objects. </em> <code>sleep</code> – rate‑limit handling.</li><li><strong>Result handling</strong> – after the API response, <code>search</code> passes the tweet list to <code>formatResearchMarkdown</code> (via <code>cmdSearch</code>) and/or <code>formatResultsTelegram</code> (via <code>format.ts</code>). Both formatters rely on <code>compactNumber</code> (called from 4 places) and <code>timeAgo</code>.</li><li><strong>Caching</strong> – before each API call, <code>apiGet</code> checks <code>cacheKey</code> (2 callers) and <code>get</code>/<code>set</code> in <code>lib/cache.ts</code>. Cache reads/writes hit the filesystem under <code>data/cache/</code>.</li></ol>
+<p>The most “blast‑radius” modules are:</p>
+<ul><li><code>lib/api.ts</code> – imported by 3 other modules, contains 12 functions (including the network call) and is the sole gateway to X.</li><li><code>x-search.ts</code> – imports 3 internal modules and drives 12 functions; any change here ripples through flag handling, search orchestration, and CLI behaviour.</li></ul>
+<p>No circular dependencies are present, and the internal call graph contains 54 resolved edges, confirming a straightforward call hierarchy.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork that contains the latest changes
+git clone https://github.com/moses-y/x-research-skill.git x-research
 cd x-research
-bun install   # no package.json, but bun will create a lockfile if needed</p><h3 class="post-h" id="configuration">Configuration</h3><p>Obtain a bearer token from the X Developer Portal.  
- Export it in the shell or place it in ~/.config/env/global.env:</p><p>export XBEARERTOKEN=&quot;YOURTOKEN&quot;</p><p>The CLI reads process.env.XBEARERTOKEN via Bun’s built‑in env handling.</p><h3 class="post-h" id="running">Running</h3><p>Search with default sorting (likes) and a 15‑minute cache
-bun run x-search.ts search &quot;Opus 4.6 trading&quot; --limit 10</p><h3 class="post-h" id="retrieve-a-user-s-recent-tweets">Retrieve a user’s recent tweets</h3><p>bun run x-search.ts profile frankdegods</p><h3 class="post-h" id="pull-a-full-thread">Pull a full thread</h3><p>bun run x-search.ts thread 1234567890123456789</p><h3 class="post-h" id="add-an-account-to-the-watchlist">Add an account to the watchlist</h3><p>bun run x-search.ts watchlist add frankdegods &quot;monitoring NFT drops&quot;</p><p>Optional flags (--sort, --min-likes, --json, --markdown, --save) are documented in the README and passed straight through to the CLI.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A research analyst could embed the CLI in a nightly cron job:</p><h3 class="post-h" id="0-6-cd-skills-x-research">0 6    cd ~/skills/x-research &amp;&amp; \</h3><p>XBEARER_TOKEN=$(cat ~/.config/env/global.env) \
-  bun run x-search.ts watchlist check --markdown --save &gt;&gt; ~/research/daily.md</p><p>The script fetches the latest tweets from all watchlist accounts, formats them as markdown, and appends the result to a daily briefing file that Claude can later summarize.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No automated tests – lib/.ts contain no test files; edge cases (e.g., rate‑limit handling) are unverified.  
-Med – No CI/CD pipeline – No .github/workflows or other CI config; builds and linting are manual.  
-Med – Missing LICENSE – Repository lacks a license file, leaving redistribution rights ambiguous.  
-Low – Minimal input validation – CLI forwards flags directly to the API wrapper; malformed queries or IDs could cause uncaught exceptions.  
-Low – Hard‑coded cache TTL – cache.ts uses a fixed 15‑minute TTL; changing it requires code modification.  
-Low – No explicit dependency list – No package.json; reliance on Bun’s implicit handling may complicate reproducibility in non‑Bun environments.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>x-research-skill delivers a functional, low‑overhead way to turn X data into structured briefings for Claude Code or OpenClaw, with a useful CLI for ad‑hoc queries. The implementation is straightforward but lacks tests, CI, and a license, which raises maintenance and legal concerns for production use. It is best suited for small teams or individual analysts who can accept manual validation of edge cases and are comfortable running Bun‑based tooling.</p>
+
+# Install Bun (required runtime)
+curl -fsSL https://bun.sh/install | bash
+
+# Provide the X API bearer token (required by lib/api.ts)
+export X_BEARER_TOKEN="your-token-here"
+
+# Run a search (example: top liked tweets about "Opus 4.6")
+bun run x-search.ts search "Opus 4.6" --sort likes --limit 10</code></pre>
+<p>Other CLI commands (<code>profile</code>, <code>thread</code>, <code>tweet</code>, <code>watchlist</code>) follow the same pattern, as documented in the README.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research team integrates the CLI into an automated nightly job that monitors a set of accounts (<code>watchlist.json</code>). The script runs:</p>
+<pre data-lang="bash"><code>bun run x-search.ts watchlist check &gt; ~/reports/watchlist-$(date +%F).md</code></pre>
+<p>The cache prevents duplicate API calls for the same query within the 15‑minute TTL, keeping costs predictable while delivering a ready‑to‑paste markdown brief for downstream LLM prompting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Cognitive load</strong> – <code>lib/api.ts</code> has ~70 branch points in 249 lines, making it a maintenance hotspot. Refactoring into smaller strategy functions would improve readability.</li><li><strong>Medium – Missing tests</strong> – No test files detected; core logic (search, caching, formatting) is unverified by automated tests.</li><li><strong>Medium – No CI/CD</strong> – Repository lacks any <code>.github/workflows</code> or other pipeline definitions, so builds and tests (if added) are not gated.</li><li><strong>Medium – No LICENSE</strong> – Absence of a license file leaves usage and redistribution rights ambiguous.</li></ul>
+<p>No secrets were found in the commit history.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>x-research-skill</code> delivers a functional, low‑overhead CLI that turns X/Twitter data into LLM‑ready research briefs, with a pragmatic cache to curb API costs. The codebase is small and well‑structured but lacks automated testing, CI, and a license, and the central API wrapper is dense enough to merit refactoring before large‑scale modification. It is suitable for teams comfortable adding their own test suite and licensing clarification.</p>
             </div>
 
             

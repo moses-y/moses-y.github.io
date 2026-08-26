@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing files, creating documents, and automating mundane tasks can be a real hassle. You know the drill: endless file sorting, document writing that eats up your time, and the constant need to connect different tools. It&#39;s frustrating when you need to shift gears between apps just to get simple tasks done. Enter Accomplish™—your AI assistant that keeps everything on your desktop.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Accomplish acts like a local AI coworker that automates your day-to-day tasks. It’s not just about chatting; it’s about taking action. You can find the core functionality in apps/desktop/src/main/opencode/index.ts, which handles the main operations. The apps/desktop/src/main/services/summarizer.ts file can help you quickly summarize documents, while the file management features are all over the apps/desktop/src/main/opencode/config-generator.ts.</p><p>You have the freedom to set rules for file management directly in the app&#39;s settings, and it uses your own API keys, meaning your data stays local. No more worrying about privacy with cloud services. Plus, you can define custom skills using the apps/desktop/src/main/skills/SkillsManager.ts, which allows for tailored workflows that fit your unique needs.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you have a cluttered folder full of reports that need sorting. Instead of manually renaming and moving files, you could write a simple skill in Accomplish to automate this. Just set up rules based on file content or dates and let the AI handle the dirty work. For example, you could create a skill that moves all reports older than a month into an archive folder, triggered by a simple command.</p><p>const moveOldReports = new Skill({
-  name: &quot;Move Old Reports&quot;,
-  action: () =&gt; {
-    // Logic to move files
-  }
-});</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Accomplish is a solid tool for anyone looking to cut down on repetitive tasks without sacrificing privacy. It’s not for everyone—if you’re just doing simple file moves, this might feel like overkill. But for those who juggle multiple projects and tools, it’s a breath of fresh air. Just bring your own API keys and let Accomplish handle the rest.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that rely on desktop AI assistants often have to trust cloud‑hosted services that keep files and prompts on external servers. When data residency, API‑key control, or offline operation matter, there is no ready‑to‑run, open‑source desktop agent that can orchestrate file moves, document generation, and browser automation while keeping every request on the local machine.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Accomplish™</code> is a self‑contained Electron app that runs on macOS and Windows. The core runtime lives under <code>apps/desktop/src/main/</code> (e.g. <code>index.ts</code>, <code>ipc/handlers.ts</code>) and exposes IPC endpoints to the renderer UI (<code>src/renderer/</code>). Skills are defined in <code>src/main/skills/</code> and invoked from the UI components in <code>src/renderer/components/</code>.</p>
+<ul><li><strong>File management</strong> – <code>src/main/services/*</code> contains <code>speechToText.ts</code> and <code>summarizer.ts</code>; the actual move/rename logic lives in <code>src/main/opencode/*</code> and is triggered via IPC calls from the renderer.</li><li><strong>Document creation</strong> – UI components such as <code>renderer/pages/Execution.tsx</code> call the <code>OpenCodeAdapter</code> (found in <code>packages/agent-core/src/internal/classes/OpenCodeAdapter.ts</code>) which forwards prompts to the selected provider (OpenAI, Anthropic, Ollama, etc.) and returns generated text.</li><li><strong>Provider flexibility</strong> – Provider modules are under <code>src/main/providers/</code> (e.g. <code>vertex.ts</code>) and are selected by the settings UI (<code>renderer/components/settings/shared/</code>). API keys are read from the user‑supplied JSON config loaded by <code>src/main/config.ts</code>.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – Electron boots via <code>apps/desktop/src/main/index.ts</code>.</li><li><strong>IPC bootstrap</strong> – <code>src/main/ipc/handlers.ts</code> registers handlers defined in <code>src/main/ipc/handlers/*</code>. Each handler validates input (<code>validation.ts</code>) and forwards to service or skill code.</li><li><strong>Skill dispatch</strong> – <code>src/main/skills/SkillsManager.ts</code> loads skill definitions from <code>bundled-skills/</code> and routes UI requests (e.g., “run skill X”) to the appropriate adapter.</li><li><strong>Provider call</strong> – The adapter (<code>OpenCodeAdapter.ts</code>) imports the hub module <code>packages/agent-core/src/common/types/provider.ts</code> (the most‑connected hub, 15 dependents) and invokes the selected provider implementation.</li><li><strong>Result flow</strong> – Responses travel back over IPC to the renderer, where components like <code>Execution.tsx</code> update state and write logs via <code>src/main/logging/*</code>.</li></ol>
+<p>The import graph shows <strong>354 internal modules</strong> with <strong>0 circular dependencies</strong>. The most‑connected hub (<code>provider.ts</code>) has a low instability score (0.06) but a high blast radius; any change there ripples to 15 downstream modules.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/accomplish
+cd accomplish
+
+# Install dependencies with pnpm (lockfile present)
+pnpm install --frozen-lockfile
+
+# Build the Electron app (script defined in apps/desktop/package.json)
+pnpm --filter ./apps/desktop run build   # or `pnpm run dev` for hot reload
+
+# Run the built binary (macOS example)
+./apps/desktop/dist/Accomplish.app/Contents/MacOS/Accomplish</code></pre>
+<p><em>Configuration</em> – API keys are expected in a JSON file loaded by <code>src/main/config.ts</code>. The repo ships a placeholder <code>apps/desktop/e2e/provider-tests/secrets.example.json</code>; replace it with real credentials before first run. No <code>.env</code> template is provided, so developers must create the config manually.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A marketing team can drop a folder of raw copy into a watched directory. <code>Accomplish</code> detects new files via the <code>FileWatcher</code> (wired through <code>src/main/opencode/auth-browser.ts</code>), triggers the “Document Writing” skill, and writes polished drafts back to the folder—all without any network request leaving the workstation.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>High – Deep nesting</strong> (8 files, e.g., <code>renderer/pages/Execution.tsx</code>): indentation depth 8, hard to follow.</li><li><strong>High – Oversized files</strong> (9 files, e.g., <code>OpenCodeAdapter.ts</code> 691 lines).</li><li><strong>High – Duplicated code blocks</strong> (repeated 6‑line snippets across 110 files).</li><li><strong>Medium – Hub module</strong> (3 files under <code>common/types/provider*</code>): 15 dependents, high churn risk.</li><li><strong>Medium – High branching density</strong> (10 files, e.g., <code>waiting-detection.ts</code>): &gt;18 branches in &lt;50 lines.</li></ul>
+<p><strong>Code‑health audit (GitHub Actions &amp; Docker)</strong></p>
+<ul><li><strong>High – Pin third‑party actions to commit SHA</strong> (<code>.github/workflows/*</code>).</li><li><strong>High – CI never runs tests</strong> (4 workflows lack a test step).</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> missing in <code>ci.yml</code>.</li><li><strong>Medium – Use lockfile in CI</strong> (<code>npm install</code> instead of <code>npm ci</code>).</li><li><strong>Medium – Pin Docker base image by digest</strong> (<code>apps/desktop/e2e/docker/Dockerfile</code>).</li><li><strong>Medium – No dependency vulnerability scan</strong> in CI.</li><li><strong>Medium – Checkout persists token</strong>; should set <code>persist-credentials: false</code>.</li><li><strong>Medium – Run container as non‑root</strong> (no <code>USER</code> directive).</li><li><strong>Medium – Postinstall script executes untrusted code</strong>; consider disabling scripts in CI.</li><li><strong>Low – No job timeout</strong> on <code>pr-preview-release.yml</code>.</li></ul>
+<p><strong>Other hygiene</strong> – Tests exist (71 files) but are not invoked by CI; a secret‑shaped example file is committed; licence (MIT) present; lockfile (<code>pnpm-lock.yaml</code>) present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Accomplish</code> delivers a functional, locally‑run AI desktop agent with a clear separation between UI, IPC, and provider adapters. The codebase is sizeable and suffers from deep nesting, oversized modules, and duplicated logic, which will increase maintenance cost. CI gaps and Docker hardening issues should be addressed before production use. It is suitable for teams that need full data control and are prepared to invest in refactoring and CI hardening.</p>
             </div>
 
             

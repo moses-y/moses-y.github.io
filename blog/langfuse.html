@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 13, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">SQL</span>
+                    <span>5 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>langfuse</h1>
@@ -80,14 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLM apps break in weird ways. You ship a chatbot, and suddenly it’s hallucinating, burning tokens, or just plain losing context. You have no clue what happened, because your logs are garbage and prompt tweaks get lost in the shuffle. Nobody wants to debug a black box.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>langfuse gives you actual observability for LLM stuff. You get prompt management, metrics, dataset tracking, and a playground to mess with prompts—all in one place. The repo integrates with OpenTelemetry, Langchain, OpenAI SDK, and even LiteLLM, so you can wire this up no matter what stack you use.</p><p>Check out .claude/skills/backend-dev-guidelines/resources/architecture-overview.md for a clear breakdown of how data flows. The prompt management isn’t just lipstick—it’s backed by real versioning. Want to track model pricing or evaluate outputs? Dig into .claude/skills/add-model-price/SKILL.md and .claude/skills/backend-dev-guidelines/resources/testing-guide.md. There’s even hooks like .claude/hooks/error-handling-reminder.ts to catch dumb mistakes before they cost you money.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re running a customer support agent with Langchain and OpenAI. Plug in langfuse and now every prompt, every response, and every token spent is logged and versioned. You can set up evals on new prompts, monitor response quality, and roll back if you break things.</p><p>Example workflow:</p><p>import { langfuse } from &#39;langfuse-sdk&#39;;</p><p>langfuse.trackPrompt({
-  userId: &#39;abc123&#39;,
-  prompt: &#39;How can I reset my password?&#39;,
-  model: &#39;gpt-4&#39;,
-  version: &#39;2.1.0&#39;
-});
-// Later: check metrics, run evals, tweak prompts, repeat.</p><p>You get dashboards and hooks for error handling (.claude/hooks/error-handling-reminder.ts)—so you don’t have to babysit your logs.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>langfuse is legit if you’re tired of flying blind with LLMs. It’s probably overkill for tiny projects, but if you care about tracking, evals, or not blowing your OpenAI budget, it’s worth the setup. If you’re building production LLM stuff, stop kidding yourself and wire this up.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams building LLM‑based products need a single place to capture traces, compute metrics, run evaluations, and manage prompts – without stitching together separate observability, prompt‑management and dataset tools. Langfuse addresses this by bundling observability, evals, prompt‑registry and dataset handling in one open‑source platform.</p>
+<h3 id="what-this-does">What This Does</h3>
+<ul><li><strong>web/</strong> (1540 files, 1484 code files) – Next.js/React UI for viewing traces, running the playground, managing datasets and billing (EE). Key UI modules live under <code>web/src/components</code>, <code>web/src/features/dashboard</code> and <code>web/src/ee/features/billing</code>.</li><li><strong>packages/</strong> (875 files, 840 code files) – Shared TypeScript library containing the core domain model, DB schema, encryption, and Zod validation. Entry points such as <code>packages/shared/src/domain/index.ts</code> and <code>packages/shared/src/encryption/index.ts</code> are imported by both the worker and the web front‑end.</li><li><strong>worker/</strong> (232 files, 219 code files) – Background job processor (Redis‑queued) that handles migrations, secret encryption and LLM‑request routing. Notable file <code>worker/src/backgroundMigrations/encryptBlobStorageSecrets.ts</code> performs the secret‑shaped path audit mentioned in the heuristic issues.</li><li><strong>ee/</strong> (8 files, 3 code files) – Enterprise‑only licensing and feature‑flag gate kept at <code>ee/src/index.ts</code> and <code>ee/src/ee-license-check/index.ts</code>.</li><li><strong>.claude/</strong> (30 files, 2 code files) – Claude‑hook configuration used by the internal assistant tooling.</li></ul>
+<p>The platform integrates with OpenTelemetry, LangChain, the OpenAI SDK and LiteLLM, exposing a unified API surface that the UI and worker consume.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The internal import graph resolves 1490 modules with 922 edges; 55 modules live inside circular dependencies.</p>
+<ul><li><strong>Hub modules</strong> (52 modules depend on each):</li><li><code>packages/shared/src/server/logger.ts</code> – central logging abstraction.</li><li><code>packages/shared/src/utils/zod.ts</code> – Zod schema definitions used across the codebase.</li><li><code>packages/shared/src/db.ts</code> – database client and query builders.</li></ul>
+<ul><li><strong>Import cycles</strong> (51 modules): the cycle includes <code>packages/shared/src/db.ts</code>, <code>packages/shared/src/domain/index.ts</code>, and <code>packages/shared/src/tableDefinitions/index.ts</code>. Changing any of these requires careful re‑wiring because many downstream modules rely on the mutual reachability.</li></ul>
+<ul><li><strong>Entry point</strong>: <code>ee/src/index.ts</code> bootstraps the server, which then mounts the Express/Next app (<code>packages/shared/src/server/index.ts</code>). The worker starts from <code>worker/src/index.ts</code> (implied by the worker directory) and processes Redis‑queued jobs.</li></ul>
+<ul><li><strong>External touches</strong>: the platform emits OpenTelemetry spans, writes to PostgreSQL (via <code>packages/shared/src/db</code>), caches results in Redis (<code>packages/shared/src/server/redis/getQueue</code>), and serves API requests from <code>web/src/pages/api/...</code>.</li></ul>
+<p>A change to the hub logger or DB schema ripples through 52+ dependent modules, illustrating the “blast radius” risk highlighted in the analysis.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Install dependencies (pnpm is the declared package manager)
+pnpm install
+
+# Start the full stack (Docker Compose file present)
+docker compose -f docker-compose.dev.yml up -d</code></pre>
+<p>The <code>docker-compose.dev.yml</code> file provisions Redis, PostgreSQL and the worker; the web UI becomes reachable at <code>http://localhost:3000</code>.</p>
+<p><strong>Configuration</strong> Copy <code>.env.dev.example</code> to <code>.env.dev</code> and set the following variables (the file lists the required keys):</p>
+<ul><li><code>DATABASE_URL</code> – PostgreSQL connection string used by <code>packages/shared/src/db.ts</code>.</li><li><code>REDIS_URL</code> – Redis endpoint for the worker queue.</li><li><code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> – credentials for LLM providers.</li></ul>
+<p><strong>Running it</strong></p>
+<ul><li>To start just the API and UI: <code>pnpm dev</code> (as defined in the root <code>package.json</code> scripts).</li><li>To run only the background worker: <code>pnpm worker:start</code> (script references <code>worker/src/index.ts</code>).</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A machine‑learning team instrumenting a RAG pipeline can instrument calls with the Langfuse SDK, which automatically creates traces stored in the platform’s PostgreSQL backend. The team then:</p>
+<ol><li><strong>Create a dataset</strong> via the UI (<code>web/src/features/datasets</code>) – a CSV of input/prompt pairs.</li><li><strong>Run an evaluation</strong> that queries the dataset, invokes the LLM through the SDK, and records <code>cost</code>, <code>latency</code> and <code>correctness</code> metrics.</li><li><strong>Inspect results</strong> in the playground (<code>web/src/playground</code>) and iterate on prompt templates stored under <code>packages/shared/src/utils/chatml</code>.</li></ol>
+<p>The same workflow works for both Langfuse Cloud (SaaS) and a self‑hosted instance (Docker compose).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured static‑analysis findings (159 total)</strong></p>
+<ul><li><strong>[HIGH/clarity] Hub module x3</strong> – <code>packages/shared/src/server/logger.ts</code>, <code>packages/shared/src/utils/zod.ts</code>, <code>packages/shared/src/db.ts</code>; 52 modules depend on each, high‑blast‑radius churn.</li><li><strong>[HIGH/soundness] Import cycle member x51</strong> – modules <code>packages/shared/src/db.ts</code>, <code>packages/shared/src/domain/index.ts</code>, <code>packages/shared/src/tableDefinitions/index.ts</code> participate in a circular import dependency.</li><li><strong>[MEDIUM/cognitive_load] High branching density x4</strong> – <code>web/src/components/trace2/lib/types.ts</code>, <code>web/src/ee/features/billing/components/useBillingInformation.tsx</code>, <code>web/src/features/score-analytics/lib/ScoreChartTooltip.tsx</code> each have 15 branch points over ~41 lines.</li><li><strong>[HIGH/clarity] Duplicated code blocks</strong> – 128 repeated 6‑line blocks across 93 files, including <code>web/src/utils/chatml/adapters/index.ts</code> and <code>packages/shared/src/utils/chatml/index.ts</code>.</li><li><strong>[MEDIUM/cognitive_load] Deep nesting</strong> – <code>web/src/ee/features/billing/components/SpendAlerts/SpendAlertDialog.tsx</code> max indentation depth 6.</li></ul>
+<p><strong>SDLC / repository‑level observations</strong> (derived from file‑structure checks)</p>
+<ul><li><strong>Secret‑shaped paths</strong> present: <code>worker/src/backgroundMigrations/encryptBlobStorageSecrets.ts</code> (flagged in the audit).</li><li><strong>CI/CD</strong> runs GitHub Actions; Dockerfiles exist for dev and production.</li><li><strong>Committed secrets</strong> confirmed (the audit flagged secret‑shaped paths).</li><li><strong>Licensing</strong>: MIT license file present at root.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Langfuse delivers a rare all‑in‑one open‑source stack for LLM observability, prompt management and evaluation, with a solid TypeScript foundation and Docker‑based dev experience. The main risks are the tightly‑coupled hub modules and circular imports in the shared package, which raise the cost of any schema or logging change; the CORS wildcard in <code>worker/src/app.ts</code> and the unpinned GitHub Actions also merit immediate attention. It is well‑suited for teams that need integrated tracing + evals without managing separate SaaS contracts, provided they invest in decoupling the shared core before scaling.</p>
             </div>
 
             
@@ -97,18 +125,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,797<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>61</b></li><li><span>SQL</span><i style="width:84%"></i><b>51</b></li><li><span>Markdown</span><i style="width:52%"></i><b>32</b></li><li><span>JSON</span><i style="width:30%"></i><b>18</b></li><li><span>TypeScript</span><i style="width:8%"></i><b>5</b></li><li><span>Shell</span><i style="width:5%"></i><b>3</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>1282</b></li><li><span>TSX</span><i style="width:58%"></i><b>745</b></li><li><span>SQL</span><i style="width:40%"></i><b>517</b></li><li><span>YAML</span><i style="width:5%"></i><b>66</b></li><li><span>Markdown</span><i style="width:5%"></i><b>61</b></li><li><span>JSON</span><i style="width:4%"></i><b>48</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Tailwind</span><span>Docker</span><span>Transformers</span><span>LangChain</span></p>
                     </div>
                 </div>
 
@@ -137,6 +165,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>worker/src/backgroundMigrations/encryptBlobStorageSecrets.ts</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1156976807">Open in Code Brain &rarr;</a>

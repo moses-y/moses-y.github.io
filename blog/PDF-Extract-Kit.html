@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">reStructuredText</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,23 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#load-layout-detection-pipeline-using-the-config-">Load layout detection pipeline using the config file</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Customers need to extract structured content (layout, formulas, tables, OCR text, reading order) from heterogeneous PDFs. Manual pipelines are brittle and require stitching together several deep‑learning models, each with its own preprocessing and post‑processing code.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PDF-Extract-Kit bundles a collection of pre‑trained models and a set of configuration files that describe how to invoke them. The core assets are:</p><p>Model configs – configs/layoutdetection.yaml, configs/formuladetection.yaml, configs/formularecognition.yaml, configs/ocr.yaml, configs/tableparsing.yaml. Each file lists model identifiers (e.g., DocLayout‑YOLOft, UniMERNet) and inference parameters.  
- Demo data – PDF and image samples under assets/demo/ illustrate the expected input formats for layout, formula, OCR, and table tasks.  
- Documentation – The docs/ tree (≈ 160 .rst files) provides per‑task algorithm descriptions, evaluation protocols, and quick‑start instructions; the English version is built with Sphinx (docs/en/Makefile).</p><p>Only two Python files appear in the repository (docs/en/conf.py and its backup). Those are Sphinx configuration scripts, not library code. The actual inference code is therefore external (presumably pulled from the ModelScope/Hugging‑Face model hubs at runtime).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the documentation‑only dependencies (Sphinx, theme, etc.)
-pip install -r docs/requirements.txt</p><p>No requirements.txt exists at the repository root, so there is no explicit pip‑installable library. The README points to external model hubs for the heavy‑weight components.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Select or edit a YAML file in configs/ to match the task you want. For example, to run layout detection:</p><p>configs/layoutdetection.yaml
-model: DocLayout-YOLOft
-device: cuda   # or cpu
-threshold: 0.5</p><p>All task‑specific options are defined in the corresponding config file; the README references them but does not list environment variables.</p><h3 class="post-h" id="running">Running</h3><p>The repo does not contain an executable script (main.py, cli.py, or a Make target) that reads the YAML and launches inference. The README’s “quickstart” section (under docs/en/getstarted/quickstart.rst) describes a high‑level workflow but stops short of a concrete command. Consequently, a user must either:</p><p>Write a thin wrapper that loads the chosen config and calls the appropriate ModelScope/Hugging‑Face inference API, or  
-Use the companion project MinerU (linked in the README) which implements the end‑to‑end pipeline.</p><p>Until such a wrapper is added, the repository serves primarily as a reference collection rather than a runnable package.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A typical integration might look like:</p><p>from modelscope import pipeline   # assumed external dependency</p><h3 class="post-h" id="load-layout-detection-pipeline-using-the-config-">Load layout detection pipeline using the config file</h3><p>layoutpipe = pipeline(&#39;document-layout-detection&#39;,
-                       model=&#39;DocLayout-YOLOft&#39;,
-                       device=&#39;cuda&#39;)</p><p>with open(&#39;sample.pdf&#39;, &#39;rb&#39;) as f:
-    layout = layout_pipe(f.read())
-layout now contains bounding boxes for tables, figures, etc.</p><p>The surrounding code (error handling, batch processing) would be written by the consumer; PDF-Extract-Kit supplies the model identifiers and recommended hyper‑parameters via the YAML files.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Untested code paths – repository-wide – No tests/ directory or pytest configuration.  
-Medium – Missing CI/CD – repository-wide – No .github/workflows/ or similar automation; builds are not gated.  
-Low – No lockfile for dependencies – docs/requirements.txt – Versions are not pinned, risking reproducibility problems.  
-High – Absence of executable entry point – root – No script or setup.py to install or run the toolkit; users must create their own wrappers.  
-Low – Documentation‑only focus – docs/ – Extensive Sphinx docs but limited source code; may confuse users expecting a pip‑installable library.</p><p>No obvious security secrets are present, and the license (LICENSE.md) is included.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PDF-Extract-Kit is a well‑documented collection of model identifiers, configuration templates, and demo assets for PDF content extraction, but it does not provide a ready‑to‑run codebase. Teams that already have an inference framework (e.g., ModelScope or Hugging‑Face pipelines) can reuse the configs and benchmarks; otherwise they will need to implement the glue code themselves or adopt the companion MinerU project, which supplies the missing execution layer.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Extracting structured content (layout, formulas, tables, OCR text) from heterogeneous PDFs is still a manual‑heavy process. Engineers need a single toolbox that wraps state‑of‑the‑art models and lets them be swapped via configuration, without writing glue code for each document type.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>PDF-Extract-Kit</code> bundles ready‑to‑run models for layout detection, formula detection/recognition, OCR and table parsing. The core code lives in <strong><code>pdf_extract_kit/</code></strong> (52 files) and is driven by the YAML files in <strong><code>configs/</code></strong>. For example, <code>configs/layout_detection.yaml</code> selects a YOLO‑based detector, while <code>configs/ocr.yaml</code> points to PaddleOCR. The <strong><code>registry/registry.py</code></strong> module (16 dependents) registers each task class, allowing the CLI in <strong><code>scripts/pdf2markdown</code></strong> to instantiate the requested pipeline with a single call.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the script <strong><code>project/pdf2markdown/scripts/pdf2markdown</code></strong> (the only entry point with a <code>main</code> function). It parses command‑line arguments, loads the global config via <code>pdf_extract_kit/utils/config_loader.py</code>, and looks up the requested task in <code>pdf_extract_kit/registry/registry.py</code>.</p>
+<ul><li><code>registry.py</code> → imports the concrete task modules (e.g., <code>pdf_extract_kit/tasks/layout_detection/task.py</code>, <code>pdf_extract_kit/tasks/ocr/task.py</code>).</li><li>Each task inherits from <code>pdf_extract_kit/tasks/base_task.py</code>, which defines <code>run()</code> and delegates to model‑specific code under <code>tasks/&lt;task&gt;/models/</code>.</li><li>Layout detection ultimately calls <code>layoutlmv3_util/layoutlmft/models/layoutlmv3/modeling_layoutlmv3.py</code> (the largest file, 1012 lines) to produce bounding boxes.</li><li>OCR invokes <code>pdf_extract_kit/tasks/ocr/models/paddle_ocr.py</code>, which wraps PaddleOCR inference.</li><li>Results are streamed back to the CLI script, which writes Markdown files under <code>assets/readme/</code> or user‑specified locations.</li></ul>
+<p>The <strong>registry</strong> module is the central hub (16 inbound imports, 0 outbound), so any change there ripples through the entire pipeline. No circular imports were detected, keeping the dependency graph acyclic.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/PDF-Extract-Kit
+cd PDF-Extract-Kit
+
+# Install Python dependencies
+pip install -r requirements.txt      # top‑level manifest
+pip install -r docs/requirements.txt    # docs‑only deps (optional)
+
+# Choose a config (e.g., layout detection with YOLO)
+export CONFIG_PATH=configs/layout_detection.yaml
+
+# Run the demo conversion script
+python project/pdf2markdown/scripts/pdf2markdown \
+    --input assets/demo/PDFs/DDPM.pdf \
+    --output output.md</code></pre>
+<p>The script expects the <code>CONFIG_PATH</code> environment variable or <code>--config</code> flag to locate the YAML file. No Dockerfile or server entry point is provided; the toolkit is intended for direct CLI or library use.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A content‑management system can call the library as a Python module:</p>
+<pre data-lang="python"><code>from pdf_extract_kit.registry import Registry
+from pdf_extract_kit.utils.config_loader import load_config
+
+cfg = load_config('configs/ocr.yaml')
+ocr_task = Registry.get('ocr')(cfg)
+text = ocr_task.run('docs/example.pdf')
+store_in_cms(text)</code></pre>
+<p>This pattern lets the CMS swap OCR back‑ends simply by editing the YAML, without touching the integration code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 58 source files, zero test files.</li><li><strong>High – Missing lockfile</strong> – <code>pyproject.toml</code> and <code>requirements.txt</code> declare ranges, no <code>poetry.lock</code>/<code>requirements.lock</code>.</li><li><strong>High – No CI workflow</strong> – repository lacks <code>.github/workflows/</code>.</li><li><strong>Medium – Deep nesting</strong> – 15 occurrences, e.g., <code>pdf_extract_kit/tasks/base_task.py</code> (max indent depth 7).</li><li><strong>Medium – Files opened without context manager</strong> – 5 spots, e.g., <code>pdf_extract_kit/dataset/dataset.py</code>.</li><li><strong>Medium – Duplicated config helpers</strong> – identical blocks across <code>docs/en/conf*.py</code> and <code>docs/zh_cn/conf.py</code>.</li><li><strong>Medium – Broad exception handling</strong> – generic <code>except:</code> in <code>pdf_extract_kit/tasks/ocr/models/paddle_ocr.py</code>.</li><li><strong>Medium – Oversized modules</strong> – <code>modeling_layoutlmv3.py</code> (1012 lines) and <code>visualizer.py</code> (large monolith).</li><li><strong>Medium – High branching density</strong> – 4 files with &gt;30 branches per 100 lines.</li><li><strong>Medium – TODO/FIXME markers</strong> – three occurrences in <code>beit.py</code> and <code>visualizer.py</code>.</li><li><strong>Medium – Large binary assets</strong> – PDFs &gt;5 MiB in <code>assets/demo/PDFs/</code> (e.g., <code>DDPM.pdf</code> 9.8 MiB).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>PDF-Extract-Kit</code> delivers a functional, modular pipeline for PDF content extraction, with clear configuration entry points and a broad model portfolio. However, the codebase lacks automated testing, reproducible dependency locking, and CI, and contains several maintainability hotspots (deep nesting, oversized files). It is suitable for teams willing to add test coverage and CI scaffolding before integrating it into production workloads.</p>
             </div>
 
             
@@ -113,11 +136,11 @@ Low – Documentation‑only focus – docs/ – Extensive Sphinx docs but limit
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">396<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>reStructuredText</span><i style="width:100%"></i><b>46</b></li><li><span>YAML</span><i style="width:24%"></i><b>11</b></li><li><span>Markdown</span><i style="width:20%"></i><b>9</b></li><li><span>JavaScript</span><i style="width:13%"></i><b>6</b></li><li><span>Python</span><i style="width:4%"></i><b>2</b></li><li><span>CSS</span><i style="width:4%"></i><b>2</b></li>
+                            <li><span>reStructuredText</span><i style="width:100%"></i><b>69</b></li><li><span>Python</span><i style="width:88%"></i><b>61</b></li><li><span>HTML</span><i style="width:43%"></i><b>30</b></li><li><span>YAML</span><i style="width:20%"></i><b>14</b></li><li><span>JavaScript</span><i style="width:20%"></i><b>14</b></li><li><span>Markdown</span><i style="width:19%"></i><b>13</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>YOLO</span></p>
                     </div>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 14, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,18 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Multi-object tracking is essential for tasks like surveillance, sports analytics, and robotics, but it’s a pain to implement. Most tracking algorithms are buried in messy research codebases or tightly coupled with specific detection models. If you want to plug in custom detectors or experiment with different trackers, good luck—you’re in for a weekend of untangling spaghetti code.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter trackers. It’s a Python library that gives you modular re-implementations of popular multi-object tracking algorithms like SORT and ByteTrack. Think of it as the clean, plug-and-play version of those research papers. The code is Apache 2.0 licensed, meaning you can actually use it in real-world projects without worrying about lawyers.</p><p>The key directories are trackers/core/, where the actual tracker implementations live, and trackers/eval/, which contains utilities for evaluating tracking performance. The trackers/scripts/ directory includes a CLI tool (trackers/scripts/track.py) for running basic tracking jobs directly from the terminal. Want to nerd out even more? The docs/ folder is packed with detailed guides and API documentation, plus a bunch of flashy SVG logos for your presentations.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’ve got a custom object detection model—maybe something lightweight like rfdetr-nano for edge devices. You can pair it with trackers to start tracking objects in a video feed within minutes. Here’s how simple it looks:</p><p>import cv2
-from rfdetr import RFDETRNano
-from trackers import ByteTrackTracker</p><p>model = RFDETRNano()
-tracker = ByteTrackTracker()</p><p>cap = cv2.VideoCapture(&quot;video.mp4&quot;)
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    detections = model.predict(frame)
-    trackedobjects = tracker.update(detections)
-    # Do something with trackedobjects, like drawing bounding boxes</p><p>If you don’t want to write code, the CLI tool has you covered. Run trackers track --source input.mp4 --output tracked.mp4 --model your-detector --tracker bytetrack to get tracked video output with minimal setup. No excuses—it doesn’t get easier than this.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>trackers is a solid choice if you care about clean, modular code and need to mix-and-match detection models with tracking algorithms. It’s not for you if you need a ready-to-go, end-to-end solution (there’s no built-in detector). But if you’re building a custom pipeline or experimenting with tracking algorithms, this is the toolkit you want. It’s not perfect (more tracker support is &quot;coming soon&quot;™), but it’s already worth your time.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p>Here's my concise technical briefing for the <code>trackers</code> repository.</p>
+<h3 id="the-problem">The Problem</h3>
+<p>Multi-object tracking implementations often sacrifice readability for performance, making it hard to swap detectors, extend algorithms, or audit behavior. This repo provides clean re-implementations of SORT, ByteTrack, and others, but the codebase has structural gaps that increase integration risk and long-term maintenance cost.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>trackers</code> is a Python package (45 files) offering modular re-implementations of MOT algorithms—SORT, ByteTrack—under Apache 2.0. The entry point is <code>trackers/scripts/track.py</code> (<code>trackers/scripts/__main__.py</code>), which exposes a CLI (<code>trackers track --source ... --model ... --tracker ...</code>). Internally, <code>trackers/core/base.py</code> defines the tracker base class; <code>trackers/core/sort/tracker.py</code> and <code>trackers/core/bytetrack/tracker.py</code> implement concrete algorithms; <code>trackers/eval/evaluate.py</code> runs MOT metrics; and <code>trackers/io/</code> handles MOT-format video/image I/O. The package is designed to plug into any detection model—you pass detections to <code>tracker.update()</code> and get tracked objects back.</p>
+<p>The internal call graph has 48 modules, 48 import edges, and no circular dependencies. The most connected hub is <code>trackers/scripts/track</code> (Ca=2, Ce=7, instability=0.78), and the deepest nesting (7 levels) lives in <code>trackers/core/sort/utils.py</code>, <code>trackers/scripts/track.py</code>, and <code>trackers/core/bytetrack/tracker.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>trackers/scripts/track.py</code> → <code>trackers/scripts/__main__.py</code>. From there, it imports <code>trackers/core/base.py</code> for the tracker interface, then instantiates either <code>SortTracker</code> or <code>ByteTrackTracker</code> depending on CLI args. The tracker’s <code>update()</code> method processes detections through Kalman filter logic (<code>trackers/core/bytetrack/kalman.py</code> or <code>trackers/core/sort/kalman.py</code>). Evaluation runs via <code>trackers/eval/evaluate.py</code>, which feeds into metric calculators (<code>test/eval/test_hota.py</code>, <code>test/eval/test_box.py</code>, etc.). IO reads MOT sequences via <code>trackers/io/mot.py</code>. Configuration is minimal—no env vars or secret keys are required; tracker choice and detection model are passed CLI- or code-side.</p>
+<p><strong>What the code touches outside itself:</strong> The package is pure Python; it reads/writes video frames and CSV-style MOT labels, and can be pip-installed. It does not make network requests, nor does it write to the filesystem beyond output video/label files specified by the user.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong> <code>pip install trackers</code> (Python&gt;=3.10). For the latest unreleased features: <code>pip install https://github.com/roboflow/trackers/archive/refs/heads/develop.zip</code>.</p>
+<p><strong>Configuration:</strong> No config files or env vars are required. Tracker type and model are selected at instantiation or CLI.</p>
+<p><strong>Running it:</strong></p>
+<pre data-lang="bash"><code>trackers track --source source.mp4 --output output.mp4 --model rfdetr-nano --tracker bytetrack</code></pre>
+<p>Or from Python:</p>
+<pre data-lang="python"><code>from trackers import ByteTrackTracker
+tracker = ByteTrackTracker()
+# pass detections to tracker.update()</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer integrating a custom detector (e.g., RFDETR) can swap trackers by changing one line: <code>ByteTrackTracker()</code> vs <code>SortTracker()</code>. The modular design means you can test ID switching, IOU thresholds, or Kalman parameters without re-implementing the full tracking pipeline. The repo’s comparison table (MOT17 HOTA: ByteTrack 60.1 vs SORT 58.4) lets you benchmark before committing.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>The static analysis block reports 8 findings across 4 severity tiers:</p>
+<ul><li><strong>[HIGH] Make CI invoke the test suite it has</strong> — <code>.github/workflows</code>: 15 test files exist but none of the 4 workflows invoke a test command. A green check that never runs assertions is worse than none, because reviewers come to trust it.</li><li><strong>[MEDIUM] Gate pull requests on a dependency vulnerability scan</strong> — <code>.github/workflows</code>: No dependency scan is configured. A known-vulnerable package could reach production unchecked.</li><li><strong>[MEDIUM] Set persist-credentials: false on checkout</strong> — <code>.github/workflows/build-package.yml</code>: The checkout step keeps the Git token, so later dependency-install steps can inadvertently read pushable credentials.</li><li><strong>[LOW] Set timeout-minutes on workflow jobs</strong> — <code>.github/workflows/build-package.yml</code>: One job declares no timeout; a wedged step would run to the six-hour platform default.</li></ul>
+<p>Beyond the measured findings: the repo has no lockfile (<code>pyproject.toml</code> declares dependencies without a corresponding <code>uv.lock</code> or <code>requirements.txt</code> lock), so installs are not fully reproducible. The analysis also flagged broad <code>except</code> clauses in <code>trackers/core/base.py</code> (swallows errors indiscriminately) and 98 repeated 6-line blocks across 27 test files (DRY violation).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers on its promise: clean, swappable MOT implementations that integrate with any detector. The Apache 2.0 license and modular design lower adoption friction. However, the CI gap (tests not invoked), missing lockfile, and broad exception handling are practical risks for anyone planning to depend on this in production. It’s well-suited for experimentation, prototyping, or non-critical pipelines; teams needing reproducible builds and CI gatekeeping should add the recommended workflow fixes before committing to a dependency.</p>
+<hr>
+<p><em>Analysis produced by static pipeline. 48 files analyzed, 8 measured findings, 0 critical issues.</em></p>
             </div>
 
             
@@ -101,14 +118,14 @@ while True:
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">86<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>45</b></li><li><span>Markdown</span><i style="width:29%"></i><b>13</b></li><li><span>YAML</span><i style="width:22%"></i><b>10</b></li><li><span>JavaScript</span><i style="width:7%"></i><b>3</b></li><li><span>CSS</span><i style="width:7%"></i><b>3</b></li><li><span>HTML</span><i style="width:4%"></i><b>2</b></li>
                         </ul>
@@ -158,6 +175,12 @@ while True:
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1157755557">Open in Code Brain &rarr;</a>

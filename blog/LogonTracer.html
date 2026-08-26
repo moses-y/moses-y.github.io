@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">HTML</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Investigating malicious Windows logons is a pain in the neck. If you’ve ever tried sifting through Windows event logs, you know it’s like finding a needle in a haystack—assuming the needle is a sign of a security breach and the haystack is full of irrelevant data. LogonTracer tackles this mess by visualizing logon attempts, making it easier to spot the bad actors.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>LogonTracer visualizes Windows Active Directory event logs, coupling hostnames or IPs with account names. It processes event IDs like 4624 for successful logons and 4625 for failures, among others, to create a graph that shows where and when logon attempts occur. Check out the config/config.yml for configuration details and the README.md for installation instructions.</p><p>The project structure is pretty straightforward. You’ve got multiple docker-compose setups in the docker-compose-with-elasticstack and docker-compose-with-nginx folders, each with their respective Dockerfiles. If you’re familiar with Docker, you can spin this up quickly. Just run docker-compose up and you&#39;re in business.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re the security lead at a mid-sized company, and you’ve noticed some odd logon patterns. You fire up LogonTracer and point it at your event logs. Within minutes, you see a graph that links a specific account attempting logons from various machines, revealing a potential breach. You could even use the docker-compose/docker-compose.yml to set up a local instance and visualize this data without much hassle.</p><p>docker-compose -f docker-compose/docker-compose.yml up</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>LogonTracer is a solid tool for anyone needing to analyze Windows logon activity. It’s especially useful for security teams hunting for anomalies in logon behavior, but if you’re just looking for a lightweight solution, this might feel like overkill. The reliance on Docker and Neo4j can also add complexity, so be prepared for that. Overall, it’s a handy tool if you know what you’re doing.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Windows Active Directory generates millions of logon events daily, and finding the one account or host that signals compromise is like searching for a needle in a haystack. Security analysts need to correlate event IDs like 4624 (successful logon) and 4625 (logon failure) across hosts and accounts to identify lateral movement or brute-force attacks, but raw event logs don't make those relationships visible.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>LogonTracer is a Python/Flask web application that ingests Windows event logs, parses logon-related events (4624, 4625, 4768, 4769, 4776, 4672), and stores the relationships between hosts and accounts in a Neo4j graph database. It then visualizes those relationships as an interactive graph using Cytoscape.js, letting analysts see which accounts logged into which hosts at a glance.</p>
+<p>The tool adds analytical depth beyond simple visualization: it applies PageRank to rank suspicious hosts and accounts, uses a Hidden Markov model and ChangeFinder (see <code>model/hmm.pkl</code>) to detect anomalous logon patterns, and provides a chronological timeline view. The UI includes case management (<code>templates/casemng.html</code>), user management, and a dark mode toggle.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The single Python file <code>logontracer.py</code> (2,201 lines) is the entire backend. It serves the Flask routes that render templates from <code>templates/</code> (login, case management, timeline, graph views) and handles the Neo4j database operations. The frontend logic lives in <code>static/js/script.js</code>, which talks to the Flask API and renders graphs via Cytoscape.</p>
+<p>The repository ships with three Docker Compose configurations: <code>docker-compose/</code> (minimal Neo4j + LogonTracer), <code>docker-compose-with-elasticstack/</code> (adds Elasticsearch and Kibana for log ingestion), and <code>docker-compose-with-nginx/</code> (adds an nginx reverse proxy with TLS). All three reference the same <code>Dockerfile</code> build context. The static analysis mapped 3 modules with zero import edges, meaning the codebase's internal coupling is minimal — <code>logontracer.py</code> is the sole hub everything routes through. There's no mapped call graph for how the Flask routes invoke Neo4j operations, so the internal wiring beyond file boundaries hasn't been traced.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone and run via Docker Compose:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/LogonTracer
+cd LogonTracer
+docker-compose -f docker-compose/docker-compose.yml up</code></pre>
+<p><strong>Configuration</strong>: Neo4j credentials and connection settings live in <code>config/config.yml</code>. Logging configuration is in <code>config/logging.yml</code>. The Docker Compose files set the Neo4j password via environment variables.</p>
+<p><strong>Running it</strong>: The container starts <code>logontracer.py</code> as the Flask entry point. Navigate to the web UI (default port varies by compose file), log in, upload a <code>.evtx</code> file, and the tool parses and visualizes it.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A DFIR consultant responding to a suspected credential theft incident receives a domain controller's Security.evtx. They upload it to LogonTracer, and the graph immediately highlights a service account that authenticated to 15 hosts in 20 minutes — a pattern the PageRank scoring flags as anomalous. The analyst drills into the timeline view to pinpoint the exact sequence of logon attempts and identifies the initial compromise vector.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found 4 issues: 3 high, 1 medium.</p>
+<ul><li><strong>High - Deep nesting</strong>: <code>logontracer.py</code> has max indentation depth of 11, making control flow hard to follow. Fix: early returns and extracting inner blocks.</li><li><strong>High - Oversized files (x2)</strong>: <code>logontracer.py</code> (2,201 lines) and <code>static/js/script.js</code> are too large to hold in one head. Fix: split by responsibility.</li><li><strong>Medium - Broad exception handling</strong>: <code>logontracer.py</code> uses bare <code>except</code> clauses that swallow errors. Fix: catch specific exceptions and re-raise or log.</li></ul>
+<p>Additional SDLC observations from the file structure: CI is present (3 GitHub Actions workflows), but no dependency lockfile exists (<code>requirements.txt</code> only), the container base image <code>python:3.12.0-slim</code> is unpinned, the 30.1MB <code>sample/Security.evtx</code> bloats every clone, and no <code>USER</code> directive exists in the Dockerfiles so containers run as root.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>LogonTracer is a legitimate, battle-tested DFIR tool (forked from JPCERTCC's 3,221-star project) that fills a real gap in logon analysis. The code is functional but monolithic and needs modernization — pin dependencies, split <code>logontracer.py</code>, and harden the Docker images. Use it if you need rapid graph-based logon analysis and can tolerate a codebase that requires careful handling.</p>
             </div>
 
             
@@ -91,9 +113,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -102,7 +124,7 @@
                         <ul class="an-bars">
                             <li><span>YAML</span><i style="width:100%"></i><b>11</b></li><li><span>HTML</span><i style="width:100%"></i><b>11</b></li><li><span>Markdown</span><i style="width:55%"></i><b>6</b></li><li><span>JSON</span><i style="width:18%"></i><b>2</b></li><li><span>CSS</span><i style="width:18%"></i><b>2</b></li><li><span>JavaScript</span><i style="width:18%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Docker</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -113,6 +135,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1156297011">Open in Code Brain &rarr;</a>

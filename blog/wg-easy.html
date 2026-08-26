@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 9, 2026</span>
-                    <span>4 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Vue</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,25 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#production-single-container">Production (single‑container)</a><a href="#development-hot-reload-ui-separate-wireguard-con">Development (hot‑reload UI, separate WireGuard container)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Setting up a WireGuard server with a management UI normally requires several manual steps: installing WireGuard, creating configuration files, handling QR‑code generation, and building a small web front‑end.  For teams that need a quick, repeatable deployment, the lack of an opinionated, container‑first solution creates operational friction and configuration drift.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>wg-easy bundles the WireGuard daemon and a Vue‑based admin UI into a single Docker image. The UI lives under src/app/ (e.g., src/app/pages/admin.vue, src/app/components/) and communicates with the server through the CLI entry point src/cli/index.ts. Dockerfiles (Dockerfile, Dockerfile.dev) define the build, while docker-compose.yml and docker-compose.dev.yml orchestrate the service, the WireGuard kernel module, and optional reverse‑proxy containers.</p><p>Key files:</p><p>src/cli/index.ts – parses command‑line flags and starts the backend service.  
- src/app/stores/ – Pinia stores (auth.ts, clients.ts) that power the UI state.  
- Dockerfile – multi‑stage build that compiles the Vue app (pnpm install &amp;&amp; pnpm build) and packages it with the WireGuard binaries.</p><p>The repository also ships extensive documentation (docs/content/) and CI pipelines (.github/workflows/.yml) that lint, run CodeQL, and publish Docker images.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Docker (required)
-curl -sSL https://get.docker.com | sh
-Clone the repo and install Node dependencies via pnpm
-git clone https://github.com/wg-easy/wg-easy.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying a WireGuard VPN with a usable web UI typically requires stitching together several components (the kernel module, a backend API, and a frontend).  Operators end up writing custom Dockerfiles, wiring environment variables, and maintaining separate UI code bases, which adds operational overhead and creates a fragile deployment surface.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>wg‑easy</code> bundles the WireGuard daemon, a Node‑based API, and a Vue‑styled admin UI into a single Docker image.  The source tree places the UI under <code>src/app/</code> (≈ 150 Vue components), the server logic under <code>src/server/</code> (database schema, repositories, utils), and the CLI entry point in <code>src/cli/index.ts</code>.  Build metadata lives in <code>package.json</code> (pnpm lockfile present) and container orchestration is defined in <code>docker-compose.yml</code> (production) and <code>docker-compose.dev.yml</code> (development).  The <code>Dockerfile</code> produces the runtime image, while <code>Dockerfile.dev</code> supports hot‑reloading during development.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/cli/index.ts</code>, which parses command‑line flags (via <code>commander</code> in the source) and ultimately invokes the server startup routine (<code>src/server/index.ts</code> – not listed but reachable from the CLI).  The server creates a SQLite database using Drizzle (<code>src/drizzle.config.ts</code>) and loads the schema defined in <code>src/server/database/schema.ts</code>.  That schema imports repository modules such as <code>src/server/database/repositories/client/schema.ts</code>; these, together with the other repository schemas, form a <strong>circular import cycle</strong> (7 modules, e.g., <code>schema.ts</code> ↔ <code>client/schema.ts</code> ↔ <code>hooks/schema.ts</code>).  The cycle inflates the module instability metric (up to 0.47) and makes any change to shared types risk breaking multiple layers.</p>
+<p>After the database is ready, the HTTP layer (express/Koa‑style, defined in <code>src/server/api/*.ts</code>) registers routes that the UI consumes.  The UI entry point <code>src/app/app.vue</code> mounts the router defined in <code>src/app/router.ts</code> (implicit) and renders pages under <code>src/app/pages/</code> (admin, clients, login, setup).  Shared UI helpers (dialogs, form fields, icons) are duplicated across many components (e.g., <code>CidrDialog.vue</code>, <code>RestartInterfaceDialog.vue</code>, <code>SuggestDialog.vue</code>, <code>ConfigDialog.vue</code>), leading to <strong>repeated 6‑line blocks</strong> in 67 files.  Server‑side utilities like <code>src/server/utils/types.ts</code> exhibit <strong>deep nesting</strong> (7‑level indentation), which hampers readability.</p>
+<p>The CLI also exposes a <code>build.js</code> script (<code>src/cli/build.js</code>) used by the Docker build process, and a <code>version.sh</code> helper (<code>scripts/version.sh</code>) that tags releases.  All CI steps run via GitHub Actions defined in <code>.github/workflows/</code> (build, lint, deploy).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/wg-easy wg-easy
 cd wg-easy
-corepack enable                # ensures pnpm is available
-pnpm install --frozen-lockfile</p><h3 class="post-h" id="configuration">Configuration</h3><p>The container expects the following environment variables (documented in docs/content/guides/setup.md and reflected in docker-compose.yml):</p><div class="table-scroll"><table><thead><tr><th>Variable</th><th>Purpose</th></tr></thead><tbody><tr><td>WGHOST</td><td>Public address (or DNS name) of the server</td></tr><tr><td>PASSWORD</td><td>Admin UI password (hashed internally)</td></tr><tr><td>WGDEFAULTADDRESS</td><td>Subnet for client IPs (e.g., 10.8.0.0/24)</td></tr><tr><td>WGDEFAULTDNS</td><td>DNS servers handed to clients</td></tr><tr><td>WGMTU</td><td>Optional MTU override</td></tr></tbody></table></div><p>Create a .env file next to docker-compose.yml or export the variables before launch.</p><h3 class="post-h" id="running">Running</h3><h3 class="post-h" id="production-single-container">Production (single‑container)</h3><p>docker compose up -d</p><h3 class="post-h" id="development-hot-reload-ui-separate-wireguard-con">Development (hot‑reload UI, separate WireGuard container)</h3><p>docker compose -f docker-compose.dev.yml up --build</p><p>The UI is reachable at http://&lt;WGHOST&gt;:51821 (default port) after the containers are healthy.  The CLI can be invoked directly for one‑off actions:</p><p>node src/cli/index.ts add-client --name alice --address 10.8.0.2</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A small office can deploy wg-easy on a cheap VPS: the Docker image isolates WireGuard from host package management, the UI lets the network admin add or revoke client keys without SSH, and Prometheus metrics (docs/content/advanced/metrics/prometheus.md) can be scraped by the existing monitoring stack.  The workflow is:
-Provision a VPS, install Docker.  
-Pull the latest image (docker pull ghcr.io/wg-easy/wg-easy).  
-Run docker compose up -d with a minimal .env.  
-Share the QR code generated by the UI with employees’ WireGuard clients.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No test suite – The repository contains no .test. files; CI runs only lint and CodeQL. Untested paths increase risk of regression. (src/cli/, src/app/*)  
-Low – Limited type safety – Only 14 TypeScript files; many Vue components are plain .vue with JavaScript sections, reducing static analysis coverage.  
-Medium – Environment‑variable reliance – Critical secrets (PASSWORD, WGHOST) are plain strings; no runtime validation shown in src/cli/index.ts.  
-Low – Dependency hygiene – pnpm-lock.yaml is present, but no automated Dependabot PRs for npm (only for GitHub Actions).  
-Low – Documentation vs code drift – Docs reference a “setup guide” and “migration guide” that are up‑to‑date, but the README’s “Dev Server” section is truncated, leaving developers without a clear pnpm dev command.  
-None – License – A LICENSE file is included (MIT).</p><p>Overall, the codebase follows a clean separation (Docker for infra, Vue for UI, CLI for server ops) and the CI pipelines enforce linting and security scanning.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>wg-easy delivers a ready‑to‑run, containerized WireGuard + UI stack that speeds up VPN provisioning for small‑to‑medium environments.  It is production‑ready in terms of deployment and documentation, but the lack of automated tests and sparse runtime validation mean that teams should audit custom changes before wide rollout.  Ideal for organizations that value quick setup over exhaustive internal test coverage.</p>
+
+# Install pnpm (if not present) and install JS deps
+corepack enable
+pnpm install
+
+# Build the production image
+docker build -t wg-easy:latest .
+
+# Run with the provided compose (creates a SQLite DB in ./data)
+docker compose up -d</code></pre>
+<p><em>Configuration</em>: The container expects environment variables documented in <code>docs/content/getting-started.md</code> (e.g., <code>WG_EASY_USERNAME</code>, <code>WG_EASY_PASSWORD</code>, <code>WG_HOST</code>).  They are passed through <code>docker-compose.yml</code> under the <code>environment:</code> block.  No secret files are committed; the repo includes a LICENSE and a lockfile (<code>pnpm-lock.yaml</code>).</p>
+<p><em>Running the UI</em>: Once the containers are up, the UI is reachable at <code>http://localhost:51820</code> (default port defined in <code>docker-compose.yml</code>).  The CLI can also be invoked directly: <code>node src/cli/index.js --help</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A small office can spin up the stack with a single <code>docker compose up -d</code>, then point a reverse proxy (Caddy, Traefik, etc.) at the exposed port as shown in <code>docs/content/examples/tutorials/caddy.md</code>.  Users log in via the web UI, generate client configs, and download QR codes for mobile WireGuard clients—all without touching the underlying system’s network configuration.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Import cycles</strong>: 7 modules in <code>src/server/database/*</code> form circular dependencies (e.g., <code>schema.ts</code>, <code>client/schema.ts</code>).  Break cycles by extracting shared types or inverting dependencies.</li><li><strong>High – Duplicate UI code</strong>: Repeated dialog logic across &gt; 60 Vue components.  Consolidate into shared mixins or composables.</li><li><strong>High – No test suite</strong>: 209 source files, zero test files.  Add unit/integration tests and a CI step to run them.</li><li><strong>Medium – Deep nesting</strong>: <code>src/server/utils/types.ts</code> has 7‑level indentation; refactor with guard clauses.</li><li><strong>Medium – TODO/FIXME markers</strong>: 3 occurrences in <code>src/server/utils/session.ts</code>.  Resolve or track as issues.</li><li><strong>High – GitHub Actions not pinned</strong>: Workflows reference actions by tag (<code>@v5</code>, <code>@v3</code>).  Pin to commit SHA to avoid supply‑chain risk.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong>: <code>.github/workflows/deploy-pr.yml</code> lacks explicit permissions.  Add <code>permissions:</code> block.</li><li><strong>Medium – Unpinned Docker base image</strong>: <code>Dockerfile</code> uses mutable <code>node:jod-alpine</code> tags.  Pin by digest.</li><li><strong>Medium – No dependency vulnerability scan</strong>: CI lacks a vulnerability‑review step.  Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Checkout persists token</strong>: <code>persist-credentials</code> not set to <code>false</code>.  Adjust checkout step.</li><li><strong>Medium – Container runs as root</strong>: No <code>USER</code> directive.  Create non‑root user.</li><li><strong>Low – No workflow timeouts</strong>: Add <code>timeout-minutes</code> to jobs.</li><li><strong>Low – Missing convention files</strong>: Add <code>.editorconfig</code>, <code>.gitattributes</code>, and a shared formatter config.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional speculation is included.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>wg‑easy</code> delivers a convenient, Docker‑first WireGuard management UI with a clear separation of UI and server code, but the codebase suffers from import cycles, duplicated Vue logic, and a complete lack of automated tests.  It is suitable for teams that need a quick‑start VPN UI and can allocate effort to refactor the cycles and add test coverage before extending the platform.</p>
             </div>
 
             
@@ -115,11 +128,11 @@ None – License – A LICENSE file is included (MIT).</p><p>Overall, the codeba
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">312<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Vue</span><i style="width:100%"></i><b>114</b></li><li><span>Markdown</span><i style="width:29%"></i><b>33</b></li><li><span>YAML</span><i style="width:14%"></i><b>16</b></li><li><span>TypeScript</span><i style="width:12%"></i><b>14</b></li><li><span>JSON</span><i style="width:4%"></i><b>5</b></li><li><span>Shell</span><i style="width:3%"></i><b>3</b></li>
+                            <li><span>Vue</span><i style="width:100%"></i><b>114</b></li><li><span>TypeScript</span><i style="width:82%"></i><b>93</b></li><li><span>Markdown</span><i style="width:29%"></i><b>33</b></li><li><span>JSON</span><i style="width:27%"></i><b>31</b></li><li><span>YAML</span><i style="width:15%"></i><b>17</b></li><li><span>Shell</span><i style="width:3%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Vue</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 

@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 14, 2026</span>
-                    <span>2 min read</span>
-                    
+                    <span>3 min read</span>
+                    <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>Serial Studio</h1>
@@ -80,9 +80,29 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Monitoring real-time data from multiple devices can be a headache. You’ve got sensors sending data from an Arduino, an ESP32, or a Raspberry Pi, but pulling that data into a single view often involves a lot of coding, manual setup, and guesswork. You need a tool that can handle various protocols without turning your life into a debugging nightmare.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter Serial Studio. This application is a cross-platform telemetry visualization tool that simplifies data collection from serial ports, Bluetooth, MQTT, and more. You can find the core application logic in the app/ directory, which houses 180 files dedicated to the interface and functionality. The CMakeLists.txt files at the root and in app/ ensure that building this tool is straightforward across platforms.</p><p>The UI is built using QML, and the main window is defined in app/qml/MainWindow/MainWindow.qml. You can create dashboards with various widgets like Plot, Gauge, and DataGrid to visualize incoming data in real-time. Want to configure an MQTT connection? Open app/qml/Dialogs/MQTTConfiguration.qml, and you’re good to go.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re debugging a Raspberry Pi that’s sending temperature data via MQTT. With Serial Studio, you can quickly set up a dashboard to visualize this data. Use the app/qml/Widgets/Plot.qml to create a real-time graph while inspecting other metrics through the DataGrid widget. No need to write a single line of code—just point, click, and configure.</p><p>For installation, grab the precompiled binaries from the latest release on GitHub. If you&#39;re on Linux, just make the AppImage executable with:</p><p>chmod +x SerialStudio-Pro-3.2.3-Linux-x64.AppImage
-./SerialStudio-Pro-3.2.3-Linux-x64.AppImage</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Serial Studio is a solid tool for anyone needing to visualize telemetry data without the hassle of coding everything from scratch. It’s especially useful for IoT developers, educators, and hobbyists. However, if you’re only working on simple projects, this might feel like overkill. Just remember: it’s open-source, so dive in and adjust it to your needs if you’re feeling adventurous.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Embedded developers and robotics teams need to visualize data from serial ports, BLE, MQTT, Modbus, and CAN in real time without writing custom dashboards. Serial Studio is a cross-platform desktop application that ingests telemetry from multiple transports and renders it as plots, gauges, and grids, with CSV logging built in.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>A Qt/C++ desktop app with a QML interface. Execution starts at <code>app/src/main.cpp</code>; the UI lives under <code>app/qml/</code> with dashboard widgets (<code>Plot.qml</code>, <code>Gauge.qml</code>, <code>FFTPlot.qml</code>, <code>GPS.qml</code>, <code>Terminal.qml</code>) and per-transport setup panes in <code>app/qml/MainWindow/Panes/SetupPanes/Drivers/</code> (UART, BLE, CANBus, Modbus, Network, Audio). A Project Editor (<code>app/qml/ProjectEditor/</code>) defines frame parsers, datasets, and groups without code. The repo bundles third-party libraries (<code>QCodeEditor</code>, <code>QSimpleUpdater</code>, <code>KissFFT</code>, <code>OpenSSL</code>, <code>mdflib</code>) under <code>lib/</code>, which accounts for most of the 2,631 files.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Static analysis resolved 215 internal modules with only 6 import edges, all in the Python test utilities (<code>tests/utils/__init__</code>, <code>data_generator</code>, <code>device_simulator</code>, <code>validators</code>, <code>api_client</code>) — no circular dependencies. <code>tests/utils/data_generator</code> is the hub with 3 importers. The C++/QML core's call graph has not been mapped by this pipeline; the traced paths cover only the test surface, so the internal wiring of <code>app/src/main.cpp</code> through the QML layer is undocumented here. The most connected modules are test utilities, which means the test suite is the only part with a resolvable dependency structure.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>Build from source with CMake (root <code>CMakeLists.txt</code>):</p>
+<pre><code>git clone https://github.com/moses-y/Serial-Studio
+cd Serial-Studio
+cmake -S . -B build
+cmake --build build</code></pre>
+<p>Prebuilt binaries are the documented path: AppImage for Linux, DMG for macOS, installer for Windows; <code>brew install --cask serial-studio</code> is community-maintained. No environment variables are required for a build. Runtime configuration happens through the QML Settings dialog, not config files. The README does not document a from-source build command verbatim, so the CMake commands above are inferred from the present <code>CMakeLists.txt</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A robotics team connects an ESP32 over UART streaming JSON telemetry. In the Project Editor they define a frame parser, map fields to datasets, and drop a <code>Gauge</code> and <code>MultiPlot</code> onto the Dashboard. Data logs to CSV while plots render live; the same project switches transports to MQTT or CAN without touching the dashboard.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 578 issues (370 high, 208 medium) of one kind: deep nesting (max depth 8) in <code>tests/utils/data_generator.py</code>, <code>app/src/API/CommandHandler.cpp</code>, and <code>app/src/API/CommandProtocol.h</code> — fix with early returns and extraction.</p>
+<p>The security audit found:</p>
+<ul><li><strong>Critical</strong> — <code>CLAUDE_CODE_OAUTH_TOKEN</code> (publish/cloud scope) in <code>.github/workflows/claude.yml</code>; fork PRs could exfiltrate it. Move secret-using steps to a <code>workflow_run</code> job that never checks out PR code.</li><li><strong>High</strong> — unpinned third-party actions (<code>@v1</code>, <code>@latest</code> tags) in <code>.github/workflows</code>; pin to commit SHAs.</li><li><strong>Medium</strong> — no least-privilege <code>GITHUB_TOKEN</code> permissions in <code>deploy.yml</code>.</li><li><strong>Medium</strong> — no Dependabot/Renovate configured.</li><li><strong>Medium</strong> — no dependency vulnerability scan in CI.</li><li><strong>Medium</strong> — four blobs over 5MB (<code>libcrypto.lib</code> at 48.9MB) under <code>lib/OpenSSL</code>; move to LFS.</li><li><strong>Medium</strong> — checkout keeps <code>persist-credentials</code>; set false.</li><li><strong>Low</strong> — no <code>timeout-minutes</code> on workflow jobs.</li></ul>
+<p>Tests, CI, and license are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A feature-complete telemetry dashboard for embedded work, inheriting a mature codebase from the upstream project. The CI security posture — particularly the exposed OAuth token — needs remediation before accepting contributions. Teams wanting a ready-made multi-transport telemetry UI should use the upstream releases rather than this fork.</p>
             </div>
 
             
@@ -92,18 +112,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">2,631<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>10</b></li><li><span>YAML</span><i style="width:30%"></i><b>3</b></li>
+                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>631</b></li><li><span>C++</span><i style="width:53%"></i><b>333</b></li><li><span>HTML</span><i style="width:32%"></i><b>201</b></li><li><span>JavaScript</span><i style="width:24%"></i><b>151</b></li><li><span>Python</span><i style="width:8%"></i><b>48</b></li><li><span>Markdown</span><i style="width:7%"></i><b>46</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Rails</span><span>Docker</span><span>PyTorch</span></p>
                     </div>
                 </div>
 

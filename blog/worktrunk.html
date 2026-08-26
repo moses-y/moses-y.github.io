@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,25 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#list-all-worktrees-with-git-status">List all worktrees with Git status</a><a href="#remove-the-current-worktree-and-its-branch">Remove the current worktree and its branch</a><a href="#real-world-use">Real‑World Use</a><a href="#agent-a">Agent A</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing many concurrent Git worktrees is cumbersome: creating a worktree requires multiple commands, switching directories is manual, and cleaning up involves both git worktree remove and branch deletion. When dozens of AI agents operate in parallel, this friction multiplies, leading to wasted cycles and higher risk of conflicts.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>worktrunk provides a thin CLI that treats worktrees like branches. Core commands live in src/cli/ and src/commands/:</p><p>wt switch &lt;branch&gt; – creates (if needed) and cd‑s into a worktree (src/commands/worktree/mod.rs).  
- wt list – shows worktrees with status, built on the list module (src/commands/list/).  
- wt remove – deletes the current worktree and its branch (src/commands/worktree/remove.rs).</p><p>Configuration is driven by a TOML template (.config/wt.toml) that maps a branch name to a directory path, making the path deterministic and reproducible. Hooks (src/cli/hook.rs and src/commands/hookcommands.rs) let users run arbitrary scripts (e.g., start Claude, run tests) automatically after a worktree is created or switched.</p><p>Documentation is extensive: the docs/ folder contains the full site (docs/templates/.html, docs/content/*.md), and the README lists the core workflow with screenshots.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Build and install the CLI locally
-cargo install --path .
-Or run directly without installing
-cargo run --bin worktrunk -- &lt;args&gt;</p><p>The presence of Cargo.toml and Cargo.lock confirms a standard Rust build.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create or edit the user config (example in dev/config.example.toml):
-.config/wt.toml
-pathtemplate = &quot;{reporoot}/{branch}&quot;</p><p>The file is read by src/cli/config.rs.</p><h3 class="post-h" id="running-it">Running it</h3><p>Switch to (or create) a worktree for branch feat-x
-wt switch feat-x</p><p>Create and launch Claude automatically (hook defined in .config/wt.toml or via CLI flag)
-wt switch -c -x claude feat-x</p><h3 class="post-h" id="list-all-worktrees-with-git-status">List all worktrees with Git status</h3><p>wt list</p><h3 class="post-h" id="remove-the-current-worktree-and-its-branch">Remove the current worktree and its branch</h3><p>wt remove</p><p>All commands resolve to functions in src/commands/, e.g., switch → src/commands/handleswitch.rs, list → src/commands/list/mod.rs.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI pipeline that runs multiple autonomous agents can spin up isolated environments with:</p><h3 class="post-h" id="agent-a">Agent A</h3><p>wt switch -c -x claude agent-a
-Agent B
-wt switch -c -x claude agent-b
-After work is done
-wt remove   # executed by each agent in its own worktree</p><p>Each agent works in its own directory (repo/agent-a, repo/agent-b) without stepping on each other, and the hooks automatically start the appropriate LLM client.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – CI configured – .github/workflows/ci.yaml runs cargo test and benchmarks.  
-Low – Test coverage – 4 test files (src/commands/list/spacing_test.rs etc.) exist, but many core modules lack direct unit tests (e.g., src/commands/worktree/mod.rs).  
-Medium – Hook safety – Hooks execute external scripts (src/cli/hook.rs) without sandboxing; a malicious hook could run arbitrary code.  
-Low – Documentation depth – docs/ provides comprehensive site generation, but the README lacks a quick‑start for non‑Rust users; a short “install via cargo” section would improve onboarding.  
-Low – Platform assumptions – The CLI calls out to the system git binary; no fallback or mock is provided, which could break on minimal containers.</p><p>No obvious licensing issues (MIT in LICENSE), secrets are absent, and the repository includes a lockfile (Cargo.lock) and a pre‑commit config.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>worktrunk delivers a practical abstraction over Git worktrees, lowering friction for parallel AI‑agent workflows. The codebase is well‑structured, CI‑protected, and documented, though core functionality would benefit from broader test coverage and tighter hook sandboxing. Teams that already use Rust and need to manage dozens of concurrent worktrees will find it immediately valuable; smaller or non‑Rust environments may need additional onboarding effort.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers running multiple AI agents often need separate Git worktrees so each agent can work without stepping on another’s changes. The native <code>git worktree</code> workflow requires repetitive commands and manual path handling, making large‑scale parallel experimentation cumbersome and error‑prone.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Worktrunk provides a thin CLI that treats a worktree as a branch name. Core commands (<code>wt switch</code>, <code>wt add</code>, <code>wt remove</code>, <code>wt list</code>) translate branch identifiers into concrete worktree paths using a configurable template (<code>.config/wt.toml</code>).</p>
+<ul><li>The binary lives in <code>src/main.rs</code> (entry point) and <code>src/lib.rs</code>.</li><li>Command implementations are in <code>src/commands/</code> – e.g. <code>src/commands/switch.rs</code>, <code>src/commands/list/mod.rs</code>, <code>src/commands/worktree/add.rs</code>.</li><li>Hook support and LLM‑driven commit generation are in <code>src/llm.rs</code> and <code>src/commands/commit.rs</code>.</li></ul>
+<p>Documentation, demos, and reference pages are in <code>docs/</code> and the <code>README.md</code> illustrates the same command set.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>fn main()</code> in <strong><code>src/main.rs:92</code></strong>. <code>main</code> parses CLI arguments (via <code>clap</code>) and dispatches to the appropriate command module, reaching <strong>401 distinct functions</strong>.</p>
+<ul><li>The most‑used internal utilities are <code>output</code> (called from 249 places) and <code>run_git</code> (139 places). Both reside in <code>src/git/</code> and wrap external <code>git</code> invocations.</li><li>A typical <code>wt switch</code> flow:</li></ul>
+<ol><li><code>main</code> → <code>dispatch</code> → <code>src/commands/switch.rs::run_switch</code>.</li><li><code>run_switch</code> calls <code>src/git/repository/mod.rs::at</code> to locate the repository, then <code>src/commands/worktree/add.rs::add_worktree</code>.</li><li><code>add_worktree</code> invokes <code>run_git</code> (via <code>src/git/commands.rs</code>) which spawns a subprocess (<code>git worktree add …</code>).</li></ol>
+<ul><li>Filesystem writes (e.g., creating a worktree directory) happen in <code>src/commands/worktree/add.rs</code> via <code>std::fs::create_dir_all</code>.</li><li>LLM‑driven commit prompts are built in <code>src/llm.rs::build_commit_prompt</code> and called from <code>src/commands/commit.rs::step_commit</code>, reaching an external model through the <code>llm</code> crate.</li></ul>
+<p>The hub modules—<code>src/shell_exec.rs</code> (63 functions, called from 82 files) and <code>tests/common/mod.rs</code> (136 functions, called from 61 files)—carry the widest blast radius because many commands route through them for process execution and test utilities.</p>
+<p>No circular import cycles were detected; the import graph contains 7 internal modules with only 3 edges, indicating a relatively flat dependency structure.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/worktrunk
+cd worktrunk
+
+# Build the CLI (Rust toolchain required)
+cargo build --release
+
+# Optional: copy the example config
+cp .config/wt.toml.example .config/wt.toml   # (file present in repo)
+
+# Create a worktree named "feat"
+./target/release/worktrunk switch -c feat   # -c also starts Claude if configured
+
+# List all worktrees with status symbols
+./target/release/worktrunk list</code></pre>
+<p>Configuration lives in <code>.config/wt.toml</code>; the template for worktree paths can be edited there. No additional environment variables are required for basic operation.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team runs ten independent Claude agents on a monorepo. Each agent executes <code>wt switch -c &lt;branch&gt;</code> to spin up its own worktree, runs its training script, then commits results via <code>wt commit</code>. Worktrunk isolates filesystem state per agent while keeping a single Git history, reducing merge conflicts and simplifying cleanup (<code>wt remove</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Secrets in workflow: <code>.github/workflows/claude-ci-fix.yaml</code> contains <code>WORKTRUNK_BOT_TOKEN</code> and <code>CLAUDE_CODE_OAUTH_TOKEN</code>. Pull‑request code can access these tokens.</li><li><strong>High</strong> – Actions not pinned: several GitHub Actions use tag references (<code>@v2</code>, <code>@latest</code>). Replace with full commit SHA to prevent supply‑chain hijack.</li><li><strong>High</strong> – Release workflow pushes directly to default branch. Switch to a bot branch and open a PR to ensure CI runs on the exact commit that will be released.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout-minutes</code>; add reasonable limits to avoid hung runs.</li></ul>
+<p>The static analysis also flagged three high‑severity maintainability concerns: deep nesting (max depth 9 in <code>benches/list.rs</code>), duplicated 6‑line blocks across ~50 files, and oversized files (&gt;1 k lines) such as <code>src/config/deprecation.rs</code>. Refactoring these would improve readability and reduce change‑impact risk.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Worktrunk delivers a focused CLI that abstracts Git worktree management into branch‑centric commands, backed by a well‑structured Rust codebase and extensive test coverage. Immediate attention should be given to CI secret handling and action pinning before using it in production, but the core functionality is solid for teams needing isolated workspaces for parallel AI agents.</p>
             </div>
 
             
@@ -115,9 +134,9 @@ Low – Platform assumptions – The CLI calls out to the system git binary; no 
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,171<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>70</b></li><li><span>Markdown</span><i style="width:63%"></i><b>44</b></li><li><span>TOML</span><i style="width:17%"></i><b>12</b></li><li><span>YAML</span><i style="width:17%"></i><b>12</b></li><li><span>HTML</span><i style="width:13%"></i><b>9</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>210</b></li><li><span>Markdown</span><i style="width:21%"></i><b>45</b></li><li><span>TOML</span><i style="width:7%"></i><b>14</b></li><li><span>YAML</span><i style="width:6%"></i><b>12</b></li><li><span>HTML</span><i style="width:4%"></i><b>9</b></li><li><span>Shell</span><i style="width:2%"></i><b>5</b></li>
                         </ul>
                         
                     </div>

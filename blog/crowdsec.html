@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 13, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,24 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>CrowdSec: Open-Source Crowd-Powered Security That Doesn’t Suck</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Let’s be real: the internet is crawling with malicious traffic. Brute force attempts, DDoS attacks, port scans, and more—someone’s always probing your servers for a weakness. Sure, you could slap a WAF or an IDS/IPS on there, but most solutions are either expensive, bloated, or locked behind paywalls. And even if you pick one, you’re on your own when it comes to staying updated on the latest threats. Not to mention the headache of managing all that.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter CrowdSec. It’s an open-source, crowdsourced security engine that not only detects and blocks malicious actors but also shares threat intelligence across its community. Think of it as a neighborhood watch for your servers, except it doesn’t annoy you with bake sale flyers.</p><p>At its core, you’ll find the CrowdSec Security Engine, which parses logs, detects shady behavior, and applies mitigation measures via modular bouncers. The detection rules live in the HUB and are licensed under MIT, so you can tweak them or create your own.</p><p>The repo&#39;s structure screams &quot;enterprise-grade nerd tools.&quot; For example:  
-.github/workflows/ contains CI/CD pipelines for everything from running bats tests to publishing Docker images.  
-.github/ISSUE_TEMPLATE/ has YAML templates for bug reports, features, and governance (yeah, they’re serious about community input).  
-The Dockerfile and .dockerignore files make containerization a breeze.</p><p>Installing CrowdSec is straightforward. Whether you’re on Linux, Windows, Kubernetes, or even OpnSense, the docs have you covered. The default scenarios (brute force, port scans, etc.) are good to go out of the box, but if you need to fine-tune, the HUB has plenty of prebuilt rules to grab.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re running a public-facing web server. You install CrowdSec and point it at your Nginx logs. CrowdSec detects repeated login failures and flags the source IP as malicious. It adds the offender to your blocklist and—here’s the kicker—shares that IP with the global CrowdSec community. That means the next time that bad actor tries their luck on someone else, they’re already blocked.</p><p>Oh, and if you want to visualize all this, the optional CrowdSec Console gives you a web UI to monitor, manage, and automate your setup.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>CrowdSec is like Fail2Ban on steroids, but with a global community feeding it real-world threat intelligence. It’s overkill for a tiny blog with 5 daily visitors, but if you’re managing exposed infrastructure and have logs to analyze, this is a no-brainer. Bonus points for being open-source and free to use. Just don’t expect hand-holding—this is a tool for people who know what a log file is.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizations need a participative way to detect and block malicious IP addresses across diverse environments. CrowdSec provides crowdsourced threat intelligence, allowing each node to contribute observed bad behaviour and receive community blocklists in real time.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>CrowdSec is an open‑source security engine that functions as an IDS/IPS and WAF. It ingests log sources and HTTP requests, evaluates detection rules, and triggers remediation through <em>bouncers</em> that firewall, reverse‑proxy, or container runtimes can consume. The core detection logic lives in <code>pkg/acquisition/modules/</code>, where parsers and buckets collect and score events. Remediation components such as bouncers are defined in <code>cmd/crowdsec-cli/clibouncer/</code>. The Security Engine’s rule evaluation is orchestrated from <code>cmd/crowdsec/serve.go:307</code> (<code>Serve</code>) and <code>cmd/crowdsec/main.go:212</code> (<code>main</code>), which start the API server, metric provider, and output routines. Configuration is driven by YAML files under <code>config/</code> and parsed by <code>pkg/csconfig/</code>. The community blocklist is fetched via the central API and merged into the in‑memory allow/deny state.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>cmd/crowdsec/main.go:212</code> (<code>main</code>), which reaches 399 internal functions and is called from nothing else in the repo. From <code>main</code> the flow proceeds to <code>Serve</code> (<code>cmd/crowdsec/serve.go:307</code>), which loads configuration, initialises the API server (<code>apiserver.go</code>), and spawns metric, bucket, and output routines. The internal call graph shows <code>Alert</code> is invoked from 334 places, <code>New</code> from 229, <code>Context</code> from 209, and <code>Run</code> from 103 – these are the functions with the widest blast radius. Traced paths to external effects are short: <code>main → Serve → Load</code> reads files via <code>os.ReadFile</code>; <code>Execute → LoadConfig → Init → loadConfig</code> opens config files with <code>os.Open</code>; <code>run → getLineCountForFile</code> also uses <code>os.Open</code>. The repository touches the filesystem in 84 functions, a database in 4, makes 3 outbound network calls, performs 3 cryptographic operations, and runs 1 external command. The module graph contains 1 internal module with no circular dependencies, so changes to a top‑level function ripple broadly but without hidden cycles.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ul><li><strong>Setup</strong>: Clone the repo verbatim: <code>git clone https://github.com/moses-y/crowdsec</code>. Build with the provided Makefiles (<code>cmd/crowdsec/Makefile</code>, <code>cmd/crowdsec-cli/Makefile</code>) or use Docker: <code>docker build -t crowdsec -f build/docker/Dockerfile .</code>.</li><li><strong>Configuration</strong>: Primary config lives in <code>config/</code>. Environment variables and secrets are referenced in workflow files under <code>.github/workflows/</code>. Ensure <code>go.mod</code> dependencies are up‑to‑date (<code>go mod tidy</code>).</li><li><strong>Running it</strong>: Start the daemon with <code>go run ./cmd/crowdsec</code> or, after building, <code>./crowdsec</code>. For Windows services use <code>Execute</code> from <code>cmd/crowdsec/win_service.go:27</code>. The CLI entry <code>add</code> (<code>cmd/crowdsec-cli/cliallowlists/allowlists.go:454</code>) can register allow‑list entries.</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security team deploys CrowdSec on a fleet of web servers. Logs from nginx are tailed by the <em>file acquisition</em> module (<code>pkg/acquisition/modules/file/</code>). The Security Engine flags repeated failed login attempts, creates a bucket, and after the threshold is met, emits an alert. The <em>bouncer</em> (<code>cmd/crowdsec-cli/clibouncer/</code>) automatically updates the host’s <code>iptables</code> or Nginx <code>deny</code> directive, blocking the offending IP. The same alert also pushes the IP to the community blocklist, benefiting all other participants.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured static‑analysis findings (120 total)</strong></p>
+<ul><li><strong>High – cognitive load</strong>: deep nesting x56 in <code>cmd/crowdsec-cli/clisetup/setup/detect_test.go</code>, <code>pkg/acquisition/config_test.go</code>, <code>pkg/acquisition/modules/file/file_test.go</code> (max indentation depth 9).</li><li><strong>High – duplicated code blocks</strong>: 1359 repeated 6‑line patterns across 337 files, notably in <code>cmd/crowdsec/api.go</code>, <code>cmd/crowdsec/win_service.go</code>, <code>cmd/crowdsec/parse.go</code>, <code>cmd/crowdsec/pour.go</code>.</li><li><strong>High – oversized files</strong>: 1393‑line files <code>pkg/database/ent/client.go</code>, <code>pkg/database/ent/mutation.go</code>, <code>pkg/exprhelpers/exprlib_test.go</code>.</li><li><strong>Medium – other</strong>: 103 medium‑severity issues (not listed individually here).</li><li><strong>Low – 4 issues</strong> (not listed individually).</li></ul>
+<p><strong>Code‑health audit (5 findings)</strong></p>
+<ul><li><strong>MEDIUM</strong> – Declare least‑privilege permissions for GITHUB_TOKEN in <code>.github/workflows/docker-tests.yml</code> (no permissions declared; 2 workflows reference secrets).</li><li><strong>MEDIUM</strong> – Pin container base image by digest in <code>build/docker/Dockerfile</code> (<code>docker.io/golang:1.25-alpine3.21</code>, <code>docker.io/alpine:3.21</code>).</li><li><strong>MEDIUM</strong> – Gate pull requests on a dependency vulnerability scan (no scan in CI).</li><li><strong>MEDIUM</strong> – Add a non‑root USER to the Docker image (<code>build/docker/Dockerfile</code> runs as root).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs in <code>.github/workflows/ci_release-drafter.yml</code> (3 jobs have no timeout).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>CrowdSec delivers a functional, crowdsourced security engine with solid Docker and Kubernetes integration, but the codebase shows signs of cognitive‑load hotspots, duplicated logic, and oversized files that hinder maintainability. The CI hygiene gaps (missing dependency scans, root‑as‑default container user, untokenled GITHUB_TOKEN) are easy to remediate. It is well‑suited for teams that want participative IP blocking and are comfortable contributing to, and consuming from, the community blocklist.</p>
             </div>
 
             
@@ -94,18 +107,18 @@ The Dockerfile and .dockerignore files make containerization a breeze.</p><p>Ins
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,557<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>74</b></li><li><span>YAML</span><i style="width:39%"></i><b>29</b></li><li><span>Python</span><i style="width:31%"></i><b>23</b></li><li><span>Markdown</span><i style="width:11%"></i><b>8</b></li><li><span>Shell</span><i style="width:5%"></i><b>4</b></li><li><span>TOML</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>809</b></li><li><span>YAML</span><i style="width:38%"></i><b>308</b></li><li><span>JSON</span><i style="width:6%"></i><b>46</b></li><li><span>Python</span><i style="width:3%"></i><b>24</b></li><li><span>Shell</span><i style="width:2%"></i><b>20</b></li><li><span>Markdown</span><i style="width:2%"></i><b>13</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Express</span><span>Docker</span><span>Kubernetes</span></p>
                     </div>
                 </div>
 
@@ -116,6 +129,12 @@ The Dockerfile and .dockerignore files make containerization a breeze.</p><p>Ins
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>pkg/acquisition/modules/kafka/testdata/kafkaClient.certificate.pem, pkg/csconfig/testdata/bad_lapi-secrets.yaml, pkg/csconfig/testdata/bad_online-api-secrets.yaml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1157441187">Open in Code Brain &rarr;</a>

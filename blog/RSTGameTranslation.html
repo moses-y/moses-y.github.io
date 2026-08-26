@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 15, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C#</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Ever tried playing a game that’s in a language you don’t understand? It’s frustrating, right? You can’t follow the story or understand the mechanics, and that’s a buzzkill. Enter the need for real-time translation tools that can help you dive into those foreign worlds without the language barrier.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>RSTGameTranslation is your go-to tool for breaking down those language walls in gaming. It combines Optical Character Recognition (OCR) and AI translation to deliver real-time text translation while you’re playing. The project structure shows you how it all comes together: src/ChatGptTranslationService.cs and src/GoogleTranslateService.cs handle the nitty-gritty of pulling in translation from various APIs, while the app/Languages folder contains JSON files for multilingual support.</p><p>The entry point is index.html, where the magic begins. You can choose from several OCR options like OneOCR, PaddleOCR, or EasyOCR. They’re all tucked away in app/webserver, which means you can pick what works best for your setup. This flexibility is key for gamers who want a tailored experience.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re playing an RPG with complex dialogues in Japanese. You fire up RSTGameTranslation, select OneOCR for quick setup, and opt for Google Translate for the translations. As you play, you press Alt+Q to select the dialogue box. The tool captures the text, translates it, and overlays the English translation on your screen without missing a beat. You can keep your immersion while understanding every plot twist.</p><p>Quick commands:
-Run rst.exe
-Select Window (Alt+Q)
-Start translating (Alt+G)</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>RSTGameTranslation is a solid tool if you&#39;re serious about gaming in different languages. The flexibility with OCR options and translation services is a nice touch, but it might be overkill for casual gamers who just want a quick fix. If you&#39;re into immersive experiences and don&#39;t mind a bit of setup, give it a shot. Just don’t expect a fully polished product yet since it’s still in the early stages with zero stars on GitHub.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Gamers who play non‑English titles often have to pause or switch to external translation tools, breaking immersion and slowing progress. The pain point is a lack of an in‑game, low‑latency solution that can capture screen text, run OCR, and feed the result to an LLM‑based translator without leaving the game window.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>RSTGameTranslation</code> is a Windows‑only WPF application that captures a user‑selected window region, runs OCR (OneOCR, Windows OCR, EasyOCR, PaddleOCR, or RapidOCR) and passes the extracted text to a configurable translation backend (Google, Gemini, Groq, ChatGPT, Ollama, Mistral, LM Studio, etc.).</p>
+<p>Key files:</p>
+<ul><li><code>src/App.xaml.cs</code> – boots the WPF app and registers services.</li><li><code>src/MainWindow.xaml.cs</code> – UI entry point; handles hot‑key shortcuts, starts OCR, and displays overlay windows.</li><li><code>src/OcrServerManager.cs</code> – launches the selected Python OCR server (<code>app/webserver/*/server_*.py</code>) as a child process and communicates via HTTP.</li><li><code>src/TranslationServiceFactory.cs</code> &amp; <code>src/ITranslationService.cs</code> – resolve the concrete translator (e.g., <code>src/GoogleTranslateService.cs</code>, <code>src/GeminiTranslationService.cs</code>).</li><li><code>src/ConfigManager.cs</code> – persists user selections (OCR engine, language pairs, API keys) in JSON files under <code>app/Languages/</code>.</li></ul>
+<p>The Python side (<code>app/webserver/EasyOCR/process_image_easyocr.py</code>, <code>.../PaddleOCR/*.py</code>, <code>.../RapidOCR/*.py</code>) each expose a tiny Flask‑style HTTP endpoint that receives an image, runs the respective OCR library, and returns plain text.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in the compiled binary generated from <code>RST.csproj</code>; the WPF runtime loads <code>src/App.xaml.cs</code>, which creates the DI container and opens <code>src/MainWindow.xaml</code>. When the user presses <strong>Alt + Q</strong> the <code>MainWindow</code> calls <code>OcrServerManager.StartServer()</code> (see <code>src/OcrServerManager.cs</code>). This method selects the configured OCR type and launches the matching script, e.g.:</p>
+<pre><code>app/webserver/EasyOCR/server_easy.py   ← started via Process.Start</code></pre>
+<p>The server listens on a hard‑coded local port; <code>MainWindow</code> then captures the selected screen rectangle (via <code>src/WindowSelectorPopup.xaml.cs</code>) and sends the bitmap to the server using <code>HttpClient</code> (inside <code>src/OneOCRManager.cs</code>). The server returns raw text, which <code>MainWindow</code> forwards to <code>TranslationServiceFactory.Create()</code> to obtain an <code>ITranslationService</code> implementation. The chosen service (e.g., <code>src/GoogleTranslateService.cs</code>) performs an HTTP request to the external API, receives the translated string, and the UI displays it in the overlay (<code>src/OverlayOptionsWindow.xaml.cs</code>).</p>
+<p>All side‑effects (file writes, network calls) are confined to:</p>
+<ul><li><code>src/ConfigManager.cs</code> – reads/writes JSON config.</li><li><code>src/*TranslationService.cs</code> – external HTTP APIs.</li><li><code>src/OcrServerManager.cs</code> – spawns/terminates Python processes.</li></ul>
+<p>No circular imports were detected; each module is isolated, which limits blast radius but also means duplicated logic across the OCR scripts (see measured findings).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ol><li><strong>Clone and build</strong></li></ol>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/RSTGameTranslation
+cd RSTGameTranslation
+dotnet build RST.sln -c Release</code></pre>
+<ol><li><strong>Install OCR back‑ends</strong> (optional for non‑OneOCR). Run the provided batch files, e.g.:</li></ol>
+<pre data-lang="cmd"><code>app\webserver\EasyOCR\SetupServerCondaEnvNVidiaEasyOCR.bat</code></pre>
+<p>These scripts create a Conda environment with the required Python packages and place the server executable in the same folder.</p>
+<ol><li><strong>Configure</strong>   - Edit <code>app/Languages/*.json</code> to add or modify language codes. - Place API keys in the UI under <strong>Settings → Translation</strong> (the app stores them encrypted via <code>src/ConfigManager.cs</code>).</li></ol>
+<ol><li><strong>Run</strong></li></ol>
+<pre data-lang="cmd"><code>dotnet run --project RST.csproj   # or execute the built rst.exe</code></pre>
+<p>Press <strong>Alt + Q</strong> to select the game window, <strong>Alt + F</strong> to toggle the overlay, and <strong>Alt + G</strong> to start/stop translation.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A streamer runs <code>rst.exe</code> alongside <em>Elden Ring</em> (windowed mode). The overlay shows translated dialogue in real time, letting the audience follow the story without subtitles. The streamer configures <code>PaddleOCR</code> for Japanese text and <code>Gemini</code> for translation, achieving sub‑second latency thanks to the local GPU‑accelerated OCR server.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHA (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – No test suite; 55 source files lack automated verification.</li><li><strong>HIGH</strong> – Workflow pushes directly to default branch (<code>update-readme-version.yml</code>).</li><li><strong>MEDIUM</strong> – Large binaries (<code>app/AudioModel/ggml-tiny.bin</code>, <code>oneocr.onemodel</code>, <code>oneocr.dll</code>) should be stored with Git LFS or external storage.</li><li><strong>LOW</strong> – Add job timeouts in CI (<code>release.yml</code>).</li><li><strong>LOW</strong> – Add convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Measured static analysis also reports 48 instances of deep nesting, duplicated OCR‑server code, and 11 oversized C# files (e.g., <code>src/ConfigManager.cs</code>, <code>src/Logic.cs</code>, <code>src/MainWindow.xaml.cs</code>). Refactoring these would improve readability and reduce change impact.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>RSTGameTranslation</code> delivers a functional, extensible pipeline for real‑time game text translation on Windows, with clear separation between UI, OCR servers, and translation services. However, the codebase suffers from duplication, deep nesting, and a lack of automated tests, which raises maintenance risk for any custom extensions. It is suitable for teams comfortable with C# and Python who need a quick, locally‑run translation overlay and are prepared to address the identified health concerns.</p>
             </div>
 
             
@@ -94,18 +123,18 @@ Start translating (Alt+G)</p><h3 class="post-h" id="the-bottom-line">The Bottom 
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">112<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>C#</span><i style="width:100%"></i><b>48</b></li><li><span>JSON</span><i style="width:15%"></i><b>7</b></li><li><span>Python</span><i style="width:13%"></i><b>6</b></li><li><span>YAML</span><i style="width:8%"></i><b>4</b></li><li><span>Markdown</span><i style="width:8%"></i><b>4</b></li><li><span>HTML</span><i style="width:4%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>ONNX</span><span>CUDA</span></p>
                     </div>
                 </div>
 

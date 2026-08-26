@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#from-the-repository-root">From the repository root</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#example-workflow">Example workflow</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers using Claude‑Code often hit the model’s context limit when tackling multi‑step projects. They must manually split work, track progress, and keep git history clean, which is time‑consuming and error‑prone.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>chief automates the split‑and‑loop workflow. A project description is stored as a PRD (.chief/prds/.json or .md). The CLI reads the PRD, generates a task list, and invokes Claude‑Code repeatedly—each iteration runs a single task, commits the result, and persists state via the “Ralph Wiggum loop”. Core logic lives in:</p><p>internal/loop/manager.go – orchestrates the loop and task persistence.  
- internal/prd/loader.go – parses PRD files into Go structs.  
- internal/tui/ – provides the terminal UI (Bubble Tea + Lip Gloss).</p><p>The entry point is cmd/chief/main.go, which wires sub‑commands (new, edit, status) from internal/cmd/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the Claude‑Code CLI and authenticate it (required by the README).  
-Build the binary:</p><h3 class="post-h" id="from-the-repository-root">From the repository root</h3><p>make            # uses the Makefile; falls back to go build ./cmd/chief
-or explicit build
-go build -o chief ./cmd/chief
-Optionally install via Homebrew (pre‑built formula is in Formula/chief.rb).</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create a PRD with chief new – this writes a skeleton to .chief/prds/.  
- Edit the PRD manually or with chief edit (uses prompts from embed/editprompt.txt).  
- No additional config files are required; the tool reads the PRD at runtime.</p><h3 class="post-h" id="running">Running</h3><p>Start the TUI; press “s” to begin the loop
-chief</p><p>Run a single task without the UI (useful for CI)
-chief run --prd .chief/prds/your-project.json</p><p>(The exact flags are defined in internal/cmd/.go; run is a placeholder for the command that triggers the loop.)</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A product team defines a feature set in my‑app.prd.json. Running chief creates a git branch, then iteratively asks Claude‑Code to implement each feature, committing after every successful step. The resulting linear commit history can be reviewed, reverted, or merged like any conventional codebase, while the model never exceeds its context window.</p><h3 class="post-h" id="example-workflow">Example workflow</h3><p>chief new               # scaffolds my-app.prd.json
-vim .chief/prds/my-app.prd.json   # fill in tasks
-git checkout -b feature/my-app
-chief                    # TUI drives implementation
-git push origin feature/my-app</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Missing LICENSE file – repository lacks a LICENSE despite the README claiming MIT; legal reuse is ambiguous. (root/)  
- Low – Hard‑coded prompt paths – embed files (embed/.txt) are read directly; changes to directory layout could break loading. (embed/embed.go)  
- Medium – Limited CI coverage – GitHub Actions defined (.github/workflows/.yml) but no badge or test matrix shown; verify that all test suites run on push. (.github/)  
- Low – No explicit error handling for Claude CLI failures – internal/loop/loop.go calls external commands without robust retry logic; a transient API error could abort the whole run.  
- Low – Platform‑specific audio – notification sound uses cgo in internal/notify/soundnocgo.go; may fail on minimal containers without audio libraries.</p><p>Positive signals: 16 test files covering core packages, a Makefile, and CI workflow files indicate an intent toward continuous testing and reproducible builds.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>chief delivers a focused solution for breaking large Claude‑Code projects into manageable, version‑controlled steps, with a usable TUI and solid test coverage. The main blocker is the missing license file and modest CI visibility; teams comfortable handling those compliance gaps can adopt it to streamline AI‑assisted development workflows.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want to use Claude Code for large, multi‑step projects must manually split work, keep track of progress, and re‑seed the model after each commit. The process is error‑prone and hard to automate, especially when the Claude context window is exceeded.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>chief</code> automates that workflow. A PRD (product‑requirements‑document) lives under <code>.chief/prds/…</code> and is loaded by <code>internal/prd/loader.go</code>. The CLI (<code>cmd/chief/main.go</code>) launches a Bubble Tea TUI (<code>internal/tui/app.go</code>) that drives a “Ralph Wiggum” loop (<code>internal/loop/manager.go</code> / <code>internal/loop/loop.go</code>). Each loop iteration spawns Claude Code via a subprocess, writes the generated code to the repo, and records the step in the PRD. The UI shows progress panels (<code>render*</code> functions) and lets the user start, pause, or abort the loop.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>main</code> in <code>cmd/chief/main.go</code> (line 33) parses flags and calls <code>runTUIWithOptions</code>.</li><li><code>runTUIWithOptions</code> → <code>IsGitRepo</code> (subprocess via <code>cmd.Run</code>) → validates the working directory.</li><li>It then invokes <code>LoadPRD</code> (<code>internal/prd/loader.go</code>) which reads the JSON/MD files from <code>.chief/prds/</code>.</li><li>A new TUI app is created: <code>NewApp</code> in <code>internal/tui/app.go</code> (calls <code>NewManager</code> → <code>NewLoop</code> in <code>internal/loop/loop.go</code>).</li><li>The manager starts the loop (<code>Run</code> → <code>NewLoop</code> → <code>NewManager</code>). <code>Run</code> is the most‑called function (30 distinct callers).</li><li>Inside the loop, <code>render*</code> functions (e.g., <code>renderEmptyPRDPanel</code>, <code>renderErrorPanel</code>) are invoked from 36 places, handling all UI updates.</li><li>The loop’s core work is <code>Run</code> → <code>NewLoop</code> → <code>runClaudeConversion</code> (<code>internal/prd/generator.go</code>) which spawns Claude Code (<code>exec.Command</code>).</li><li>After each successful generation, <code>Save</code> (<code>internal/prd/loader.go</code>) writes the updated PRD back to disk.</li></ol>
+<p>The call graph contains 580 internal edges; the hub functions (<code>Render</code>, <code>Run</code>, <code>LoadPRD</code>, <code>ParseLine</code>, <code>NewManager</code>) have the widest blast radius. No circular imports were detected, but <code>internal/loop/manager.go</code> and <code>internal/loop/loop.go</code> each have deep nesting (indentation depth 16) and duplicated 6‑line blocks across several files, making future changes risky.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and build
+git clone https://github.com/moses-y/chief
+cd chief
+make            # builds the binary in ./bin/chief</code></pre>
+<p>Or install via the provided script:</p>
+<pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/MiniCodeMonkey/chief/refs/heads/main/install.sh | sh</code></pre>
+<p>Prerequisites: the Claude Code CLI must be installed and authenticated (see README). No additional config files are required; the TUI creates <code>.chief/prds/</code> on first run. Launch the UI:</p>
+<pre data-lang="bash"><code>./bin/chief          # starts the TUI</code></pre>
+<p>Create a new project:</p>
+<pre data-lang="bash"><code>./bin/chief new      # invokes internal/cmd/new.go → runInteractiveClaude</code></pre>
+<p>The UI responds to <code>s</code> to start the loop, <code>q</code> to quit, and other keys documented in <code>internal/tui/help.go</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A front‑end team wants to scaffold a marketing site. They run <code>chief new</code>, answer the initial prompts, and let the loop generate component files, commit after each task, and update the PRD automatically. The CI pipeline can later run <code>go test ./...</code> to verify the generated code before release.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*.yml</code>).</li><li><strong>High</strong> – No LICENSE file (rights undefined).</li><li><strong>High</strong> – CI workflow does not execute the test suite.</li><li><strong>Medium</strong> – No Dependabot/Renovate configuration.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>Medium</strong> – Checkout step keeps token (<code>persist-credentials: false</code> needed).</li><li><strong>Low</strong> – Jobs lack <code>timeout-minutes</code>.</li><li><strong>High</strong> – Deep nesting in <code>cmd/chief/main.go</code> and <code>internal/loop/manager.go</code>.</li><li><strong>High</strong> – Duplicated code blocks across UI components and command files.</li><li><strong>Medium</strong> – Oversized file <code>internal/tui/app.go</code> (828 LOC).</li><li><strong>Medium</strong> – High branching density in several command files.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>chief</code> delivers a concrete automation layer for Claude Code, with a functional TUI and clear PRD workflow. However, the codebase suffers from high cognitive load, duplicated logic, and several SDLC gaps (missing license, incomplete CI). It is usable for experimentation but would need refactoring and CI hardening before production adoption.</p>
             </div>
 
             

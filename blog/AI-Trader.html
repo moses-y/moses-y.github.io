@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,24 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most AI trading projects are smoke and mirrors: backtests, cherry-picked results, or “simulations” where the only thing real is the hype. If you want to see if an AI can actually beat the market—live, with zero human handholding—you need something that logs real trades, shows agent reasoning, and runs head-to-head with other models on actual data. Good luck finding that in the wild.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>AI-Trader sets up a live battle royale for AI agents in markets like NASDAQ 100, SSE 50, and crypto. The agent/ folder is where you drop your strategy; inherit from something in baseagent.py or baseagentcrypto.py to avoid reinventing the wheel. Configs live in configs/—each JSON file (defaultconfig.json, defaultcryptoconfig.json, etc.) maps your agent to market, interval, and trading specifics. Data comes from data/, with historical prices, weights, and market indices (and yes, it’s a mess of CSV and JSON).</p><p>For actual trading, tools in agenttools/ handle price fetching (toolgetpricelocal.py), crypto orders (toolcryptotrade.py), and even news scraping (toolalphavantagenews.py). Everything is logged: see data/agentdata/{agent}/log/ for reasoning chains and trade outcomes. Want to analyze agent performance? The leaderboard updates live at ai4trade.ai, and you can inspect logs directly.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you have a wild new trading strategy: make a copy of baseagent.py, override the decide() method, and drop your file into agent/. Add a config like myagentconfig.json in configs/. Submit a PR. If it runs, your code goes live in the arena for a week, with results tracked on the leaderboard and logs published for everyone to pick apart. You can see hourly trades, reasoning, and performance right alongside other AI models—no hiding bad trades, no secret sauce.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you want to test AI trading in the real world—warts and all—this is the repo. The structure is a bit chaotic, and you’ll need to read the docs and configs carefully, but it actually does what most trading “AI” projects pretend to do: live, transparent competition. Great for researchers and devs who don’t mind some rough edges. If you’re just dabbling or hate JSON, look elsewhere.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>LLM trading agents are hard to evaluate honestly: backtests overfit, and there is no standardized arena to compare strategies across markets. AI-Trader runs multiple LLM agents autonomously in live markets (NASDAQ 100, SSE 50, crypto) with zero human input, publishing results to a public leaderboard at <code>ai4trade.ai</code>.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is a fork of HKUDS/AI-Trader (21.5k stars upstream), a framework where you submit a strategy agent and it competes against others in live markets. <code>agent/base_agent/</code> defines the base agent classes (daily and hourly variants); <code>agent/base_agent_astock/</code> and <code>agent/base_agent_crypto/</code> adapt them to A-share and crypto markets. <code>agent_tools/</code> wraps trading, news, search, math, and price-lookup services. <code>configs/</code> holds per-market JSON configs. The bulk of the repo — 1,714 of 1,796 files — is market data and agent run logs under <code>data/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main.py</code>. The import graph is small — 58 internal modules, 39 edges — and it centers on two hubs. <code>tools/general_tools.py</code> is imported by 17 modules; <code>tools/price_tools.py</code> by 10. Both are high-blast-radius: a change in <code>general_tools.py</code> ripples across nearly a third of the codebase. The base agents in <code>agent/base_agent/</code> sit mid-graph (Ca 2, Ce 3, instability 0.6). There is one import cycle: <code>agent/base_agent_crypto/base_agent_crypto.py</code> and <code>prompts/agent_prompt_crypto.py</code> are mutually reachable, which makes either file harder to change in isolation.</p>
+<p>Agents reach the outside world through <code>agent_tools/</code> — <code>tool_trade.py</code>, <code>tool_alphavantage_news.py</code>, <code>tool_jina_search.py</code>, <code>tool_get_price_local.py</code> — which is where effects leave the process (external APIs, trade execution). The function-level runtime path from <code>main.py</code> to those calls is not mapped by the available analysis; the import graph gives module edges only.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ul><li><strong>Setup</strong>: <code>pip install -r requirements.txt</code>. This is the only dependency manifest; there is no lockfile, so installs are not reproducible.</li><li><strong>Configuration</strong>: copy <code>.env.example</code> to <code>.env</code> and set API keys. Per-market settings live in <code>configs/*.json</code> (<code>default_config.json</code>, <code>default_astock_config.json</code>, <code>default_crypto_config.json</code>).</li><li><strong>Running</strong>: invoke <code>main.py</code>. Per the README, the intended contribution flow is a PR adding <code>agent/{your_strategy}.py</code> (inheriting from the base model), a config, and run instructions; the platform runs it for a week and publishes results.</li></ul>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team building a strategy-evaluation harness would subclass <code>base_agent</code>, register a config, and let the platform run the strategy against live markets alongside competitors. The public leaderboard provides a comparable benchmark instead of self-reported backtests, and the <code>data/</code> logs give per-day JSONL traces of reasoning and positions for post-hoc analysis.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found 61 findings: 16 high, 45 medium, across 7 kinds. Notable ones:</p>
+<ul><li><strong>High — duplicated code</strong>: 2,509 repeated 6-line blocks across 47 files, concentrated in <code>agent/base_agent/</code> and its variants; the three base-agent families are near-copies of each other.</li><li><strong>High — deep nesting</strong>: 38 instances, max indentation depth 9 in <code>tools/price_tools.py</code> and the base agents.</li><li><strong>High — import cycle</strong>: <code>agent/base_agent_crypto/base_agent_crypto.py</code> ↔ <code>prompts/agent_prompt_crypto.py</code>.</li><li><strong>Medium — broad exception handling</strong>: 12 bare <code>except</code> clauses in <code>tools/general_tools.py</code> and <code>tools/price_tools.py</code>.</li><li><strong>Medium — hub module</strong>: <code>tools/general_tools.py</code> has 17 dependents.</li></ul>
+<p>No test suite exists (39 source files, zero tests), so regressions ship undetected. CI runs GitHub Actions but has no dependency vulnerability scan, and the deploy workflow keeps <code>persist-credentials</code> at default with no job timeouts.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A functional LLM-trading competition framework with a real live leaderboard and public results — the data and logs are the asset. Code quality is research-grade: heavy duplication across market variants, a central hub module, and no tests. Use it to benchmark strategies, not as a base for production trading infrastructure.</p>
             </div>
 
             
@@ -165,6 +181,16 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>1</strong> of 6 declared dependencies are a major version behind. Resolved 6 of 6 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>fastmcp</code></td>
+                            <td>==2.12.5</td><td>3.4.7</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
