@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 19, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#openrouterapikey-youropenrouterapikeyhere">OPENROUTERAPIKEY=youropenrouterapikeyhere</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Data scientists and ML engineers often need a reproducible sandbox that can spin up a full Python environment, expose a web UI, and let a language‑model‑driven agent execute code, install packages, and access local files. Setting this up manually requires scripting, environment management, and careful handling of API keys.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository ships a minimal “agentic” ML engineer built around Claude’s Code SDK.</p><p>karpathy/agent.py defines the core Agent class that receives prompts, calls Claude, and executes generated code in a sandboxed virtual environment.  
- karpathy/utils.py contains helper routines (setupsandbox, copyenv, etc.) used by the CLI entry points.  
-start.py orchestrates the end‑to‑end workflow: creates a sandbox directory, provisions a virtual environment with PyTorch, Transformers, scikit‑learn, copies the user’s .env into the sandbox, and launches the ADK web interface (adk web).</p><p>The surrounding files (tools.py, instructions.yaml) provide reusable tool definitions and configuration for the Claude Scientific Skills collection.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>git clone https://github.com/K-Dense-AI/karpathy.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Machine‑learning practitioners often need a reproducible, isolated environment that bundles API keys, scientific‑skill libraries, and a lightweight UI for interactive model development. Setting up such a sandbox manually is error‑prone and time‑consuming.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository provides a minimal “agentic” ML engineer that:</p>
+<ul><li>Creates a <code>sandbox</code> directory populated with Claude Scientific Skills. (<code>karpathy/utils.py::download_scientific_skills</code>)</li><li>Spins up a Python virtual environment using <strong>uv</strong> and installs common ML packages. (<code>karpathy/utils.py::setup_uv_environment</code>)</li><li>Copies a user‑supplied <code>.env</code> (containing <code>OPENROUTER_API_KEY</code> and <code>AGENT_MODEL</code>) into the sandbox so the agent can call external services. (<code>karpathy/utils.py::copy_env_file</code>)</li></ul>
+<p>The top‑level entry point is <code>start.py</code> → <code>main()</code>. The core orchestration lives in <code>karpathy/utils.py</code>, which defines the five public functions (<code>load_instructions</code>, <code>download_scientific_skills</code>, <code>setup_uv_environment</code>, <code>copy_env_file</code>, <code>setup_sandbox</code>). A single helper, <code>karpathy/tools.py::delegate_task</code>, is present but not wired into the current flow.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>start.py</code> line 11 defines <code>main()</code> and is the only start function identified.</li><li><code>main()</code> calls <code>setup_sandbox()</code> (in <code>karpathy/utils.py</code>). This is the sole path that leaves the process.</li><li><code>setup_sandbox()</code> performs three side‑effect actions:   <em> <code>copy_env_file()</code> → creates <code>sandbox/.env</code> (filesystem write). </em> <code>download_scientific_skills()</code> → pulls skill packages from the Claude collection (external command / network). * <code>setup_uv_environment()</code> → runs <code>uv venv</code> and <code>uv pip install</code> to build the sandbox environment (external command).</li></ol>
+<p>The internal call graph shows 8 resolved edges; the most frequently referenced function is <code>setup_sandbox</code>, called from two places (currently only <code>main</code>).</p>
+<p><code>karpathy/utils.py</code> is the hub: it contains 5 functions, is imported by <code>start.py</code>, reads/writes files, and spawns external processes. <code>karpathy/tools.py</code> is peripheral with a single <code>delegate_task</code> function, imported nowhere else. No circular imports are present, and the import graph is shallow (4 edges, 5 modules).</p>
+<p>The deepest nesting occurs in <code>karpathy/utils.py</code> and <code>karpathy/tools.py</code> (max indentation depth 8), making the control flow harder to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repository
+git clone https://github.com/moses-y/karpathy
 cd karpathy
-uv sync               # installs dependencies from pyproject.toml</p><p>uv is the recommended package manager (declared in the README). No lockfile is present, so repeatability depends on the current package index.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create a .env file inside the karpathy package (or copy .env.example and fill in values):</p><h3 class="post-h" id="openrouterapikey-youropenrouterapikeyhere">OPENROUTERAPIKEY=youropenrouterapikeyhere</h3><p>AGENTMODEL=yourmodelnamehere</p><p>The file is read by karpathy/utils.py and copied into the sandbox at startup.</p><h3 class="post-h" id="running">Running</h3><p>python start.py</p><p>start.py performs the following, as documented in its source:
-Calls karpathy.utils.setup_sandbox() → creates sandbox/ and a venv.
-Installs ML libraries (torch, transformers, scikit-learn, …) inside the sandbox.
-Copies the .env file into the sandbox.
-Executes adk web to launch the ADK UI on http://localhost:8000.
-The UI lets you select the karpathy agent and interact with it; all generated files appear under sandbox/.</p><p>For head‑less operation, you can run only the sandbox setup:</p><p>python -m karpathy.utils</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can place a dataset (data.csv) into sandbox/, then ask the agent to train a model:</p><p>User: Train a RandomForest on data.csv and export the model to model.pkl</p><p>The agent will generate and execute a Python script inside the sandbox, using the pre‑installed scikit-learn. Results (model file, logs) are written to sandbox/, where the team can retrieve them directly.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Untested code – No tests/ directory; functions in agent.py and utils.py are not exercised by automated tests.  
-Med – Missing CI/CD – No .github/workflows or other pipeline files; builds are not automatically validated.  
-Low – No lockfile – pyproject.toml lists dependencies but lacks a uv.lock or requirements.txt, risking nondeterministic installs.  
-Low – Minimal documentation – README covers basic usage; internal functions lack docstrings, making IDE assistance limited.  
-Low – Hard‑coded paths – start.py assumes a sandbox directory at the repository root; running from another cwd may fail.  
-Info – License present – MIT license is included, satisfying basic legal requirements.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repo delivers a lightweight, Claude‑driven ML assistant that can auto‑provision an isolated Python environment and expose a web UI. It is functional for prototyping and small‑team experimentation but lacks automated testing, CI, and reproducible lockfiles, which raises maintenance risk for production use. Suitable for proof‑of‑concept work or teams comfortable with manual validation; not ready for mission‑critical pipelines without additional engineering effort.</p>
+
+# Install dependencies with uv (Python 3.13+ required)
+uv sync
+
+# Create .env in the package directory
+cat &gt; karpathy/.env &lt;&lt;EOF
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+AGENT_MODEL=your_model_name_here
+EOF
+
+# Run the setup and launch the ADK web UI
+python start.py</code></pre>
+<p><em>Running only the sandbox setup</em> (no UI) is possible with:</p>
+<pre data-lang="bash"><code>python -m karpathy.utils</code></pre>
+<p>The UI is started separately via <code>adk web</code> after the sandbox is ready.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can place training scripts or datasets into <code>sandbox/</code> and interact with the agent through the web UI at <code>http://localhost:8000</code>. The agent reads the copied <code>.env</code> to authenticate calls to external LLM services, then executes user‑directed ML pipelines inside the isolated environment, keeping the host system clean.</p>
+<pre data-lang="python"><code># Example: trigger a training job from the UI
+POST /run
+{
+  "script": "train.py",
+  "args": ["--epochs", "10"]
+}
+# The agent runs `python train.py --epochs 10` inside sandbox</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing lockfile</strong> – <code>pyproject.toml</code> declares dependencies but no lockfile is committed. This hampers reproducible builds.</li><li><strong>Medium – No Dependabot</strong> – Only one manifest (<code>pyproject.toml</code>) is present; no automated dependency‑update bot is configured.</li><li><strong>Medium – No test suite</strong> – No <code>tests/</code> directory or test files detected.</li><li><strong>Medium – No CI/CD</strong> – No <code>.github/workflows</code> or other pipeline definitions.</li><li><strong>Low – Deep nesting</strong> – <code>karpathy/utils.py</code> and <code>karpathy/tools.py</code> have indentation depth 8, increasing cognitive load.</li></ul>
+<p>The repository includes a <code>LICENSE</code> (MIT) and a <code>README.md</code> but lacks Dockerfile, CI scripts, and a lockfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The project delivers a lightweight, scripted sandbox for Claude‑driven ML workflows with clear entry points and minimal external dependencies. However, the codebase suffers from poor reproducibility (no lockfile), absent automated testing/CI, and deeply nested logic that may hinder maintenance. It is suitable for prototyping or evaluation in controlled environments, but production teams should add tests, CI, and a lockfile before relying on it.</p>
             </div>
 
             

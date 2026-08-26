@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 13, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Google Workspace APIs are great... if you enjoy drowning in REST docs, crafting endless curl commands, and debugging JSON payloads at 2 AM. For developers and sysadmins trying to automate Google Drive, Gmail, Calendar, or Sheets, the official tools are clunky, fragmented, and make even simple workflows painfully complicated. Managing all this with AI agents? Forget it.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>gws is one CLI to rule them all—Drive, Gmail, Calendar, Docs, Chat, Sheets, Admin, and pretty much every Google Workspace API under the sun. It dynamically builds its commands from the Google Discovery Service, so when Google adds a new API endpoint, gws supports it automatically. No more manually updating tools or dealing with outdated SDKs.</p><p>The real magic, though, is in the skills/ directory. This library of 90+ &quot;agent skills&quot; combines API calls into higher-level workflows like generating reports, triaging Gmail, or creating shared drives. These are prebuilt automations designed for both humans and bots. The src/ folder handles the heavy lifting: src/commands.rs defines the CLI structure, src/auth.rs wraps OAuth flows, and src/generate_skills.rs dynamically builds commands on the fly. It&#39;s clean, logical, and kind of genius.</p><p>And let&#39;s not ignore the AI angle. Every response is JSON-structured and bot-ready. Pair it with the skills library and your favorite LLM for full Workspace automation.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re onboarding a new hire. With gws, you could automate the entire process:</p><p>Or, say you&#39;re an AI bot tasked with managing documents. Use gws drive files list to fetch recent files, generate summaries with an LLM, and send updates via gws chat.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>gws is a lifesaver for anyone working heavily with Google Workspace APIs. It’s not perfect—expect bugs and breaking changes since it’s still pre-1.0—but the potential here is massive. If you&#39;re automating Workspace, skip the SDKs and start here. Just don&#39;t expect handholding; this tool is for people who actually know what they&#39;re doing.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers and automation agents that need to interact with many Google Workspace services must write repetitive HTTP calls, maintain separate auth flows, and keep client libraries in sync with Google’s ever‑changing API surface.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The <code>gws</code> CLI reads Google’s Discovery Service at runtime and builds a full command hierarchy for Drive, Gmail, Calendar, Docs, Sheets, Chat, Admin, etc. Core logic lives in <code>src/</code> – e.g., <code>src/auth.rs</code> and <code>src/auth_commands.rs</code> handle credential acquisition, while <code>src/executor.rs</code> builds and sends HTTP requests. The repository also ships 92 “skill” definitions under <code>skills/</code> that expose ready‑made agent actions (e.g., <code>skills/gws-gmail-reply-all/SKILL.md</code>). The binary is produced from Rust (<code>src/main.rs</code>) and packaged for npm via <code>package.json</code> and the pre‑built binaries referenced in the README.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/main.rs::main</code> (line 46). <code>main</code> calls <code>run</code>, which parses CLI arguments and ultimately invokes <code>fetch_discovery_document</code> – a network call (<code>client.get(&amp;url).send</code>). The discovery payload drives dynamic command generation used by <code>src/commands.rs</code>.</p>
+<p>User‑initiated actions flow through a small hub:</p>
+<ul><li><code>src/auth_commands.rs</code> (93 functions) – parses <code>gws auth …</code> sub‑commands, reads/writes credential files via <code>src/credential_store.rs</code>.</li><li><code>src/setup_tui.rs</code> (87 functions) – provides the interactive TUI for auth setup; its <code>handle_key</code> is called from 35 places.</li><li><code>src/executor.rs</code> (53 functions) – builds HTTP requests (<code>build_http_request</code>), sends them (<code>send_with_retry</code> in <code>src/client.rs</code>), and processes responses.</li><li><code>src/helpers/gmail/mod.rs</code> (64 functions) – implements Gmail‑specific helpers used by many skills.</li></ul>
+<p>The internal call graph contains 1,028 edges; the most fan‑out functions are <code>make_items</code> (41 callers) and <code>handle_key</code> (35 callers). No circular imports were detected.</p>
+<p>File‑level responsibilities (high‑impact paths):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>External effect</th></tr></thead><tbody><tr><td><code>src/auth_commands.rs</code></td><td>Auth CLI parsing, token cache handling</td><td>Reads/writes token files</td></tr><tr><td><code>src/setup_tui.rs</code></td><td>TUI rendering, key handling</td><td>Reads config, writes UI state</td></tr><tr><td><code>src/executor.rs</code></td><td>HTTP request construction, retry logic</td><td>Outbound network calls</td></tr><tr><td><code>src/client.rs</code></td><td>Low‑level HTTP client, retry wrapper</td><td>Network I/O</td></tr><tr><td><code>src/credential_store.rs</code></td><td>Secure key storage, file I/O</td><td>File reads/writes</td></tr><tr><td><code>src/helpers/gmail/reply.rs</code></td><td>Build reply‑all payloads, dedup recipients</td><td>Network request payload</td></tr></tbody></table></div>
+<p>Because the CLI builds commands dynamically, most service‑specific code lives in <code>src/helpers/&lt;service&gt;/</code>. Changing a service’s request format typically requires editing the corresponding helper module without touching the core executor.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/cli
+cd cli
+
+# Install Node‑side wrapper (pnpm is the lockfile’s manager)
+pnpm install -g @googleworkspace/cli   # pulls pre‑built binary
+
+# Or build the Rust binary locally
+cargo install --git https://github.com/googleworkspace/cli --locked</code></pre>
+<p>Authentication requires a Google Cloud project and OAuth credentials. The CLI creates a credential directory (<code>.gws/</code> by default) and stores tokens via <code>src/credential_store.rs</code>. Run the interactive setup:</p>
+<pre data-lang="bash"><code>gws auth setup   # walks through project ID, OAuth consent screen, etc.
+gws auth login   # opens a browser for user consent</code></pre>
+<p>After login, any Workspace API can be called, e.g.:</p>
+<pre data-lang="bash"><code>gws drive files list --params '{"pageSize":5}'
+gws gmail messages send --json '{"raw":"&lt;base64‑url&gt;" }' --dry-run</code></pre>
+<p>Skills are invoked as sub‑commands, for example:</p>
+<pre data-lang="bash"><code>gws recipe-create-sheet-for-new-month --params '{"title":"July"}'</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can generate weekly reports: <code>gws gws-gmail-watch</code> streams new messages, <code>gws gws-sheets-append</code> writes rows, and a custom skill processes the data. All steps run from a single binary, reducing dependency churn and eliminating custom HTTP client code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Add a test suite</strong> – 38 source files, no tests (<code>src/</code> only).</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>.github/workflows/ci.yml</code> lacks a <code>permissions</code> block.</li><li><strong>Medium – Enable Dependabot/Renovate</strong> – No update bot for <code>Cargo.toml</code> or <code>package.json</code>.</li><li><strong>Medium – Gate PRs on vulnerability scan</strong> – CI lacks a dependency‑review or osv‑scanner step.</li><li><strong>Medium – Set <code>persist-credentials: false</code></strong> – Checkout step keeps the token, exposing it to post‑install scripts.</li><li><strong>Low – Add <code>timeout-minutes</code></strong> – Workflow jobs have no explicit timeout, risking runaway runs.</li></ul>
+<p>Additional static findings (not in the health block) show deep nesting (max depth 8 in <code>src/auth.rs</code>), duplicated 6‑line blocks across many files, and several oversized modules (&gt;1,600 lines). Refactoring these hotspots would lower cognitive load and reduce blast radius for future changes.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>gws</code> provides a single, dynamically generated CLI for the full Google Workspace suite and bundles useful agent “skills”. The core is functional but lacks automated tests and exhibits maintainability concerns (deep nesting, duplicated code). It is suitable for teams that need rapid Workspace automation and are comfortable adding their own test coverage and refactoring the identified hotspots.</p>
             </div>
 
             

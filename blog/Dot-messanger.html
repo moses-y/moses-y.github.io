@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 15, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>DOT Messenger: A Local Network Chat App for Real-Life Problems</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Picture this: a classroom full of students trying to collaborate, share files, and communicate during a group computer science project. The catch? The internet is either crawling or completely dead. Welcome to the pain of relying on school Wi-Fi. Forget Google Drive or Slack — even basic messaging becomes a nightmare.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter Dot Messenger, a React-based front-end paired with an Express server backend, designed to bring back the classic Windows Live Messenger experience — only now it runs entirely on your local network. The project is split into two main directories: frontEnd/ and server/.</p><p>The frontEnd/ folder (80 files, mostly TSX) houses the React app, with components like ChatPage.tsx for messaging features, UserProfileDialog.tsx for profile management, and StickerDialog.tsx for sending GIFs and stickers. It&#39;s built on TypeScript and powered by Vite (vite.config.ts handles the build process).</p><p>On the backend, the server/server.js file sets up an Express server, with WebSocket integration for real-time messaging. The server/server/memory/ folder includes lightweight in-memory stores (chatStore.js, userStore.js) for handling messages and users without a database. Middleware like authMiddleware.js and rateLimiter.js provide basic security.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say your class is working on a group project. The teacher sets up the server on their local computer. Students then connect via the local network and create accounts using the signupController.js. Now, you’re messaging classmates in real time (messageHandler.js), sharing PDFs for the project (PendingPdfDialog.tsx), and coordinating via the news panel (AddNewsDialog.tsx).</p><p>Want to send a funny GIF? The getgifController.js pulls from the Giphy API. Need to share a voice clip? Record it via the Web Audio API, validated server-side for size limits. It&#39;s simple, functional, and doesn’t care if the school forgot to pay the internet bill again.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a niche project with a clear use case: LAN-based communication where internet access is unreliable. It&#39;s not going to replace Slack or Discord, but that’s not the goal. The setup is straightforward, and the codebase is well-organized, though the lack of database integration limits scalability. If you’re looking for a fun weekend project or a practical school tool, DOT Messenger delivers. Just don’t expect this to power your startup.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Students in classrooms with unreliable or no internet cannot share files or chat in real time. A lightweight LAN‑only messenger eliminates the need for an external network while still offering instant messaging, media sharing, and simple announcements.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships a full‑stack web app that mimics the classic Windows Live Messenger experience. The <strong>frontend</strong> lives under <code>frontEnd/</code> and is a React 19 + TypeScript UI built with Vite (<code>frontEnd/vite.config.ts</code>). Core UI components such as <code>ChatPage.tsx</code>, <code>SignupPage.tsx</code>, and <code>TitleBar.tsx</code> render the chat view, registration flow, and common header.</p>
+<p>The <strong>backend</strong> is an Express 5 server in <code>server/server/</code>. It opens an HTTP listener (<code>server/server/server.js</code>), configures CORS, attaches a native WebSocket, and loads in‑memory stores (<code>memory/userStore.js</code>, <code>memory/chatStore.js</code>). Controllers (<code>signinController.js</code>, <code>sigupController.js</code>) and handlers (<code>messageHandler.js</code>, <code>authHandler.js</code>) process HTTP routes and socket events, while middleware (<code>authMiddleware.js</code>, <code>validateMessage.js</code>, <code>rateLimiter.js</code>) enforce security and request validation.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Startup</strong> – Execution begins in <code>server/server/server.js</code>. The file imports the Express app, applies CORS (<code>app.use(cors())</code>), registers middleware, mounts routes from <code>routes/chatRoutes.js</code>, and starts the HTTP server (<code>app.listen</code>). It also creates a WebSocket (<code>new WebSocket.Server({ server })</code>) and wires events to the <code>messageHandler</code> and <code>broadcastService</code>.</li></ol>
+<ol><li><strong>Client bootstrap</strong> – <code>frontEnd/src/main.tsx</code> imports <code>App.tsx</code> and mounts it into <code>index.html</code>. Vite serves the bundle and hot‑reloads during development.</li></ol>
+<ol><li><strong>Authentication flow</strong> – The client’s signup form (<code>SignupPage.tsx</code>) POSTs to <code>/api/signup</code> handled by <code>sigupController.js</code>. The controller validates the request via <code>validateMessage.js</code>, checks IP/email uniqueness using <code>userStore.js</code>, and on success creates a session cookie.</li></ol>
+<ol><li><strong>Real‑time messaging</strong> – After login, <code>ChatPage.tsx</code> opens a WebSocket connection to the server endpoint. Incoming messages trigger <code>messageHandler.js</code>, which writes to <code>chatStore.js</code> and broadcasts to all connected sockets via <code>broadcastService.js</code>. Outgoing messages from the UI are sent through the same socket and validated by <code>validateMessage.js</code>.</li></ol>
+<ol><li><strong>Data flow hotspots</strong> –   <em> <code>ChatPage.tsx</code> imports 18 other modules (instability 0.95) and contains 2 351 lines, making it the most volatile component. </em> <code>TitleBar.tsx</code> is a hub (12 dependents, instability 0.08); any change there has a wide blast radius. * <code>userStore.js</code> and <code>socket.js</code> have multiple inbound edges but no outbound imports, so they are stable leaf nodes.</li></ol>
+<p>No circular dependencies were detected, so the import graph is acyclic.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Dot-messanger.git
+cd Dot-messanger
+
+# Install backend dependencies
+cd server
+npm ci            # uses server/package-lock.json
+# Copy example env and adjust if needed
+cp .example.env .env
+
+# Start the backend (see server/package.json scripts)
+node server/server.js   # or npm run start if defined
+
+# Install frontend dependencies
+cd ../frontEnd
+npm ci            # uses frontEnd/package-lock.json
+
+# Launch the Vite dev server (script defined in frontEnd/package.json)
+npm run dev       # serves http://localhost:5173</code></pre>
+<p>The client expects the API at the same host (default) and will automatically connect to the WebSocket endpoint provided by <code>server.js</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A school IT admin can spin up the server on a Raspberry Pi connected to the LAN, run the commands above, and point student laptops to the Pi’s IP address. Once the React UI loads, students register with a unique school email, and the chat, file‑share, and announcement panels become instantly available without any external internet traffic.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 40 source files, zero test files.</li><li><strong>HIGH – Missing lockfile for root</strong> – <code>.vite/deps/package.json</code> lacks a companion lockfile.</li><li><strong>HIGH – No CI workflow</strong> – repository has no <code>.github/workflows</code> or other pipeline definitions.</li><li><strong>HIGH – Wildcard CORS</strong> – <code>server/server/server.js</code> calls <code>cors()</code> with default (allow‑all) while also enabling credentials.</li><li><strong>MEDIUM – Dependabot disabled</strong> – three manifest files present, no update bot configured.</li><li><strong>LOW – Missing repository conventions</strong> – no <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<p>Additional observations from the static analysis:</p>
+<ul><li>Deep nesting and duplicated code blocks across several chat dialogs (<code>AddNewsDialog.tsx</code>, <code>PhotoPreviewDialog.tsx</code>, etc.) increase cognitive load.</li><li><code>ChatPage.tsx</code> is oversized (2 351 lines) and highly unstable (imports 18 modules).</li><li><code>validateMessage.js</code> contains 23 branch points in 79 lines, suggesting a refactor to a strategy table.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The project delivers a functional LAN‑only messenger with a complete UI and real‑time backend, but the codebase suffers from poor modularity, no automated testing or CI, and insecure CORS settings. It is suitable for rapid prototyping or educational environments where the team can address the highlighted health issues before production deployment.</p>
             </div>
 
             

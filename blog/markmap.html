@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#building-mindmaps-with-markmap">Building Mindmaps with Markmap</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="building-mindmaps-with-markmap">Building Mindmaps with Markmap</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>If you&#39;ve ever tried organizing your thoughts or notes in a linear format, you know it can quickly become a tangled mess. Markdown is great for writing, but it lacks the visual structure needed for clarity. Enter Markmap: a tool that transforms your Markdown into mindmaps, making it easier to visualize connections and hierarchies.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Markmap utilizes a simple text format to create interactive mindmaps, allowing for a more intuitive approach to organizing information. The core functionality is found in packages/markmap-cli/src/index.ts, which processes Markdown files and generates the mindmap. The packages/markmap-autoloader/src/index.ts handles loading the necessary assets, while the configuration files (like vite.config.mts) set up the build process using Vite and TypeScript.</p><p>The project is structured into multiple packages, with packages/markmap-common providing reusable components and utilities. You’ll find README.md files in each package, which detail how to use the functionality specific to that package. The tests are scattered across various directories, but there are only five test files, which might raise an eyebrow about the project&#39;s stability.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re prepping for a big presentation. You jot down your key points in a Markdown file like this:</p><p>Running the Markmap CLI (packages/markmap-cli/bin/cli.js) turns this Markdown into a dynamic mindmap. You can then visually navigate through your ideas, making it easier to communicate and expand on them.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Markmap is a handy tool if you often work with Markdown and need to visualize your notes or presentations. It&#39;s got a solid structure and is built on modern tools like React and TypeScript, but the limited test coverage is a concern. If you&#39;re looking for a better way to organize your thoughts, give Markmap a shot—just don’t expect it to replace your entire note-taking workflow.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who write Markdown often need a quick visual overview of hierarchy, but Markdown viewers render only linear text. Switching to a dedicated mind‑map tool forces copy‑pasting and breaks the write‑review cycle.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>markmap</code> converts a Markdown document into an interactive SVG/HTML mind‑map. The core logic lives in the <strong>packages</strong> monorepo:</p>
+<ul><li><strong>packages/markmap-lib</strong> – parsers, transform pipeline, and built‑in plugins (checkbox, front‑matter, syntax‑highlight, KaTeX, etc.).</li><li><strong>packages/markmap-autoloader</strong> – runtime that loads assets (JS/CSS) on demand and calls <code>transform</code> → <code>render</code>.</li><li><strong>packages/markmap-cli</strong> – thin wrapper exposing a <code>cli</code> command (<code>packages/markmap-cli/bin/cli.js</code>) that reads a file, runs the autoloader, and writes the HTML output.</li></ul>
+<p>The most‑used public symbols are in <code>packages/markmap-lib/src/types.ts</code> (13 other modules import it) and the transformer functions in <code>packages/markmap-autoloader/src/index.ts</code> (<code>initialize</code>, <code>transform</code>, <code>render</code>, <code>doRender</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the CLI entry point <code>packages/markmap-cli/src/cli.ts</code> (exported as <code>main</code>).</p>
+<ol><li><strong>CLI parsing</strong> → calls <code>createMarkmap</code> in <code>packages/markmap-cli/src/index.ts</code>.</li><li><code>createMarkmap</code> loads the <strong>autoloader</strong> (<code>packages/markmap-autoloader/src/index.ts</code>) and invokes <code>transform</code> on the Markdown source.</li><li><code>transform</code> (in the autoloader) forwards the AST to <code>packages/markmap-lib/src/transform.ts</code>, which walks the tree, applies plugins, and returns a <code>MarkmapData</code> object.</li><li>The resulting data is fed to <code>render</code> (same autoloader file). <code>render</code> builds the SVG/HTML by calling <code>renderData</code> → <code>transition</code> (both hit 5 call sites each) and finally writes the output via the <strong>view</strong> module (<code>packages/markmap-view/src/view.ts</code>).</li><li>Asset handling (<code>getAssets</code>, <code>fetchAssets</code>) pulls JS/CSS for plugins; the shared loader in <code>packages/markmap-common/src/loader.ts</code> resolves URLs and inserts <code>&lt;script&gt;</code>/<code>&lt;link&gt;</code> tags.</li></ol>
+<p>Key hot‑spots:</p>
+<ul><li><code>packages/markmap-lib/src/types.ts</code> – hub with 13 inbound imports; keep its API stable.</li><li><code>packages/markmap-view/src/view.ts</code> – 699 lines, high cognitive load; changes ripple to the rendering pipeline.</li><li>Repeated 6‑line blocks across <code>fetch-assets.ts</code>, <code>dev-server.ts</code>, and several plugin browser entry points; they belong in a shared helper (<code>packages/markmap-common/src/util.ts</code> is a candidate).</li></ul>
+<p>No circular imports were detected, and the internal call graph shows 194 resolved edges, with the most‑used functions (<code>transition</code>, <code>transform</code>, <code>getAssets</code>, <code>fit</code>, <code>defer</code>, <code>walkTree</code>) each called from five distinct places.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># clone the repo
+git clone https://github.com/moses-y/markmap.git
+cd markmap
+
+# install dependencies (pnpm is the workspace manager)
+pnpm install
+
+# run the CLI on a Markdown file
+pnpm --filter markmap-cli exec node packages/markmap-cli/bin/cli.js path/to/file.md -o out.html</code></pre>
+<p><em>The CLI flags are defined in <code>packages/markmap-cli/src/cli.ts</code>; <code>-o</code> selects the output HTML file.</em> If a build step is required (e.g., to bundle the autoloader for the browser), run the Vite config in each package: <code>pnpm --filter &lt;package&gt; run build</code> (scripts are defined in the respective <code>package.json</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A documentation pipeline can invoke the CLI during CI to generate a mind‑map for each Markdown spec file and publish the resulting HTML to a static site. Example snippet in a CI job:</p>
+<pre data-lang="yaml"><code>- run: pnpm --filter markmap-cli exec node packages/markmap-cli/bin/cli.js docs/api.md -o public/api.html</code></pre>
+<p>The generated <code>api.html</code> can be linked from the main docs site, giving readers an interactive overview without leaving the documentation repository.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions use tag references (<code>@v3</code>, <code>@v4</code>). Pin to commit SHA to avoid supply‑chain risk.</li><li><strong>HIGH</strong> – CI workflow does not execute the test suite; add a <code>npm test</code> (or <code>pnpm test</code>) step.</li><li><strong>MEDIUM</strong> – No least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> in <code>.github/workflows/ci.yml</code>. Declare <code>contents: read</code>.</li><li><strong>MEDIUM</strong> – Dependabot / Renovate not configured; add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – README lacks usage instructions; expand with install/run example.</li><li><strong>MEDIUM</strong> – Checkout step keeps credentials; set <code>persist-credentials: false</code> and pass token only where needed.</li><li><strong>MEDIUM</strong> – Test coverage is low (2 test files for 65 source files); add tests for high‑fan‑in modules like <code>types.ts</code> and <code>view.ts</code>.</li><li><strong>LOW</strong> – CI jobs have no <code>timeout-minutes</code>; set a reasonable bound (e.g., 15 min).</li></ul>
+<p>Additional observations: the repository includes a full test suite for the HTML parser but none for the core lib or view, and the CI currently runs only linting/build steps.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>markmap</code> provides a functional Markdown‑to‑mind‑map pipeline with a clear separation between parsing, transformation, and rendering. The codebase is well‑structured but suffers from a few maintainability hotspots (large view file, duplicated asset loaders) and CI hygiene gaps. It is suitable for teams that need an embeddable mind‑map generator and are comfortable addressing the medium‑severity health issues.</p>
             </div>
 
             
@@ -91,9 +122,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Ever tried to debug or compare NixOS configurations? It&#39;s a nightmare. You can diff the derivations, sure, but that just gives you a mess of low-level garbage. Good luck figuring out why a certain package or option changed. If you want answers at the config level—what values were explicitly set, what dependencies influenced them—you&#39;re on your own. Until now.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>nixos-config-tui is a terminal-based UI for exploring and diffing NixOS configurations at the human-readable level. It doesn&#39;t just show you the end result; it traces back dependencies and lets you see exactly why a configuration looks the way it does.</p><p>The heavy lifting happens in src/resolve.rs and src/diff.rs, which handle dependency tracking and comparison. The TUI itself is built around src/tui.rs, with widgets and rendering logic tucked into src/tree/. The tool works with &quot;tracked&quot; configurations, which you generate using a patched version of Nix that outputs additional metadata (tracking.json, tracking-deps.json, etc.).</p><p>Once you&#39;ve got your configuration, you can:  
-Explore it (nixos-config show) to see all options and their dependencies.  
-Diff two configurations (nixos-config diff) to compare changes at the config level.  
-Narrow diffs down to explicitly defined values (--explicit).</p><p>It’s like having git diff for your NixOS configs but without the headache of scrolling through derivation junk.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re migrating a server from NixOS 23.05 to 25.11. You update your flake.nix and build the new system, but something&#39;s broken—your SSH config isn’t behaving. Instead of wasting hours sifting through derivations, you use nixos-config-tui:</p><p>The TUI shows that services.openssh.enable is still true in both configs, but in the new one, services.openssh.settings was overridden by some sneaky dependency. Now you know exactly where to look.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you&#39;re serious about debugging NixOS configurations or tracking changes, this tool is a lifesaver. The TUI is fast, intuitive, and does exactly what you need without drowning you in derivation details. That said, setting up the patched Nix environment can be annoying, and the warning about &quot;subtle bugs&quot; means you should test this like your life depends on it. For production? Maybe not. For devs who love tinkering with Nix internals? Absolutely.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operators need to understand why a NixOS option has a particular value and how two configurations differ. The standard <code>nixos-rebuild diff</code> works at the derivation level, hiding the option‑level provenance that can be critical for debugging complex module sets.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>nixos-config-tui</code> is a terminal UI that reads the JSON tracking files emitted by a <em>patched</em> Nix evaluator and lets users browse the configuration tree, inspect individual option values, and diff two configurations option‑by‑option.</p>
+<ul><li>The core logic lives in <code>src/main.rs</code> (CLI parsing) and <code>src/diff.rs</code> / <code>src/show.rs</code> (diff and display).</li><li>The tree model is built in <code>src/tree/data.rs</code> (functions like <code>build_config_tree</code>, <code>get_children_at_path</code>, <code>sort_branches_first</code>).</li><li>Rendering helpers are in <code>src/tree/render.rs</code> and <code>src/tree/widgets.rs</code>, while colour handling lives in <code>src/tree/icons.rs</code>.</li></ul>
+<p>All UI interaction is driven by the <code>tui</code> module (<code>src/tui.rs</code>) which sets up the <code>crossterm</code>/<code>ratatui</code> event loop.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>src/main.rs</code> (line 124). The CLI dispatches to either <code>run</code> (<code>src/diff.rs:17</code>) for the <strong>diff</strong> command or <code>run_show</code> (<code>src/show.rs</code>) for the <strong>show</strong> command.</p>
+<ul><li><code>run</code> builds a <code>ConfigTree</code> by calling <code>convert</code> (from <code>src/json2nix.rs</code>) which parses the tracking JSON. <code>convert</code> is the most‑called internal routine (9 call sites).</li><li>The tree is then passed to <code>build_diff_lines</code> → <code>find_hunks</code>, which walk the tree with <code>get_children_at_path</code> (6 call sites) and <code>format_value_full</code> (6 call sites) to create a diff buffer.</li><li>Rendering is performed in <code>render_frame</code> (in <code>src/tui.rs</code>), which repeatedly calls <code>footer_pill</code> (23 calls) and <code>render_dep_list</code> (6 calls). Those functions ultimately invoke colour helpers (<code>node_icon</code>, <code>node_name_color</code>, <code>value_color</code>) defined in <code>src/tree/icons.rs</code>.</li><li>Input handling is isolated in <code>src/tree/input.rs</code> (<code>handle_input</code> → <code>rect_contains</code> 24 times, <code>jump_to_path</code> 9 times).</li></ul>
+<p>The most central file by call volume is <code>src/tree/data.rs</code> (27 functions, referenced from five other files). It owns the data model and the bulk of the algorithmic work, making it a high‑impact change point. No circular imports were detected, but the depth of nesting (up to 10 levels) in <code>diff.rs</code>, <code>show.rs</code>, and <code>tree/input.rs</code> makes the control flow hard to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/nixos-config-tui
+cd nixos-config-tui
+
+# Build the binary (requires Rust toolchain)
+cargo build --release
+
+# Example workflow (as documented in README)
+# 1. Enter a shell with the patched Nix evaluator
+nix shell github:oddlama/nix/thunk-origins-v1 \
+          github:oddlama/nixpkgs/thunk-origins-v1#nixos-config
+
+# 2. Build a tracked configuration
+nix build --print-out-paths .#nixosConfigurations.host1.config.system.build.toplevel
+
+# 3. Show a configuration
+./target/release/nixos-config show /nix/store/...-nixos-toplevel-tracked
+
+# 4. Diff two configurations
+./target/release/nixos-config diff /nix/store/OLD /nix/store/NEW</code></pre>
+<p>The binary name (<code>nixos-config</code>) is produced by Cargo; the README’s usage examples assume it is installed in the user’s PATH.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline that builds NixOS images for multiple hosts can invoke <code>nixos-config diff $OLD $NEW</code> after each build to generate a concise option‑level changelog. The output can be posted to Slack or attached to a merge‑request, giving developers immediate insight into why a system behaved differently without digging into the full derivation diff.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 15 source files, no test files. → Add unit tests for each public entry point and a CI step to run them.</li><li><strong>High – No CI workflow</strong> – No <code>.github/workflows</code> or other CI configuration. → Add a GitHub Actions workflow that runs <code>cargo build --release</code> and the test suite on push and PR.</li><li><strong>Medium – No Dependabot</strong> – Only <code>Cargo.toml</code>/<code>Cargo.lock</code> present, no update bot. → Commit <code>.github/dependabot.yml</code> for the Rust ecosystem.</li><li><strong>High – Cognitive load</strong> – Deep nesting (max indentation depth 10) in <code>src/diff.rs</code>, <code>src/show.rs</code>, <code>src/tree/input.rs</code>. → Refactor with early returns and extract helper functions.</li><li><strong>High – Duplicated code</strong> – Repeated 6‑line blocks across <code>src/diff.rs</code>, <code>src/show.rs</code>, <code>src/tree/render.rs</code>, <code>src/tree/input.rs</code>. → Create shared utilities to obey DRY.</li><li><strong>Medium – Oversized files</strong> – <code>src/tree/data.rs</code>, <code>src/tree/input.rs</code>, <code>src/tree/render.rs</code> each exceed 600 lines. → Split by responsibility (e.g., separate traversal, rendering, and data definitions).</li></ul>
+<p>No Dockerfile, secret leakage, or missing license was detected; the repository includes both Apache‑2.0 and MIT notices.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>nixos-config-tui</code> provides a practical, option‑level view of NixOS configurations, useful for debugging and change‑tracking. The code works but suffers from deep nesting, duplicated logic, and large monolithic files, which increase maintenance risk. Adding tests, CI, and modest refactoring would make it reliable for production environments. It is best suited for teams already comfortable with Rust and Nix who need fine‑grained insight into configuration differences.</p>
             </div>
 
             
@@ -94,9 +129,9 @@ Narrow diffs down to explicitly defined values (--explicit).</p><p>It’s like h
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -116,6 +151,12 @@ Narrow diffs down to explicitly defined values (--explicit).</p><p>It’s like h
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1178605322">Open in Code Brain &rarr;</a>

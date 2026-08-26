@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>ComfyUI is great for visual workflow creation, but it’s a dead end if you need to integrate those workflows into actual Python projects. You’re stuck manually translating nodes and parameters into code—tedious, error-prone, and downright annoying when you’re trying to build something that moves beyond tinkering in a GUI. If you’ve ever thought, “Why can’t I just export this as Python and move on?”, this repo is for you.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>ComfyUI-to-Python-Extension takes your ComfyUI workflows and spits out Python code that actually works. The meat of the project lives in comfyuitopython.py, which does the heavy lifting of converting nodes and connections into Python functions. There’s also comfyuitopython_utils.py to handle supporting tasks like parameter parsing.</p><p>The repo uses pyproject.toml and requirements.txt for dependency management—no surprises there—and a GitHub Actions workflow (.github/workflows/publish.yml) for CI/CD. The images/ folder is just marketing fluff (banners, screenshots, etc.), and there’s a lone JavaScript file, js/save-as-script.js, which likely integrates with ComfyUI’s UI.</p><p>You get Python code that imports reusable components (KSamplerAdvanced, VAEDecode, etc.) from the original ComfyUI repo and replicates your workflow logic. No reinventing the wheel here—just clean, modular code that mirrors what you designed visually.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re prototyping an AI-powered image generator in ComfyUI. You’ve got a killer workflow built, but now you&#39;re tasked with deploying it as part of a larger Python app. Instead of manually rewriting everything, you use this extension to generate the Python equivalent of your workflow:</p><p>Boom—your workflow is now a Python script with all the nodes, parameters, and connections intact. You can tweak the generated code to fit your app’s needs, add logging, or scale it for production.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This extension is a lifesaver if you’re knee-deep in ComfyUI and need to get workflows into Python without losing your sanity. The code generation is solid, but don’t expect miracles—you’ll still need to understand how the generated code works if you plan to customize it. If you’re building a quick prototype or integrating ComfyUI workflows into a larger system, this is absolutely worth using. For tiny projects? Maybe overkill.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>ComfyUI lets users compose image‑generation pipelines visually, but moving those pipelines into a reproducible Python script requires manual copying of node names, wiring, and parameter values. The effort is error‑prone and slows down automation, testing, and deployment.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>ComfyUI-to-Python-Extension</code> reads a ComfyUI workflow JSON file and emits a ready‑to‑run Python script that reproduces the same node graph. The core logic lives in <strong><code>comfyui_to_python.py</code></strong> (workflow parsing, load‑order determination, code generation) and <strong><code>comfyui_to_python_utils.py</code></strong> (helper utilities such as <code>import_custom_nodes</code>, <code>find_path</code>, and sys‑path adjustments). The public API is exposed through <code>__init__.py</code> via the <code>save_as_script</code> function, which ultimately calls the <code>ComfyUItoPython</code> class defined in <code>comfyui_to_python.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong><code>execute</code></strong> function in <code>comfyui_to_python.py</code> (line 547). Its call chain is:</p>
+<ol><li><strong><code>execute</code></strong> → reads the workflow JSON with <code>read_json_file</code>.</li><li>Determines node load order via <code>determine_load_order</code>, which uses <code>_dfs</code> and <code>_load_special_functions_first</code>.</li><li>Generates Python source with <code>generate_workflow</code>, which calls: <em> <code>clean_variable_name</code> (used twice), </em> <code>create_function_call_code</code> (twice), * <code>get_class_info</code>, <code>get_function_parameters</code>, <code>update_inputs</code>, <code>assemble_python_code</code>.</li><li>Writes the produced script to disk through <code>write_code_to_file</code>, which creates the target directory with <code>os.makedirs</code>.</li></ol>
+<p>Only <strong><code>write_code_to_file</code></strong> reaches outside the repository (filesystem write). No network or database calls are present.</p>
+<p>The internal call graph contains 26 intra‑repo edges. The most connected modules are:</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th class="num">Ca (imported by)</th><th class="num">Ce (imports)</th><th class="num">Instability</th></tr></thead><tbody><tr><td><code>comfyui_to_python</code></td><td class="num">1</td><td class="num">1</td><td class="num">0.5</td></tr><tr><td><code>comfyui_to_python_utils</code></td><td class="num">1</td><td class="num">0</td><td class="num">0</td></tr><tr><td><code>__init__</code></td><td class="num">0</td><td class="num">1</td><td class="num">1</td></tr><tr><td><code>install</code></td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr><tr><td><code>js/save-as-script</code></td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr></tbody></table></div>
+<p><code>comfyui_to_python</code> is the hub; changes there affect many downstream helpers. No circular dependencies were detected, simplifying refactoring.</p>
+<p>File responsibilities (ranked by routing count):</p>
+<ul><li><strong><code>comfyui_to_python.py</code></strong> – orchestrates the whole conversion, handles I/O, and defines the bulk of the public API.</li><li><strong><code>comfyui_to_python_utils.py</code></strong> – supplies import handling, path tweaks, and generic helpers.</li><li><strong><code>__init__.py</code></strong> – thin wrapper exposing <code>save_as_script</code>.</li><li><strong><code>install.py</code></strong> – auxiliary installer script (writes files without a context manager).</li><li><strong><code>js/save-as-script.js</code></strong> – UI helper for the browser extension (outside the Python flow).</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL from the spec)
+git clone https://github.com/moses-y/ComfyUI-to-Python-Extension
+cd ComfyUI-to-Python-Extension
+
+# Install dependencies (pyproject.toml defines the package)
+python -m pip install -e .
+
+# Optional: run the helper installer (if you need extra model paths)
+python install.py</code></pre>
+<p>The primary API is the <code>execute</code> function:</p>
+<pre data-lang="python"><code>from comfyui_to_python import execute
+
+# Convert a ComfyUI workflow JSON to a Python script
+execute(
+    workflow_path="path/to/workflow.json",
+    output_dir="generated_code"
+)</code></pre>
+<p>The generated script can be run directly (<code>python generated_code/script.py</code>). No environment variables or external configuration files are required by the core library.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline that validates a set of ComfyUI experiments can call <code>execute</code> for each JSON definition, commit the resulting Python scripts, and then run them in parallel on a GPU cluster. The conversion is deterministic, so the same JSON always yields identical Python code, enabling reproducible benchmarking.</p>
+<pre data-lang="yaml"><code>- name: Convert workflows
+  run: |
+    python -c "from comfyui_to_python import execute; \
+               execute('tests/exp1.json', 'out/exp1')"</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/publish.yml</code> uses <code>Comfy-Org/publish-node-action@v1</code>. Replace <code>@v1</code> with a fixed 40‑character SHA to avoid supply‑chain drift.</li><li><strong>High – Missing lockfile</strong> – <code>pyproject.toml</code> declares dependencies without a lockfile. Generate and commit <code>poetry.lock</code> (or <code>requirements.txt</code> from <code>pip freeze</code>) to guarantee reproducible builds.</li><li><strong>Medium – Enable Dependabot/Renovate</strong> – No automated version‑bump config; add <code>.github/dependabot.yml</code> for Python and GitHub‑Actions.</li><li><strong>Medium – No vulnerability scan in CI</strong> – The workflow lacks a dependency‑review or OSV scanner; add one to block PRs that introduce known‑vulnerable packages.</li><li><strong>Low – No job timeout</strong> – <code>publish.yml</code> omits <code>timeout-minutes</code>; set a reasonable bound (e.g., <code>timeout-minutes: 30</code>) to prevent runaway builds.</li></ul>
+<p>Additional observations:</p>
+<ul><li>No test suite present; all code paths are untested.</li><li>CI exists (GitHub Actions) but does not cover security or dependency checks.</li><li>License file is included, but the repository lacks a lockfile and any documented secret handling.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The extension reliably converts ComfyUI JSON workflows into executable Python scripts, with a clear single‑entry point (<code>execute</code>) and modest code size. However, the lack of tests, an unlocked dependency manifest, and missing security hardening in CI make it risky for production use without remediation. It is best suited for internal tooling or experimentation where rapid prototyping outweighs the need for hardened supply‑chain guarantees.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 20, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Project N.O.M.A.D. addresses the challenge of maintaining access to critical information, educational content, and AI tools when internet connectivity is unavailable or unreliable. It packages Wikipedia, medical references, educational courses, maps, and a local AI assistant into a single self-contained server that runs on Debian-based hardware.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>N.O.M.A.D. is a management layer (&quot;Command Center&quot;) that orchestrates containerized tools via Docker. The admin/ directory contains an AdonisJS backend (TypeScript) with controllers for services like ollamacontroller.ts (AI chat), zimcontroller.ts (offline content), and downloadscontroller.ts (resource management). The frontend is React with Inertia.js, including chat components under admin/inertia/components/chat/ and a file uploader for RAG document ingestion.</p><p>The system manages service lifecycle through dockerservice.ts, handles content curation via collectionmanifestservice.ts, and provides a benchmark suite with community leaderboard submission. Background jobs in admin/app/jobs/ handle model downloads, file embedding, and service updates. The UI includes an easy setup wizard for guided first-time configuration.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install on Debian-based systems (Ubuntu recommended) with root privileges:
-sudo apt-get update &amp;&amp; sudo apt-get install -y curl &amp;&amp; curl -fsSL https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/installnomad.sh -o installnomad.sh &amp;&amp; sudo bash installnomad.sh</p><p>Configuration: Environment variables live in admin/.env.example (database, queue, session settings). The system auto-orchestrates Docker containers for each service—no manual container configuration needed.</p><p>Running it: After install, open http://localhost:8080 (or http://DEVICEIP:8080). The server entry point is admin/bin/server.ts. The UI guides you through content selection and service setup via the easy setup wizard.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A field hospital in a region with intermittent connectivity deploys N.O.M.A.D. on a GPU-backed server. Staff access offline Wikipedia for medical references, download regional ProtoMaps for navigation, and use the Ollama-powered chat with uploaded PDFs for local semantic search—all without internet. The benchmark tool validates hardware capability before deployment.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Migration sprawl: 24 migrations in admin/database/migrations/, several with near-identical timestamps and names (createcreatechatsessionstable.ts), suggesting schema evolution was rapid and may lack consolidation.
-Low - Duplicate naming: Controllers and services like zimservice.ts and zimextractionservice.ts overlap in responsibility—unclear separation of concerns.
-Low - Test coverage: Only 2 test files for a 200-file repo. Core services (Docker orchestration, RAG, downloads) appear untested.
-Med - Security surface: The system orchestrates arbitrary Docker containers and handles file uploads for RAG. The security-audit-v1.md doc exists but the attack surface for a network-exposed device is significant.
-Low - Dependency pinning: The migration 1771000000002pinlatestservice_images.ts suggests container images were previously unpinned—supply chain risk if not consistently maintained.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Project N.O.M.A.D. is a well-architected offline knowledge platform with genuine utility for disaster response, remote education, and field operations. The Docker orchestration and curated content model are solid. It requires serious hardware (GPU recommended) and has thin test coverage, so it suits organizations with infrastructure support rather than casual users. The active upstream fork (35k+ stars) indicates community validation, but verify security practices before network exposure.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users need a portable, offline‑first server that bundles education, reference, and AI tools without relying on continuous internet access. Maintaining such a heterogeneous stack (Docker images, AI models, map data, etc.) is error‑prone and hard to orchestrate on a single device.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>project‑nomad</code> ships a self‑contained web UI and API that orchestrates the required containers, downloads content packs, and exposes an <strong>Ollama</strong>‑based chat with RAG via <strong>Qdrant</strong>. The core server lives in <code>admin/bin/server.ts</code> and is configured through <code>admin/.env.example</code>. UI components under <code>admin/inertia/**</code> (React + Tailwind) render the “Command Center”, while service classes in <code>admin/app/services/</code> implement the heavy lifting (Docker orchestration, model download, benchmark, etc.).</p>
+<p>Key files:</p>
+<ul><li><code>admin/app/services/ollama_service.ts</code> – wraps Ollama client, downloads models, invokes inference.</li><li><code>admin/app/services/docker_service.ts</code> – creates, starts, and monitors the auxiliary containers (Kiwix, Kolibri, Qdrant, etc.).</li><li><code>admin/app/controllers/*_controller.ts</code> – HTTP entry points that call the services.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>admin/bin/server.ts</code></strong> which boots the AdonisJS server and registers the Inertia app (<code>admin/inertia/app/app.tsx</code>). The request flow for a typical AI chat is:</p>
+<ol><li><strong>HTTP request</strong> → <code>admin/app/controllers/chats_controller.ts</code> → <code>admin/app/services/chat_service.ts</code>.</li><li><code>chat_service</code> calls <code>admin/app/services/ollama_service.ts</code> → <code>dispatchModelDownload</code> (if model missing) → network call via <code>this.ollama.list</code> (outbound) → <strong>model inference</strong> (counts as one of the 6 functions that call a model).</li><li>The response bubbles back through the controller to the client UI component <code>admin/inertia/components/chat/index.tsx</code>.</li></ol>
+<p>The most fan‑in module is <code>admin/inertia/lib/api.ts</code> (62 functions, called from six files). Functions with the widest blast radius include <code>catchInternal</code> (called from 59 places) and <code>status</code> (28 places).</p>
+<p>Two circular imports exist between <code>admin/app/models/chat_message.ts</code> and <code>admin/app/models/chat_session.ts</code>; breaking this cycle would reduce build‑time coupling.</p>
+<p>Deeply nested UI components (e.g., <code>TierSelectionModal.tsx</code>) reach an indentation depth of 10, making future UI tweaks harder to reason about.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/project-nomad.git
+cd project-nomad
+
+# Build the production container
+docker build -t project-nomad:latest -f Dockerfile .
+
+# Create a .env from the example and edit as needed
+cp admin/.env.example .env   # edit .env for any required keys (e.g., DB path)
+
+# Run the container (exposes port 8080)
+docker run -p 8080:8080 --env-file .env project-nomad:latest</code></pre>
+<p>The server starts on <code>http://localhost:8080</code>. All UI interactions go through the Inertia React frontend; API calls are handled by the AdonisJS controllers under <code>admin/app/controllers/</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A field clinic installs the container on a modest Ubuntu workstation, runs the Docker image, and uses the web UI to:</p>
+<ul><li>Pull the latest offline Wikipedia ZIM file (<code>admin/app/services/zim_service.ts</code>).</li><li>Start the Kolibri container for educational content.</li><li>Chat with the local Ollama model to retrieve medical guidance, with the request flowing through <code>ollama_service</code> → Ollama API → response rendered in <code>ChatMessageBubble.tsx</code>.</li></ul>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin third‑party GitHub Actions</strong> – <code>.github/workflows/*</code> uses <code>@vN</code> tags; replace with commit SHA.</li><li><strong>High – Push to default branch</strong> – <code>.github/workflows/release.yml</code> pushes directly to <code>main</code>; switch to PR workflow.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – no permissions block in <code>release.yml</code>.</li><li><strong>Medium – Pin Docker base image</strong> – <code>Dockerfile</code> uses <code>node:22-slim</code>; pin by digest.</li><li><strong>Medium – No dependency‑vulnerability scan</strong> – add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Run container as non‑root</strong> – add an unprivileged USER in <code>Dockerfile</code>.</li><li><strong>Medium – Test coverage is minimal</strong> – only 1 test file for ~233 source files.</li><li><strong>Low – Missing job timeouts</strong> – add <code>timeout-minutes</code> in <code>build-disk-collector.yml</code>.</li><li><strong>Low – No repository convention files</strong> – add <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config.</li></ul>
+<p>No critical findings were reported by the static analysis.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>project‑nomad</code> delivers a functional offline server stack with clear separation of UI, API, and service layers, but the codebase suffers from duplicated logic, oversized service files, and a few architectural smells (import cycles, deep nesting). It is suitable for teams willing to invest in refactoring and adding test coverage to stabilize the platform for production deployments.</p>
             </div>
 
             

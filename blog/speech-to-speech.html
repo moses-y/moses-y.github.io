@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building local voice agents can be a pain in the neck, especially when you&#39;re juggling multiple models for voice activity detection (VAD), speech-to-text (STT), language processing, and text-to-speech (TTS). You’re stuck either integrating a bunch of libraries with varying quality or relying on some half-baked cloud service that eats into your budget and time.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter the speech-to-speech repo. It gives you an open-source pipeline that covers the full deal: VAD, STT, language modeling, and TTS, all wrapped in a neat package. The core structure is split into directories: VAD for voice detection, STT for transcribing audio, LLM for language modeling, and TTS for generating speech.</p><p>You’ll find files like STT/whisperstthandler.py to handle Whisper model integration and TTS/chatTTShandler.py for generating speech responses. The s2spipeline.py file ties everything together, allowing you to run the complete pipeline in a few lines of code. It’s modular enough that you can swap models in and out without losing your mind.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you want to set up a local assistant that converts speech to text, processes it, and reads it back in a different voice. You can clone the repo, set up your environment with a couple of uv commands, and run something like this:</p><p>With minimal fuss, you get a responsive voice agent that works offline. If you’re on Mac and using Melo TTS, just remember to download the necessary files and handle any compatibility issues.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is solid if you&#39;re diving into voice agents without wanting to wrestle with a dozen different libraries. It&#39;s not for tiny projects—if you need a simple TTS, you&#39;re better off with a standalone solution. But for those needing a full-featured local agent, this is a good start. Just make sure your system can handle the requirements—especially if you&#39;re on Apple Silicon.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying a local voice‑assistant that runs end‑to‑end speech‑to‑speech (VAD → STT → LLM → TTS) typically requires stitching together several heavyweight libraries, handling device‑specific builds, and writing glue code that is hard to reuse. Teams that want an on‑prem solution must also manage Docker images, model downloads, and a fragile command‑line interface.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The <strong>speech‑to‑speech</strong> repository provides a ready‑made, modular pipeline that ties open‑source models together:</p>
+<ul><li><strong>VAD</strong> – <code>VAD/vad_handler.py</code> and <code>VAD/vad_iterator.py</code> wrap Silero VAD.</li><li><strong>STT</strong> – nine handlers under <code>STT/</code> (e.g., <code>parakeet_tdt_handler.py</code>, <code>whisper_stt_handler.py</code>) expose <code>setup</code>, <code>warmup</code>, and <code>process</code> methods for a variety of Whisper‑based back‑ends.</li><li><strong>LLM</strong> – <code>LLM/language_model.py</code> (and its concrete subclasses) implement <code>setup</code>, <code>warmup</code>, and <code>process</code> for Hugging‑Face transformers, mlx‑lm, or OpenAI API.</li><li><strong>TTS</strong> – ten handlers under <code>TTS/</code> (e.g., <code>kokoro_handler.py</code>, <code>facebookmms_handler.py</code>) follow the same three‑method pattern.</li></ul>
+<p>Argument definitions live in <code>arguments_classes/</code> so each handler can be launched from the CLI or embedded in another service without code changes. The top‑level script <code>baseHandler.py</code> wires the four stages together and offers a <code>run</code> entry point that can be called programmatically.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <strong><code>benchmark_stt.py:main</code></strong> (line 330) for the STT benchmark and at <strong><code>baseHandler.py:run</code></strong> for the full pipeline.</p>
+<ul><li><code>main</code> → <code>setup</code> (calls <code>warmup</code> × 15) → <code>process</code> → model inference via <code>self.client.chat.completions.create</code>.</li><li><code>run</code> → <code>s2s_pipeline.setup_logger</code> → <code>s2s_pipeline.parse_arguments</code> → <code>s2s_pipeline.rename_args</code> → <code>s2s_pipeline.check_mac_settings</code>.</li></ul>
+<p>The central hub is <strong><code>baseHandler.py</code></strong>, which is imported by 19 other modules (highest fan‑in). It creates the VAD, STT, LLM, and TTS handler objects and sequences their <code>setup</code>/<code>warmup</code>/<code>process</code> calls.</p>
+<p>Key downstream modules:</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th>Functions / Classes</th><th>Calls Into</th><th class="num">Fan‑in</th></tr></thead><tbody><tr><td><code>s2s_pipeline.py</code></td><td><code>rename_args</code>, <code>parse_arguments</code>, <code>setup_logger</code>, <code>optimal_mac_settings</code>, <code>check_mac_settings</code></td><td>24 other functions</td><td class="num">1</td></tr><tr><td><code>LLM/language_model.py</code></td><td><code>parse_tool_calls</code>, <code>setup</code>, <code>warmup</code>, <code>process</code>, <code>LanguageModelHandler</code></td><td>13 functions, 1 external model call</td><td class="num">2</td></tr><tr><td><code>STT/parakeet_tdt_handler.py</code></td><td><code>setup</code>, <code>_setup_mlx</code>, <code>_setup_nano_parakeet</code>, <code>warmup</code>, <code>process</code></td><td>5 functions</td><td class="num">4</td></tr><tr><td><code>TTS/facebookmms_handler.py</code></td><td><code>setup</code>, <code>load_model</code>, <code>warmup</code>, <code>generate_audio</code>, <code>process</code></td><td>0 internal calls</td><td class="num">5</td></tr><tr><td><code>benchmark_stt.py</code></td><td><code>__init__</code>, <code>add_inference</code>, <code>add_error</code>, <code>get_stats</code>, <code>load_audio</code></td><td>12 functions</td><td class="num">0</td></tr></tbody></table></div>
+<p>The import graph shows <strong>56 modules</strong> with <strong>85 import edges</strong> and <strong>no circular dependencies</strong>, indicating a clean top‑level structure. However, the deepest nesting (6 levels) appears in <code>baseHandler.py</code>, <code>STT/parakeet_tdt_handler.py</code>, and <code>connections/websocket_streamer.py</code>, making those sections harder to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork that contains the local modifications
+git clone https://github.com/moses-y/speech-to-speech.git
+cd speech-to-speech
+
+# Build the Docker image (includes PyTorch, CUDA, and all handlers)
+docker build -t s2s:latest -f Dockerfile .
+
+# Run the full pipeline inside the container
+docker run --gpus all -v $(pwd)/models:/models -e HF_HOME=/models \
+    s2s:latest python baseHandler.py --config arguments_classes/module_arguments.py</code></pre>
+<p><em>The repository supplies a <code>requirements.txt</code> for local Python execution; install with <code>pip install -r requirements.txt</code> if you prefer a non‑Docker run.</em></p>
+<p>Configuration arguments are defined in the <code>arguments_classes/</code> files (e.g., <code>language_model_arguments.py</code>). No secret keys are hard‑coded; OpenAI API usage requires setting <code>OPENAI_API_KEY</code> in the environment before invoking the LLM handler.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A company building an on‑prem customer‑service kiosk can launch the container, mount a local model cache, and call <code>baseHandler.run()</code> from a Flask endpoint. The endpoint streams microphone input to <code>VAD/vad_handler.py</code>, feeds transcriptions to <code>STT/parakeet_tdt_handler.py</code>, sends the text to <code>LLM/openai_api_language_model.py</code>, and finally streams the generated audio from <code>TTS/kokoro_handler.py</code> back to the client.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – No CI pipeline. 56 source files lack any GitHub Actions or other automated build/test configuration.</li><li><strong>HIGH</strong> – No Docker build gate. The <code>Dockerfile</code> is never validated by an automated workflow.</li><li><strong>MEDIUM</strong> – Dependabot/Renovate missing. <code>requirements.txt</code> is not locked, leaving builds non‑reproducible.</li><li><strong>MEDIUM</strong> – Base image not pinned by digest (<code>pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel</code>).</li><li><strong>MEDIUM</strong> – Test coverage is minimal (1 test file vs. 56 source files).</li></ul>
+<p>Additional observations from the static analysis:</p>
+<ul><li>Deep nesting (up to 6 levels) in three files makes future modifications risky.</li><li><code>baseHandler.py</code> is a high‑impact hub; any change may affect 19 dependent modules.</li><li>Repeated 6‑line code blocks appear across 14 files in the LLM and STT packages – a DRY refactor would reduce maintenance load.</li><li>Broad <code>except:</code> clauses in <code>VAD/vad_iterator.py</code>, <code>connections/local_audio_streamer.py</code>, and <code>connections/websocket_streamer.py</code> swallow errors, hindering debugging.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a functional, Docker‑ready speech‑to‑speech stack with clear separation of VAD, STT, LLM, and TTS concerns, making it a solid starting point for on‑prem voice agents. Production readiness is limited by missing CI/CD, sparse testing, and some code‑quality hotspots; addressing those will be essential before extensive customization or enterprise deployment.</p>
             </div>
 
             
@@ -91,9 +124,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -102,7 +135,7 @@
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>56</b></li><li><span>Markdown</span><i style="width:7%"></i><b>4</b></li><li><span>YAML</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Docker</span><span>PyTorch</span></p>
                     </div>
                 </div>
 
@@ -161,6 +194,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1179188329">Open in Code Brain &rarr;</a>

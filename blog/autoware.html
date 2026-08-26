@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 14, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building autonomous vehicle software is a nightmare if you don’t have a solid stack to work with. You’re juggling localization, object detection, route planning, and control all at once. Good luck with that if you’re starting from scratch.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter Autoware, the open-source solution designed to tackle those challenges head-on. It’s built on the Robot Operating System (ROS), which means you&#39;re not reinventing the wheel. Key components are organized in the ansible/ directory, where you’ll find playbooks like docker.yaml for setting up your Docker environment without losing your mind.</p><p>The CI/CD setup in .github/workflows is a real gem. Files like docker-build-and-push.yaml automate the build process, ensuring your images are always up-to-date. Need to check your code coverage? health-check.yaml has you covered. Just keep an eye on that one test file—it&#39;s a little lonely in the tests/ directory.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re tasked with deploying a self-driving vehicle prototype. You clone the repo, fire up Docker with the provided Dockerfile, and run ansible-playbook playbooks/docker.yaml to set up your environment. Once that&#39;s done, you tweak configurations in galaxy.yml to fit your specific hardware needs and hit the ground running.</p><p>If you find bugs, the structured issue templates in .github/ISSUE_TEMPLATE/ let you report them without needing a PhD in communication. Just fill out the relevant template, and you’re golden.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Autoware is a solid option for anyone serious about autonomous driving. The reliance on Docker and Ansible means you can get your environment up and running without a ton of friction. However, if you’re just dabbling or working on a small-scale project, the overhead might feel like overkill. Go for it if you want a structured, community-supported solution; otherwise, consider lighter alternatives.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>The repository contains duplicated 6‑line shell blocks in <code>docker/build.sh</code> and <code>docker/run.sh</code> that violate the DRY principle and create a maintenance burden. Separately, several third‑party GitHub Actions are referenced only by version tag (e.g., <code>@v1</code>), meaning the actions running with repository secrets can change without notice – a known vector for credential leaks.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Autoware is an open‑source ROS‑based stack for autonomous vehicles. The clone at <code>https://github.com/moses-y/autoware</code> provides:</p>
+<ul><li><strong>Docker infrastructure</strong> – <code>docker/Dockerfile</code>, <code>docker/Dockerfile.base</code>, <code>docker/docker-compose.yaml</code>, <code>docker/docker-compose.gpu.yaml</code> and helper scripts <code>docker/build.sh</code> / <code>docker/run.sh</code> that spin up CPU or GPU builds.</li><li><strong>Ansible provisioning</strong> – 141 files under <code>ansible/</code> (roles, playbooks, galaxy requirements) that install system packages, CUDA toolkits, ROS 2 components, and configure the runtime environment.</li><li><strong>CI/CD</strong> – 41 <code>.github/workflow</code> files orchestrating builds, tests, linting, and releases via GitHub Actions.</li><li><strong>Tooling &amp; dev containers</strong> – <code>.devcontainer/*</code> definitions for VS Code remote development, including CUDA‑enabled dev containers.</li></ul>
+<p>Key entry points for a new contributor are the shell scripts <code>docker/build.sh</code> and <code>docker/run.sh</code> (the actual build and start commands) and the top‑level <code>docker-compose.yaml</code> for orchestrating multi‑service stacks.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The static analysis measured <strong>0 internal modules and 0 import edges</strong> across the 15 Shell files examined, indicating the repo is primarily orchestration‑driven rather than a tightly‑coupled code base. Execution flow:</p>
+<ol><li><strong>Build</strong> – Running <code>docker/build.sh</code> pulls base images, installs ROS 2, and tags the image.</li><li><strong>Run</strong> – <code>docker/run.sh</code> starts the container, mounts necessary volumes, and launches the Autoware node graph.</li><li><strong>Compose</strong> – <code>docker/docker-compose.yaml</code> (or <code>docker-compose.gpu.yaml</code>) wires together the built image, a ROS 2 master, and optional simulation tools.</li><li><strong>Ansible</strong> – Playbooks under <code>ansible/playbooks/</code> (e.g., <code>docker.yaml</code>, <code>universe.yaml</code>) provision host packages and configure container runtimes; roles such as <code>acados</code>, <code>ros2</code>, and <code>cuda</code> install language‑specific dependencies.</li></ol>
+<p>The CI pipelines in <code>.github/workflows/</code> invoke these scripts, push images, and run validation steps.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/autoware   # &lt;-- clone URL as provided
+cd autoware
+# optional: select environment file matching your OS release
+source amd64.env     # or amd64_jazzy.env for Ubuntu Jazzy</code></pre>
+<p><strong>Configuration</strong></p>
+<ul><li>Environment variables are defined in <code>amd64.env</code> / <code>amd64_jazzy.env</code> (e.g., <code>ROS_DISTRO</code>, <code>CUDA_VERSION</code>).</li><li>Docker compose files read these vars; no additional secret files are committed (the analysis found no committed secrets).</li></ul>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># CPU‑only build and start
+./docker/build.sh
+./docker/run.sh
+
+# GPU‑accelerated stack
+docker compose -f docker/docker-compose.gpu.yaml up -d</code></pre>
+<p><strong>CI integration</strong> – Pushes are gated by the workflow <code>docker-build-and-push.yaml</code>; see the health‑checks section below for required fixes.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer wanting to prototype a perception pipeline can clone the repo, run <code>./docker/build.sh</code> to produce a container image, then <code>./docker/run.sh</code> to launch Autoware with ROS 2 nodes for object detection and planning already wired. The GPU compose file adds CUDA‑enabled runtimes for faster inference, and the Ansible roles ensure host packages (e.g., <code>nvidia-container-toolkit</code>) are present without manual apt‑get steps.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – Duplicated code</strong>: 2 repeated 6‑line blocks appear in <code>docker/build.sh</code> and <code>docker/run.sh</code>. Extract a shared helper function to avoid future divergence.</li><li><strong>HIGH – Pin third‑party GitHub Actions</strong>: <code>.github/workflows/</code> references <code>autowarefoundation/autoware-github-actions/set-git-config@v1</code>, <code>step-security/changed-files@v46</code>, <code>autowarefoundation/autoware-github-actions/generate-changelog@v1</code>, and <code>docker/login-action@v3</code>. Replace each <code>@vN</code> with the 40‑character commit SHA (keep the <code># vN</code> comment) and let Dependabot bump the SHAs.</li><li><strong>MEDIUM – Declare least‑privilege GITHUB_TOKEN</strong>: Three workflows (<code>docker-build-and-push.yaml</code> among others) have no <code>permissions</code> block, so the token inherits repository defaults that can push commits or mint releases. Add <code>permissions: contents: read</code> at the workflow level and widen per‑job as needed.</li><li><strong>LOW – Set timeout‑minutes</strong>: The same workflow lacks <code>timeout-minutes</code> on jobs; a stuck step could run six hours, causing overlapping runs on the two‑hourly schedule. Add a realistic <code>timeout-minutes</code> (e.g., <code>150</code>) to each job.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo is a well‑structured, ROS‑centric stack with solid Docker and Ansible tooling, but it suffers from duplicated shell logic and outdated Action version pins that expose secrets to potential drift. Teams comfortable with ROS 2 and containerised builds can adopt it immediately, provided they apply the security fixes and DRY the build/run scripts. It is best suited for organisations already invested in the Autoware ecosystem or those needing a modular, ansible‑driven CI pipeline for autonomous‑driving stacks.</p>
             </div>
 
             

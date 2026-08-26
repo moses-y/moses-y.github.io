@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 20, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,27 +80,57 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#from-source">From source</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Engineers and researchers often need to generate parametric 3D geometry programmatically, but existing script‑based CAD tools either lack a full Python ecosystem or are tied to heavyweight GUI frameworks. The gap is a lightweight, pure‑Python API that can be driven from CI pipelines, notebooks, or server‑side processes without a graphical front‑end.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>cadquery provides a Pythonic wrapper around the Open‑CASCADE Technology (OCCT) kernel. Core functionality lives in cadquery/cq.py (the Workplane class) and cadquery/assembly.py (assembly handling). Export/import helpers are under cadquery/occimpl/exporters/ and cadquery/occimpl/importers/. The examples/ folder contains 30+ ready‑to‑run scripts that demonstrate solids, sweeps, lofts, and assembly creation. Documentation is extensive (doc/ with reST sources) and compiled on ReadTheDocs.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>The project uses classic setuptools; install from source or PyPI:</p><h3 class="post-h" id="from-source">From source</h3><p>python -m pip install -e .
-Or from PyPI (recommended)
-python -m pip install cadquery</p><p>The azure-pipelines.yml and appveyor.yml files show the CI build steps; they invoke python -m pip install . followed by pytest. No Dockerfile or Makefile is provided, so container builds must be scripted by the consumer.</p><h3 class="post-h" id="configuration">Configuration</h3><p>No runtime configuration files are required. The optional Conda recipe lives in conda/meta.yaml for users preferring Conda environments. If the OCCT binary wheels are unavailable for the target platform, the conda/web-installer/ scripts (build.py, construct.yaml.jinja2) can be used to generate a custom installer.</p><h3 class="post-h" id="running-it">Running it</h3><p>Typical usage is via the Workplane API:</p><p>from cadquery import Workplane</p><p>result = (
-    Workplane(&quot;XY&quot;)
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Engineers need a scriptable, fully‑Python CAD kernel that can be embedded in CI pipelines, Jupyter notebooks, or back‑end services. Existing solutions either require a heavy GUI stack or expose only a limited subset of OCCT features, making automated parametric modeling cumbersome.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository provides a pure‑Python API that wraps the Open CASCADE Technology (OCCT) kernel. Core geometry lives in <code>cadquery/occ_impl/*.py</code> (e.g., <code>shapes.py</code>, <code>geom.py</code>, <code>assembly.py</code>). High‑level helpers such as <code>cadquery/cq.py</code>, <code>cadquery/assembly.py</code>, and the selector library <code>cadquery/selectors.py</code> let users build and query models with a fluent “Workplane” style (<code>Workplane</code>, <code>Vector</code>, <code>box</code>, <code>extrude</code>, etc.).</p>
+<p>Documentation (<code>doc/</code>), a full test suite (<code>tests/</code>), and numerous Jupyter‑ready examples (<code>examples/</code>) illustrate usage from simple blocks to complex assemblies.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the CLI entry point <code>cadquery/cq_directive.py:run</code> (line 218). That function parses command‑line arguments and ultimately invokes the public API (e.g., <code>Workplane</code>, <code>Assembly</code>).</p>
+<ul><li>The most‑used symbols—<code>Workplane</code>, <code>Vector</code>, <code>box</code>, <code>faces</code>, <code>val</code>, <code>size</code>, <code>extrude</code>—are defined across <code>cadquery/cq.py</code>, <code>cadquery/occ_impl/shapes.py</code>, and <code>cadquery/occ_impl/geom.py</code>. They are called from <strong>277</strong>, <strong>218</strong>, <strong>173</strong> distinct places respectively, giving them the widest blast radius.</li></ul>
+<ul><li><code>cadquery/occ_impl/shapes.py</code> alone defines 351 functions and 13 classes, is imported by 40 other files, and calls into eight lower‑level modules. It therefore acts as a hub; any change ripples broadly.</li></ul>
+<ul><li><code>cadquery/assembly.py</code> and <code>cadquery/occ_impl/assembly.py</code> together manage hierarchical assemblies, exposing methods such as <code>add</code>, <code>remove</code>, and <code>solve</code>. They are called from 27 files and perform the only observed external effect: a filesystem write via <code>os.makedirs</code> in the <code>main → run_constructor</code> path (see <em>What Each File Is Responsible For</em>).</li></ul>
+<ul><li>The import graph contains 22 circular dependencies, notably among <code>cadquery/__init__.py</code>, <code>cadquery/occ_impl/shapes.py</code>, and <code>cadquery/occ_impl/geom.py</code>. These cycles increase cognitive load and risk accidental breakage when refactoring.</li></ul>
+<ul><li>The internal call graph shows dense coupling: <code>test_constraint_solver → constrain</code> (45 calls) and <code>testSweep → Workplane</code> (28 calls), confirming that the test suite exercises the core API heavily.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork
+git clone https://github.com/moses-y/cadquery
+cd cadquery
+
+# Install in editable mode (requires a working OCCT wrapper, e.g., the OCP package)
+pip install -e .</code></pre>
+<p><em>No additional configuration files are required; the package reads no environment variables.</em></p>
+<p>Run a script or notebook that imports the top‑level package:</p>
+<pre data-lang="python"><code>import cadquery as cq
+
+result = (
+    cq.Workplane("XY")
     .box(10, 20, 5)
-    .faces(&quot;&gt;Z&quot;)
-    .hole(3)
+    .faces("&gt;Z")
+    .hole(2)
 )
-result.exportStl(&quot;output.stl&quot;)</p><p>The entry point for scripts is cadquery/cq.py; importing cadquery automatically exposes the Workplane class. Jupyter integration is supported through cadquery/cqgi.py and the cadquery/occimpl/jupytertools.py module, as demonstrated in examples/CQexamples.ipynb.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A manufacturing pipeline can generate a family of parts from a single parameter file:</p><p>import json
-from cadquery import Workplane</p><p>with open(&quot;params.json&quot;) as f:
-    p = json.load(f)</p><p>part = (
-    Workplane(&quot;XY&quot;)
-    .box(p[&quot;width&quot;], p[&quot;depth&quot;], p[&quot;height&quot;])
-    .faces(&quot;&gt;Z&quot;)
-    .hole(p[&quot;holediameter&quot;])
-)</p><p>part.exportStep(f&quot;{p[&#39;name&#39;]}.step&quot;)</p><p>The script can be invoked in a CI job to produce updated STEP files whenever the JSON changes.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Test coverage – 26 test modules (tests/) cover core modules, but cadquery/vis.py and cadquery/occimpl/sketchsolver.py have no direct unit tests.  
-Medium – Platform dependence – OCCT binaries are large and platform‑specific; the repo does not ship wheels for all OSes, requiring users to build or use Conda.  
-Low – Documentation gaps – API reference (doc/apireference.rst) is present, yet some newer functions (e.g., cadquery.utils) lack explicit examples.  
-Low – CI artifacts – Azure Pipelines and AppVeyor are configured, but badge URLs in README.md point to the old AppVeyor build; the pipeline may be stale.  
-Low – License – LICENSE file exists (BSD‑3‑Clause), so legal exposure is minimal.</p><p>Overall, the repository shows a mature structure: setup.cfg, setup.py, CI pipelines, a full test suite, and generated documentation. No secret files or hard‑coded credentials are present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>cadquery delivers a well‑engineered, Python‑first parametric CAD API backed by a proven OCCT kernel. It is ready for integration into automated design workflows, especially where headless operation and scriptability are required. Users should verify OCCT binary availability for their target platform and supplement missing tests for any custom extensions. Suitable for engineering teams needing reproducible geometry generation without a GUI.</p>
+result.exportStep("example.step")</code></pre>
+<p>The <code>cq_directive.py</code> script can be invoked directly for command‑line modelling:</p>
+<pre data-lang="bash"><code>python -m cadquery.cq_directive --script examples/Ex001_Simple_Block.py --export step</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A manufacturing pipeline can generate a custom bracket per order:</p>
+<pre data-lang="python"><code>def make_bracket(width, height, thickness):
+    return (
+        cq.Workplane("XY")
+        .box(width, height, thickness)
+        .faces("&gt;Z")
+        .hole(5)
+    )
+
+bracket = make_bracket(120, 80, 10)
+bracket.exportStl("bracket.stl")</code></pre>
+<p>The generated STL can be fed to downstream slicers without manual CAD interaction.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – soundness</strong> – 22 import cycles (e.g., <code>cadquery/__init__.py</code> ↔ <code>occ_impl/shapes.py</code>).</li><li><strong>High – cognitive_load</strong> – oversized files (<code>shapes.py</code>, <code>geom.py</code>, <code>selectors.py</code> ≈ 5 k lines).</li><li><strong>High – cognitive_load</strong> – deep nesting (max depth 6) in the same large modules.</li><li><strong>High – clarity</strong> – hub module <code>cadquery/__init__.py</code> imported by 53 other modules.</li><li><strong>Medium – resource_safety</strong> – <code>open(...)</code> without context manager in <code>tests/__init__.py</code>, <code>occ_impl/exporters/svg.py</code>, <code>setup.py</code>.</li><li><strong>Medium – resilience</strong> – broad <code>except:</code> blocks in <code>occ_impl/importers/dxf.py</code>, <code>cq_directive.py</code>, <code>cqgi.py</code>.</li><li><strong>High – clarity</strong> – duplicated 6‑line code blocks across &gt;20 files.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional issues were observed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The fork delivers a functional, well‑documented Python wrapper around OCCT, suitable for automated parametric modelling and integration into CI or Jupyter workflows. However, the core modules are large, tightly coupled, and contain import cycles, which will increase maintenance effort for any substantial modification. Teams comfortable with deep refactoring or willing to isolate stable API surfaces will benefit most.</p>
             </div>
 
             

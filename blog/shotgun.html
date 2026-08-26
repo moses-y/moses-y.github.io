@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 13, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#shotgun-ai-agents-that-actually-follow-specs">Shotgun: AI Agents That Actually Follow Specs</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="shotgun-ai-agents-that-actually-follow-specs">Shotgun: AI Agents That Actually Follow Specs</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>AI coding agents are great at cranking out code, but they’re also loose cannons. Ask them for a feature, and you’ll get a Frankenstein PR with broken specs, redundant code, and files nobody asked for. Reviewing a 10k-line PR? Good luck. Most agents treat your codebase like a sandbox, not something with rules and structure.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Shotgun fixes the chaos. It reads your entire codebase, understands the structure, and plans features upfront like a real engineer. Then it splits the work into bite-sized, codebase-aware PRs with detailed instructions for AI agents like Codex, Claude Code, or Cursor.</p><p>The src/shotgun/agents directory is where the magic happens. For example, agents/autopilot/stagemonitor.py orchestrates staged tasks while agents/config/manager.py handles codebase config parsing. Shotgun doesn’t blindly guess—it builds a dependency graph (agents/autopilot/dependencygraph.py) and uses structured prompts (agents/autopilot/prompts) to keep the AI on track.</p><p>Testing isn’t just an afterthought either. The evals/ folder has files like routerevaluators.py and clarifyingquestionscases.py, which simulate scenarios to ensure agents understand what the hell they’re doing.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you need to refactor a messy utils.py. Normally, you’d ask an AI agent, and it might rewrite half your project in the process. With Shotgun, it scans your codebase, understands dependencies, and breaks the refactor into stages. First, it’ll document the changes (docs/CONTRIBUTING.md), then handle file-by-file updates (agents/tools/codebase/directorylister.py), and finally write tests in tests/. Instead of one bloated PR, you get a manageable flow of incremental changes.</p><p>Here’s a typical workflow:</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Shotgun is a niche tool with specific use cases. If you’re juggling complex features or working with AI agents on a production codebase, it’s a lifesaver. But for small projects or one-off scripts, it’s probably overkill. The staged PRs are great for collaboration, but the setup can feel heavy. Use it if you’re tired of AI agents derailing your codebase. Otherwise, stick to manual reviews or simpler tools.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI coding agents often lose context when asked to implement multi‑file features, producing large, unfocused pull requests that require extensive manual cleanup. Shotgun attempts to keep the agent on‑track by ingesting the whole repository, planning a staged rollout, and emitting precise, file‑by‑file instructions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The core logic lives under <code>src/shotgun/</code>. The CLI entry point <code>src/shotgun/main.py</code> parses commands and hands off to the <code>run</code> routine in <code>src/shotgun/cli/run.py</code>, which orchestrates the <strong>autopilot</strong> pipeline (<code>src/shotgun/agents/autopilot/*</code>). Specs are modelled in <code>src/shotgun/agents/config/models.py</code> and turned into concrete actions by the <strong>router</strong> (<code>src/shotgun/agents/router/router.py</code>).</p>
+<p>File‑system and code‑base interactions are encapsulated in <code>src/shotgun/codebase/core/manager.py</code> and the various <strong>tool</strong> modules (e.g., <code>src/shotgun/agents/tools/codebase/*</code>). Test suites in <code>test/</code> validate each component, while the <code>evals/</code> package provides deterministic evaluation of generated PRs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/shotgun/main.py:109</code> (<code>main</code>). It creates a <code>ConfigManager</code> (called 108 times) and then invokes <code>run</code> (<code>src/shotgun/cli/run.py:28</code>), which reaches 351 functions. The most‑used internal symbols are:</p>
+<ul><li><code>exists</code> – referenced from 128 locations.</li><li><code>ConfigManager</code> – 108 callers.</li><li><code>track_event</code> – 52 callers.</li></ul>
+<p><code>run</code> eventually calls <code>ParallelExecutor</code> (42 callers) to launch stages. Each stage is rendered by <code>src/shotgun/tui/app.py</code> (the TUI entry point) and ultimately triggers filesystem writes via <code>write_report</code> (e.g., <code>main → write_report → Path.parent.mkdir</code>).</p>
+<p>The <strong>codebase manager</strong> (<code>src/shotgun/codebase/core/manager.py</code>) performs the heaviest external work: it reads/writes files, talks to the Neo4j database, and runs cryptographic helpers (46 functions, 3 classes, called from 21 files). The <strong>router</strong> (<code>src/shotgun/agents/router/router.py</code>) is a hub: 24 modules import it, making it a high‑blast‑radius component.</p>
+<p>Import cycles are present in 13 modules, notably <code>evals/models.py</code>, <code>src/shotgun/tui/app.py</code>, and <code>src/shotgun/agents/config/models.py</code>. These cycles increase cognitive load and risk of subtle breakage when refactoring. Deep nesting (max depth 8) appears in <code>src/shotgun/tui/app.py</code> and several agent modules, further complicating maintenance.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/shotgun
+cd shotgun
+
+# Install Python dependencies (requires Python 3.11+)
+uv sync   # uv reads pyproject.toml; alternatively: pip install -r &lt;(uv pip compile)
+
+# Optional: build the Docker image (uses Dockerfile)
+docker build -t shotgun:latest .
+
+# Run the CLI (the primary entry point)
+python -m shotgun.main --help</code></pre>
+<p>Configuration defaults are provided in <code>.env.example</code>; copy it to <code>.env</code> and adjust any required keys (e.g., API tokens for LLM providers). The TUI can be launched with <code>python -m shotgun.tui.app</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A development team using Cursor can invoke Shotgun to generate a feature spec. Shotgun reads the repo, produces a staged plan, and writes a series of PR branches (<code>git checkout -b feature-stage‑1</code>, …). Each PR contains only the files the AI is instructed to modify, dramatically reducing review overhead and preventing accidental deletions.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Remove <code>continue-on-error</code> from correctness‑gate steps (<code>.github/workflows/installation-tests.yml</code>).</li><li><strong>HIGH</strong> – Stop baking secrets into the Docker image (<code>Dockerfile</code> ARG <code>SHOTGUN_POSTHOG_API_KEY</code>).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/installation-tests.yml</code>).</li><li><strong>MEDIUM</strong> – Pin the base image by digest (<code>Dockerfile</code> <code>python:3.13-slim</code>).</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan to CI (<code>.github/workflows</code>).</li><li><strong>MEDIUM</strong> – Supply a timeout for outbound <code>requests</code> calls (identified in Dockerfile).</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout steps (<code>.github/workflows/deploy.yml</code>).</li><li><strong>LOW</strong> – Define <code>timeout-minutes</code> on workflow jobs (<code>.github/workflows/deploy.yml</code>).</li></ul>
+<p>Additional static findings include 13 import cycles, deep nesting in several modules, duplicated code blocks across the <code>evals/</code> package, and a few files that open resources without context managers.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Shotgun provides a concrete, spec‑driven workflow that can tame AI‑generated code changes, and its modular design (CLI, autopilot, router, codebase manager) is well‑instrumented with tests. However, the codebase suffers from import cycles, deep nesting, and several high‑severity CI/security issues that should be addressed before production use. Teams comfortable with Python and containerized deployments will find the tool usable after the listed hygiene fixes.</p>
             </div>
 
             

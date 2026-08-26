@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 14, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#neutts-on-device-tts-that-doesn-t-suck">NeuTTS: On-Device TTS That Doesn’t Suck</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="neutts-on-device-tts-that-doesn-t-suck">NeuTTS: On-Device TTS That Doesn’t Suck</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Text-to-speech (TTS) is everywhere—voice assistants, audiobooks, accessibility tools—but most solutions require hitting some cloud API. That’s great until you care about latency, privacy, or running offline. And good luck deploying those massive server-grade models on a Raspberry Pi. You either get terrible audio quality on smaller models or pay for a giant, overkill cloud solution that eats your wallet.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>neutts gives you a library of open-source TTS models optimized for on-device use. These models are small enough to run locally on phones, laptops, or even embedded devices like Raspberry Pis, but they still produce natural, human-like voices.</p><p>The repo is cleanly structured. The examples/ folder is where you’ll want to start—there’s a working basicexample.py script for simple TTS and interactiveexample.ipynb if you’re into notebooks. Need speaker cloning? Check out examples/encodereference.py. The main meat of the library is in neutts/, with neutts.py handling the heavy lifting and phonemizers.py managing the text-to-phoneme conversion.</p><p>For deployment, the models are already quantized into GGUF format (Q8 and Q4 variants). These are great for squeezing out performance on smaller hardware. If you&#39;re into CI/CD (or just want to see how they handle releases), there’s a publish.yaml workflow in .github/workflows/.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Want to clone your voice in three seconds and make your Raspberry Pi whisper sweet nothings to you? Grab a sample audio file, load the examples/encodereference.py script, and point it to a samples/*.pt file. Then, fire up basicexample.py and feed it some text.</p><p>Boom. You’ve got a .wav file that sounds eerily human.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you need lightweight, offline TTS with voice cloning, neutts is the real deal. It’s well-documented, easy to play with, and the audio quality is shockingly good for the model size. That said, the repo is sparse on tests (tests/testneutts.py is doing all the work here), and if you’re not already comfortable with Python, the setup might be a bit intimidating.</p><p>For hackers, indie devs, and anyone building on-device voice applications, this is a no-brainer. For massive enterprise projects, go pay for cloud APIs—this isn’t for you.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying high‑quality text‑to‑speech on constrained hardware usually requires a large cloud API or a custom‑built inference stack. Teams that need on‑device voice synthesis must stitch together model loading, phonemisation, and streaming logic themselves, which is error‑prone and hard to benchmark.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository supplies a ready‑to‑run PyTorch implementation of NeuTTS, a family of compact LLM‑backed TTS models. Core code lives in <code>neutts/neutts.py</code> (model class, loading helpers) and <code>neutts/phonemizers.py</code> (text‑to‑phoneme utilities). Example scripts in <code>examples/</code> demonstrate three usage patterns:</p>
+<ul><li><code>basic_example.py</code> – single‑utterance inference and audio write‑out.</li><li><code>basic_streaming_example.py</code> – chunked streaming inference with a background audio player.</li><li><code>onnx_example.py</code> – inference via an exported ONNX model.</li></ul>
+<p>All examples import the <code>NeuTTS</code> class from <code>neutts/neutts.py</code>, which internally calls <code>_load_phonemizer</code>, <code>_load_backbone</code>, and <code>_load_codec</code> before exposing <code>infer</code> and <code>infer_stream</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <code>main</code> function in <code>examples/basic_example.py</code> (line 7). The flow is:</p>
+<ol><li><code>main</code> → <code>NeuTTS</code> constructor (<code>neutts/neutts.py</code>).</li><li>Constructor loads three resources via:   <em> <code>_load_phonemizer</code> (calls <code>phonemizers.__init__</code> → <code>phonemize</code>) </em> <code>_load_backbone</code> (loads the LLM checkpoint) * <code>_load_codec</code> (initialises the NeuCodec).</li><li><code>main</code> calls <code>infer</code> on the instance, which routes to <code>_apply_chat_template</code> → <code>_to_phones</code> → <code>_decode</code>.</li><li><code>_decode</code> uses <code>_linear_overlap_add</code> to stitch audio frames and returns a NumPy array that <code>main</code> writes to <code>output.wav</code>.</li></ol>
+<p>The streaming path (<code>examples/basic_streaming_example.py</code>) follows the same start‑up sequence, then calls <code>infer_stream</code>. This invokes <code>_infer_stream_ggml</code>, which again reaches <code>_to_phones</code> and <code>_decode</code>, but processes audio in overlapping chunks and passes raw PCM to <code>audio_player_thread</code>. The only external effect is a file open (<code>open(...)</code>) in <code>basic_streaming_example.py</code> that is not wrapped in a context manager.</p>
+<p>The internal call graph contains 37 intra‑repo edges. The hub functions with the widest blast radius are <code>NeuTTS</code> (instantiated in four places) and <code>infer</code> (called from three places). No circular imports are present, simplifying refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/neutts
+cd neutts
+
+# Install dependencies (pyproject.toml declares them)
+pip install .   # editable install works as well: pip install -e .
+
+# Run the single‑utterance demo
+python examples/basic_example.py
+# Output audio: output.wav</code></pre>
+<p>For streaming:</p>
+<pre data-lang="bash"><code>python examples/basic_streaming_example.py path/to/audio.wav</code></pre>
+<p>If you prefer ONNX inference, first export the model (not provided in the repo) and then run:</p>
+<pre data-lang="bash"><code>python examples/onnx_example.py</code></pre>
+<p>No environment variables or additional configuration files are required beyond the model checkpoints placed in <code>samples/</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A robotics platform can embed <code>NeuTTS</code> by importing <code>neutts.neutts.NeuTTS</code>, loading a quantised checkpoint from <code>samples/</code>, and calling <code>infer_stream</code> on live command text. The streaming example shows how to pipe PCM directly to an audio output thread, enabling low‑latency voice feedback without network dependency.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – lockfile missing</strong> – <code>pyproject.toml</code> declares dependencies but no lockfile. Reproducible builds require committing a lockfile (e.g., <code>uv lock</code> or <code>pip freeze &gt; requirements.txt</code>).</li><li><strong>Medium – overly permissive GITHUB_TOKEN</strong> – <code>.github/workflows/publish.yaml</code> omits explicit <code>permissions</code>. Add <code>permissions: { contents: read }</code> at the workflow top.</li><li><strong>Medium – no automated dependency updates</strong> – No Dependabot or Renovate config. Add <code>.github/dependabot.yml</code> to keep libraries patched.</li><li><strong>Medium – no CI dependency‑vulnerability scan</strong> – Workflows lack a step such as <code>dependency-review-action</code>. Insert it on <code>pull_request</code> events.</li><li><strong>Low – missing job timeout</strong> – <code>publish.yaml</code> does not set <code>timeout-minutes</code>. Define a reasonable bound (e.g., <code>timeout-minutes: 30</code>) for each job.</li></ul>
+<p>Additional observations: the test suite (<code>tests/test_neutts.py</code>) exercises model loading and inference but only covers two scenarios; expanding coverage would improve confidence. Documentation is limited to a README and a <code>TRAINING.md</code>; a developer guide for extending the phonemizer or codec would aid contributors.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>NeuTTS provides a functional, on‑device TTS stack with clear entry points and modest code size, making it suitable for embedded applications that can afford a PyTorch runtime. However, the repository lacks reproducible dependency locking and several CI hardening measures, which must be addressed before adopting it in production environments. Engineers comfortable with PyTorch and willing to add the missing safety scaffolding will find this a solid foundation for on‑device voice AI.</p>
             </div>
 
             

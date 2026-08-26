@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running coding agents in isolation is a nightmare. Every agent (Claude, Codex, OpenCode, etc.) has its own API, quirks, and weird limitations. Want to swap one out? Get ready to rewrite half your integration. And don’t even think about running these things in production without isolation—you’ll end up with a rogue AI setting your servers on fire. Oh, and good luck persisting session data when the sandbox crashes or gets terminated.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>sandbox-agent is here to save your weekends. It’s a lightweight Rust-based server (or embeddable SDK) that runs directly inside any sandbox—Docker, Vercel, E2B, Daytona, whatever. It exposes a universal HTTP and SSE API to control multiple coding agents (Claude Code, Codex, Amp, OpenCode, etc.), so you write your integration once and never think about agent APIs again.</p><p>The repo is massive but well-organized. The examples/ folder has 94 files (yes, really), so you’ll find ready-to-go setups for Python, TypeScript, and more. The docs/ directory is stacked with 46 .mdx files covering everything from session persistence (docs/session-persistence.mdx) to OpenCode compatibility (docs/opencode-compatibility.mdx). And for those who love over-engineering, there’s even a built-in UI (examples/cloudflare/frontend/App.tsx) for inspecting and debugging sessions.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re running Claude Code in a Docker sandbox. You drop the sandbox-agent binary into your container and spin it up with a single command. Your app talks to the agent over HTTP, streaming events in a normalized schema. Need to swap Claude for Codex? Change a config and call it a day—no rewrites.</p><p>Here’s a quick example from the Python SDK (examples/boxlite-python/main.py):</p><p>Persist session events to Postgres, audit them later, or replay them for debugging. Your CI/CD pipeline can even use the sandbox-agent to run tests in isolated environments (see examples/boxlite-python/setup_image.py).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Sandbox-Agent is a power tool for people building apps around coding agents. It’s overkill for small projects—but if you’re juggling multiple agents or deploying to sandboxes, it’s pure gold. The repo is intimidating, but the docs are solid, and the examples are surprisingly useful. Just don’t expect it to hold your hand—it’s built for devs who know what they’re doing.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a single, sandbox‑safe way to drive multiple coding‑agent back‑ends (Claude Code, Codex, OpenCode, Cursor, Amp, Pi). Existing SDKs are agent‑specific, assume local execution, and expose divergent APIs, forcing repetitive integration work and risking security when agents run on production hosts.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Sandbox Agent</code> provides a lightweight Rust daemon (<code>sandbox-agent server</code>) that runs <strong>inside any sandbox</strong> (Docker, E2B, Daytona, Vercel) and exposes a <strong>universal HTTP + SSE API</strong>. A TypeScript SDK (<code>sdks/typescript/src/client.ts</code>) talks to that API, offering a single client surface for all supported agents. The repo ships a full UI inspector, a CLI wrapper, and several runnable examples (e.g., <code>examples/e2b/src/index.ts</code>, <code>examples/boxlite/src/index.ts</code>) that demonstrate embedded‑mode and server‑mode usage.</p>
+<p>Key files:</p>
+<ul><li><strong>Server daemon</strong> – <code>factory/packages/backend/src/index.ts</code> (entry point <code>main</code>) builds the HTTP router and wires the actor system.</li><li><strong>Actor core</strong> – <code>factory/packages/backend/src/actors/context.ts</code> (hub module, 14 dependents) holds request‑scoped state used by most backend actions.</li><li><strong>Handoff logic</strong> – <code>factory/packages/backend/src/actors/handoff/index.ts</code> (25 functions, 13 types) creates, persists, and streams session handoffs.</li><li><strong>TypeScript client</strong> – <code>sdks/typescript/src/client.ts</code> (196 functions, 32 callers) implements the universal API, performs network I/O, and marshals the universal session schema.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>factory/packages/backend/src/index.ts:121</code></strong> (<code>main</code>). <code>main</code> constructs the server, registers routes, and calls into the <strong>backend actor</strong> layer. The most traversed call chain is:</p>
+<pre><code>main → getActorRuntimeContext (32 callers) → getClient (26 callers) → fetch (30 callers) → requestJson (23 callers) → updateVersion (filesystem read)</code></pre>
+<ul><li><code>getActorRuntimeContext</code> lives in <code>factory/packages/backend/src/actors/context.ts</code> and is the primary hub; any change there ripples to 14 modules.</li><li>Session creation flows through <code>factory/packages/backend/src/actors/handoff/index.ts</code> (<code>buildInitialHandoffs</code> → <code>minutesAgo</code> → <code>transcriptFromLegacyMessages</code>).</li><li>The <strong>SDK</strong> calls <code>sdks/typescript/src/client.ts:getClient</code>, which performs an outbound HTTP request (<code>fetch</code>) and returns typed responses; this function is invoked by 26 internal callers, including the examples and the UI inspector.</li></ul>
+<p>The call graph shows <strong>12 circular import groups</strong>, the most visible being between <code>factory/packages/client/src/backend-client.ts</code>, <code>scripts/release/main.ts</code>, and <code>factory/packages/client/src/workbench-client.ts</code>. These cycles increase cognitive load and risk breakage when refactoring.</p>
+<p>Database writes occur in <code>factory/packages/backend/src/actors/handoff/index.ts</code> (e.g., <code>upsertHandoffLookupRow</code>) and <code>factory/packages/backend/src/actors/workspace/actions.ts</code> (<code>workspaceWorkflowQueueName</code>). External commands are spawned in <code>factory/packages/backend/src/actors/sandbox-instance/index.ts</code> (e.g., launching the Rust sandbox binary). Cryptographic material (<code>crypto.randomBytes</code>) is used in <code>factory/packages/backend/src/actors/handoff-status-sync/index.ts:start</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/sandbox-agent
+cd sandbox-agent
+
+# Build the Rust daemon (requires Rust toolchain)
+cargo build --release               # produces target/release/sandbox-agent
+
+# Run the server inside a sandbox (example Docker)
+docker build -f docker/runtime/Dockerfile -t sandbox-agent .
+docker run -p 8080:8080 sandbox-agent</code></pre>
+<p><strong>TypeScript SDK</strong> (example client):</p>
+<pre data-lang="bash"><code>pnpm install                      # installs sdks/typescript deps
+node -e "import { SandboxAgentClient } from './sdks/typescript/src/client';
+const c = new SandboxAgentClient({ baseUrl: 'http://localhost:8080' });
+c.createSession({ agent: 'claude-code' }).then(console.log);"</code></pre>
+<p><strong>Example embedded mode</strong> – see <code>examples/e2b/src/index.ts</code> which imports <code>sdks/typescript/src/client.ts</code> and calls <code>run()</code> to start a sandbox, then drives an agent via the universal API.</p>
+<p>Configuration is driven by environment variables read in <code>factory/packages/backend/src/integrations/git/index.ts</code> (e.g., <code>GITHUB_TOKEN</code>) and by the OpenAPI spec under <code>docs/api-reference.mdx</code>. No additional config files are required to start the server.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform can spin up an isolated Docker sandbox per user, launch <code>sandbox-agent server</code> inside it, and use the TypeScript client from its backend to orchestrate code‑generation sessions. All events are streamed via SSE, stored in Postgres (via <code>factory/packages/backend/src/actors/handoff/index.ts</code>), and later replayed in the built‑in inspector UI (<code>frontend/packages/inspector/src/App.tsx</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>.github/workflows/claude.yml</code> exposes <code>CLAUDE_CODE_OAUTH_TOKEN</code> to fork‑triggered jobs.</li><li><strong>High</strong> – GitHub Actions are pinned to tags only (<code>dtolnay/rust-toolchain@stable</code>, etc.).</li><li><strong>Medium</strong> – No least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>ci.yaml</code>).</li><li><strong>Medium</strong> – Dependabot not configured; 43 manifests lack automated updates.</li><li><strong>Medium</strong> – Base images in <code>docker/runtime/Dockerfile</code> use mutable tags (<code>node:22-alpine</code>).</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>Medium</strong> – Large binaries (<code>sdks/gigacode/.../gigacode.exe</code>) stored directly in repo.</li><li><strong>Medium</strong> – Checkout step retains credentials (<code>persist-credentials</code> missing).</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li><li><strong>Low</strong> – Repository lacks <code>.editorconfig</code>, <code>.gitattributes</code>, and formatter config.</li></ul>
+<p>Additional observations from the static analysis: 27 files are oversized (&gt; 800 LOC), 28 files exhibit deep nesting (indentation &gt; 8), and 12 modules participate in import cycles, all of which increase maintenance cost.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Sandbox Agent</code> delivers a pragmatic, language‑agnostic bridge to multiple coding agents, with a clear separation between sandboxed Rust daemon and a typed TypeScript client. The codebase is functional but shows typical technical‑debt signals—large files, deep nesting, and import cycles—that will require refactoring for long‑term stability. It is suitable for teams that need immediate multi‑agent support and are prepared to address the highlighted security and maintainability concerns.</p>
             </div>
 
             
@@ -91,16 +127,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">785<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JSON</span><i style="width:100%"></i><b>41</b></li><li><span>TypeScript</span><i style="width:73%"></i><b>30</b></li><li><span>Markdown</span><i style="width:51%"></i><b>21</b></li><li><span>Docker</span><i style="width:22%"></i><b>9</b></li><li><span>YAML</span><i style="width:20%"></i><b>8</b></li><li><span>Python</span><i style="width:17%"></i><b>7</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>244</b></li><li><span>JSON</span><i style="width:58%"></i><b>141</b></li><li><span>Markdown</span><i style="width:39%"></i><b>96</b></li><li><span>TSX</span><i style="width:22%"></i><b>53</b></li><li><span>Rust</span><i style="width:19%"></i><b>46</b></li><li><span>SQL</span><i style="width:7%"></i><b>18</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Docker</span></p>
                     </div>

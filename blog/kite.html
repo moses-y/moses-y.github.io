@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 10, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Go</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>kite</h1>
@@ -80,8 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing Kubernetes clusters is a pain. Between juggling kubectl, handling RBAC, staring at YAML files like they&#39;re ancient scrolls, and trying to get useful insights from Prometheus, the whole experience feels like a high-stakes game of whack-a-mole. And if you’re dealing with multiple clusters, well, good luck keeping your sanity. Most dashboards out there are either bloated, half-baked, or just don’t cover everything you need.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>kite is a Kubernetes dashboard that tries to fix this mess. It&#39;s not just another UI slapped onto kubectl; it’s a full platform that combines multi-cluster management, resource editing, security (OAuth/RBAC), and even AI-powered tools in one workspace.</p><p>The backend is written in Go (main.go is the entry point), and the frontend uses React (ui/src/App.tsx). The project has a well-organized file structure—pkg/ is where the real magic happens, with subdirectories for AI (pkg/ai/), cluster management (pkg/cluster/), and RBAC (pkg/rbac/). Helm charts live in charts/, and the deployment files are in deploy/. Even the docs are solid, with 69 Markdown files sitting pretty in the docs/ folder, covering everything from installation to Prometheus setup.</p><p>Features like live YAML editing (thanks to the Monaco editor), a kube proxy for direct pod/service access (pkg/kube/proxy.go), and global search make managing resources less soul-crushing. The AI assistant is tucked into pkg/ai/, offering tools like OpenAI integration to help you debug or automate tasks. And yes, you can deploy this thing via Docker or Helm—both setups are detailed in the README.md.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re managing three clusters for staging, production, and dev environments. With kite, you can switch between them easily (multi-cluster management is baked into pkg/cluster/), set fine-grained RBAC policies (pkg/rbac/manager.go), and monitor real-time metrics via Prometheus (pkg/prometheus/client.go).</p><p>Need to debug a flaky pod? Use the built-in web terminal (pkg/handlers/terminal_handler.go) or live logs viewer (pkg/kube/log.go). Want to scale a deployment quickly? Update the resource YAML directly in the dashboard, validate it on the fly, and apply changes without leaving the UI.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>kite is polished and powerful, but it’s not for everyone. If you’re running a single cluster for a side project, this is overkill—stick to kubectl and move on. But for dev teams handling multiple clusters or enterprises with serious governance needs, this dashboard is a lifesaver. It’s easy to deploy, well-documented, and actually useful, which is more than I can say for half of the Kubernetes tools out there.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Operators need a single UI that can view, edit, and act on resources across many Kubernetes clusters while enforcing enterprise‑grade access controls. Existing dashboards either lack multi‑cluster support or require separate tools for RBAC, audit logs, and AI‑assisted troubleshooting, forcing teams to stitch together ad‑hoc scripts.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>kite</code> delivers a full‑stack platform: a Go‑based API server (<code>main.go</code>) and a React/TypeScript front‑end (<code>ui/src</code>). The back‑end implements OAuth, RBAC, audit logging and proxies to the Kubernetes API (see <code>pkg/auth/handler.go</code>, <code>pkg/rbac/*.go</code>, <code>pkg/kube/client.go</code>). The UI talks to the API via the generated client in <code>ui/src/lib/api.ts</code> and renders resource tables, live charts, logs and an AI chat assistant (<code>pkg/ai/handler.go</code>). Helm charts (<code>charts/kite/*.yaml</code>) and Dockerfiles (<code>Dockerfile</code>, <code>Dockerfile.binary</code>) enable containerised deployment.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Process start</strong> – <code>main.go:223</code> runs <code>main</code>, which initializes the DB (<code>InitDB</code> in <code>pkg/model/model.go</code>), creates the Kubernetes client (<code>NewClient</code> in <code>pkg/kube/client.go</code>), registers HTTP routes (<code>setupAPIRouter</code> in <code>pkg/auth/handler.go</code>) and starts the HTTP server.</li><li><strong>Routing</strong> – <code>setupAPIRouter</code> registers handlers such as <code>NewAuthHandler</code>, <code>NewGenericResourceHandler</code>, and AI endpoints (<code>HandleChat</code>, <code>HandleExecute</code>). Each route is a hub; e.g., <code>RegisterRoutes -&gt; NewGenericResourceHandler</code> occurs 27 times, giving <code>generic_resource_handler.go</code> the highest fan‑in (23 callers).</li><li><strong>Core request flow</strong> – A typical resource list request follows:   <code>HTTP → RegisterRoutes → NewGenericResourceHandler.List → Query (pkg/prometheus/client.go) → DB Exec → JSON response</code>. The <code>Query</code> function is called from 12 places, making it a high‑impact node.</li><li><strong>AI interaction</strong> – <code>HandleChat</code> (entry point) creates an <code>Agent</code> (<code>pkg/ai/agent.go</code>), which builds a runtime prompt (<code>buildRuntimePromptContext</code>) and calls the model client (<code>NewAnthropicClient</code> or <code>NewOpenAIClient</code>). The model call is the only outbound network call from the AI path.</li><li><strong>External effects</strong> –   <em> DB writes: <code>InitDB</code>, <code>Callback → Query</code>, <code>Create</code> (resource creation). </em> Network calls: Kubernetes client (<code>client.Get</code>), model APIs, Prometheus queries. * Filesystem: log streaming (<code>pkg/kube/log.go</code>), reading/writing config files.</li><li><strong>Hotspots</strong> –   <em> <code>ui/src/pages/resource-list</code> imports 20 other modules but is only imported once, indicating high </em>instability* (0.95). <em> UI components <code>button</code> and <code>card</code> are pure leaf nodes (Ca = 10, Ce = 0). </em> The most connected back‑end module is <code>pkg/handlers/resources/cr_handler.go</code> (9 functions, called from 23 files).</li></ol>
+<p>No circular import cycles were detected, so static dependencies are acyclic, simplifying refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/kite
+cd kite
+
+# Build the server (requires Go 1.25+)
+make build          # produces ./kite (binary)
+
+# Build the UI (pnpm required)
+cd ui
+pnpm install
+pnpm run build      # outputs dist/ for the static assets
+
+# Run locally with Docker (recommended)
+docker build -t kite:local .
+docker run -d -p 8080:8080 -v $(pwd)/data:/data \
+  -e DB_DSN=/data/db.sqlite kite:local</code></pre>
+<p>Configuration lives in environment variables (<code>DB_DSN</code>, OAuth client IDs, Prometheus URLs) as documented in <code>docs/config/*.md</code>. The Helm chart (<code>charts/kite/values.yaml</code>) provides a production‑ready manifest; install with:</p>
+<pre data-lang="bash"><code>helm repo add kite https://kite-org.github.io/kite/
+helm install kite kite/kite -n kube-system -f myvalues.yaml</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform runs <code>kite</code> as a side‑car in each customer’s management cluster. The back‑end authenticates users via the provider configured in <code>docs/config/oauth-setup.md</code>, enforces per‑tenant RBAC (<code>pkg/rbac/manager.go</code>), and exposes an AI chat that can query Prometheus metrics and suggest scaling actions, all from a single UI.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Privileged pull‑request checkout in <code>.github/workflows/build-preview-docker-image.yml</code>.</li><li><strong>Critical</strong> – Secrets used in a fork‑triggered workflow <code>.github/workflows/deploy-test-env.yml</code>.</li><li><strong>High</strong> – GitHub Actions not pinned to commit SHAs (<code>docker/setup-qemu-action@v3</code>, etc.).</li><li><strong>High</strong> – Release workflow pushes directly to default branch (<code>.github/workflows/release.yaml</code>).</li><li><strong>Medium</strong> – Base images referenced by mutable tags in <code>Dockerfile</code>.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan step in CI.</li><li><strong>Medium</strong> – Checkout step retains token; should set <code>persist-credentials: false</code>.</li><li><strong>Medium</strong> – Container runs as root; no non‑root <code>USER</code> defined.</li><li><strong>Medium</strong> – Test coverage low (9 test files vs 269 source files).</li><li><strong>Low</strong> – Workflow jobs lack explicit <code>timeout-minutes</code>.</li></ul>
+<p>Additional static findings: deep nesting (max depth 8) in several UI components, duplicated logic across AI helper files, and oversized files (<code>ui/src/lib/api.ts</code>, <code>pkg/ai/tools.go</code>). These are reported by the analysis and include suggested fixes.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>kite</code> is a well‑structured, full‑stack Kubernetes dashboard with solid modular separation between UI, API, and cluster interaction. It offers the needed multi‑cluster, RBAC, and AI features, but the repository contains serious CI/CD security gaps and limited test coverage that must be addressed before production deployment. Suitable for teams comfortable with Go and React who can invest in hardening the CI pipeline.</p>
             </div>
 
             
@@ -91,18 +124,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">404<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>79</b></li><li><span>Markdown</span><i style="width:56%"></i><b>44</b></li><li><span>YAML</span><i style="width:28%"></i><b>22</b></li><li><span>Shell</span><i style="width:6%"></i><b>5</b></li><li><span>JSON</span><i style="width:4%"></i><b>3</b></li><li><span>HTML</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>164</b></li><li><span>Go</span><i style="width:48%"></i><b>79</b></li><li><span>Markdown</span><i style="width:27%"></i><b>44</b></li><li><span>TypeScript</span><i style="width:15%"></i><b>24</b></li><li><span>YAML</span><i style="width:13%"></i><b>22</b></li><li><span>CSS</span><i style="width:5%"></i><b>9</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span><span>Kubernetes</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>Kubernetes</span></p>
                     </div>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Downloading files from archive.org is a chore. Sure, torrents exist, but they don’t always include everything in the archive. And manually grabbing files? That’s a time sink, especially for large archives with scattered files. If you’ve ever tried to snag an entire collection of retro magazines or software from archive.org without losing your sanity, you know exactly what I’m talking about.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>ia-get simplifies the process by automating the entire download pipeline. Point it at an archive.org details page, and it’ll handle the rest: pulling down metadata, downloading all files, preserving directory structures, and even resuming partial downloads. The main logic lives in src/main.rs, which calls supporting modules like src/downloader.rs (handles downloads) and src/archive_metadata.rs (processes metadata). The Cargo.toml file manages dependencies, and GitHub Actions (.github/workflows/) provides CI/CD support for building and releasing across platforms.</p><p>The tool checks file integrity with hashes and can be run multiple times to sync updates without duplicating files. It’s barebones but functional, with a clear focus: get files, no fluff. The included justfile also makes local builds and tests trivial if you’re hacking on the code.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re archiving the classic ZZap!64 magazines for preservation or nostalgia. Instead of clicking through endless links, run:</p><p>This grabs every file (scans, metadata, maybe even a torrent file), verifies them, and dumps them into your current directory. Want to seed the torrent later? No problem—the files are already in the correct structure. Bonus: if the download fails halfway through, just rerun the command to pick up where you left off.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>ia-get is a niche tool, but it nails its purpose: pain-free archive.org downloads. It’s solid for personal use or preservation projects, though it might feel overkill for casual, one-off downloads. The codebase is clean, modular, and a decent intro to Rust for anyone curious. If you’re dealing with archive.org often, this could save you hours—just don’t expect polished UX or a lot of hand-holding.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Downloading every file listed in an Internet Archive (archive.org) details page is tedious. The page only exposes an XML index; users must manually parse it, create directories, resume interrupted downloads, and verify hashes.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>ia-get</code> is a small Rust CLI that accepts a details‑page URL, fetches the associated XML, and downloads every listed object while preserving the archive’s directory layout. Core logic lives in <code>src/main.rs</code> (argument parsing, URL validation, <code>fetch_xml_metadata</code>) and <code>src/downloader.rs</code> (file‑system preparation, hash checking, progress UI). Helper utilities such as <code>create_progress_bar</code> and <code>sanitize_filename</code> are in <code>src/utils.rs</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <strong>src/main.rs</strong> (line 130). It validates the input URL (<code>is_url_accessible</code>), resolves the XML URL (<code>get_xml_url</code>), and calls <code>fetch_xml_metadata</code>. <code>fetch_xml_metadata</code> (line 74) parses the XML via <code>parse_xml_files</code> in <strong>src/archive_metadata.rs</strong>, producing a list of <code>XmlFile</code> structs. The list is handed to <code>download_files</code> in <strong>src/downloader.rs</strong>.</p>
+<p><code>download_files</code> orchestrates the download pipeline:</p>
+<ol><li><code>setup_signal_handler</code> – prepares graceful shutdown.</li><li>For each <code>XmlFile</code>: <em> <code>ensure_parent_directories</code> creates required paths. </em> <code>check_existing_file</code> runs <code>calculate_md5</code> (which creates a progress bar) to decide whether to skip or resume. <em> <code>download_file_content</code> streams the remote bytes, uses <code>create_progress_bar</code> and <code>format_transfer_rate</code> for UI, and writes to disk. </em> <code>verify_downloaded_file</code> recomputes the MD5 and compares it to the metadata.</li></ol>
+<p>The most used symbols are <code>sanitize_filename</code> (called from 18 places) and <code>create_progress_bar</code> (2 places). No circular imports are present; the internal call graph contains 37 edges, all resolvable. The only measured cognitive‑load hot spot is deep nesting in <strong>src/downloader.rs</strong> (max indentation depth 6).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/ia-get
+cd ia-get
+
+# Build the binary
+cargo build --release
+
+# Run the tool (replace &lt;identifier&gt; with a real archive.org ID)
+./target/release/ia-get https://archive.org/details/&lt;identifier&gt;</code></pre>
+<p>No external configuration files or environment variables are required; the program derives all needed URLs from the command‑line argument.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A backup service for a digital‑preservation team can schedule a nightly cron job that runs <code>ia-get</code> against a curated list of archive IDs, storing the results in a version‑controlled data lake. Example script fragment:</p>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+ids=("deftributetozzap64" "zzapp_64_issue_001_600dpi")
+for id in "${ids[@]}"; do
+    ia-get "https://archive.org/details/${id}"
+done</code></pre>
+<p>The tool’s resume capability avoids re‑downloading large files after network hiccups.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – GitHub Actions are pinned to tags (<code>dtolnay/rust-toolchain@stable</code>, etc.). Tags can move, exposing the CI to supply‑chain risk.</li><li><strong>Medium</strong> – GITHUB_TOKEN permissions are not declared; the workflow inherits full repository rights.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan is run in CI.</li><li><strong>Medium</strong> – Checkout step retains the token (<code>persist-credentials</code> defaults to true), allowing malicious post‑install scripts to push commits.</li><li><strong>Medium</strong> – Deep nesting in <code>src/downloader.rs</code> (max indent 6) makes control flow hard to follow.</li><li><strong>Low</strong> – No job timeout is set; a hung step could block subsequent runs.</li><li><strong>Medium</strong> – No test files are present, meaning core paths are untested.</li></ul>
+<p>All findings come from deterministic static analysis; no additional issues were inferred.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>ia-get</code> delivers a focused, Rust‑based solution for bulk downloading from archive.org with built‑in resume and hash verification. The codebase is small and well‑structured, but it lacks automated tests and has several CI hardening gaps that should be addressed before adopting it in a production pipeline. Suitable for teams that need a quick, command‑line downloader and are comfortable reviewing and tightening the CI configuration.</p>
             </div>
 
             
@@ -91,9 +123,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +145,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1178868983">Open in Code Brain &rarr;</a>

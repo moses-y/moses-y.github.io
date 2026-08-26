@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,26 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building applications for robotics can be a nightmare. You&#39;ve got a myriad of frameworks, each with its own quirks. You either end up spending weeks on setup or drowning in dependencies like ROS. Dimensional aims to simplify this chaos, letting you develop applications in Python without the overhead of traditional robotics frameworks.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Dimensional provides a framework for creating robotics applications that run on various hardware like humanoids, quadrupeds, and drones. The dimos/agents directory contains the core code for agent communication and interaction, while data/ holds your assets and various resource files. The bin/ folder is packed with handy scripts, including bin/dev for local development and bin/dockerbuild for building Docker images.</p><p>You can easily extend functionality or create custom agents with the provided examples in dimos/agents/skills/. For instance, if you want to implement a GPS navigation skill, just check out dimos/agents/skills/gpsnavskill.py and start tweaking it to fit your needs.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you want your robot to navigate through your office and avoid obstacles. You can drop in a SLAM algorithm using the pre-built functionality in dimos/agents/skills/navigation.py. Your main application could look like this:</p><p>Just like that, your robot is off to find the coffee machine, avoiding all those pesky chairs in the way.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Dimensional is an ambitious framework that cuts through the complexity of robotics development. It’s a decent fit for those looking to create robust applications without getting buried under a mountain of dependencies. But if your project is small-scale, this might be overkill. If you’re serious about robotics, though, Dimensional could save you a ton of headaches.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>Technical Briefing: dimos Repository</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>The repository contains 22 modules in circular import dependencies, with <code>dimos/msgs/sensor_msgs/__init__.py</code>, <code>dimos/msgs/geometry_msgs/__init__.py</code>, and <code>dimos/core/module.py</code> mutually reachable. Additionally, 155 modules depend on <code>dimos/msgs/sensor_msgs/__init__.py</code> and 138 on <code>dimos/msgs/geometry_msgs/__init__.py</code>, creating high-blast-radius hubs where changes ripple broadly. Max indentation depth reaches 6 in <code>dimos/core/module.py</code>, making control flow hard to follow. These structural issues increase cognitive load and risk unintended breakage when modifying core message or module systems.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>dimos is a collection of 4 self-contained projects totaling 1244 files: the core <code>dimos</code> system (958 files, 857 code files), <code>examples</code> (21 files), <code>docker</code> (22 files), and <code>bin</code> (21 files). It functions as an agentive operating system for physical robotics, enabling Python-based control of humanoids, quadrupeds, and drones without requiring ROS. Core capabilities include navigation and mapping (SLAM, dynamic obstacle avoidance), perception (detectors, 3D projections, VLMs, audio processing), agentive control via natural language, and spatial memory (spatio-temporal RAG, object localization). The codebase integrates React, Svelte, Flask, FastAPI, Transformers, YOLO, and vector stores, with Python (828 files) as the dominant language.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts from several entry points. <code>main</code> in <code>bin/hooks/filter_commit_message.py:20</code> reaches 307 functions and is called from 1 place. <code>start</code> in <code>dimos/agents/agent.py:75</code> reaches 400 functions with no other callers in the repo. <code>run</code> in <code>dimos/manipulation/control/coordinator_client.py:459</code> reaches 195 functions, also called from nothing else. The internal call graph has 5272 resolved call edges. <code>Vector3</code> is called from 187 places, <code>publish</code> from 110, <code>Pose</code> from 103. Key traced paths: <code>main -&gt; run_dimos</code> [subprocess via <code>subprocess.run</code>]; <code>start -&gt; _connect</code> [db via <code>redis.Redis</code>]; <code>_call -&gt; fn -&gt; subscribe -&gt; iterate_items -&gt; _iter_items</code> [db via <code>conn.execute</code>]. <code>dimos/core/stream.py</code> (36 functions, 9 classes) is central for observable streams, called from 57 files. <code>dimos/msgs/geometry_msgs/Vector3.py</code> (48 functions, 1 class) is called from 81 files. Circular imports affect <code>dimos/core/module.py</code> (95 importers, 11 imports, in a cycle) and message init files.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone via <code>git clone https://github.com/moses-y/dimos</code>. The presence of <code>pyproject.toml</code> indicates pip-based installation; <code>package.json</code> files indicate npm dependencies for web components. No ROS is required per the README.</p>
+<p><strong>Configuration</strong>: Environment variables and keys are loaded from <code>docker/navigation/.env.hardware</code> (evidenced as a committed .env file). The API server at <code>dimos/web/dimos_interface/api/server.py</code> uses <code>allow_origins=["*"]</code> with credentials enabled — this configuration should be reviewed. <code>dimos/web/command-center-extension/package.json</code>, <code>vite.config.ts</code>, and <code>tsconfig.json</code> configure the web extension.</p>
+<p><strong>Running it</strong>: The entry point <code>start</code> in <code>dimos/agents/agent.py:75</code> initiates the agent system. For manipulation, <code>run</code> in <code>dimos/manipulation/control/coordinator_client.py:459</code> is the designated start function. The README documents additional hardware-specific setups.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A robotics team needs to deploy a navigation stack across a fleet of heterogeneous robots. Using dimos, they write Python agents that subscribe to lidar streams (via <code>dimos/msgs/sensor_msgs</code>), integrate YOLO-based perception, and issue motor commands through the control loop. The agent's spatial memory module queries the timeseries database (<code>dimos/memory/timeseries/base.py</code>) for localization data. The system runs natively on target hardware without ROS infrastructure, and the multi-agent architecture allows coordinating multiple robots from a single natural language prompt.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>CODE HEALTH AUDIT — 9 findings (0 critical, 4 high, 4 medium, 1 low), ranked by severity, confidence and production reach:</p>
+<ul><li><strong>[HIGH] Pin third-party GitHub Actions to a commit SHA</strong> — <code>.github/workflows</code>: docker/login-action@v3, crazy-max/ghaction-github-runtime@v3, docker/setup-buildx-action@v3, docker/build-push-action@v6. A tag can move, so the action running with your token and secrets is whatever its owner last pushed.</li><li><strong>[HIGH] Drop privileged mode and host networking</strong> — <code>docker/dev/docker-compose.yaml</code>: <code>network_mode: host</code>. Privileged hands every capability including direct device access; host networking removes the network boundary.</li><li><strong>[HIGH] Remove the committed .env and rotate what it holds</strong> — <code>docker/navigation/.env.hardware</code>. A tracked .env is the most common route for working keys to reach a public clone; the app actually loads this file.</li><li><strong>[HIGH] Replace the wildcard CORS origin with an explicit allow list</strong> — <code>dimos/web/dimos_interface/api/server.py</code>: <code>allow_origins=["*"]</code> together with credentials enabled. Any page on the internet can call the API with the browser's cookies attached.</li><li><strong>[MEDIUM] Enable Dependabot or Renovate</strong> — 4 manifest(s), no update bot configured. Without a bot a published advisory sits unpatched.</li><li><strong>[MEDIUM] Pin the container base image by digest</strong> — <code>dimos/manipulation/grasping/docker_context/Dockerfile</code>: <code>nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04</code>. An untagged base means today's build and last month's contain different libc and a different CVE set.</li><li><strong>[MEDIUM] Gate pull requests on a dependency vulnerability scan</strong> — <code>.github/workflows</code>: no dependency scan in CI.</li><li><strong>[MEDIUM] Add a non-root USER to the image</strong> — <code>dimos/manipulation/grasping/docker_context/Dockerfile</code>: no USER directive. A process running as root in the container is root against every mounted volume.</li><li><strong>[LOW] Set timeout-minutes on the workflow jobs</strong> — <code>.github/workflows/_docker-build-template.yml</code>: 4 workflow(s) declare no job timeout.</li></ul>
+<p>Additionally, MEASURED FINDINGS from static analysis: 338 total (95 high, 239 medium, 4 low) including import cycle members, broad exception handling, deep nesting, hub modules, and file opened without context manager.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers a functional agentive OS for physical robotics with genuine multi-hardware support and a working Python-first workflow. However, the circular import structure and hub modules create significant maintainability risk — changes to <code>dimos/msgs/sensor_msgs</code> or <code>dimos/core/module</code> affect 155+ and 138+ dependent modules respectively. The SDLC gaps (pinned Action SHAs, privileged Docker mode, committed .env, wildcard CORS) are actionable and should be addressed before production deployment. Teams needing rapid prototyping across diverse robot platforms will find value here, but those requiring long-term maintainability should budget refactor time for the import cycle and hub consolidation.</p>
             </div>
 
             
@@ -150,6 +168,30 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>19</strong> of 36 declared dependencies are a major version behind. Resolved 36 of 36 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@sveltejs/vite-plugin-svelte</code></td>
+                            <td>^3.0.1</td><td>7.3.0</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>@types/node</code></td>
+                            <td>^22.3.0</td><td>26.2.0</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>@vitejs/plugin-react</code></td>
+                            <td>^4.3.4</td><td>6.0.5</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>typescript</code></td>
+                            <td>5.9.2</td><td>7.0.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>vite</code></td>
+                            <td>^6.0.0</td><td>8.2.1</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>@types/pako</code></td>
+                            <td>^2.0.4</td><td>3.0.0</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>pako</code></td>
+                            <td>^2.1.0</td><td>3.0.1</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>react-leaflet</code></td>
+                            <td>^4.2.1</td><td>5.0.0</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
 

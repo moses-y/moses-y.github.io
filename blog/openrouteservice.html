@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 14, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Java</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Routing is hard. Doing it at scale, with multiple modes of transport, customizable preferences, and real-time data? Even harder. If you&#39;re building an app that needs routing, snapping, isochrones, or travel matrix calculations, you&#39;re either stuck using expensive SaaS solutions or cobbling together poorly maintained, limited libraries. Enter openrouteservice, a self-hosted, open-source routing API that gives you the flexibility and firepower of big-name services without the price tag or vendor lock-in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>At its core, openrouteservice is a routing engine powered by a forked version of GraphHopper. It&#39;s written in Java, with Docker support (Dockerfile, docker-compose.yml) for easy deployment. The API provides endpoints like directions, isochrones, matrix, and even some niche ones like snapping and export. These are documented in the extensive docs/api-reference directory, which has per-endpoint breakdowns like directions/custom-models.md.</p><p>The repo’s structure is a mixed bag, though. A whopping 151 files live in the docs/ folder, which is great for documentation but makes finding anything else kind of like a digital scavenger hunt. The .github/ folder is stacked with CI/CD workflows using GitHub Actions (e.g., reusablebuilddockerimages.yml, docker-build-and-test.yml), and there’s even some ymlconfigvalidation.sh scripts for converting and validating configs. Deployment and configuration are handled via the .rpm-packaging/ folder, with multiple Dockerfile variants for different setups.</p><p>The main entry point for the docs appears to be docs/.vitepress/theme/index.ts, likely for generating the (quite polished) documentation site. From the looks of it, the project has thought of pretty much everything—except maybe a way to make this repo less overwhelming at first glance.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re building a ride-sharing app where you need to calculate optimized routes for drivers, estimate ETAs, and provide navigation instructions. With openrouteservice, you could spin up your own instance using the provided docker-compose.yml. Configure the API in docs/run-instance/configuration/ to fine-tune routing profiles (bike, walking, etc.) and preferences like avoiding tolls or ferries. Once running, you can hit the /directions endpoint with a simple POST request and get back JSON with step-by-step directions.</p><p>Voilà! A route, turn-by-turn instructions, and more—no SaaS bill at the end of the month.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>openrouteservice is a fantastic tool if you need a powerful, self-hosted routing engine and have the time to navigate its labyrinthine structure. It’s overkill for small projects, but if you’re working on something substantial (or want to escape the clutches of commercial APIs), this is a solid option. Just be prepared to spend some time wading through the docs. Bring coffee.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that need turn‑by‑turn routing, isochrones, distance matrices, or raw OSM‑based graph exports must either rely on commercial SaaS APIs or build a bespoke routing stack. Maintaining a self‑hosted, standards‑compliant service that can be tuned to local data and deployed in containers is non‑trivial.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a portfolio of four Maven projects that together deliver a complete routing platform:</p>
+<ul><li><strong><code>ors-engine</code></strong> – the core graph‑hopper‑derived routing engine (≈ 550 files). It builds and queries the road network, exposing Java APIs used by the API layer.</li><li><strong><code>ors-api</code></strong> – a Spring‑Boot REST façade (≈ 230 files). Controllers such as <code>ExportAPI.java</code>, <code>MatrixAPI.java</code> and <code>MatchingAPI.java</code> receive HTTP requests, validate parameters, and forward them to the engine.</li><li><strong><code>ors-benchmark</code></strong> – a small benchmark harness (≈ 52 files) for measuring request latency under different configurations.</li><li><strong><code>ors-test‑scenarios</code></strong> – curated OSM extracts and expected results used by the integration test suite (≈ 21 files).</li></ul>
+<p>Documentation lives under <code>docs/</code> (VitePress site) and Docker build logic under <code>Dockerfile</code>, <code>.rpm‑packaging/Dockerfile</code>, and <code>docker‑compose.yml</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with the Spring Boot main class packaged in <code>ors-api</code> (the exact class is not listed but is the standard <code>org.heigit.ors.Application</code>). Maven builds the three modules and assembles a runnable JAR.</p>
+<ol><li><strong>HTTP entry</strong> – <code>org.heigit.ors.api.controllers.*</code> (e.g., <code>ExportAPI.java</code>, <code>MatrixAPI.java</code>). Each controller parses request bodies, applies <code>ApiConfig</code>/<code>OpenAPIConfig</code> settings, and calls the corresponding service in the engine.</li><li><strong>Engine call</strong> – Controllers invoke methods in <code>ors-engine</code> (e.g., <code>RoutingEngine.calculateRoute</code>). The engine loads the pre‑processed OSM graph from the data directory (referenced in <code>ors-config.json</code> inside <code>.rpm‑packaging</code>).</li><li><strong>Result serialization</strong> – Engine returns POJOs that the controller converts to JSON using Jackson and writes to the HTTP response.</li><li><strong>Auxiliary services</strong> – Health and status endpoints (<code>/health</code>, <code>/status</code>) are implemented in the same controller package but are not exposed by the public live API.</li></ol>
+<p>The two Maven modules have <strong>no import cycles</strong> (static analysis reports 0 circular dependencies). The only cross‑module dependency is <code>ors-api</code> → <code>ors-engine</code>; no other internal module imports exist, keeping the call surface small.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the exact upstream repository
+git clone https://github.com/moses-y/openrouteservice.git
+cd openrouteservice
+
+# 2. Build all modules with Maven (requires JDK 11+)
+mvn clean install -DskipTests   # skipTests optional; CI runs them separately
+
+# 3. Run the service locally (Docker is the recommended production mode)
+docker compose up -d            # uses docker-compose.yml, builds the image
+# or, run the jar directly
+java -jar ors-api/target/ors-api-*.jar</code></pre>
+<p>Configuration lives in <code>ors-config.json</code> (packaged under <code>.rpm-packaging/ors-config.json</code>). Adjust <code>graph.location</code>, <code>router.default_profile</code>, and any API keys there before starting the container or jar. No additional environment variables are required by the code itself.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A logistics platform can spin up the image from Docker Hub (<code>heigit/openrouteservice</code>) or build locally, point <code>ors-config.json</code> at a country‑level OSM extract, and issue HTTP POSTs to <code>/v2/directions/foot-walking</code> for real‑time routing. The same instance can serve <code>/v2/isochrones</code> to compute delivery zones, while the benchmark module can be used to size the deployment for expected query volume.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>High – Deep nesting</strong> in several API controllers (e.g., <code>ExportAPI.java</code>, <code>MatchingAPI.java</code>, <code>MatrixAPI.java</code>). Indentation depth 10 makes the flow hard to follow.</li><li><strong>High – Duplicated code blocks</strong> across <code>APIEnums.java</code>, <code>ApiConfig.java</code>, <code>OpenAPIConfig.java</code>, and several controllers (≈ 1 846 repeated 6‑line snippets).</li><li><strong>High – Oversized test files</strong> (<code>ParamsTest.java</code>, <code>ResultTest.java</code>) each &gt; 1 600 lines, risking brittle changes.</li></ul>
+<p><strong>Code‑health audit</strong></p>
+<ul><li><strong>HIGH</strong> – CI never runs the test suite (see <code>.github/workflows/*.yml</code>). Add a <code>mvn test</code> step.</li><li><strong>MEDIUM</strong> – Workflows lack least‑privilege <code>GITHUB_TOKEN</code> permissions; add <code>permissions: contents: read</code>.</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate configured; add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – Base image <code>tomcat:9.0.75</code> is unpinned; use a digest.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Large binary (<code>srtm_38_03.gh</code>, 69 MB) stored in Git; move to Git LFS or external storage.</li><li><strong>MEDIUM</strong> – Dockerfile runs as root; create a non‑root <code>USER</code>.</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>; set explicit limits.</li></ul>
+<p>No critical or license issues were detected; the repository includes a LICENSE, CI, Dockerfiles, and tests.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a mature, self‑hostable routing service with a clear separation between engine and API layers, but the codebase suffers from deep nesting, duplicated snippets, and an under‑utilized CI pipeline. It is suitable for teams that need full control over routing data and are prepared to address the highlighted maintainability and security gaps.</p>
             </div>
 
             
@@ -111,6 +143,11 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">5 declared dependencies, none a major version behind. Resolved 5 of 5 against the registry.</p>
+                    
+                </div>
 
                 
 

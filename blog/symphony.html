@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 12, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Elixir</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing coding agents can be a nightmare. Sure, they&#39;re great at writing boilerplate and churning out code snippets, but someone still has to babysit them—reviewing their pull requests, managing CI, ensuring their code doesn&#39;t blow up production, and generally holding their digital hands. It&#39;s like hiring interns who never become full-time employees. Enter Symphony, which flips the script: instead of micromanaging agents, you manage the work itself. Symphony takes the &quot;coding agent&quot; concept and weaponizes it with automation, turning your project tasks into autonomous, self-contained execution runs.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Symphony is an Elixir-powered framework for automating project workflows. It takes tasks from tools like Linear and spawns agents to tackle them autonomously. These agents don&#39;t just code—they also manage their own CI, write PR descriptions, handle reviews, and even generate walkthrough videos. Want to see the magic? Check out the .codex/skills/ directory, where you&#39;ll find skills like commit, land, push, and debug defined and documented. For example, codex/skills/land/landwatch.py is part of the pipeline that ensures your PR gets merged safely. No hand-holding required.</p><p>The main brains of the operation live in elixir/lib/symphonyelixir/. Files like agentrunner.ex and orchestrator.ex manage the lifecycle and coordination of these agents. Meanwhile, the elixir/lib/symphonyelixirweb/ folder powers a neat status dashboard (statusdashboard.ex and dashboardlive.ex) to keep your team updated on progress. And yes, there&#39;s a demo video in the .github/media/ folder that shows this thing in action.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re a lead dev managing a project with a team of human developers and a few coding agents. Your team uses Linear to track tasks. Symphony monitors the Linear board, picks up tasks, spawns agents, and cranks out work autonomously. For instance, the agent might create a branch, write the code, run tests, and open a PR—all while documenting its proof of work (see elixir/test/fixtures/statusdashboard_snapshots/ for how it tracks progress). You can then focus on higher-level decisions instead of chasing down rogue agents that forgot to lint their code.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Symphony is ambitious, maybe even audacious. If you&#39;re already drowning in agent chaos, this could save your sanity. But let&#39;s be real: this isn&#39;t for your side hustle or a 3-person team. It&#39;s built for orgs that are already deep into automation and need a way to scale it intelligently. Good for those who love Elixir and don&#39;t mind the &quot;engineering preview&quot; vibe; bad for anyone looking for plug-and-play simplicity.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who use coding agents often spend more time supervising the agents than delivering value.  Missing isolation, unclear hand‑off points, and ad‑hoc tooling make it hard to treat “work items” as autonomous, reproducible runs.  The result is fragile pipelines and constant manual triage.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Symphony</code> provides a reference implementation (the <strong>elixir</strong> sub‑project) that treats each work item as a self‑contained execution.  The core runtime lives in <code>elixir/lib/symphony_elixir/*.ex</code> – e.g. <code>orchestrator.ex</code> decides which agent to launch, <code>app_server.ex</code> and <code>workspace.ex</code> manage the isolated environment, and <code>cli.ex</code> exposes a command‑line entry point.  Docker support for end‑to‑end tests is in <code>elixir/test/support/live_e2e_docker/</code>.  The repository also ships a small <code>.codex</code> helper library used by the original OpenAI spec.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong> – <code>elixir/lib/symphony_elixir/cli.ex</code> implements <code>main/1</code>.  The Mix task <code>mix symphony</code> (defined in <code>mix.exs</code>) invokes <code>CLI.run/1</code>.</li><li><strong>Orchestration</strong> – <code>CLI.run/1</code> calls <code>SymphonyElixir.Orchestrator.start/0</code>.  The orchestrator loads configuration from <code>elixir/lib/symphony_elixir/config.ex</code> (which reads <code>config/config.exs</code>) and creates a <code>Workspace</code> (<code>workspace.ex</code>).</li><li><strong>Workspace</strong> – <code>Workspace</code> provisions an isolated directory, writes a temporary spec, and hands it to <code>AppServer.start/1</code> (<code>app_server.ex</code>).  The app server spawns an Elixir process that runs the agent code (<code>agent_runner.ex</code>) and streams logs via <code>LogFile.ex</code>.</li><li><strong>Agent execution</strong> – <code>AgentRunner</code> selects a tool (e.g. Linear adapters in <code>linear/</code>) and runs the work payload.  Results are posted back through <code>HttpServer.ex</code> and recorded in <code>Tracker</code> (<code>tracker.ex</code> / <code>tracker/memory.ex</code>).</li><li><strong>Status reporting</strong> – <code>StatusDashboard.ex</code> aggregates live metrics; tests in <code>core_test.exs</code> snapshot its output.  The LiveView <code>dashboard_live.ex</code> renders the dashboard in the Phoenix web UI.</li></ul>
+<p>All side‑effects (filesystem writes, network calls) are confined to the <code>Workspace</code> directory and the HTTP server port configured in <code>config.ex</code>.  No circular dependencies appear in the import graph (1 internal module, 0 import edges).  The biggest blast‑radius modules are <code>orchestrator.ex</code>, <code>status_dashboard.ex</code>, and the core test suite (<code>core_test.exs</code>), each exceeding 1 300 lines.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/symphony
+cd symphony/elixir
+
+# Install deps (Mix)
+mix deps.get
+
+# Run unit tests
+mix test
+
+# Start the server (example)
+mix run --no-halt   # invokes CLI → Orchestrator → AppServer</code></pre>
+<p>The Docker‑based live‑E2E tests can be exercised with the provided Dockerfile:</p>
+<pre data-lang="bash"><code>cd elixir/test/support/live_e2e_docker
+docker compose up --build</code></pre>
+<p>Configuration lives in <code>elixir/config/config.exs</code>; adjust the <code>:http_port</code> or workspace root as needed before running.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team that tracks tickets in Linear can point Symphony at a board.  When a new ticket appears, the orchestrator creates a workspace, runs the agent (via <code>AgentRunner</code>), and posts a PR with CI status.  The team reviews the PR and merges; Symphony then archives the workspace automatically.  The whole flow requires only the CLI start command and a Linear API token placed in <code>config.exs</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/*</code>).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> (<code>make-all.yml</code>).</li><li><strong>MEDIUM</strong> – Pin Docker base image by digest (<code>Dockerfile</code>).</li><li><strong>MEDIUM</strong> – Move large binary <code>symphony-demo.mp4</code> to Git LFS.</li><li><strong>MEDIUM</strong> – Add a non‑root <code>USER</code> in the Dockerfile.</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs.</li><li><strong>LOW</strong> – Add missing convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Additional observations: tests and CI are present; a license file exists; no lockfile (no <code>mix.lock</code>‑based pinning beyond <code>mix.lock</code> itself); no secrets detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Symphony offers a concrete, Docker‑enabled Elixir reference for turning work items into isolated runs, with a clear call chain from CLI to workspace to agent.  The codebase is functional but suffers from duplicated logic, oversized modules, and several CI‑security hygiene gaps that should be addressed before production use.  It is best suited for teams comfortable with Elixir/Phoenix who need a sandboxed agent execution framework and are prepared to refactor the identified hotspots.</p>
             </div>
 
             

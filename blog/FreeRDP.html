@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 18, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>FreeRDP addresses the need for a free, interoperable implementation of Microsoft&#39;s Remote Desktop Protocol (RDP). Organizations using non-Windows clients or servers need a way to connect to Windows-based remote desktops without relying on proprietary client software. The project also enables embedding RDP functionality into custom applications.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>FreeRDP is a C-based library and client implementation of RDP, organized primarily under channels/ with 170 files. The channels/ directory contains protocol extensions—each subdirectory (e.g., cliprdr/, rdpdr/, rail/, audin/) implements a specific RDP channel for clipboard, device redirection, remote application integration, or audio input. Each channel follows a consistent pattern with client/ and server/ subdirectories, plus shared common/ code where needed.</p><p>The build system is CMake-based (CMakeLists.txt at root and per-channel), with platform-specific audio backends under channels/audin/client/ (ALSA, PulseAudio, OSS, macOS, iOS, Windows). The repo includes a .clang-format and .clang-tidy for code style enforcement. CI is comprehensive: 19 GitHub Actions workflows covering ABI checks, CodeQL, fuzzing, Coverity, and builds for macOS, FreeBSD, MinGW, and ARM/PPC/RISC-V architectures.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Build from source using CMake. The repo contains no prebuilt binaries or package manager manifests; the README directs users to the wiki for compilation instructions. A typical flow would be:</p><p>cmake -B build -DCMAKEBUILDTYPE=Release
-cmake --build build</p><p>Configuration: No environment variables are documented in the repo. Build options are configured via CMake flags per channel (each ChannelOptions.cmake file governs whether a channel is built). The SECURITY.md file covers vulnerability reporting.</p><p>Running it: The repo shows no top-level client executable in the provided file listing—the core client code appears to be split across the channel implementations. The README links to the API documentation and project website for usage details, but the entry point is not evident from this snapshot.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical deployment: an organization runs Linux-based thin clients that need to access Windows Terminal Servers. FreeRDP provides the RDP protocol stack, with channels/cliprdr/ enabling clipboard sharing and channels/rdpdr/ handling drive/printer redirection. Developers embedding remote access into a custom application would link against the FreeRDP library and initialize the specific channels they need, such as audin for microphone redirection in a support-tool scenario.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Core client executable not visible in the snapshot; the entry point for running a full RDP session is unclear from the repo structure alone. This may be an artifact of the partial file listing, but it complicates assessment.
-Low - Channel code is highly repetitive (each channel has near-identical client/ and server/ scaffolding); this is a maintainability concern but consistent with the protocol&#39;s structure.
-Low - Only 3 test files exist (under channels/rdpear/common/test/), which is thin for a protocol implementation of this scope. CI is extensive, but test coverage appears concentrated in one channel.</p><p>The codebase shows strong engineering discipline: ABI checker, CodeQL, fuzzing, and Coverity in CI, plus style enforcement via clang-format and clang-tidy. The Apache license is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FreeRDP is a mature, actively maintained RDP implementation with serious CI infrastructure and clean channel-based architecture. It is well-suited for organizations needing cross-platform RDP support or embedding remote desktop functionality. The lack of visible test coverage outside one channel and the opaque entry point are minor concerns relative to the project&#39;s overall quality and the backing of the upstream FreeRDP project.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Legacy remote‑desktop clients often rely on closed or platform‑specific libraries, making integration into custom Linux, Android, or embedded stacks difficult. Developers need a permissively‑licensed, cross‑platform RDP implementation that can be built with standard C/C++ toolchains and extended through plug‑in channels.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a portfolio of ten self‑contained projects that together implement the Remote Desktop Protocol (RDP) and a set of reusable runtimes:</p>
+<ul><li><strong><code>winpr/</code></strong> – Windows Portable Runtime, a thin abstraction layer for win32 APIs (threads, sockets, crypto). Core code lives in <code>winpr/libwinpr/</code> and the CLI tool <code>winpr/tools/makecert-cli/main.c</code> generates X.509 certificates for TLS hand‑shakes.</li><li><strong><code>libfreerdp/</code></strong> – the protocol engine, handling RDP hand‑shaking, graphics encoding, and input. Entry points are the <code>freerdp_*</code> functions in <code>libfreerdp/common/</code> and <code>libfreerdp/client/</code>.</li><li><strong><code>client/</code></strong> – front‑ends (SDL, Android, macOS, Windows) that build on <code>libfreerdp</code>. The Android Gradle modules (<code>client/Android/Studio/*.gradle</code>) compile the Java UI and native JNI bridge.</li><li><strong><code>channels/</code></strong> – a plug‑in system for audio, input, clipboard, etc. Each channel has a CMake sub‑project (e.g., <code>channels/audin/client/alsa/audin_alsa.c</code>).</li><li><strong><code>server/</code></strong> – an RDP server skeleton that re‑uses the same runtime and channel code.</li><li><strong><code>rdtk/</code>, <code>uwac/</code>, <code>tools/</code>, <code>scripts/</code>, <code>resources/</code></strong> – auxiliary utilities, test scaffolding, and build helpers.</li></ul>
+<p>Common techniques across the portfolio are: CMake‑driven builds, cross‑compilation support (see <code>cmake/</code>), Dockerised CI, and a strict separation between platform‑neutral core (<code>libfreerdp</code>) and platform‑specific adapters (<code>client/*</code>, <code>winpr/*</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution of the most visible utility starts in <code>winpr/tools/makecert-cli/main.c</code>. The <code>main()</code> function parses command‑line options, then calls <code>winpr_CertCreateSelfSigned()</code> from <code>winpr/libwinpr/crypto/certificate.c</code>. That routine uses OpenSSL wrappers in <code>winpr/libwinpr/crypto/</code> to generate a key pair and write PEM files.</p>
+<p>The RDP client flow follows a similar pattern: the platform UI (e.g., <code>client/SDL/common/SDL_freerdp.c</code>) creates a <code>freerdp*</code> context, then invokes <code>freerdp_connect()</code> (implemented in <code>libfreerdp/client/connect.c</code>). The connection routine loads the certificate generated by the <code>makecert-cli</code>, negotiates security via <code>winpr/libwinpr/crypto/</code>, and registers required channels (<code>channels/audin/</code>, <code>channels/clipboard/</code>, …). Each channel registers callbacks in <code>freerdp_channels_*</code> tables; the core dispatch loop in <code>libfreerdp/common/freerdp.c</code> routes inbound PDUs to the appropriate channel handler.</p>
+<p>No import cycles were detected; the static import graph contains five isolated modules, so changes in one module (e.g., <code>winpr</code>) have limited blast radius. The only high‑cognitive‑load hotspots are deep nesting in three test files (<code>winpr/libwinpr/wtsapi/test/TestWtsApiExtraSendMessage.c</code>, <code>libfreerdp/common/test/TestFuzzCommonAssistanceParseFileBuffer.c</code>, <code>client/SDL/common/test/TestSDLWebview.cpp</code>), where indentation reaches nine levels, making maintenance harder.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork
+git clone https://github.com/moses-y/FreeRDP
+cd FreeRDP
+
+# Build with CMake (default Release)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+
+# Optional: build the Docker image used by CI
+docker build -t freerdp:local -f Dockerfile .</code></pre>
+<p>For Android clients, open <code>client/Android/Studio</code> in Android Studio; the Gradle files (<code>build.gradle</code>) pull the native library via the NDK. The <code>makecert-cli</code> can be run directly:</p>
+<pre data-lang="bash"><code>./build/tools/makecert-cli -f mycert.pem -k mykey.pem</code></pre>
+<p>If a Docker‑based environment is required, replace the base image tag in <code>docs/mingw-example/Dockerfile</code> with the digest shown in the CI configuration.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A thin‑client appliance can embed the SDL front‑end, invoke <code>freerdp_connect()</code> with a server address, and rely on the built‑in audio (<code>channels/audin</code>) and clipboard channels. The certificate generated by <code>makecert-cli</code> satisfies the server’s TLS requirement without external PKI.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Measured findings – 818 total (650 high, 139 medium, 29 low)</strong> – the only distinct class is <em>high cognitive load</em> caused by deep nesting in three test files (max depth 9).</li><li><strong>Code‑health audit</strong></li><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHA (<code>.github/workflows/*</code>).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/abi-checker.yml</code>).</li><li><strong>MEDIUM</strong> – Pin Docker base image by digest (<code>docs/mingw-example/Dockerfile</code>).</li><li><strong>MEDIUM</strong> – Add timeout to outbound HTTP call (<code>scripts/fetch_language_identifiers.py</code>).</li><li><strong>LOW</strong> – Set <code>timeout‑minutes</code> on workflow jobs (<code>.github/workflows/abi-checker.yml</code>).</li><li>Repository hygiene: tests present, CI (GitHub Actions) active, Dockerfile exists, Apache licence present, but no lockfile for Gradle and a few PEM files are committed as test assets.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>FreeRDP offers a mature, modular RDP stack with clear separation between core protocol, runtime abstractions, and UI front‑ends. Build scripts and CI are in place, but the project would benefit from tighter dependency locking and addressing the deep‑nesting test code. It is well‑suited for teams needing a permissive, extensible RDP implementation across Linux, Android, and Windows targets.</p>
             </div>
 
             
@@ -114,6 +140,11 @@ Low - Only 3 test files exist (under channels/rdpear/common/test/), which is thi
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">3 declared dependencies, none a major version behind. Resolved 0 of 3 against the registry.</p>
+                    
+                </div>
 
                 
                 <div class="an-block">

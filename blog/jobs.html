@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 15, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">HTML</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,31 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#ai-exposure-of-the-us-job-market">AI Exposure of the US Job Market</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="ai-exposure-of-the-us-job-market">AI Exposure of the US Job Market</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Everyone’s talking about how AI is going to steal jobs, but no one has a clear picture of which occupations are actually at risk — or why. This repo tackles that problem by quantifying “AI exposure” for 342 occupations in the US economy using data scraped from the Bureau of Labor Statistics (BLS). If you’ve ever wondered whether accountants or plumbers should start panicking, this project has some answers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>At its core, this repo is about taking government data (the BLS Occupational Outlook Handbook) and turning it into something useful. Here&#39;s the rundown:
-Scrape: scrape.py uses Playwright (non-headless mode because BLS blocks bots) to grab 342 HTML pages of job descriptions. These are dumped into the html/ folder — yes, all 196 files are raw HTML. 
-Parse: parsedetail.py and process.py employ BeautifulSoup to clean up the HTML and spit out Markdown files (in pages/) with structured data fields.
-Tabulate and Score: makecsv.py creates a tidy occupations.csv, summarizing pay, job count, growth projections, etc. Then, score.py sends the Markdown descriptions to an LLM (Gemini Flash via OpenRouter) for AI Exposure scoring (0-10). Results land in scores.json.
-Build the Treemap: buildsitedata.py smooshes the occupations.csv and scores.json into site/data.json for the frontend, which is a pretty cool treemap visualization (check it out here).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re a career counselor, worried about how emerging tech will impact your clients. You could clone this repo, tweak score.py to use a different LLM tailored to your needs (ChatGPT, Claude, whatever), and rerun it with updated job descriptions from next year’s BLS data. Then, plug the scores into the treemap (site/index.html) for a visual tool to guide discussions on career planning.</p><p>Want a quick snapshot? Just open the treemap. Curious about how scores are calculated? Dive into the prompt.md file for the LLM rubric and methodology.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a decent project for anyone who’s into data-driven career analysis or just wants to geek out over AI’s impact on jobs. The data pipeline is solid, but unless you’re customizing it or updating the dataset, you’re mostly here for the treemap. It’s not groundbreaking, but it’s a fun and informative way to slice and dice BLS data. If you&#39;re scared of AI taking your job, maybe spend less time worrying and more time on score.py.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repository analyzes AI exposure across 342 US occupations using Bureau of Labor Statistics data, but lacks automation guardrails. A consultant would find no CI/CD pipeline, no dependency lockfile, and no license — meaning changes merge unverified, builds are non-reproducible, and reuse rights are undefined.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The code implements a six-stage data pipeline across 8 Python source files. <strong><code>scrape.py</code></strong> drives Playwright to download raw BLS occupation HTML into <code>html/</code> (342 files). <strong><code>parse_detail.py</code></strong> and <strong><code>process.py</code></strong> use BeautifulSoup to convert those into clean Markdown in <code>pages/</code>. <strong><code>make_csv.py</code></strong> extracts structured fields (pay, education, job count, growth outlook, SOC code) into <code>occupations.csv</code>. <strong><code>score.py</code></strong> sends each occupation's Markdown to an LLM (Gemini Flash via OpenRouter) with a scoring rubric, producing <code>scores.json</code>. <strong><code>build_site_data.py</code></strong> merges CSV stats and AI exposure scores into compact <code>site/data.json</code> for the frontend. The entry point is <strong><code>site/index.html</code></strong>, an interactive treemap where rectangle area = employment and color = AI exposure (green to red). A <code>prompt.md</code> file (~45K tokens) aggregates all data for LLM analysis.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the Playwright scraper (<code>scrape.py</code>), which writes 342 HTML files into <code>html/</code>. Those feed <strong><code>parse_detail.py</code></strong> (indentation depth 9, 3 levels of nesting) which converts HTML to Markdown in <code>pages/</code>. <strong><code>process.py</code></strong> (1 branch point) then processes those Markdown files. The scored output flows through <strong><code>score.py</code></strong> (56 branch points over 154 lines) to <code>scores.json</code>, which <strong><code>build_site_data.py</code></strong> merges with <code>occupations.csv</code> to produce <code>site/data.json</code>. The module graph shows <strong><code>scrape</code></strong> as the root hub (Ca=1, Ce=0) — every other module depends on it indirectly. <strong><code>make_csv</code></strong> and <strong><code>build_site_data</code></strong> are leaf nodes with no outgoing imports. The deepest blast radius resides in <strong><code>score.py</code></strong>: it imports no other modules (Ce=0) but is imported by no other file (Ca=0), making it a standalone scorer with no downstream dependents, yet its LLM call leaves the process boundary. <strong><code>parse_detail.py</code></strong> and <strong>`make_csv.py</strong> each carry the high cognitive-load finding of deep nesting (x3), requiring flattening via guard clauses.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: No lockfile exists, but <code>pyproject.toml</code> declares 4 dependencies. Install with:</p>
+<pre data-lang="bash"><code>pip install -r requirements.txt  # if present, otherwise pip install . per pyproject.toml</code></pre>
+<p>No <code>requirements.txt</code> or explicit <code>install_requires</code> in the measured artifacts was confirmed; verify the <code>pyproject.toml</code> manifest before installing.</p>
+<p><strong>Configuration</strong>: No environment variables or API keys are documented. <strong><code>score.py</code></strong> requires an OpenRouter API key for the Gemini Flash LLM — source this and place it in the runtime environment or a <code>.env</code> file the script reads.</p>
+<p><strong>Running it</strong>: The pipeline has no single entry point. To rebuild from scratch, run sequentially:</p>
+<pre data-lang="bash"><code>python scrape.py      # populates html/
+python parse_detail.py  # produces pages/
+python make_csv.py    # produces occupations.csv
+python score.py       # produces scores.json
+python build_site_data.py  # produces site/data.json</code></pre>
+<p>Then open <code>site/index.html</code> in a browser.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A data journalist could clone this repo, run the pipeline to generate fresh <code>scores.json</code>, then embed <code>site/data.json</code> into a client-facing dashboard. The treemap visualization (<code>site/index.html</code>) immediately shows which occupational clusters (by BLS category) face the highest AI exposure, weighted by employment — useful for workforce planning or policy briefings. The <code>prompt.md</code> file provides a ready-made, data-grounded context for ad-hoc LLM analysis of exposure trends.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[HIGH] Add a LICENSE</strong> — no licence file at the repository root; redistribution rights are undefined. Without a license the default is all rights reserved, so this code cannot legally be reused in client engagements.</li><li><strong>[HIGH] Add CI/CD workflow</strong> — 8 source files, no CI configuration; every change merges with nobody having run the build once.</li><li><strong>[MEDIUM] Enable Dependabot or Renovate</strong> — 1 manifest (pyproject.toml), no update bot configured; published advisories sit unpatched until manual audit.</li><li><strong>[MEDIUM] Deep nesting x3</strong> — <code>parse_detail.py</code>, <code>make_csv.py</code>, <code>score.py</code> each have indentation depth up to 9; control flow is hard to follow. Fix: flatten with early returns/guard clauses.</li><li><strong>[MEDIUM] High branching density x2</strong> — <code>parse_detail.py</code> and <code>make_prompt.py</code> have 56 branch points over 154 lines; decompose decision-heavy logic.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The pipeline is functional and produces a compelling treemap visualization of AI exposure across the US job market, but it operates without a license, test coverage, or automation gates. A consultant would accept the data pipeline as-is for ad-hoc analysis but would insist on a license, CI, and a lockfile before recommending this code for any production or shared estate. The scoring logic and LLM integration are the strongest technical assets; the surrounding SDLC gaps are the primary blockers to adoption.</p>
             </div>
 
             
@@ -129,6 +148,11 @@ Build the Treemap: buildsitedata.py smooshes the occupations.csv and scores.json
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">4 declared dependencies, none a major version behind. Resolved 4 of 4 against the registry.</p>
+                    
+                </div>
 
                 
                 <div class="an-block">

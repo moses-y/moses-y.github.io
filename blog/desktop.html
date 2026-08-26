@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 19, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#python">Python</a><a href="#javascript">JavaScript</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLMs need a safe, isolated environment to execute code or interact with graphical applications. Existing sandbox solutions either expose the host OS, require heavyweight VM provisioning, or lack a simple API for streaming the desktop back to the model. This repo provides an open‑source virtual desktop that can be created, launched, and streamed from any LLM while keeping each instance isolated.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The project is a thin wrapper around E2B’s cloud sandbox that boots a full XFCE desktop (see template/files/ for the XFCE config). Two SDKs expose the same surface:</p><p>packages/js-sdk/src/index.ts – JavaScript/TypeScript entry point.  
- packages/python-sdk/e2bdesktop/main.py – Python package (e2bdesktop module).</p><p>Both implement Sandbox.create(), desktop.launch(), desktop.wait(), and a stream API for real‑time screen capture (see packages/js-sdk/src/sandbox.ts and packages/python-sdk/e2bdesktop/main.py). Example usage is demonstrated in examples/basic-javascript/index.js and examples/basic-python/main.py.</p><p>The desktop image is built from the template/ directory (Dockerfiles, pyproject.toml, and poetry.lock), then shipped as a lightweight container. React appears in the packages/js-sdk but is used only for the SDK’s internal UI, not the core sandbox.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>API key – Sign up at &lt;https://e2b.dev&gt; and set the environment variable E2BAPIKEY. The key is read at runtime; no secret is stored in the repo.  
-Install an SDK</p><h3 class="post-h" id="python">Python</h3><p>pip install e2b-desktop</p><h3 class="post-h" id="javascript">JavaScript</h3><p>npm install @e2b/desktop</p><p>(These commands correspond to the package.json at the root and pyproject.toml in packages/python-sdk.)</p><p>Create and run a sandbox – Python example (also in examples/basic-python/main.py):</p><p>from e2bdesktop import Sandbox</p><p>desktop = Sandbox.create()
-desktop.launch(&#39;google-chrome&#39;)
-desktop.wait(10000)
-authkey = desktop.stream.getauthkey()
-print(&#39;Stream URL:&#39;, desktop.stream.geturl(authkey=authkey))
-…perform tasks…
-desktop.kill()</p><p>– JavaScript example (also in examples/basic-javascript/index.js):</p><p>import { Sandbox } from &#39;@e2b/desktop&#39;</p><p>const desktop = await Sandbox.create()
-await desktop.launch(&#39;google-chrome&#39;)
-await desktop.wait(10000)
-const authKey = desktop.stream.getAuthKey()
-console.log(&#39;Stream URL:&#39;, desktop.stream.getUrl({ authKey }))
-// …perform tasks…
-// await desktop.kill()</p><p>Configuration – The only required configuration is the E2BAPIKEY env var. The sandbox image is defined by template/pyproject.toml and template/poetry.lock; customizing dependencies would require editing those files and rebuilding the Docker image (see template/builddev.py, template/builddocker.py).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A common pattern is feeding a vision‑enabled LLM a live desktop stream so it can “look” at UI elements and issue commands (e.g., fill forms, click buttons). The SDK’s stream.start({requireAuth:true}) returns an auth key that the LLM can use to pull JPEG frames over HTTPS without embedding credentials. This enables scenarios such as automated browser testing, data‑entry assistants, or interactive code‑execution environments where the model must interact with a graphical stack.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests &amp; CI – 10 test files exist (packages/js-sdk/tests/, packages/python-sdk/tests/). GitHub Actions workflows (lint.yml, js-sdk-tests.yml, python-sdk-tests.yml, etc.) run on every pull request.  
-License – LICENSE files are present at the root and in both SDK packages.  
-Dependency hygiene – package-lock.json, poetry.lock, and pnpm-lock.yaml are committed, ensuring reproducible installs.  
-Potential risk – The JS SDK’s src/sandbox.ts abstracts sandbox lifecycle but does not surface detailed error types; consumers may see generic exceptions when launch fails. The Python SDK similarly raises broad E2BError without granular codes. Adding typed error enums would improve developer ergonomics.  
-No obvious secrets in code – The API key is expected from the environment, not checked into the repo, which is a good practice.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo delivers a minimal, SDK‑driven virtual desktop that LLMs can control safely and stream back. It’s well‑structured, has tests, CI, and clear licensing, making it suitable for teams building computer‑use agents or needing a sandboxed UI for model interaction. The main trade‑off is that error reporting could be more granular; otherwise it’s a solid starting point for secure desktop‑level LLM integration.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>LLMs need a safe, isolated environment to execute real‑world computer actions (opening apps, moving the mouse, taking screenshots). Without such a sandbox, any generated code runs on the host machine, exposing secrets and the file system. The repository provides a ready‑made virtual desktop that can be started, driven, and streamed from a language model while keeping the host isolated.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The core implementation lives in <code>packages/python-sdk/e2b_desktop/main.py</code> and its counterpart <code>packages/js-sdk/src/index.ts</code>. These modules wrap the underlying E2B sandbox, expose high‑level operations such as <code>launch</code>, <code>wait</code>, and <code>stream.start</code>, and handle the VNC/Xfce stack needed for a graphical session. Example entry points are <code>examples/basic-python/main.py</code> (Python) and <code>examples/basic-javascript/index.js</code> (JavaScript), which demonstrate creating a sandbox, launching Chrome, waiting, and streaming the screen.</p>
+<p>The Python SDK ships as the <code>e2b-desktop</code> package (see <code>packages/python-sdk/package.json</code> for the npm metadata and <code>pyproject.toml</code> for the Poetry configuration). The JavaScript SDK is packaged under <code>@e2b/desktop</code> with its own <code>package.json</code>, TypeScript source, and Vitest test suite. Both SDKs share the same runtime behavior but expose language‑specific APIs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>packages/python-sdk/e2b_desktop/main.py:144</code> in the <code>start</code> function. <code>start</code> builds a VNC server, generates a secret password via <code>_generate_password</code> (uses <code>secrets.choice</code>), and then calls a short chain of helpers: <code>_wait_for_port</code>, <code>_check_vnc_running</code>, and finally returns a <code>Sandbox</code> object. The object’s methods (<code>launch</code>, <code>wait</code>, <code>stream.start</code>) delegate to lower‑level functions such as <code>move_mouse</code>, <code>screenshot</code>, and <code>right_click</code>.</p>
+<p>The internal call graph shows that <code>move_mouse</code> is the most referenced function (7 distinct callers). Functions like <code>screenshot</code>, <code>right_click</code>, and <code>_wait_and_verify</code> each have three callers, making them secondary hotspots. No circular dependencies were detected, so the dependency surface is predictable.</p>
+<p>On the JavaScript side, <code>packages/js-sdk/src/index.ts</code> re‑exports the sandbox class and forwards calls to <code>src/sandbox.ts</code>. The most connected module in the JS test suite is <code>packages/js-sdk/tests/setup</code> (imports from three places, imports one module).</p>
+<p>The only external effect is the cryptographic password generation (<code>_generate_password</code>) and three file‑system interactions (reading/writing temporary VNC config files). No database or network calls are made directly from the SDK; all network activity is limited to the E2B API endpoint configured by the user’s <code>E2B_API_KEY</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/desktop.git
+cd desktop
+
+# Python SDK setup (uses Poetry)
+poetry install        # installs e2b-desktop and test deps
+# set required secret
+export E2B_API_KEY=your_key_here
+
+# Run the Python example
+python examples/basic-python/main.py</code></pre>
+<pre data-lang="bash"><code># JavaScript SDK setup (uses pnpm)
+pnpm install           # reads examples/basic-javascript/package.json
+export E2B_API_KEY=your_key_here
+
+# Run the JS example
+node examples/basic-javascript/index.js</code></pre>
+<p>Both examples create a sandbox, launch <code>google-chrome</code>, wait 10 seconds, start a stream, and print a URL that can be opened in a browser. The SDKs expose the same methods, so swapping languages only changes the import path.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A conversational agent can import <code>Sandbox</code> from the Python SDK, call <code>Sandbox.create()</code>, and then issue <code>desktop.launch('vscode')</code>, <code>desktop.wait(5000)</code>, and <code>desktop.stream.start(require_auth=True)</code>. The agent receives the stream URL and can feed the video back to the LLM for visual feedback, while all actions remain confined to the isolated VNC session.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin third‑party GitHub Actions</strong> – <code>.github/workflows/*.yml</code> use tag references (<code>@v2.1.1</code>, <code>@v3</code>). Replace with 40‑character commit SHAs.</li><li><strong>High – Push directly to default branch</strong> – <code>.github/workflows/publish_packages.yml</code> runs <code>git push</code>. Change to push a bot branch and open a PR.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>.github/workflows/lint.yml</code> declares no permissions. Add <code>permissions: contents: read</code>.</li><li><strong>Medium – No dependency vulnerability scan</strong> – None of the CI workflows run a scanner. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Checkout persists credentials</strong> – <code>.github/workflows/js-sdk-tests.yml</code> lacks <code>persist-credentials: false</code>. Add the flag.</li><li><strong>Low – Missing job timeouts</strong> – Same workflow omits <code>timeout-minutes</code>. Define realistic limits.</li></ul>
+<p>Additional observations: tests exist for both SDKs, CI runs on GitHub Actions, a LICENSE file is present, and no secrets were found in the repository. The repo lacks a Dockerfile, so container builds must be added manually if required.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The project delivers a functional, language‑agnostic desktop sandbox with clear SDK boundaries and usable examples. Code health is solid but CI security practices need tightening. It is suitable for teams that want to let LLMs control a GUI in an isolated environment, provided they are comfortable adding the missing CI safeguards.</p>
             </div>
 
             
