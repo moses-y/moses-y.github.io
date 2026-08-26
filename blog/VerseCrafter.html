@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 17, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,55 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Working with video generation that actually respects camera motion and object trajectories sucks. Most video diffusion models spit out pretty clips, but as soon as you want to control the camera path or object movement—forget it. You end up with janky results, or you hack together some control system that barely works. If you want real, direct geometric control over both camera and multiple objects, you’re out of luck with almost everything out there.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>VerseCrafter gives you explicit 4D geometric control over video generation—camera motion, object motion, and their interaction. The key magic lives in versecrafter/pipeline/pipelinewanversecrafter.py where the pipeline wires up a frozen Wan2.1 video diffusion backbone and then injects geometry via a GeoAdapter. Everything related to 4D control—camera paths, 3D Gaussian object motion—is handled through JSON and NPZ files (see demodata/ and config/).</p><p>You get Blender integration (blenderaddon/) for hands-on editing and trajectory export, plus a pile of scripts in inference/ for fitting Gaussians (fit3Dgaussian.py), running segmentation (groundedsam2infer.py), and full pipeline inference (versecrafterinference.py). The project isn’t hiding the data: check demodata/ for real examples, from camera paths to rendered videos and masks.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you want to generate a street scene where the camera orbits a car and a person walks across the frame. You’d prep your control files (camera path as an NPZ, object trajectories as JSONs). Then you’d run something like:</p><p>python inference/versecrafterinference.py --config config/wan2.1/wancivitai.yaml \
-  --camera-trajectory demodata/.../customcameratrajectory.npz \
-  --object-trajectories demodata/.../custom3Dgaussiantrajectory.json</p><p>Edit anything in Blender (using the blenderaddon), re-export, and re-run. All your outputs—depths, masks, videos—land in demo_data/ for inspection. No black box nonsense.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you actually need precise camera and object motion control in video generation, VerseCrafter is one of the few open options that doesn’t lie to you about what’s possible. It’s fiddly to set up, eats VRAM for breakfast, and isn’t for quick experiments—but if you want explicit geometry in your video synthesis, this is the toolkit. If you just want pretty TikTok clips, look elsewhere.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Generating coherent, controllable video content requires a model that can ingest explicit 4‑D camera and object motion while preserving realistic dynamics. Existing diffusion‑based video generators lack a clean interface for geometric control, forcing developers to resort to ad‑hoc conditioning pipelines.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>VerseCrafter supplies a frozen Wan2.1 diffusion backbone wrapped with a <strong>GeoAdapter</strong> that injects a unified 4‑D control state (camera trajectory + per‑object 3‑D Gaussian motion). The core implementation lives in <code>versecrafter/models/wan_transformer3d_versecrafter.py</code> and the supporting transformer definition <code>versecrafter/models/wan_transformer3d.py</code>.</p>
+<p>The repository also ships three consumable entry points:</p>
+<ul><li><code>inference/versecrafter_inference.py</code> – CLI driver that loads a checkpoint, reads a JSON control file, runs the model, and writes an MP4.</li><li><code>api_server.py</code> / <code>model_server.py</code> – minimal Flask‑style HTTP wrappers exposing the same inference path as a service.</li><li><code>blender_addon/</code> – a Blender plug‑in (<code>operators.py</code>, <code>panels.py</code>) that forwards the current Blender scene to the same inference pipeline, enabling interactive 4‑D control from within Blender.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>entry point</strong> you choose:</p>
+<ol><li><strong>CLI / script</strong> – <code>python inference/versecrafter_inference.py --config cfg.yaml</code>.   <em> Parses arguments, loads model via <code>versecrafter/models/__init__.py</code> → <code>wan_transformer3d_versecrafter.WanTransformer3DVerseCrafter</code>. </em> Calls <code>pipeline_wan_versecrafter.run()</code> (defined in <code>versecrafter/pipeline/pipeline_wan_versecrafter.py</code>). <em> The pipeline pulls the frozen backbone from <code>wan_transformer3d.WanTransformer3D</code>, injects the GeoAdapter, and runs the diffusion loop. </em> Output is written to the filesystem (<code>*.mp4</code> in the caller’s cwd).</li></ol>
+<ol><li><strong>HTTP server</strong> – <code>python api_server.py</code> (or <code>model_server.py</code>).   <em> Flask routes (<code>/infer</code>) forward the request payload to the same <code>pipeline_wan_versecrafter.run()</code> function used by the CLI. </em> The request handling code lives in <code>api_server.py</code> (imports <code>requests</code> and the pipeline). * No timeout is set on outbound <code>requests</code> calls, giving the server an unbounded wait window (see health issue).</li></ol>
+<ol><li><strong>Blender add‑on</strong> – user clicks “Generate” in the UI panel (<code>blender_addon/panels.py</code>).   <em> <code>operators.py</code> gathers the current scene, writes a temporary control JSON, then invokes the same inference script via <code>subprocess</code>. </em> It disables SSL hostname verification (<code>check_hostname = False</code>), exposing the add‑on to MITM risks.</li></ol>
+<p><strong>Import graph highlights</strong> – <code>versecrafter/models/__init__</code> is the most imported module (Ca = 4, Ce = 2) and therefore the primary hub for model construction. The Blender add‑on, API server, and inference script each import only a handful of utilities, keeping their blast radius limited to the pipeline call. No circular dependencies were detected.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (the fork you are evaluating)
+git clone https://github.com/moses-y/VerseCrafter.git
+cd VerseCrafter
+# Create a clean Python 3.11 environment
+conda create -n versecrafter python=3.11 -y
+conda activate versecrafter
+
+# Install PyTorch (matching the repo’s README)
+conda install pytorch==2.3.0 torchvision==0.18.0 pytorch-cuda=12.1 -c pytorch -c nvidia -y
+
+# Install Python deps
+pip install -r requirements.txt
+
+# Install third‑party adapters (as documented)
+pip install git+https://github.com/microsoft/MoGe.git
+# Grounded‑SAM‑2 and pytorch3d are optional for the demo scripts</code></pre>
+<p><strong>Configuration</strong> – download model checkpoints into <code>model/</code> as described in the README (uses <code>huggingface_hub</code>). The inference script expects a YAML control file (e.g., <code>config/wan2.2/wan_civitai_t2v.yaml</code>).</p>
+<p><strong>Run inference</strong></p>
+<pre data-lang="bash"><code>python inference/versecrafter_inference.py \
+    --config config/wan2.2/wan_civitai_t2v.yaml \
+    --output results/output.mp4</code></pre>
+<p><strong>Start the API</strong></p>
+<pre data-lang="bash"><code>python api_server.py   # listens on default Flask port</code></pre>
+<p><strong>Blender</strong> – enable the add‑on in Blender’s Preferences, then use the “VerseCrafter” panel to generate video directly from the scene.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A VFX studio can embed the HTTP server into its render farm. A pipeline step posts a JSON describing camera rigs and object motions; the server returns a rendered MP4 that downstream compositing tools ingest. Example client snippet (Python):</p>
+<pre data-lang="python"><code>import requests, json
+payload = json.load(open('control.json'))
+resp = requests.post('http://localhost:5000/infer', json=payload, timeout=30)
+open('clip.mp4', 'wb').write(resp.content)</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 19 source files, zero test files.</li><li><strong>High – Certificate verification disabled</strong> – <code>blender_addon/operators.py</code> sets <code>check_hostname = False</code>.</li><li><strong>High – No CI workflow</strong> – repository lacks any <code>.github/workflows/*</code>.</li><li><strong>Medium – Dependabot missing</strong> – only <code>requirements.txt</code> is present, no update bot configured.</li><li><strong>Medium – Large binary assets in Git</strong> – several <code>.mov</code>, <code>.mp4</code>, <code>.gif</code> files &gt; 5 MB (e.g., <code>demo_data/.../record.mov</code>).</li><li><strong>Medium – Outbound requests lack timeout</strong> – <code>api_server.py</code> makes HTTP calls without a <code>timeout=</code> argument.</li></ul>
+<p>Additional hygiene observations: no Dockerfile, no lockfile, a LICENSE is present, and no secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>VerseCrafter delivers a functional 4‑D‑controlled video diffusion pipeline with clear entry points for CLI, service, and Blender integration. The codebase is usable but suffers from missing automated testing, CI, and some security‑related oversights. It is suitable for research or prototype integration where the team can add a test harness and tighten network handling; production deployments should first address the high‑severity health issues.</p>
             </div>
 
             
@@ -93,14 +138,14 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">98<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>19</b></li><li><span>JSON</span><i style="width:37%"></i><b>7</b></li><li><span>YAML</span><i style="width:26%"></i><b>5</b></li><li><span>Markdown</span><i style="width:11%"></i><b>2</b></li><li><span>Shell</span><i style="width:5%"></i><b>1</b></li>
                         </ul>
@@ -151,6 +196,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159778456">Open in Code Brain &rarr;</a>

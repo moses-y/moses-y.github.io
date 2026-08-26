@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,23 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#ai-on-your-desktop-meet-computer-agent">AI on Your Desktop: Meet computer-agent</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="ai-on-your-desktop-meet-computer-agent">AI on Your Desktop: Meet computer-agent</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Ever wanted to automate mundane tasks on your computer without writing a ton of scripts? Maybe you’ve dreamt of yelling at your machine to “reply to that email” while you sip coffee—but instead, you’re stuck manually clicking and typing like it’s 2007. Sure, there are browser extensions and automation tools, but most don’t touch your actual desktop. What if you could slap some AI onto that problem and let it take over both your browser and your computer?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>computer-agent is like your lazy coworker that you can boss around—only it actually listens. It’s a desktop app built with Tauri (Rust + Web tech) that turns an AI into your personal assistant. You give it natural language commands and it’ll do everything from typing in your terminal to moving your mouse.</p><p>The guts of this project live in src-tauri/. Files like src-tauri/src/agent.rs and src-tauri/src/computer.rs handle the heavy lifting for desktop control. For browser automation, it leans on the Chrome DevTools Protocol, wired up in src-tauri/src/browser.rs. Want background mode instead of full desktop takeover? That’s handled via async APIs in Rust (tokio powers this).</p><p>The frontend is TypeScript-based and lives in src/. Files like src/MainWindow.tsx and src/components/VoiceOrb.tsx build the interface for push-to-talk commands. It’s styled with Tailwind, so you get clean, modern vibes instead of 90s WinForms energy.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Here’s how it works: imagine you need to bulk reply to tweets with “lol” (why? I don’t know, maybe you’re a bot). You’d hit the shortcut ⌃⇧B (Background Mode) and instruct the agent to open Twitter, find unread DMs, and reply. Behind the scenes, it uses browser automation (src-tauri/src/browser.rs) to click through the interface. If you’re feeling fancy, you can switch to Computer Use Mode (⌃⇧C) to let it take over your desktop directly.</p><p>Need something more hands-on? You can write custom Rust handlers in files like src-tauri/src/api.rs or tweak the JSON configs in src-tauri/capabilities/default.json.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>computer-agent is ambitious—and impressive—but probably overkill for simple automation. It shines in scenarios where you need a mix of browser and desktop control, like managing multi-app workflows or running scripts while you’re hands-off. If you’re comfortable with Rust and React, it’s worth a shot. For everyone else? Maybe stick to your Bash scripts.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repo provides a local AI agent that controls a desktop environment via natural language commands, using screenshots, mouse, keyboard, and terminal. The codebase shows signs of high cognitive load: nine files with deep nesting (max indentation depth 13 in <code>src-tauri/src/agent.rs</code>, <code>src-tauri/src/api.rs</code>, <code>src-tauri/src/main.rs</code>), duplicated logic across React components, and no automated test or CI gate. A change can ripple widely without signal that existing behavior is preserved.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>computer-agent</code> is a Tauri-based desktop app with a React + TypeScript frontend and Rust backend. The frontend lives in <code>src/</code> (14 files), the Tauri backend in <code>src-tauri/src/</code> (13 code files). React components <code>ChatView.tsx</code> and <code>MessagesDisplay.tsx</code> each contain ~300 repeated 6-line blocks, violating DRY. State flows through <code>src/stores/agentStore.ts</code>, while <code>src/hooks/useAgent.ts</code> handles agent decision logic with 68 branch points across 217 lines. The Rust backend (<code>src-tauri/src/agent.rs</code>, <code>src-tauri/src/api.rs</code>) manages system control primitives—<code>bash.rs</code>, <code>browser.rs</code>, <code>computer.rs</code>, <code>voice.rs</code>, and <code>panels.rs—exposing commands to the frontend via Tauri commands. The types layer at </code>src/types/index.ts<code> is a central dependency with five importers and zero outgoing edges, making it a low‑instability foundation. Control flow starts at </code>src-tauri/src/main.rs<code>, which boots the Tauri app, loads </code>index.html<code>, and renders </code>src/main.tsx`. User interactions traverse React components → hooks → store → Tauri commands → Rust functions that invoke OS-level actions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution enters through <code>src-tauri/src/main.rs</code>, which initializes the Tauri runtime and starts the frontend. The React app mounts via <code>src/main.tsx</code>, and the primary agent logic resides in <code>src/hooks/useAgent.ts</code>, called by <code>src/stores/agentStore.ts</code>. The store consults <code>src/types/index.ts</code> for type definitions—this module has five importers and zero outgoing imports, giving it instability 0 and making it the most stable anchor in the graph. From the store, agent decisions flow to Rust commands defined in <code>src-tauri/src/api.rs</code> and <code>src-tauri/src/agent.rs</code>, which dispatch to <code>bash.rs</code>, <code>browser.rs</code>, <code>computer.rs</code>, and <code>voice.rs</code> for system interaction. The import graph contains 16 internal modules and 22 edges with no circular dependencies, but <code>src/components/ChatView</code> (instability 0.86) and <code>src/hooks/useAgent</code> (instability 0.67) are the most volatile modules: many depend on them, but they import few things, meaning changes here have wide blast radius. <code>src/utils/audio</code> is a leaf module (instability 0, three importers) with no dependencies, making it a safe point for extension.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (from README):</p>
+<ul><li>Requirements: Rust &amp; Cargo, Node.js &amp; npm, Anthropic API key.</li><li>Install dependencies: ``<code>bash npm install </code>``</li><li>Add API key (create <code>.env</code>): ``<code>bash echo "ANTHROPIC_API_KEY=your-key-here" &gt; .env </code>``</li><li>Run development mode: ``<code>bash npm run tauri dev </code>``</li><li>Build production binary: ``<code>bash npm run tauri build </code>``</li><li>On macOS, grant accessibility permissions in System Settings → Privacy &amp; Security → Accessibility when prompted.</li></ul>
+<p><strong>Configuration</strong>: The Anthropic key is read from <code>.env</code> at runtime. No other build-time configuration is required beyond what <code>package.json</code>, <code>vite.config.ts</code>, <code>tailwind.config.js</code>, and <code>src-tauri/Cargo.toml</code> already define.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>An engineer wants the agent to autonomously research a topic: open a browser, navigate to three sources, extract key points, and summarize them. In <strong>Computer Use Mode</strong>, the agent takes screenshots, moves the cursor, clicks links, and types queries. In <strong>Background Mode</strong>, it uses Chrome DevTools Protocol for web navigation and the terminal for command execution, leaving mouse and keyboard free. The user invokes the agent with <code>⌃⇧C</code> (push-to-talk) and monitors progress via the chat UI (<code>src/components/ChatView.tsx</code>). If a task spans multiple apps, Computer Use Mode is required; for pure web+terminal workflows, Background Mode is faster and more reliable.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – No test suite: 28 source files have no corresponding test files. Any change ships without signal that existing behavior holds, so regressions reach production undetected.</li><li><strong>HIGH</strong> – No CI/CD workflow: 29 source files merge without a build or test gate having run, meaning every PR is untested by automation.</li><li><strong>MEDIUM</strong> – No dependency update bot: two manifests (<code>package.json</code>, <code>src-tauri/Cargo.toml</code>) exist but Dependabot or Renovate are not configured, leaving advisories unpatched until manual audit.</li><li><strong>MEDIUM</strong> – Oversized files and duplicated blocks: <code>src/components/ChatView.tsx</code> and <code>src-components/MessagesDisplay.tsx</code> contain ~300 repeated 6-line blocks; <code>src-tauri/src/agent.rs</code>, <code>src-tauri/src/api.rs</code>, and <code>src/components/ChatView.tsx</code> each exceed 1000 lines, raising cognitive load and ripple risk.</li><li><strong>LOW</strong> – Missing convention files: <code>.editorconfig</code>, <code>.gitattributes</code>, and a formatter config are absent, risking inconsistent tooling across contributors.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a functional local AI desktop controller with a clear React‑Tauri split and useful mode differentiation, but the codebase suffers from deep nesting, duplicated logic, and no automated quality gate. Without tests or CI, each merge is a gamble; without Dependabot, security debt accumulates silently. It’s suitable for developers or researchers who need immediate desktop AI control and are willing to accept untested code and manual dependency management, but it is not production‑ready as-is.</p>
             </div>
 
             
@@ -91,18 +106,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">49<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>Rust</span><i style="width:100%"></i><b>13</b></li><li><span>TSX</span><i style="width:62%"></i><b>8</b></li><li><span>JSON</span><i style="width:46%"></i><b>6</b></li><li><span>TypeScript</span><i style="width:46%"></i><b>6</b></li><li><span>JavaScript</span><i style="width:15%"></i><b>2</b></li><li><span>Markdown</span><i style="width:8%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Tailwind</span></p>
                     </div>
                 </div>
 
@@ -143,6 +158,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159366394">Open in Code Brain &rarr;</a>

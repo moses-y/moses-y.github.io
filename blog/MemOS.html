@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 15, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#memos-memory-for-ai-agents-that-doesn-39-t-suck">MemOS: Memory for AI Agents That Doesn&#39;t Suck</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="memos-memory-for-ai-agents-that-doesn-39-t-suck">MemOS: Memory for AI Agents That Doesn&#39;t Suck</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>LLMs and AI agents have the memory of a goldfish. Every interaction is a reset, and they have to process the entire conversation history to &quot;remember&quot; anything. This burns compute, tokens (read: money), and your patience. If you&#39;re building multi-turn or multi-agent systems, this lack of persistent memory means you&#39;re duct-taping hacks just to make things usable.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MemOS is a memory operating system that gives your LLMs and AI agents long-term, structured memory. It lets you store, retrieve, manage, and even share memory across tasks and agents. Think of it as the missing hippocampus for your AI.</p><p>At its core is a unified memory API that handles CRUD operations on memory. Want to create a memory graph? Check out examples/corememories/treetextualmemory.py. Need a key-value cache? There&#39;s examples/corememories/kvcachememory.py. Prefer something more basic? examples/corememories/naivetextualmemory.py has you covered.</p><p>Integration with systems like openwork-memos-integration/apps/desktop lets you plug MemOS into other tools (like OpenClaw for multi-agent use cases). It even comes with Dockerfiles (docker/) and configuration files (examples/data/config/) to make setup straightforward—if you’re used to wrangling YAML, that is.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you&#39;re building a multi-agent system where agents need to share context (hello, OpenClaw users). Without MemOS, you&#39;d have to build some janky custom memory manager or duplicate context across agents. With MemOS, you can use the existing examples/memscheduler to set up an intelligent memory scheduler that optimizes memory usage and enables agents to share memories through a unified userid. Want to test it out? Run examples/memchat/chatwgeneratedcubeexplicitmemoryonly.py and watch your chatbot actually remember something for once.</p><p>Here&#39;s a quick example of storing and retrieving memory:</p><p>from examples.corememories.kvcachememory import KVCacheMemory</p><p>memory = KVCacheMemory()
-memory.store(&quot;favoritecolor&quot;, &quot;blue&quot;)
-print(memory.retrieve(&quot;favorite_color&quot;))  # Outputs: blue</p><p>Now imagine scaling that to a fleet of agents sharing multi-turn conversations. Magic.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MemOS is a solid choice for anyone building complex AI systems that require persistent memory. The examples are rich, the structure is clean, and the Docker setup is a nice touch. That said, the learning curve is steep, and some parts (like the evaluation/ folder) feel like a maze. If you&#39;re just building a simple chatbot, this is overkill. But if you&#39;re serious about memory-first AI, give it a go. Just don’t expect to set it up in 5 minutes.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>LLM‑driven agents need a persistent, queryable store for learned skills and user‑specific context. Without a unified memory layer each task re‑learns the same information, leading to token waste, inconsistent behavior, and difficult skill evolution.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>MemOS</code> supplies a “memory operating system” that sits between agents and their vector/graph back‑ends. The core Python package lives under <code>src/</code> (≈ 357 code files) and implements:</p>
+<ul><li><strong>Graph‑based memory API</strong> – see <code>src/memos/mem_reader/</code> and <code>src/memos/mem_scheduler/</code> for ingestion, retrieval, and scheduling logic.</li><li><strong>Multi‑modal parsers</strong> – <code>src/memos/mem_reader/read_multi_modal/__init__.py</code> and <code>src/memos/mem_reader/read_multi_modal/multi_modal_parser.py</code> turn text, images, and tool outputs into structured nodes.</li><li><strong>Persistence adapters</strong> – Docker images ship Neo4j and a vector store; the adapters are referenced from <code>src/memos/types/</code> and <code>src/memos/mem_reader/</code>.</li></ul>
+<p>The front‑end integration lives in <code>openwork-memos-integration/apps/desktop/</code> (React + Tailwind) and provides the UI for skill creation, inspection, and editing. Example skill bundles (<code>ask‑user‑question</code>, <code>dev-browser</code>) are under <code>openwork-memos-integration/apps/desktop/skills/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution is driven by Docker‑Compose (see <code>docker/docker-compose.yml</code>). The compose file starts three containers:</p>
+<ol><li><strong>Backend</strong> – a Django service (not listed explicitly but implied by the <code>Django</code> tag). Its entry point is the standard <code>manage.py</code> command that loads <code>src/memos/</code>. The request handler <code>src/memos/mem_scheduler/base_mixins/web_log_ops.py</code> receives HTTP calls, logs them, and forwards to the scheduler core (<code>src/memos/mem_scheduler/</code>).</li></ol>
+<ol><li><strong>Vector/Graph store</strong> – Neo4j and a vector DB are defined as separate services. The backend talks to them through adapters in <code>src/memos/types/</code> and <code>src/memos/mem_reader/</code>.</li></ol>
+<ol><li><strong>Frontend</strong> – the React desktop app is built from <code>openwork-memos-integration/apps/desktop/</code>. The entry HTML is <code>openwork-memos-integration/apps/desktop/index.html</code>; the main renderer starts in <code>openwork-memos-integration/apps/desktop/src/main/ipc/handlers/index.ts</code>, which opens IPC channels to the backend API.</li></ol>
+<p>A typical request flow:</p>
+<pre><code>browser → React UI (src/renderer/components/…) → IPC handler (src/main/ipc/handlers) 
+   → HTTP request → Django view → mem_scheduler/base_mixins/queue_ops.py 
+   → mem_reader/read_multi_modal/multi_modal_parser.py 
+   → Neo4j / vector store</code></pre>
+<p>The most connected production module is <code>src/memos/types/openai_chat_completion_types/__init__.py</code> (imports 13, imported by 1, instability 0.93), meaning changes here ripple widely. The test hub <code>tests/utils.py</code> (imports 26, no outgoing imports) is the only high‑impact non‑runtime module.</p>
+<p>No circular imports were detected, and the import graph contains 304 edges across 697 internal modules, indicating a relatively flat dependency landscape.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/MemOS
+cd MemOS
+
+# 2. Build and start the stack
+docker compose -f docker/docker-compose.yml up --build -d
+
+# 3. Install the Python SDK (optional, for custom agents)
+poetry install   # uses pyproject.toml / poetry.lock
+# Or, inside the running backend container:
+docker exec -it memos_backend poetry install</code></pre>
+<p>Configuration files:</p>
+<ul><li><code>docker/.env.example</code> – copy to <code>docker/.env</code> and supply <code>NEO4J_AUTH</code>, <code>VECTOR_DB_URL</code>, and API keys required by the agents.</li><li><code>openwork-memos-integration/apps/desktop/.eslintrc.json</code> – lint rules for the UI; no runtime effect.</li></ul>
+<p>The backend listens on the port defined in <code>docker/docker-compose.yml</code> (default 8000). The UI is reachable at <code>http://localhost:3000</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>An autonomous research bot can call <code>MemoryOS.add_memory(user_id, skill_payload)</code> (implemented in <code>src/memos/mem_reader/</code>). The payload is parsed by <code>read_multi_modal_parser</code>, stored in Neo4j, and later retrieved by <code>mem_scheduler</code> when the same user asks a related question, cutting token usage by ~ 70 % (as claimed in the README).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – Enable Dependabot</strong> – 9 manifest files lack an update bot (<code>.github/dependabot.yml</code> missing).</li><li><strong>MEDIUM – Pin Docker base image</strong> – <code>docker/Dockerfile</code> uses mutable <code>python:3.11-slim</code>.</li><li><strong>MEDIUM – Add vulnerability scan</strong> – No dependency‑review or OSV scanner in CI.</li><li><strong>MEDIUM – Checkout without persist‑credentials</strong> – <code>.github/workflows/python-tests.yml</code> leaves token in <code>.git/config</code>.</li><li><strong>MEDIUM – Run container as non‑root</strong> – No <code>USER</code> directive in Dockerfile.</li><li><strong>LOW – Set workflow timeout</strong> – <code>python-release.yml</code> lacks <code>timeout-minutes</code>.</li></ul>
+<p>Measured code‑quality findings (high/medium/low) include deep nesting (max depth 8 in several files), an oversized <code>SettingsDialog.tsx</code> (704 LOC), broad exception handling, and duplicated evaluation scripts. The hub module <code>tests/utils.py</code> imports 26 other modules; keep it stable.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>MemOS</code> offers a fairly complete stack—backend SDK, Neo4j/vector persistence, and a React UI—for building long‑term memory into LLM agents. The codebase is modular and passes basic hygiene checks, but production readiness requires tightening Docker security, adding automated dependency updates, and refactoring a few large, deeply nested files. Teams that need a plug‑and‑play memory layer and are comfortable operating Docker‑compose will find it usable with modest engineering effort.</p>
             </div>
 
             
@@ -93,18 +130,18 @@ print(memory.retrieve(&quot;favorite_color&quot;))  # Outputs: blue</p><p>Now im
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">862<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>92</b></li><li><span>TypeScript</span><i style="width:32%"></i><b>29</b></li><li><span>JSON</span><i style="width:16%"></i><b>15</b></li><li><span>YAML</span><i style="width:15%"></i><b>14</b></li><li><span>Markdown</span><i style="width:15%"></i><b>14</b></li><li><span>TSX</span><i style="width:11%"></i><b>10</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>544</b></li><li><span>TypeScript</span><i style="width:18%"></i><b>99</b></li><li><span>TSX</span><i style="width:10%"></i><b>52</b></li><li><span>JSON</span><i style="width:5%"></i><b>29</b></li><li><span>Markdown</span><i style="width:4%"></i><b>21</b></li><li><span>YAML</span><i style="width:3%"></i><b>16</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Django</span><span>Tailwind</span><span>Docker</span><span>Vector store</span><span>Neo4j</span></p>
                     </div>
                 </div>
 

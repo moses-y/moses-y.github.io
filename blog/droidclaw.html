@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#turning-old-phones-into-ai-agents-with-droidclaw">Turning Old Phones Into AI Agents with droidclaw</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="turning-old-phones-into-ai-agents-with-droidclaw">Turning Old Phones Into AI Agents with droidclaw</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>We all have old Android phones lying around, and most of the time, they’re just gathering dust. They could be doing something useful, but setting up automation on these devices has always been a nightmare. You either need a million APIs, deal with janky tools, or write custom scripts for every little task. And even then, you’re stuck with rigid, predefined workflows that break as soon as an app updates its UI. What if you could just tell your phone what to do, and it would figure it out?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>droidclaw is a DIY tool that turns your old Android devices into AI-powered task runners. You give it a goal in plain English, and it reads the screen via accessibility APIs, uses a large language model (LLM) to decide what to do, and then performs actions (taps, swipes, typing) via ADB. No more hardcoding every single interaction.</p><p>At its core, the magic happens in src/kernel.ts — the brains of the operation. It loops through a cycle of think (ask the LLM what the goal requires), act (send ADB commands like input tap or input text), and repeat until the task is done. If you need reusable automations, you can use JSON-based workflows (see examples/workflows) or YAML flows (see examples/flows).</p><p>You can run it with just:</p><p>bun run src/kernel.ts</p><p>Then, type a goal like &quot;open Instagram and like the first post&quot; — and watch your phone do the thing.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you want to send a message to your team on Slack every morning with your daily standup update. Instead of fumbling with Slack’s API (ugh) or manually typing it in, you use the examples/workflows/messaging/slack-standup.json:</p><p>{
-  &quot;name&quot;: &quot;slack standup&quot;,
-  &quot;steps&quot;: [
-    {
-      &quot;app&quot;: &quot;com.Slack&quot;,
-      &quot;goal&quot;: &quot;open #standup channel, type the message and send it&quot;,
-      &quot;formData&quot;: { &quot;Message&quot;: &quot;yesterday: fixed bugs\ntoday: refactor tests\nblockers: none&quot; }
-    }
-  ]
-}</p><p>Run it with:</p><p>bun run src/kernel.ts --workflow examples/workflows/messaging/slack-standup.json</p><p>Done. No APIs, no manual inputs, no wasted time.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>droidclaw is ridiculously cool if you’re into automation and have a spare Android lying around. It’s experimental, sure, and you’ll need some patience (and a willingness to debug when it screws up). But for hackers and tinkerers, this is a playground. If you’re expecting a polished, GUI-driven experience, look elsewhere. For everyone else: just install bun, fire up adb, and turn your phone into a little AI butler.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Manual phone tasks (sending a message, logging a call, updating a calendar) require a device in hand and repetitive UI navigation. Scaling such chores across many devices or integrating them into larger workflows is painful because Android’s UI is not script‑friendly and existing automation tools lack natural‑language reasoning.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>droidclaw</code> turns an Android phone into an AI‑driven agent. A user supplies a plain‑English goal; the agent reads the accessibility tree, asks an LLM what UI actions are needed, and executes them via ADB (<code>src/actions.ts</code>). The core loop lives in <code>src/kernel.ts</code>, which orchestrates reading the screen, sanitising LLM output (<code>src/sanitizer.ts</code>), and stepping through a <em>flow</em> (<code>src/flow.ts</code>). Example workflows are stored as JSON/YAML under <code>examples/workflows/</code> and <code>examples/flows/</code>, ready to be invoked without code changes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>bun run src/kernel.ts</code> launches the CLI.</li><li><strong>Kernel (<code>src/kernel.ts</code>)</strong> reads the goal, loads configuration (<code>src/config.ts</code>), creates a <code>Flow</code> object, and repeatedly calls <code>flow.next()</code> until the flow reports <code>done</code>.</li><li><strong>Flow (<code>src/flow.ts</code>)</strong> decides the next action by:   <em> calling <code>sanitize()</code> (in <code>src/sanitizer.ts</code>) to clean LLM output, </em> consulting the LLM provider (<code>src/llm‑providers.ts</code>) for a plan, * delegating concrete UI commands to <code>actions.ts</code>. Flow has the highest instability (1.0) and contains 56 branch points over 191 lines, so it is a hotspot for future refactoring.</li><li><strong>Actions (<code>src/actions.ts</code>)</strong> translate high‑level intents (launch, tap, type, enter, done) into ADB commands executed via <code>Bun.spawnSync</code>.</li><li><strong>Skills (<code>src/skills.ts</code>)</strong> expose reusable primitives (e.g., <code>openApp</code>, <code>search</code>) that the LLM can invoke; they are imported by the kernel and flow.</li><li><strong>Constants &amp; Config (<code>src/constants.ts</code>, <code>src/config.ts</code>)</strong> supply static values and environment‑driven settings (<code>LLM_PROVIDER</code>, <code>GROQ_API_KEY</code>, <code>OLLAMA_MODEL</code>).</li><li><strong>Logger (<code>src/logger.ts</code>)</strong> provides console output for each step.</li><li><strong>Workflow loader (<code>src/workflow.ts</code>)</strong> parses the JSON/YAML files in <code>examples/</code> and feeds them to the kernel when the <code>--workflow</code> flag is used.</li></ol>
+<p>The import graph shows 11 internal modules with 23 edges and no circular dependencies. <code>src/actions.ts</code> is the most imported (Ca = 6) and thus has the widest blast radius; changes there affect every flow step.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># clone the original repository
+git clone https://github.com/moses-y/droidclaw.git
+cd droidclaw
+
+# install Bun (required) and project deps
+curl -fsSL https://bun.sh/install | bash
+bun install
+
+# copy example env and set your LLM credentials
+cp .env.example .env
+# edit .env: set LLM_PROVIDER=groq and GROQ_API_KEY=your_key
+# or use ollama: LLM_PROVIDER=ollama, OLLAMA_MODEL=llama3.2
+
+# connect a phone with USB debugging enabled
+adb devices   # should list the device
+
+# run a single goal
+bun run src/kernel.ts
+# &gt; enter your goal: open youtube and search for "lofi hip hop"
+
+# or execute a stored workflow
+bun run src/kernel.ts --workflow examples/workflows/messaging/whatsapp-reply.json</code></pre>
+<p>No Dockerfile or Makefile is present; the only build artifact is the TypeScript compilation performed by Bun at runtime.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A support team could automate ticket triage on a shared device: a Slack bot posts a ticket description, the team runs <code>bun run src/kernel.ts --workflow examples/workflows/productivity/github-check-prs.json</code>, and the agent opens the GitHub app, searches the PR, copies the status, and replies in Slack—all without manual UI steps.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No LICENSE</strong> – repository root lacks any licence file; reuse is legally ambiguous.</li><li><strong>HIGH – No test suite</strong> – 11 source files, only one ad‑hoc test (<code>test-ollama.ts</code>) and no structured tests.</li><li><strong>HIGH – No lockfile</strong> – <code>package.json</code> present without <code>bun.lockb</code>; builds are non‑reproducible.</li><li><strong>HIGH – No CI pipeline</strong> – no <code>.github/workflows/</code> or other CI config; changes are not automatically built or tested.</li><li><strong>MEDIUM – Dependabot missing</strong> – no <code>dependabot.yml</code>; security updates rely on manual checks.</li><li><strong>MEDIUM – Cognitive load</strong> – <code>src/sanitizer.ts</code> and <code>src/flow.ts</code> contain dense branching (56 branches in 191 lines); refactoring into strategy tables would improve maintainability.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>droidclaw</code> delivers a functional prototype for AI‑guided Android automation, with clear entry points and extensible workflow files. However, the codebase lacks basic production safeguards (license, tests, CI, lockfile) and contains complex branching that will hinder scaling. It is suitable for experimentation or internal tooling, but any external deployment should first address the health issues and add a solid test suite.</p>
             </div>
 
             
@@ -100,18 +127,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">64<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>JSON</span><i style="width:100%"></i><b>39</b></li><li><span>TypeScript</span><i style="width:28%"></i><b>11</b></li><li><span>Markdown</span><i style="width:13%"></i><b>5</b></li><li><span>YAML</span><i style="width:13%"></i><b>5</b></li><li><span>HTML</span><i style="width:3%"></i><b>1</b></li><li><span>Shell</span><i style="width:3%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Express</span></p>
                     </div>
                 </div>
 
@@ -155,6 +182,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159544956">Open in Code Brain &rarr;</a>

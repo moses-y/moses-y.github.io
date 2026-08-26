@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 17, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">SQL</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>mindsdb</h1>
@@ -80,10 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#create-view-salessupport-as">CREATE VIEW salessupport AS</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Juggling data across multiple databases, warehouses, and cloud apps is a nightmare. You end up duct-taping scripts, wrestling with ETL, and still can&#39;t ask a simple question across all your sources. AI integrations? Usually an afterthought or a bolt-on hack.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>mindsdb is an open-source federated query engine with a built-in MCP server. It connects to just about anything—MySQL, Postgres, MongoDB, SaaS APIs—so you don&#39;t have to babysit a dozen connectors. The guts live in folders like docker/ (for container builds), .github/workflows/ (CI/CD), and a mountain of docs in docs/. You get SQL-like unification: create views and knowledge bases to blend structured and unstructured data, no ETL required. The magic is in how you can schedule jobs (see the docs on jobs) to automate cleaning or syncing. Want AI-powered responses? Hook up agents and chat directly with your data.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say your sales data lives in MySQL and customer support logs are in MongoDB. With MindsDB, you spin up a container (docker-compose.yml), connect both sources, and create a unified view:</p><h3 class="post-h" id="create-view-salessupport-as">CREATE VIEW salessupport AS</h3><p>SELECT s.orderid, s.amount, m.supportticket
-FROM mysql.sales s
-JOIN mongodb.support m ON s.customerid = m.customer_id;</p><p>You can then fire off questions like, &quot;Show all orders with unresolved tickets,&quot; and get answers without writing glue code. Want to automate a nightly sync? Set up a job in SQL to run transformations whenever you want.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MindsDB does what most &quot;AI data platforms&quot; promise but rarely deliver: one place to connect, unify, and ask questions across messy data. It&#39;s overkill for tiny projects or if you&#39;re allergic to containers, but if you need AI-powered queries across enterprise sources, it&#39;s actually worth your time. The docs are exhaustive, maybe too much, but at least you won&#39;t get stuck. For anyone sick of ETL and patchwork scripts, this is a solid option.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>Technical Briefing: MindsDB</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>MindsDB addresses the need for a federated query engine that connects diverse data sources, unifies them under a SQL interface, and enables AI agents to respond to queries across them. Organizations operating across multiple databases, data warehouses, and SaaS applications need a unified layer without custom ETL pipelines or data migration.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MindsDB is a server-based federated query engine for AI. Its architecture has three pillars:</p>
+<ul><li><strong>Connect</strong>: Integrations layer that connects to hundreds of data sources (databases, warehouses, SaaS). The integrations live in <code>mindsdb/integrations/</code>, with handler modules for specific databases and services. A central hub is <code>mindsdb/integrations/libs/const.py</code>, which 344 modules depend on—making it a high-blast-radius dependency point.</li></ul>
+<ul><li><strong>Unify</strong>: SQL layer providing knowledge bases (for indexing unstructured data) and views (for creating unified access across sources without ETL). Jobs automate synchronization and transformation. The SQL utilities reside in <code>mindsdb/integrations/utilities/sql_utils.py</code>, where analysis found max indentation depth of 6, indicating control flow that is hard to follow.</li></ul>
+<ul><li><strong>Respond</strong>: Agents and an built-in MCP server that enable chat-with-data workflows. Entry points include <code>mindsdb/__main__.py</code> and <code>mindsdb/api/a2a/common/server/server.py</code>.</li></ul>
+<p>The import graph spans 1499 internal modules with 2117 import edges. Seven modules participate in circular dependencies, specifically <code>mindsdb/api/executor/controllers/session_controller.py</code> and <code>mindsdb/interfaces/database/database.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>mindsdb/__main__.py</code> (the package entry point) or via <code>setup.py</code> for installation. From there, control flows through the integrations layer toward data source-specific handlers. The most connected module, <code>mindsdb/integrations/libs/const.py</code>, is imported by 344 other modules and exports constants used throughout the codebase—any change to it has wide-reaching impact.</p>
+<p>The <code>mindsdb/integrations/utilities/sql_utils.py</code> file shows deep nesting (depth 6), and <code>mindsdb/integrations/utilities/query_traversal.py</code> similarly has high indentation. These files are part of the query-building pipeline that constructs SQL from natural language or user input.</p>
+<p>The import cycle between <code>session_controller.py</code> and <code>database.py</code> means these modules mutually reference each other, which can slow refactoring and increase risk when modifying either file.</p>
+<p>What the code touches outside the repo: outbound HTTP calls from <code>mindsdb/integrations/handlers/rag_handler/settings.py</code> (no timeout configured), and Docker container builds that pull mutable base images.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>:</p>
+<pre data-lang="bash"><code># Using Docker Desktop (recommended)
+docker run -p 47324:47324 mindsdb/mindsdb
+
+# Or using Docker Compose
+docker-compose up -d</code></pre>
+<p><strong>Configuration</strong>: Environment variables and connection settings are managed through the MindsDB dashboard or specified in docker-compose.yml and docker/db_images/*/Dockerfiles. The MCP server is built-in per the documentation.</p>
+<p><strong>Running it</strong>:</p>
+<pre data-lang="bash"><code>python -m mindsdb  # from mindsdb/__main__.py
+# or via the API
+curl http://localhost:47324/api/v1/status</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer connects MindsDB to a PostgreSQL database and a Salesforce instance, creates a knowledge base over CRM tickets, and deploys an agent that answers "What's our average resolution time by product?" The agent routes through the MCP server, which translates the natural language query into federated SQL across the two sources, executes via the unify layer, and returns a response.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings from static analysis (253 total):</strong></p>
+<ul><li>[HIGH/clarity] Hub module x15 — <code>mindsdb/integrations/libs/const.py</code>, <code>mindsdb/utilities/__init__.py</code>, <code>mindsdb/integrations/libs/response.py</code>. 344 modules depend on <code>const.py</code>; churn here is high-blast-radius.</li><li>[HIGH/soundness] Import cycle member x2 — <code>mindsdb/api/executor/controllers/session_controller.py</code> and <code>mindsdb/interfaces/database/database.py</code>. Mutually reachable modules.</li><li>[HIGH/cognitive_load] Deep nesting x29 — <code>mindsdb/integrations/utilities/sql_utils.py</code>, <code>mindsdb/integrations/utilities/query_traversal.py</code>, <code>mindsdb/api/executor/utilities/sql.py</code>. Max indentation depth 6.</li><li>[MEDIUM/resilience] Broad exception handling x11 — <code>mindsdb/utilities/functions.py</code>, <code>mindsdb/api/executor/utilities/sql.py</code>, <code>mindsdb/utilities/fs.py</code>. Bare <code>except</code> swallows errors.</li><li>[MEDIUM/cognitive_load] High branching density x3 — <code>mindsdb/integrations/utilities/handler_utils.py</code>, <code>mindsdb/integrations/utilities/query_traversal.py</code>, <code>mindsdb/api/mysql/mysql_proxy/data_types/mysql_datum.py</code>. 36 branch points over 92 lines.</li></ul>
+<p><strong>Code Health Audit (9 findings):</strong></p>
+<ul><li>[HIGH] Pin third-party GitHub Actions to commit SHA — <code>.github/workflows</code> references <code>dorny/paths-filter@v3</code>, <code>mindsdb/github-actions/get-deploy-labels@main</code>, <code>mindsdb/github-actions/docker-bake@main</code>, <code>FranzDiebold/github-env-vars-action@v2</code>. Tags can move; SHAs are immutable.</li><li>[HIGH] Commit a lockfile beside the manifest — <code>pyproject.toml</code> has no lockfile in scope. Unlocked ranges mean tested and shipped artifacts can differ.</li><li>[MEDIUM] Pin container base image by digest — <code>docker/db_images/mariadb/Dockerfile</code> uses mutable tag <code>mariadb</code> instead of <code>mariadb@sha256:&lt;digest&gt;</code>.</li><li>[MEDIUM] Give the outbound request a timeout — <code>mindsdb/integrations/handlers/rag_handler/settings.py</code> has 1 outbound call with no timeout; <code>requests</code> has no default timeout.</li><li>[MEDIUM] Set persist-credentials: false on checkout — <code>.github/workflows/build_deploy_prod.yml</code> keeps the token in <code>.git/config</code> for all later steps.</li><li>[MEDIUM] Enable Dependabot or Renovate — 189 manifests, no update bot configured.</li><li>[MEDIUM] Gate pull requests on dependency vulnerability scan — no dependency scan in CI.</li><li>[LOW] Set timeout-minutes on workflow jobs — <code>.github/workflows/build_deploy_dev.yml</code> declares no job timeout.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MindsDB delivers a functional federated query engine with a working MCP server and broad data-source connectivity. The codebase is large (3518 files, 1499 modules) and shows signs of structural debt: a heavily depended-on const hub, circular imports, deep nesting, and missing lockfile/pinned dependencies. It is suitable for teams needing immediate federated AI query capability, but engineering teams should budget time to stabilize the hub modules, add a lockfile, and lock down CI action SHAs before productionizing.</p>
             </div>
 
             
@@ -93,18 +125,18 @@ JOIN mongodb.support m ON s.customerid = m.customer_id;</p><p>You can then fire 
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">3,518<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>19</b></li><li><span>Markdown</span><i style="width:53%"></i><b>10</b></li><li><span>JSON</span><i style="width:21%"></i><b>4</b></li><li><span>SQL</span><i style="width:16%"></i><b>3</b></li><li><span>Docker</span><i style="width:11%"></i><b>2</b></li><li><span>HCL</span><i style="width:5%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>1763</b></li><li><span>Markdown</span><i style="width:13%"></i><b>238</b></li><li><span>YAML</span><i style="width:2%"></i><b>28</b></li><li><span>JSON</span><i style="width:1%"></i><b>14</b></li><li><span>SQL</span><i style="width:0%"></i><b>5</b></li><li><span>Docker</span><i style="width:0%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Django</span><span>FastAPI</span><span>Docker</span><span>TensorFlow</span><span>Transformers</span><span>LangChain</span><span>Vector store</span><span>pandas</span><span>MLflow</span></p>
                     </div>
                 </div>
 

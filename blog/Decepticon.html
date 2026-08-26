@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#decepticon-ai-agents-for-hacking-legally-hopeful">Decepticon: AI Agents for Hacking (Legally, Hopefully)</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="decepticon-ai-agents-for-hacking-legally-hopeful">Decepticon: AI Agents for Hacking (Legally, Hopefully)</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Red teaming is tedious. Manual recon, planning attacks, executing them, and documenting results—it&#39;s all time-consuming and repetitive. Plus, when you’re simulating adversarial behavior, you’re limited by human creativity and speed. What if you could offload the grunt work to autonomous agents that handle it for you? That’s where Decepticon comes in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Decepticon is an &quot;AI hacker&quot;—a multi-agent red-teaming framework designed to simulate adversarial behavior autonomously. Think of it as a hive mind of bots that can handle the various stages of a cyberattack: reconnaissance, initial access, lateral movement, and more. The project is Python-heavy (82 files), with a frontend (frontend/streamlitapp.py) built on Streamlit. The backend lives in src/, which includes agent definitions (src/agents/swarm/), prompt engineering (src/prompts/), and utilities for managing AI models (src/utils/llm/).</p><p>The architecture is built around a &quot;multi-agent system&quot; where agents like Planner, Recon, and Summary (all in src/agents/swarm/) perform specific tasks and coordinate via shared states and workflows (frontend/web/core/workflowhandler.py). You can interact with this system either via CLI (frontend/cli/cli.py) or the web UI.</p><p>For deployment, there’s a Dockerfile.attacker and docker-compose.yml—so yes, you can run this in a containerized setup for better isolation. The project even supports both cloud-based and local AI models (src/utils/llm/configmanager.py), meaning you can roll your own &quot;AI hacker&quot; without an internet connection if you’re paranoid. Smart.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re testing a company’s network security. You could configure mcpconfig.json to define attack settings, deploy the agents, and let them do their thing—recon, exploit, summarize findings, repeat. Then, you can use the replay feature (frontend/web/core/chatreplay.py) to walk through how the attack unfolded and share it with stakeholders. Or, export logs and submit them as part of a PR to the open-source community.</p><p>Here’s a quick snippet to spin up the agents via CLI:</p><p>python frontend/cli/cli.py --config mcpconfig.json</p><p>The agents will start coordinating tasks like scanning for vulnerabilities (src/tools/mcp/Reconnaissance.py) and attempting initial access (src/tools/mcp/Initial_Access.py).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Decepticon is ambitious—and let’s be real, a little terrifying. It’s not for casual users or folks looking for a quick vulnerability scan. But if you’re into offensive security or want to explore the bleeding edge of AI-driven red teaming, it’s worth your time. Just don’t forget the “don’t hack without permission” rule, or you’ll end up needing an actual lawyer, not a Python one.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Red‑team teams spend large amounts of manual effort orchestrating toolchains, logging output, and stitching together attack phases.  Without automation, repeatable, auditable engagements are hard to scale, and knowledge transfer between operators is limited.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Decepticon</code> implements an autonomous multi‑agent red‑team framework.  The CLI entry point <code>frontend/cli/cli.py</code> loads prompt definitions (<code>src/prompts/prompt_loader.py</code>), constructs LLM‑backed agents (<code>src/agents/swarm/*.py</code>), and drives a workflow through the <em>swarm</em> graph (<code>src/graphs/swarm.py</code>).  The web UI (<code>frontend/web/pages/01_Chat.py</code> and related components) offers an interactive front‑end that re‑uses the same executor logic (<code>frontend/web/core/executor.py</code>).  Core utilities such as LLM configuration (<code>src/utils/llm/config_manager.py</code>), memory handling (<code>src/utils/memory.py</code>), and logging (<code>src/utils/logging/logger.py</code>) are shared across both interfaces.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>frontend/cli/cli.py</code></strong> (the declared entry point).</p>
+<ol><li><strong>CLI bootstrap</strong> – parses arguments and calls <code>frontend/web/core/executor_manager.run()</code> which in turn creates an <code>Executor</code> (<code>src/utils/executor.py</code>).</li><li><strong>Prompt loading</strong> – <code>Executor</code> imports <code>src/prompts/prompt_loader.py</code>; this module imports 11 other prompt files (e.g., <code>src/prompts/base/initaccess.py</code>) and is the most‑connected source (Ca = 4, Ce = 11, instability 0.73).</li><li><strong>Agent creation</strong> – <code>src/agents/swarm/__init__.py</code> pulls the prompt objects into agent classes (<code>InitAccess</code>, <code>Planner</code>, <code>Recon</code>, <code>Summary</code>).  Each agent references the LLM config via <code>src/utils/llm/config_manager.py</code> (Ca = 7, Ce = 1, low instability).</li><li><strong>Graph orchestration</strong> – <code>src/graphs/swarm.py</code> builds a directed workflow linking the agents; it imports the agents and the shared memory store (<code>src/utils/memory.py</code>).  The graph module is also a hub (Ca = 4, Ce = 6).</li><li><strong>Execution</strong> – <code>Executor.run()</code> iterates the graph, calling each agent’s <code>run()</code> method, which ultimately invokes the LLM through <code>src/utils/llm/models.py</code>.  Results are logged by <code>src/utils/logging/logger.py</code> (high nesting depth, see health findings).</li><li><strong>Web UI path</strong> – The same executor logic is exposed via <code>frontend/web/core/executor.py</code>, which is invoked by the Streamlit app (<code>frontend/streamlit_app.py</code>) and the Flask‑based UI (<code>frontend/web/pages/01_Chat.py</code>).  Both routes converge on the same core modules, giving a single blast radius for changes to <code>Executor</code>, <code>prompt_loader</code>, or the LLM config manager.</li></ol>
+<p>No circular imports were detected, so the dependency graph is acyclic.  The largest fan‑in modules are <code>src/prompts/prompt_loader.py</code> and <code>frontend/web/utils/constants.py</code>, meaning changes there affect many downstream files.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Decepticon
+cd Decepticon
+
+# Install Python deps (pip is the declared manager)
+pip install -r requirements.txt   # or: pip install .   (pyproject.toml)
+
+# Build and run the attacker container (Dockerfile.attacker)
+docker compose -f docker-compose.yml up --build   # pulls kalilinux/kali-rolling
+
+# Run the CLI locally (alternatively, exec into the container)
+python frontend/cli/cli.py   # shows available commands in the help output</code></pre>
+<p><em>Configuration</em>: copy <code>.env.example</code> to <code>.env</code> and populate any required keys (e.g., OpenAI API tokens) – the repo does not ship defaults, so the application will abort until they are set.</p>
+<p><em>Web UI</em>: after the container is up, open <code>http://localhost:8501</code> (Streamlit) or <code>http://localhost:5000</code> (Flask) to access the chat‑based interface.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A penetration‑testing consultancy could embed <code>Decepticon</code> in their CI pipeline to automatically generate reconnaissance reports.  A simple script could invoke <code>frontend/cli/cli.py --target 10.0.0.5 --plan full</code>, capture the JSON replay (<code>frontend/web/core/chat_replay.py</code>), and archive it alongside manual findings for client delivery.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 82 source files, zero test files.</li><li><strong>HIGH – No CI workflow</strong> – repository lacks any GitHub Actions or other pipeline definitions.</li><li><strong>HIGH – Privileged Docker &amp; host networking</strong> – <code>docker-compose.yml</code> sets <code>privileged: true</code> and <code>network_mode: host</code>.</li><li><strong>HIGH – No build gate for deployable artifacts</strong> – images are built but never validated in CI.</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> – only <code>pyproject.toml</code> and <code>requirements.txt</code> are present.</li><li><strong>MEDIUM – Mutable base image</strong> – <code>Dockerfile.attacker</code> uses <code>kalilinux/kali-rolling</code> tag.</li><li><strong>MEDIUM – Large binaries in repo</strong> – <code>.github/web.gif</code> (40 MB) and other GIFs exceed 5 MB.</li><li><strong>MEDIUM – No non‑root user in Dockerfile</strong> – containers run as root by default.</li><li><strong>MEDIUM – Deep nesting &amp; duplicated code</strong> – files such as <code>src/utils/logging/logger.py</code> have indentation depth 8; repeated 6‑line blocks appear in &gt;25 files.</li><li><strong>MEDIUM – Broad exception handling</strong> – many <code>except:</code> clauses swallow errors.</li><li><strong>MEDIUM – Oversized CLI file</strong> – <code>frontend/cli/cli.py</code> contains 928 lines, making local changes high‑risk.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Decepticon</code> provides a concrete, code‑driven red‑team automation layer with a clear separation between CLI, web UI, and shared agent logic.  Its architecture is functional but suffers from serious production‑readiness gaps: no tests, no CI, and unsafe Docker defaults.  Teams that need rapid prototyping of AI‑assisted attacks can adopt it, but must first harden the build pipeline, add test coverage, and remediate the highlighted security and maintainability issues.</p>
             </div>
 
             
@@ -91,18 +119,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">130<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>82</b></li><li><span>CSS</span><i style="width:12%"></i><b>10</b></li><li><span>TOML</span><i style="width:6%"></i><b>5</b></li><li><span>JSON</span><i style="width:6%"></i><b>5</b></li><li><span>Markdown</span><i style="width:5%"></i><b>4</b></li><li><span>YAML</span><i style="width:4%"></i><b>3</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Flask</span><span>Docker</span><span>LangChain</span></p>
                     </div>
                 </div>
 
@@ -129,6 +157,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159023254">Open in Code Brain &rarr;</a>

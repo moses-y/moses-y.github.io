@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>zvec</h1>
@@ -80,19 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#in-process-vector-search-with-zvec">In-Process Vector Search with Zvec</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#define-schema">Define schema</a><a href="#create-collection">Create collection</a><a href="#insert-data">Insert data</a><a href="#query-similar-items">Query similar items</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="in-process-vector-search-with-zvec">In-Process Vector Search with Zvec</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Most vector databases are overkill for lightweight use cases. You want fast vector search embedded right into your app, but the usual suspects—like Pinecone or Milvus—make you spin up servers, manage clusters, and deal with scaling headaches. What if you just want to search a few million vectors locally without the ops overhead? That’s where zvec comes in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>zvec is an in-process vector database that lets you embed blazing-fast similarity search directly into your codebase. No servers, no containers, no nonsense—just import the library and go. The repo structure tells you how it works:  
-Core Search Logic: Found in src/ailego/. This is where the heavy lifting happens—distance calculations, matrix operations, and quantization algorithms. It’s all written in C++ for speed, because Python just doesn’t cut it here.  
-Python Bindings: Located in src/binding/python/. These files glue the C++ backend to Python, exposing APIs like zvec.createandopen and zvec.CollectionSchema.  
-Examples: The examples/c++/ folder has some starter code for C++ usage, but let’s be real—most folks are here for Python.</p><p>It supports dense and sparse vectors, multi-vector queries, and even hybrid search (semantic + filters). The Python API is clean and intuitive, making it painless to set up and start searching.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re building a local recommendation engine for your app. Instead of spinning up a full-blown vector database, you can use zvec like this:</p><p>import zvec</p><h3 class="post-h" id="define-schema">Define schema</h3><p>schema = zvec.CollectionSchema(  
-    name=&quot;localrecengine&quot;,  
-    vectors=zvec.VectorSchema(&quot;embedding&quot;, zvec.DataType.VECTORFP32, 128),  
-)</p><h3 class="post-h" id="create-collection">Create collection</h3><p>collection = zvec.createandopen(path=&quot;./recdata&quot;, schema=schema)</p><h3 class="post-h" id="insert-data">Insert data</h3><p>collection.insert([  
-    zvec.Doc(id=&quot;item1&quot;, vectors={&quot;embedding&quot;: [0.1, 0.2, ...]}),  
-    zvec.Doc(id=&quot;item2&quot;, vectors={&quot;embedding&quot;: [0.3, 0.4, ...]}),  
-])</p><h3 class="post-h" id="query-similar-items">Query similar items</h3><p>results = collection.query({&quot;embedding&quot;: [0.15, 0.25, ...]}, top_k=5)  
-for result in results:  
-    print(result.id, result.score)</p><p>No cluster setup. No network latency. Just fast, local vector search.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>zvec is a sharp tool for developers who need fast, lightweight vector search without infrastructure headaches. It’s perfect for local apps, prototypes, and edge deployments, but it might struggle with massive, distributed workloads—stick with Milvus for that. The codebase is well-organized and leans on solid C++ fundamentals, but Python users might feel the lack of higher-level abstractions. For the right use case, though, this is a no-brainer.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Applications that need low‑latency similarity search often spin up separate vector‑search services (e.g., Milvus, Vespa) or embed heavyweight libraries. That adds deployment complexity, network overhead, and resource waste for workloads that run in a single process such as notebooks, edge services, or micro‑services.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>zvec</code> provides an in‑process vector database built on Alibaba’s Proxima engine. The core C++ implementation lives under <code>src/ailego/</code> (e.g., <code>src/ailego/algorithm/kmeans.h</code>, <code>src/ailego/math/*</code>). Python bindings are generated in <code>src/binding/python/</code> (<code>binding.cc</code>) and exposed through the <code>python/zvec/</code> package. High‑level Python APIs such as <code>zvec.CollectionSchema</code>, <code>zvec.create_and_open</code>, and <code>zvec.Doc</code> are defined in <code>python/zvec/model/</code> and <code>python/zvec/extension/</code>. The repository ships with a full test suite (<code>python/tests/</code>) and CI pipelines (<code>.github/workflows/</code>) that compile the native library and run the Python tests.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in Python code that imports <code>zvec</code>. The import chain is:</p>
+<ol><li><code>python/zvec/__init__.py</code> → re‑exports symbols from <code>python/zvec/model/</code> and <code>python/zvec/extension/</code>.</li><li>Creating a collection (<code>zvec.create_and_open</code>) calls <code>python/zvec/model/collection.py</code>, which constructs a <code>Collection</code> object.</li><li><code>collection.py</code> invokes the C++ binding via the generated module <code>zvec._core</code> (exported from <code>src/binding/python/binding.cc</code>).</li><li>The binding forwards calls to the native library entry points in <code>src/ailego/</code> (e.g., <code>src/ailego/io/file.cc</code> for persistence, <code>src/ailego/algorithm/*</code> for indexing, and <code>src/ailego/math/*</code> for distance computation).</li><li>Results propagate back through the binding to the Python wrapper, which returns native Python objects (<code>zvec.Doc</code>, <code>zvec.QueryResult</code>).</li></ol>
+<p>The import graph (56 internal modules, 86 edges) shows no circular dependencies. The most‑connected Python module is <code>python/zvec/extension/__init__</code> (imports 12 others, referenced by 3), indicating it is the hub for extension functions such as <code>bm25_embedding_function.py</code> and <code>openai_embedding_function.py</code>. The <code>python/zvec/model/doc.py</code> module is heavily imported (9 inbound edges) but only imports one other module, making it a low‑instability leaf.</p>
+<p>All filesystem interaction is confined to <code>src/ailego/io/file.cc</code> and <code>src/ailego/io/file_lock.cc</code>. No network code is present, confirming the “in‑process only” claim. The C++ side is compiled via the top‑level <code>CMakeLists.txt</code>, which pulls in <code>src/ailego/CMakeLists.txt</code> and <code>src/binding/CMakeLists.txt</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and enter the repo
+git clone https://github.com/moses-y/zvec
+cd zvec
+
+# Build the native library (requires cmake &amp; a C++17 compiler)
+mkdir build &amp;&amp; cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --parallel
+
+# Install the Python package from the source tree
+cd ..                # back to repo root
+pip install .        # reads pyproject.toml, builds the extension</code></pre>
+<p>A minimal Python script (mirroring the README) is:</p>
+<pre data-lang="python"><code>import zvec
+
+schema = zvec.CollectionSchema(
+    name="demo",
+    vectors=zvec.VectorSchema("emb", zvec.DataType.VECTOR_FP32, 4),
+)
+
+col = zvec.create_and_open("./demo_db", schema)
+col.insert([zvec.Doc(id="d1", vectors={"emb": [0.1, 0.2, 0.3, 0.4]})])
+print(col.search(zvec.Query(vectors={"emb": [0.1, 0.2, 0.3, 0.4]}, top_k=1)))</code></pre>
+<p>Run the script with <code>python demo.py</code>. The example under <code>examples/c++/db/main.cc</code> demonstrates the same flow in C++.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A recommendation engine can embed <code>zvec</code> directly into its inference service. After loading a pre‑computed embedding matrix into a <code>Collection</code>, each request calls <code>collection.search()</code> to retrieve the nearest neighbours in &lt; 5 ms, eliminating HTTP round‑trips to an external vector store.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – lockfile missing</strong> – <code>pyproject.toml</code> declares dependencies but no lockfile (e.g., <code>poetry.lock</code>).</li><li><strong>Medium – Dependabot not configured</strong> – only one manifest (<code>pyproject.toml</code>).</li><li><strong>Medium – Docker base image not pinned</strong> – <code>.github/workflows/docker/Dockerfile.linux_x64_glibc228</code> uses <code>ubuntu:18.10</code>.</li><li><strong>Medium – No dependency‑vulnerability scan</strong> – CI lacks <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Checkout persists token</strong> – <code>build_test_wheel.yml</code> should set <code>persist-credentials: false</code>.</li><li><strong>Low – Workflow jobs lack timeout</strong> – four CI jobs have no <code>timeout-minutes</code>.</li></ul>
+<p>Additional findings from static analysis: <code>python/zvec/model/collection.py</code> opens files without a context manager, and several C++ files (<code>examples/c++/db/main.cc</code>, <code>src/ailego/algorithm/integer_quantizer.cc</code>, <code>src/ailego/algorithm/kmeans.h</code>) exhibit deep nesting (up to 10 levels), increasing cognitive load.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>zvec</code> delivers a fast, in‑process vector store with a clean Python API backed by a well‑structured C++ core. It is ready for integration into latency‑sensitive services, but production use should address the missing lockfile, Docker image pinning, and CI hardening to reduce supply‑chain risk. Engineers comfortable with CMake and Python extensions will find the codebase approachable and extensible.</p>
             </div>
 
             
@@ -102,18 +131,18 @@ for result in results:
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">843<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>55</b></li><li><span>C/C++ Header</span><i style="width:84%"></i><b>46</b></li><li><span>YAML</span><i style="width:27%"></i><b>15</b></li><li><span>Markdown</span><i style="width:7%"></i><b>4</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li><li><span>Shell</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>316</b></li><li><span>Python</span><i style="width:18%"></i><b>56</b></li><li><span>YAML</span><i style="width:5%"></i><b>15</b></li><li><span>C++</span><i style="width:3%"></i><b>8</b></li><li><span>Markdown</span><i style="width:2%"></i><b>5</b></li><li><span>Shell</span><i style="width:1%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -144,6 +173,12 @@ for result in results:
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159559244">Open in Code Brain &rarr;</a>

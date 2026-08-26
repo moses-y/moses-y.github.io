@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 18, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Validation in JavaScript can be a headache. Libraries like Joi often feel like overkill for simple use cases, bogging you down with configuration and dependencies. You just want something that’s fast and easy to use, without the bloat.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter fastest-validator, a lightweight library that promises speed and simplicity. Found in the lib/ directory, the core validator logic is encapsulated in validator.js, which allows you to define schemas and validate data effortlessly. The examples/ folder provides handy snippets for common use cases, including how to integrate it in a React app with examples/with-react-nextjs/.</p><p>The library supports over 20 built-in validators, and if those don’t fit your needs, you can create custom validators. Want to halt validation on the first error? Just pass haltOnFirstError: true when creating your Validator instance. The whole setup is straightforward, and with npm install fastest-validator, you&#39;re off to the races.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re building a REST API and need to validate incoming requests. Instead of writing verbose validation logic, you can define a schema like this:</p><p>Simply call check(data) to validate your object. If there’s an issue, you’ll get a clear error response without the noise.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>fastest-validator is a solid choice if you need quick, no-frills validation without the overhead of larger libraries. It’s perfect for small to medium projects where performance matters. Just keep in mind, if your validation needs are complex, you might outgrow it. But for most cases, it’s a breath of fresh air.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients need a validation engine that runs in Node, the browser, and Deno without pulling in external dependencies. Existing libraries (e.g., Joi) trade speed for feature‑richness, which can become a bottleneck in high‑throughput services or edge‑runtime environments.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>fastest-validator</code> compiles a JSON‑style schema into a plain JavaScript function using the <code>Function</code> constructor. The compiled checker validates an object in a single pass and returns either <code>true</code> or an array of error objects. The core lives in <code>lib/validator.js</code>, which loads built‑in rule implementations from <code>lib/rules/*.js</code> and message templates from <code>lib/messages.js</code>. Helper utilities such as <code>lib/helpers/deep-extend.js</code> and <code>lib/helpers/flatten.js</code> support rule compilation and error formatting. Example usage is provided in <code>examples/index.js</code> and the browser bundle in <code>examples/browser/index.html</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when a consumer calls <code>new Validator()</code> (exported from <code>index.js</code>). The constructor forwards to <code>lib/validator.js</code>, the hub module (27 inbound, 27 outbound imports, instability 0.5).</p>
+<ol><li><strong>Schema compile</strong> – <code>Validator.prototype.compile</code> invokes <code>compile</code> → <code>getRuleFromSchema</code> (8 callers) → <code>compileRule</code> (4 callers) → rule‑specific generators in <code>lib/rules/*.js</code>.</li><li><strong>Rule generation</strong> – each rule may call <code>deepExtend</code> (5 callers) and <code>makeError</code> (7 callers) to merge defaults and produce error objects.</li><li><strong>Validation</strong> – the generated checker calls <code>check</code> (the main validation loop) which ultimately invokes <code>render</code> → <code>check</code> → rule functions. <code>makeError</code> is the most frequently called error builder (48 call sites).</li></ol>
+<p>The call graph shows no circular dependencies, but <code>lib/validator.js</code> is a high‑impact hub; any change there propagates to all rule modules and the public API. The deepest nesting (7 levels) appears in <code>lib/validator.js</code> and several object‑rule tests, making those files cognitively heavy. Several test files (<code>test/integration.spec.js</code>, <code>test/typescript/integration.spec.ts</code>, <code>test/validator.spec.js</code>) exceed 1 200 lines, inflating the blast radius for test‑maintenance.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/fastest-validator
+cd fastest-validator
+
+# Install dependencies
+npm ci
+
+# Run the benchmark (optional sanity check)
+npm run bench
+
+# Compile a schema in your code
+node -e "
+const Validator = require('./index');
+const v = new Validator();
+const schema = { id:{type:'number',positive:true,integer:true}, name:{type:'string',min:3} };
+const check = v.compile(schema);
+console.log(check({id:5,name:'Bob'})); // true
+"</code></pre>
+<p>No additional configuration files are required; the library is zero‑dependency and works out‑of‑the‑box in Node, browsers (via the UMD bundle in <code>examples/browser/index.html</code>), and Deno (<code>examples/deno/index.ts</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A microservice handling millions of JSON payloads per second can instantiate a single <code>Validator</code> per schema at startup, cache the compiled checker, and invoke it for each request. Because the checker is plain JavaScript, V8 can inline and optimize it, delivering the advertised ~8 M validations / s on modest hardware.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/deno.yml</code> uses <code>denolib/setup-deno@master</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> (<code>.github/workflows/deno.yml</code>).</li><li><strong>Medium</strong> – Enable Dependabot or Renovate (<code>package.json</code> present, no config).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI (<code>.github/workflows</code> lacks such a step).</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on the checkout step (<code>.github/workflows/nodejs.yml</code>).</li><li><strong>Low</strong> – Define <code>timeout-minutes</code> on workflow jobs (<code>.github/workflows/nodejs.yml</code>).</li></ul>
+<p>The repository includes full test coverage, a permissive MIT license, and CI for Node. No Dockerfile, secret leakage, or missing documentation beyond the README and basic examples.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>fastest-validator</code> delivers a genuinely dependency‑free, high‑throughput validation engine with a clear entry point and well‑scoped rule modules. Maintenance complexity stems from a dense core (<code>lib/validator.js</code>) and oversized test files; addressing those hotspots would ease future changes. Suitable for performance‑critical Node, browser, or Deno projects that can tolerate a modestly complex core.</p>
             </div>
 
             
@@ -91,9 +125,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">

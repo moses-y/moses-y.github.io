@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 18, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">JSX</span>
+                    <span>4 min read</span>
+                    <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>btw</h1>
@@ -80,8 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Setting up a personal blog shouldn&#39;t feel like deploying a production-grade SaaS app. Between configuring databases, dealing with authentication, and hosting, it’s easy to lose hours (or days) on stuff that should just work. Platforms like Medium are fine until you need control over your content, branding, or data. Self-hosting alternatives exist, but they’re often bloated, overly complex, or just plain annoying to work with.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>btw strips blogging down to the essentials. It’s an open-source Medium alternative that lets you self-host your blog in minutes. The repo is built with React and deploys via Docker, so you can skip the endless dependency hell and just get things running. The entry points are clean (list/assets/index.html for the UI, list/src/actions/app.ts for app-level actions) and the Docker setup is straightforward. The main config file, deploy/docker-compose.dev.yml, handles database setup, admin user creation, and optional extras like image uploads via S3.</p><p>The blogging interface is powered by list/src/components/Tiptap.jsx, a rich text editor component. It’s not bloated—just enough functionality to publish decent-looking posts without feeling like you need a manual. For custom branding, you’ve got access to font files in list/assets/media/fonts and icon sets in list/assets/media/icons.</p><p>Authentication is dead simple. You can opt for a basic login or toss in an OTP setup by defining ADMINOTP in the Docker config. Want SMTP for email-based login? Just plug your credentials into the environment variables (SMTPHOST, SMTPUSER, etc.).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re launching a blog for your side hustle. Clone the repo, set your ADMINEMAIL and ADMIN_SLUG in docker-compose.dev.yml, and docker-compose up your way to a working site. Use the editor (list/src/components/Tiptap.jsx) to write posts, and customize the look by swapping out fonts or icons in list/assets/media.</p><p>Here’s a snippet to set up the admin user and database:</p><p>Run docker-compose up and you’re live. No 20-step setup guide, no “why isn’t this working” rabbit holes.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>btw is the no-nonsense blogging platform for devs who don’t want to fight their tools. It’s easy to set up, extensible, and gets out of your way. The Docker-first approach makes it ideal for self-hosting without headaches. Downsides? It might be overkill if you just need a couple of static pages. But if you want control without complexity, this gets the job done.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Self‑hosting a personal‑blog platform typically requires wiring a front‑end, an API, background workers and a database together. Existing open‑source solutions either expose a monolithic codebase that is hard to reason about, or they lack the scaffolding (Docker, CI, CI‑gate) needed for a production‑grade deployment.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>btw</code> ships four loosely coupled projects that together implement a Medium‑style publishing stack:</p>
+<div class="table-scroll"><table><thead><tr><th>Project</th><th>Role</th><th>Key files</th></tr></thead><tbody><tr><td><strong>list</strong></td><td>Front‑end UI &amp; public site server</td><td><code>list/src/actions/app.ts</code>, <code>list/src/containers/ListContainer.jsx</code>, <code>list/Dockerfile</code></td></tr><tr><td><strong>writer</strong></td><td>Authenticated editor UI</td><td><code>writer/src/Root.jsx</code>, <code>writer/src/actions/index.ts</code></td></tr><tr><td><strong>tasks</strong></td><td>Background job runner &amp; email/AI services</td><td><code>tasks/app.js</code>, <code>tasks/services/db.js</code>, <code>tasks/services/queue.js</code></td></tr><tr><td><strong>publisher</strong></td><td>Content publishing API &amp; note handling</td><td><code>publisher/logic/notes.js</code>, <code>publisher/Dockerfile</code></td></tr></tbody></table></div>
+<p>All projects share a common toolchain: React, Tailwind, Express, TypeScript, Docker and npm. The <code>deploy/docker-compose.dev.yml</code> orchestrates the four containers and a Postgres instance.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in each container’s <code>Dockerfile</code>. For the public site the entry point is <code>list/src/actions/app.ts</code>, which creates an Express server, loads environment from <code>.env</code>, and mounts the React build (<code>list/assets/index.html</code>). Requests flow through the <strong>actions</strong> index (<code>list/src/actions/index.ts</code>) – the most‑connected module (8 inbound, 8 outbound imports, instability 0.5) – then to specific containers (e.g., <code>ListContainer</code>).</p>
+<p>The editor (<code>writer</code>) follows the same pattern, bootstrapping via <code>writer/src/actions/index.ts</code> (7 ↔ 7 imports).</p>
+<p>Background processing is driven by <code>tasks/app.js</code>, a hub with 16 outgoing imports (instability 1). It spawns workers defined in <code>tasks/services/db.js</code> (12 inbound, 0 outbound – a stable data layer) and <code>tasks/services/queue.js</code> (11 inbound, 0 outbound). These services are the only modules that interact with the PostgreSQL database, using connection strings from <code>deploy/docker-compose.dev.yml</code> (<code>TASKS_DATABASE_URL</code>).</p>
+<p>The publishing API (<code>publisher</code>) imports shared utilities from the other projects but remains isolated; its main logic resides in <code>publisher/logic/notes.js</code>.</p>
+<p>No circular dependencies were detected across the 350 analyzed files, but several hub modules (<code>list/src/actions/index</code>, <code>tasks/logic/user</code>) concentrate import traffic, meaning changes there have a wide blast radius.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/btw.git
+cd btw
+
+# Install npm dependencies for each sub‑project
+npm ci          # root lockfile (no scripts)
+cd list &amp;&amp; npm ci &amp;&amp; cd ..
+cd writer &amp;&amp; npm ci &amp;&amp; cd ..
+cd tasks &amp;&amp; npm ci &amp;&amp; cd ..
+
+# Prepare runtime configuration
+cp .env.example .env   # edit ADMIN_EMAIL, ADMIN_SLUG, SECRET, etc.
+# Variables are read by the Docker compose file.
+
+# Start the stack (Docker required)
+docker compose -f deploy/docker-compose.dev.yml up --build</code></pre>
+<p>The public site becomes reachable at <code>http://localhost:3000</code>, the editor at <code>http://localhost:3001</code>, and the task worker runs in the background. Logs are streamed to the console; the <code>Procfile</code> in <code>list/</code> defines the web process for Heroku‑style runtimes.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider could deploy <code>btw</code> per customer to give each a white‑label blog. The provider would run the Docker compose stack on a Kubernetes pod, replace the hard‑coded <code>ADMIN_EMAIL/SLUG</code> with per‑tenant values, and point the S3 configuration (<code>S3_ENDPOINT</code>, <code>S3_BUCKET</code>, etc.) at a tenant‑scoped bucket. Content authored in <code>writer</code> is persisted via the API, queued for background processing (e.g., email notifications), and finally served by <code>list</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>High cognitive load</strong> – deep nesting (28 occurrences) and oversized files (11 ≥ 688 LOC) in <code>tasks/services/db.js</code>, <code>tasks/logic/ai.js</code>, <code>list/src/containers/IntelligenceContainer.jsx</code>.</li><li><strong>Medium resilience</strong> – empty catch blocks (<code>list/src/fingerprint.js</code>, etc.).</li><li><strong>Medium clarity</strong> – hub modules (<code>tasks/logic/user.js</code>, <code>tasks/services/db.js</code>).</li><li><strong>High clarity</strong> – duplicated 6‑line blocks across config files.</li><li><strong>Medium cognitive load</strong> – high branching density in <code>publisher/logic/notes.js</code>, etc.</li></ul>
+<p><strong>Code‑health audit</strong></p>
+<ul><li><strong>HIGH</strong> – Add a CI build gate for <code>list/Dockerfile</code>.</li><li><strong>HIGH</strong> – Remove the committed <code>.env</code> and rotate its secrets.</li><li><strong>MEDIUM</strong> – Enable Dependabot/Renovate for dependency updates.</li><li><strong>MEDIUM</strong> – Pin Docker base image by digest in <code>list/Dockerfile</code>.</li><li><strong>MEDIUM</strong> – Add a pre‑commit secret‑scan hook.</li><li><strong>MEDIUM</strong> – Run container as a non‑root user (<code>USER</code> directive missing).</li><li><strong>LOW</strong> – Add repository convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Additional hygiene notes: tests exist (164 files) and CI runs via Travis (<code>.travis.yml</code>) and GitHub Actions (<code>.github/workflows/push.yml</code>). A licence file is present, but the repository currently ships a secret‑filled <code>.env</code>.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>btw</code> offers a functional, Docker‑ready stack for self‑hosted personal blogs, with clear separation between front‑end, editor, and background workers. However, the codebase suffers from deep nesting, large modules and duplicated configuration, and it ships a committed <code>.env</code> that must be removed before production use. It is suitable for teams comfortable refactoring high‑impact hub modules and tightening the DevSecOps pipeline.</p>
             </div>
 
             
@@ -91,18 +130,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">711<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JSX</span><i style="width:100%"></i><b>30</b></li><li><span>JavaScript</span><i style="width:90%"></i><b>27</b></li><li><span>TypeScript</span><i style="width:50%"></i><b>15</b></li><li><span>JSON</span><i style="width:27%"></i><b>8</b></li><li><span>YAML</span><i style="width:13%"></i><b>4</b></li><li><span>TSX</span><i style="width:10%"></i><b>3</b></li>
+                            <li><span>JavaScript</span><i style="width:100%"></i><b>126</b></li><li><span>TypeScript</span><i style="width:76%"></i><b>96</b></li><li><span>TSX</span><i style="width:51%"></i><b>64</b></li><li><span>JSX</span><i style="width:48%"></i><b>61</b></li><li><span>JSON</span><i style="width:24%"></i><b>30</b></li><li><span>CSS</span><i style="width:6%"></i><b>8</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -131,6 +170,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>.env</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1160527977">Open in Code Brain &rarr;</a>

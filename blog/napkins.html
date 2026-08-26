@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Turning a wireframe or sketch into a functioning app feels like the kind of task that should take 10 minutes but somehow ends up taking half your day. You’ve got to mess with design tools, write boilerplate code, and pray your API keys are configured properly. For developers who want to skip the repetitive parts and get straight to building, this repo is trying to close that gap.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>napkins.dev takes a screenshot or wireframe and turns it into an app. That’s not marketing fluff—it literally uses Meta’s Llama 4 vision model and Together AI for inference to analyze your design and spit out functional code. The entry point for the magic is app/api/generateCode/route.ts, which handles the code generation.</p><p>On the front end, it’s a Next.js app styled with Tailwind. The bulk of the UI components live in components/ui/—like button.tsx, select.tsx, and tooltip.tsx. The generated code can be viewed in a sandbox powered by Sandpack (components/code-viewer.tsx). It even uploads your images to an S3 bucket (app/api/s3-upload/route.ts) so you don’t have to worry about local storage or setup.</p><p>The repo’s structure is clean but opinionated. The lib/shadcn-docs/ folder is packed with reusable UI components like card.tsx and checkbox.tsx, which are based on the Shadcn library. The next.config.mjs file handles build settings, and tailwind.config.ts takes care of your styling system.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re prototyping a new app and want to skip the boring part—writing layouts and boilerplate code. You sketch out the UI, take a screenshot, upload it to your local instance of Napkins, and voila: the repo spits out functional React/Next.js code, complete with Tailwind styles.</p><p>For example, you could use the code viewer (components/code-viewer.tsx) to tweak the generated app directly or edit prompts to refine the result. Want to store your screenshots? Configure your S3 bucket using the .env file and let the backend (app/api/s3-upload/route.ts) handle the heavy lifting.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is clever and does what it promises. It’s perfect for hackathons, prototypes, or anyone who’s allergic to writing boilerplate. That said, it’s not production-ready—there’s no guarantee the generated app won’t require heavy cleanup. If you’re building something serious, you’ll want to treat this as a starting point, not a magic bullet. But for quick-and-dirty projects? It’s worth checking out.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Designers and product teams often produce wireframes or screenshots but must hand them off to developers to build a working app. Translating a static mockup into a functional codebase is time‑consuming and error‑prone, especially for rapid prototyping.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>napkins.dev</code> is a Next.js application that accepts a screenshot, runs it through the Llama 4 model (via Together.ai), and generates a minimal React/Next UI scaffold. The core generation logic lives in <code>app/api/generateCode/route.ts</code>, which calls the LLM and returns component code. UI primitives are provided by the <code>lib/shadcn-docs/</code> folder (e.g., <code>avatar.tsx</code>, <code>button.tsx</code>, <code>card.tsx</code>, etc.) and wrapped by the <code>components/ui/</code> collection. Styling is handled by Tailwind (<code>tailwind.config.ts</code>) and global CSS (<code>app/globals.css</code>). The repository also includes S3 upload support (<code>app/api/s3‑upload/route.ts</code>) for persisting generated images.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins with the Next.js App Router. The first server‑side request that triggers generation is the HTTP POST to <code>/api/generateCode</code>, implemented in <code>app/api/generateCode/route.ts</code>.</p>
+<ol><li><strong>Entry point</strong> – <code>app/api/generateCode/route.ts</code> reads the request payload, extracts the image URL, and calls the Llama 4 endpoint using the <code>TOGETHER_API_KEY</code> from <code>.env</code>.</li><li><strong>Code generation</strong> – The LLM response is parsed into a string of TypeScript/TSX code. The string is written to the response body and may be saved to S3 via the helper in <code>app/api/s3-upload/route.ts</code>.</li><li><strong>Component library</strong> – Generated code imports UI primitives from <code>lib/shadcn-docs/*.tsx</code>. The module <code>lib/shadcn-docs/index.ts</code> re‑exports all primitives and is the most connected internal module (imports 9 others, no incoming imports). This hub means any change to the index file ripples to every generated component.</li><li><strong>Rendering</strong> – The client‑side page <code>app/page.tsx</code> consumes the generated code, displaying it with the <code>components/code-viewer.tsx</code> component. This file contains deep nesting (max indent depth 6) and duplicated logic that also appears in <code>lib/shadcn-docs/select.tsx</code> and <code>components/ui/button.tsx</code>.</li><li><strong>Styling &amp; assets</strong> – Tailwind classes are applied throughout; static assets such as logos live in <code>public/</code>. No database or persistent state beyond the optional S3 bucket is used.</li></ol>
+<p>The call graph shows 25 analyzed modules, 9 import edges, and no circular dependencies, indicating a relatively flat dependency structure aside from the central <code>lib/shadcn-docs/index.ts</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repository
+git clone https://github.com/moses-y/napkins
+cd napkins
+
+# Install dependencies (npm is the package manager)
+npm install
+
+# Provide required environment variables
+# .env.example shows the needed keys
+#   TOGETHER_API_KEY=your_together_ai_key
+#   S3_ACCESS_KEY_ID=...
+#   S3_SECRET_ACCESS_KEY=...
+#   S3_BUCKET=...
+cp .env.example .env
+# edit .env to insert your values
+
+# Run the development server
+npm run dev</code></pre>
+<p>The server starts on <code>http://localhost:3000</code>. Use the UI to upload a screenshot; the backend will invoke the LLM and return a generated app view.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team can embed <code>napkins.dev</code> in an internal portal. When a designer uploads a new wireframe, the service instantly produces a runnable Next.js prototype that developers can clone, review, and iterate on, reducing hand‑off time from days to minutes.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 25 source files, zero test files.</li><li><strong>High – No CI workflow</strong> – No <code>.github/workflows</code> or other CI config.</li><li><strong>Medium – Dependabot missing</strong> – No <code>dependabot.yml</code> to keep dependencies patched.</li><li><strong>Low – Convention files missing</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li><li><strong>High – Duplicated code blocks</strong> – Identical 6‑line fragments appear in <code>app/page.tsx</code>, <code>lib/shadcn-docs/select.tsx</code>, <code>components/ui/button.tsx</code>, etc.</li><li><strong>High – Oversized file</strong> – <code>lib/shadcn.ts</code> contains 2,751 lines, creating a large blast radius for changes.</li><li><strong>Medium – Deep nesting</strong> – <code>app/page.tsx</code> reaches six levels of indentation, making the control flow hard to follow.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional issues have been inferred.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>napkins.dev</code> delivers a functional prototype generator built on a clean Next.js + Tailwind stack, but the codebase suffers from poor modularization, missing automated testing/CI, and a lack of basic repo conventions. It is suitable for experimentation or as a starting point for internal tooling, provided the team is prepared to add tests, CI, and refactor the large utility files before production use.</p>
             </div>
 
             
@@ -91,9 +125,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -137,6 +171,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1161559577">Open in Code Brain &rarr;</a>

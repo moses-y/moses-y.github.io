@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 18, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Java</span>
+                    <span>5 min read</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>camel karavan</h1>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building data integrations with Apache Camel can feel like self-inflicted pain if you’re not already a Camel expert. Writing endless XML or YAML, setting up Docker and Kubernetes files by hand, fiddling with Git and CI—all of it eats time and energy. Most “low-code” tools are either toy UIs glued on top, or black boxes you can’t debug.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>camel-karavan puts a visual, low-code UI on top of Apache Camel and actually wires it up to modern workflows. The main action lives in karavan-app/, which runs the backend (Java, Spring, Quarkus—you know the drill) and exposes APIs for project management, deployment, and live status. The docs/ folder is stacked with real instructions, not just marketing slides, including how to run with Docker (docs/WEBDOCKER.md) or Kubernetes (docs/WEBKUBERNETES.md).</p><p>You design integrations visually (think: drag and drop EIPs, REST endpoints, YAML editing when you want), and Karavan generates all the ugly bits—Docker Compose, Kubernetes manifests, OpenAPI to REST DSL, and so on. It supports live reload, log streaming, and pushes everything to Git (your actual source of truth). Want to hack a deployment script? There’s a src/main/resources/configuration/docker/build.sh waiting for you.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re integrating a legacy CRM with a new ticketing service. Open Karavan in your browser or VS Code, drag your REST endpoints, map your fields, tweak the YAML if you need something fancy. Hit the deploy button, and Karavan builds the container, spits out the Docker Compose or K8s YAML, and pushes the project to your Git repo. You can even watch logs and traces from the dashboard—no more “it works on my laptop” excuses.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Karavan actually bridges the gap between “low code” and “real code.” If you know your way around Camel but hate setup grunt work, this will save you hours. For tiny, one-off scripts? Probably overkill. For teams building actual integration microservices (and planning to maintain them), this is a breath of fresh air—finally, a low-code tool you won’t be embarrassed to use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who need to build Apache Camel integration routes spend most of their time writing XML/Java DSL, wiring containers, and managing deployment descriptors. The lack of a visual, low‑code front‑end makes onboarding slow and error‑prone, especially when teams must switch between IDEs, Docker, and Kubernetes.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>apache/camel-karavan</code> supplies a web UI (<code>karavan-app</code>) and a VS Code extension (<code>karavan-vscode</code>) that let users draw routes, configure components, and generate the underlying Camel DSL in YAML or Java. The core model and API live in <code>karavan-core</code>, which defines the canonical <code>CamelDefinition</code> and <code>IntegrationDefinition</code> types used by both the UI and the generator (<code>karavan-generator</code>). Build and deployment helpers are in <code>karavan-app/src/main/docker</code> and the Helm/Kubernetes manifests under <code>docs/install</code>.</p>
+<p>Key files:</p>
+<ul><li><code>karavan-app/src/main/webui/src/index.tsx</code> – boots the React SPA.</li><li><code>karavan-core/src/core/model/CamelDefinition.ts</code> – the 3 682‑line type graph that drives the designer.</li><li><code>karavan-generator/src/main/java/.../Generator.java</code> (implicit from the Java sources) – converts the model to runnable Camel projects.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>karavan-app/src/main/webui/src/index.tsx</code>, which mounts the React root and loads <code>App.tsx</code>. <code>App.tsx</code> creates the <code>DesignerStore</code> (<code>karavan-app/src/main/webui/src/karavan/features/integration/designer/DesignerStore.ts</code>). This store is the most‑connected module (imports 32, exported to 1) and holds the in‑memory <code>CamelDefinition</code> tree.</p>
+<p>When a user adds a component, the UI dispatches actions that mutate the <code>CamelDefinition</code> model. The model is persisted via <code>karavan-core/src/core/api/CamelDefinitionYaml.ts</code>, which serialises to YAML for storage in the Git repo (the source‑of‑truth). The same module also deserialises on load, but it contains an empty <code>catch {}</code> block (high‑severity resilience issue).</p>
+<p>The VS Code extension mirrors this flow: its webview entry point <code>karavan-vscode/webview/index.tsx</code> creates a parallel <code>DesignerStore</code> (<code>karavan-vscode/webview/integration-designer/DesignerStore</code>). Both stores rely on the same core types, creating a circular import chain among <code>CamelDefinition.ts</code>, <code>IntegrationDefinition.ts</code>, and <code>CamelDefinitionYaml.ts</code> (18 import‑cycle members). The hub module <code>karavan-core/src/core/model/CamelDefinition.ts</code> is referenced by 33 other modules, giving it the largest blast radius for any change.</p>
+<p>After a design is saved, <code>karavan-generator</code> reads the YAML files (via <code>CamelDefinitionYaml</code>) and emits a Maven/Quarkus project that can be built with the Dockerfile at <code>karavan-app/src/main/docker/Dockerfile</code>. The generated image is then pushed to the registry defined in <code>docs/install/karavan-docker/docker-compose.yaml</code> or the Helm chart under <code>docs/install/karavan-helm</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># clone the repo
+git clone https://github.com/moses-y/camel-karavan
+cd camel-karavan
+
+# build the web UI (npm is the package manager)
+cd karavan-app/src/main/webui
+npm ci            # lockfile install per CI recommendation
+npm run build     # Vite produces a static bundle used by the Spring Boot app
+
+# start the Spring Boot container (Dockerfile provided)
+cd ../../..
+docker compose -f docs/install/karavan-docker/docker-compose.yaml up -d</code></pre>
+<p>The UI is reachable at <code>http://localhost:8080</code>. To edit locally, install the VS Code extension from the marketplace and open a folder containing a Karavan integration project (YAML files under <code>src/main/resources/integrations</code>). No additional environment variables are required beyond the Docker compose defaults.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A fintech team can model a payment‑routing flow in the designer, export the YAML, and let <code>karavan-generator</code> produce a Quarkus‑based Camel microservice. The generated Docker image is then deployed to the company’s OpenShift cluster via the Helm chart in <code>docs/install/karavan-helm</code>. Because the source repository holds the YAML, version control and CI/CD can treat the integration as code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*.yml</code> uses tag versions (<code>@v3</code>, <code>@v5</code>). Replace with commit SHAs.</li><li><strong>High – CI never runs tests</strong> – Workflows lack a test step despite 93 test files. Add a step invoking <code>npm test</code> or Maven test.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>.github/workflows/app.yml</code> declares no permissions. Add <code>permissions: contents: read</code>.</li><li><strong>Medium – Enable Dependabot</strong> – No <code>.github/dependabot.yml</code> despite three manifest files. Add one covering npm, Maven, and GitHub Actions.</li><li><strong>Medium – Use lockfile in CI</strong> – Workflows run <code>npm install</code>; switch to <code>npm ci</code>.</li><li><strong>Medium – Dependency‑vulnerability gate</strong> – No scan step. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Checkout persist‑credentials</strong> – <code>vscode.yml</code> keeps the token; set <code>persist-credentials: false</code>.</li><li><strong>Low – Job timeout</strong> – Workflows lack <code>timeout-minutes</code>. Define a reasonable limit (e.g., 30).</li><li><strong>Low – Repository conventions</strong> – Missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config. Add them to enforce consistency.</li></ul>
+<p>Additional static findings (381 total) include:</p>
+<ul><li><strong>Oversized files</strong> – <code>karavan-core/src/core/model/CamelDefinition.ts</code> (3 682 lines) and related API files; split by responsibility.</li><li><strong>Import cycles</strong> – Core model and API files form 18 circular dependencies; refactor shared types into a separate module.</li><li><strong>Deep nesting &amp; high branching</strong> – Several API files exceed six indentation levels and contain &gt;150 branch points; simplify with guard clauses or strategy tables.</li><li><strong>Hub module</strong> – <code>CamelDefinition.ts</code> is depended on by 33 modules; keep it stable and extract volatile logic.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>camel-karavan</code> delivers a functional low‑code UI and VS Code tooling for Apache Camel, backed by a coherent core model and containerised build pipeline. The codebase works but suffers from large, tightly coupled files, import cycles, and several CI hygiene gaps that should be addressed before extending or deploying in production. Teams comfortable with Java, Maven, and React can adopt it quickly, provided they allocate effort to refactor the core model and tighten the CI configuration.</p>
             </div>
 
             
@@ -91,18 +123,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">943<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Java</span><i style="width:100%"></i><b>115</b></li><li><span>YAML</span><i style="width:24%"></i><b>28</b></li><li><span>Markdown</span><i style="width:10%"></i><b>11</b></li><li><span>Shell</span><i style="width:3%"></i><b>3</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>302</b></li><li><span>TypeScript</span><i style="width:66%"></i><b>200</b></li><li><span>Java</span><i style="width:46%"></i><b>139</b></li><li><span>YAML</span><i style="width:27%"></i><b>82</b></li><li><span>CSS</span><i style="width:25%"></i><b>75</b></li><li><span>JSON</span><i style="width:6%"></i><b>17</b></li>
                         </ul>
-                        <p class="an-fw"><span>Spring</span><span>Docker</span><span>Kubernetes</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Spring</span><span>Docker</span><span>Kubernetes</span></p>
                     </div>
                 </div>
 

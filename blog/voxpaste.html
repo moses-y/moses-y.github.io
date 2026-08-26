@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 18, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Typing sucks. It’s slow, tedious, and often a bottleneck when you want to capture ideas quickly. If you’re a developer or anyone who interacts with AI regularly, switching between typing and speaking can kill your flow. You need a solution that gets your thoughts into text without the hassle of manually typing.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter Voxpaste—a lightweight CLI tool that transforms your voice into text and dumps it right into your clipboard. The core functionality is in main.py, which handles voice input and transcription. The project supports multiple speech-to-text providers like Mistral and OpenAI, making it flexible for different needs.</p><p>You can choose between two modes: Raw Mode for quick transcription without fluff and Clean Mode for polished text. Just run voxpaste for Raw or voxpaste --clean for the cleaned-up version. Configuration is straightforward too; just set your preferred provider in the .env.example file with VOXPASTE_PROVIDER.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Picture this: you’re drafting an email to your team about the latest project milestones. Instead of typing everything out, you fire up Voxpaste, hit your hotkey, and start speaking. In Raw Mode, your speech is instantly transcribed into your clipboard—ready to paste into your email. If you want a polished version, switch to Clean Mode, and let the AI do the tidying up. The whole process can be done in under a minute, saving you precious time.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Voxpaste is a nifty tool for anyone who prefers talking over typing, especially for developers engaging with AI. It&#39;s fast, easy to set up, and supports multiple providers, so you&#39;re not locked into one service. However, if you need something more than quick transcriptions, like advanced editing features, you might want to look elsewhere. Overall, if your workflow involves a lot of voice input, Voxpaste is worth checking out.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who spend most of their day dictating prompts to LLMs waste time switching between keyboard and microphone. A single‑command tool that records speech, transcribes it, optionally cleans the text, and places the result on the clipboard would eliminate that friction.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>voxpaste</code> is a tiny CLI written in Python that talks to a speech‑to‑text provider (Mistral, OpenAI, Groq, Deepgram, or OpenRouter). The core logic lives in <strong><code>main.py</code></strong>, which defines 27 functions and 11 classes such as <code>Provider</code>, <code>MistralProvider</code>, <code>CleaningProvider</code>, and <code>clean</code>. The entry point is the <code>main</code> function (line 693). It orchestrates the workflow:</p>
+<ol><li><strong>Provider selection</strong> – <code>get_provider()</code> reads <code>VOXPASTE_PROVIDER</code> (default <em>mistral</em>) and returns a concrete provider class.</li><li><strong>Audio capture</strong> – <code>record_audio()</code> uses <code>portaudio</code> to record from the microphone.</li><li><strong>Transcription</strong> – <code>transcribe()</code> sends the audio bytes to the chosen provider’s API.</li><li><strong>Optional cleanup</strong> – When <code>--clean</code> is passed, <code>get_cleaning_provider()</code> selects a cleaning model and <code>clean()</code> runs a second inference call.</li><li><strong>Result delivery</strong> – <code>copy_to_clipboard()</code> invokes the system clipboard (<code>xclip</code> on Linux, <code>pbcopy</code> on macOS).</li></ol>
+<p>All external effects (network calls, model inference, subprocess execution, file I/O) are funneled through these five functions, making them the highest‑risk surface.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <strong><code>main.py</code></strong> (line 693). From there the internal call graph (8 resolved edges) follows a linear chain:</p>
+<pre><code>main → get_provider
+     → record_audio
+     → audio_to_wav_bytes
+     → transcribe
+     → get_cleaning_provider (if --clean)
+     → clean (if --clean)
+     → copy_to_clipboard</code></pre>
+<ul><li><strong>Network / model calls</strong> – <code>get_provider</code> builds the provider object; <code>transcribe</code> and <code>clean</code> each perform an HTTP request to the selected vendor’s API.</li><li><strong>External command</strong> – <code>copy_to_clipboard</code> runs <code>xclip</code>/<code>pbcopy</code> via <code>subprocess.run</code>.</li><li><strong>File I/O</strong> – <code>audio_to_wav_bytes</code> writes a temporary WAV file before sending it.</li></ul>
+<p>No other Python modules exist; the repository consists of a single source file, so the dependency graph is trivial (no circular imports, <code>instability 0</code>). The deep nesting detected (max indentation depth 7) makes the control flow in <code>main.py</code> hard to follow; refactoring into guard clauses would improve readability.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ol><li><strong>Install</strong> (requires Python 3.11+ and <code>uv</code> or <code>pipx</code>):</li></ol>
+<pre data-lang="bash"><code>   # Recommended with uv
+   uv tool install git+https://github.com/moses-y/voxpaste.git</code></pre>
+<p>The command installs the <code>voxpaste</code> entry point globally.</p>
+<ol><li><strong>Configure</strong> – Create a <code>.env</code> (or export) with the provider key, e.g.:</li></ol>
+<pre data-lang="bash"><code>   export VOXPASTE_PROVIDER=mistral
+   export MISTRAL_API_KEY=sk-...</code></pre>
+<p>Keys for other providers follow the same pattern (<code>OPENAI_API_KEY</code>, <code>GROQ_API_KEY</code>, etc.) as documented in the README.</p>
+<ol><li><strong>Run</strong> – Basic transcription:</li></ol>
+<pre data-lang="bash"><code>   voxpaste</code></pre>
+<p>Cleaned output:</p>
+<pre data-lang="bash"><code>   voxpaste --clean</code></pre>
+<p>The command records, transcribes, optionally cleans, and copies the text to the clipboard in one step.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer binds <code>voxpaste</code> to a hotkey in their window manager. While reviewing code, they press the shortcut, dictate a prompt, and the cleaned text appears instantly in their IDE’s clipboard, ready for a ChatGPT or Claude query. No manual copy‑paste or typing is required.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Workflow <code>.github/workflows/claude.yml</code> exposes <code>CLAUDE_CODE_OAUTH_TOKEN</code>; a malicious PR could exfiltrate the token. Fix: move secret‑using steps to a <code>workflow_run</code> job that never checks out PR code.</li><li><strong>High</strong> – GitHub Actions reference tags (<code>anthropics/claude-code-action@v1</code>). Fix: replace with fixed SHA commits.</li><li><strong>Medium</strong> – No Dependabot/renovate config; add <code>.github/dependabot.yml</code> for automatic updates.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Low</strong> – Jobs lack <code>timeout-minutes</code>; set reasonable limits to avoid hung runs.</li><li><strong>Medium (cognitive load)</strong> – <code>main.py</code> has nesting depth 7; flatten with early returns or extract inner blocks.</li><li><strong>Additional observations</strong> – No test suite, no lockfile (<code>uv.lock</code> present but not used by CI), and the repository already includes a LICENSE.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>voxpaste</code> delivers a functional, single‑file CLI that turns speech into clipboard text with minimal latency. It is usable today but suffers from deep nesting, no automated tests, and several CI security misconfigurations that should be addressed before production deployment. Engineers comfortable with Python and willing to refactor the entry script will find it a solid foundation for voice‑first AI workflows.</p>
             </div>
 
             
@@ -91,9 +127,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +149,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1160880868">Open in Code Brain &rarr;</a>

@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 18, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">HTML</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>anymap ts</h1>
@@ -80,8 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Creating interactive maps can be a headache. You’ve got a million libraries to choose from, each with its own quirks. If you&#39;re juggling between Python and JavaScript, the complexity skyrockets. Developers often end up wrestling with a spaghetti mess of APIs and libraries just to display a simple map.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter anymap-ts. This package lets you whip up interactive maps in Jupyter notebooks using Python while backing it all up with TypeScript. It offers support for popular libraries like MapLibre, Mapbox, and Leaflet, giving you a smorgasbord of options. The anymap_ts/ directory houses the core functionality, including specific files like leaflet.py and deckgl.py that manage different mapping libraries.</p><p>The structure is clean, with examples/ containing various starter projects to get you going quickly. Want to see how to implement a DeckGL map? Check out examples/deckgl/main.ts and examples/deckgl/index.html. You can dive straight into the code and see how it all fits together.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you need to visualize geospatial data for a presentation. With anymap-ts, you can do this in minutes. Here’s a quick example:</p><p>This code snippet creates a centered map with a marker in San Francisco. It’s that straightforward. You can also add layers and controls without getting lost in a sea of documentation.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>anymap-ts is a solid choice for developers who want to create interactive maps without the usual headaches. It’s especially useful if you’re already working in Python and want to add some mapping flair. However, if your project is simple, this might feel like overkill. Use it when you need flexibility and multiple mapping options, but don’t expect it to solve all your problems.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Creating interactive, browser‑based maps inside Jupyter notebooks normally requires juggling separate Python wrappers, JavaScript builds, and manual widget plumbing. Users end up with fragmented code bases, duplicated layer logic, and brittle builds that break when front‑end dependencies shift.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>anymap-ts</code> bundles a Python API with a TypeScript front‑end, all served through <strong>anywidget</strong>.</p>
+<ul><li>The Python package lives in <code>anymap_ts/</code> (e.g. <code>anymap_ts/maplibre.py</code>, <code>anymap_ts/leaflet.py</code>). Each module defines a class that subclasses the anywidget base and forwards configuration to the browser.</li><li>Front‑end code resides under <code>src/</code> (<code>src/maplibre/MapLibreRenderer.ts</code>, <code>src/maplibre/adapters/DeckLayerAdapter.ts</code>, etc.) and is built with Vite (<code>vite.config.ts</code>).</li><li>Example notebooks and HTML entry points (<code>examples/cesium/main.ts</code>, <code>examples/maplibre/index.html</code>) demonstrate the full stack.</li></ul>
+<p>The package supports multiple libraries—MapLibre, Mapbox, Leaflet, OpenLayers, DeckGL, Cesium, KeplerGL, and Potree—by reusing a common widget skeleton (<code>anymap_ts/base.py</code>) and delegating rendering to the appropriate TypeScript renderer.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>User entry</strong> – In a notebook the user runs <code>from anymap_ts import Map</code> (exported from <code>anymap_ts/__init__.py</code>).</li><li><strong>Python side</strong> – <code>__init__.py</code> imports the concrete map class from <code>anymap_ts/base.py</code>, which creates an <code>anywidget.AnyWidget</code> instance using the type definitions in <code>src/types/anywidget</code>. The widget’s model stores map options (center, zoom, basemap list).</li><li><strong>Front‑end boot</strong> – When the widget is displayed, anywidget loads the compiled JavaScript bundle produced by Vite. The bundle’s entry point (<code>src/main.ts</code> for the selected library) reads the model, instantiates the corresponding renderer (<code>src/maplibre/MapLibreRenderer.ts</code> for MapLibre, <code>src/deckgl/DeckGLRenderer.ts</code> for DeckGL, etc.).</li><li><strong>Renderer dispatch</strong> – <code>MapLibreRenderer</code> imports the high‑fan‑out adapter <code>DeckLayerAdapter.ts</code>. This file is the <strong>hub module</strong> (30 incoming imports, zero outgoing), meaning changes here ripple to many layers.</li><li><strong>Layer creation</strong> – Renderers call adapters (e.g., <code>DeckLayerAdapter</code>) to translate Python‑side layer specifications into MapLibre‑compatible objects. The adapters do not import other modules, keeping the dependency direction clean.</li><li><strong>Bidirectional sync</strong> – Anywidget’s messaging channel propagates user interactions (draw, click) back to Python via callbacks defined in <code>anymap_ts/utils.py</code>. Broad <code>except:</code> blocks in these utilities swallow errors, as flagged in the health audit.</li></ol>
+<p>No circular imports were detected; the call graph is a directed acyclic structure with 98 internal modules and 109 edges.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL given)
+git clone https://github.com/moses-y/anymap-ts
+cd anymap-ts
+
+# Install Python package in editable mode with dev extras
+pip install -e ".[dev]"
+
+# Install front‑end dependencies (npm is implied by package.json)
+npm install
+npm run build   # Vite builds the TS bundles
+
+# Example: launch a MapLibre map in a notebook
+python - &lt;&lt;'PY'
+from anymap_ts import Map
+m = Map(center=[-122.4, 37.8], zoom=10)
+m.add_basemap("OpenStreetMap")
+m
+PY</code></pre>
+<p><em>Optional</em>: Set <code>MAPBOX_TOKEN</code> in the environment for Mapbox maps, as shown in the README.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can embed a MapLibre view inside a notebook to explore a large GeoJSON dataset, then call <code>m.add_draw_control()</code> to let analysts sketch polygons. The drawn geometry is instantly available as a Python <code>shapely</code> object via the anywidget callback, enabling downstream spatial analysis without leaving the notebook.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions use tag versions (<code>astral-sh/setup-uv@v7</code>, <code>nwtgck/actions-netlify@v3.0</code>). Pin to commit SHA to avoid supply‑chain drift.</li><li><strong>HIGH</strong> – No lockfile for npm (<code>package.json</code>). Generate and commit <code>package-lock.json</code> (or <code>pnpm-lock.yaml</code>) to guarantee reproducible builds.</li><li><strong>MEDIUM</strong> – Workflows lack explicit <code>permissions:</code> for <code>GITHUB_TOKEN</code>; add least‑privilege scopes.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Checkout step keeps the token; set <code>persist-credentials: false</code> and pass a scoped token only where needed.</li><li><strong>LOW</strong> – CI jobs have no <code>timeout-minutes</code>; define sensible limits to prevent overlapping runs.</li></ul>
+<p>Additional observations: tests exist (<code>tests/</code>), CI is present, a license file is included, but a lockfile is missing and several large, highly‑connected TypeScript files (<code>DeckLayerAdapter.ts</code>, <code>MapLibreRenderer.ts</code>, <code>anymap_ts/maplibre.py</code>) exhibit high cognitive load and duplicated code blocks.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>anymap-ts</code> delivers a functional Python‑to‑JavaScript map widget ecosystem with extensive library support, but the front‑end codebase contains several heavyweight modules that are hard to modify safely. Immediate remediation should focus on stabilizing the hub adapters, adding lockfiles, and tightening CI permissions. It is a solid foundation for notebook‑based GIS work, provided the team is comfortable managing the TypeScript side or is willing to invest in refactoring the identified hotspots.</p>
             </div>
 
             
@@ -91,18 +126,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">268<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>HTML</span><i style="width:100%"></i><b>44</b></li><li><span>TypeScript</span><i style="width:77%"></i><b>34</b></li><li><span>Markdown</span><i style="width:75%"></i><b>33</b></li><li><span>Python</span><i style="width:30%"></i><b>13</b></li><li><span>YAML</span><i style="width:27%"></i><b>12</b></li><li><span>CSS</span><i style="width:18%"></i><b>8</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>82</b></li><li><span>Jupyter Notebook</span><i style="width:65%"></i><b>53</b></li><li><span>HTML</span><i style="width:63%"></i><b>52</b></li><li><span>Markdown</span><i style="width:40%"></i><b>33</b></li><li><span>Python</span><i style="width:20%"></i><b>16</b></li><li><span>YAML</span><i style="width:16%"></i><b>13</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span></p>
                     </div>
                 </div>
 
@@ -148,6 +183,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1160533485">Open in Code Brain &rarr;</a>

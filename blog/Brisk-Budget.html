@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 15, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing personal finances can be a headache. Most apps are bloated, require subscriptions, or just don’t meet basic needs. If you’re looking to track your expenses without dealing with a convoluted interface or a database, you’re in trouble.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter Brisk-Budget. This lightweight, JSON-based finance tracker lets you manage accounts, transactions, and even recurring payments—all from your local machine. The app lives in public/index.html, with the frontend powered by vanilla JavaScript in public/js/app.js. No frameworks to learn, just straight-up JS that you can read and modify.</p><p>Data storage happens in simple JSON files, eliminating the need for a database. The server/utils/data.js handles data retrieval and storage, making it straightforward to back up or transfer your financial info. Need a new category? Just tweak the settings in the app, and you&#39;re good to go.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’ve got a couple of accounts—checking, savings, and maybe a loan. You want to track where your money goes without fuss. You fire up the app, categorize your transactions in public/js/categories.js, and set up recurring payments in public/js/recurring.js. Want to see your net worth trend? Just check the dashboard analytics, and you’ve got a clear picture.</p><p>If you want to deploy it, just run the provided shell script in deploy.sh. It sets up everything, including a systemd service for auto-start. Easy-peasy.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Brisk-Budget is a no-frills solution for personal finance tracking. It’s lightweight, easy to deploy, and requires minimal setup. If you&#39;re looking for something simple and self-hosted, this is worth a shot. Just don’t expect it to replace your enterprise-level finance software—it&#39;s not that kind of beast. But for personal use? It gets the job done.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Many households still rely on legacy desktop tools (e.g., Microsoft Money) that are discontinued, expensive, or require cloud accounts. Users need a self‑hosted, zero‑dependency way to record accounts, transactions, and recurring items without learning a full‑stack framework.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>public/index.html</code> loads the single‑page UI built from vanilla JavaScript files such as <code>public/js/app.js</code>, <code>public/js/dashboard.js</code>, and <code>public/js/api.js</code>. The UI talks to a lightweight Express‑style server defined in <code>server/index.js</code>. Server routes (<code>server/routes/*.js</code>) implement CRUD operations on JSON files stored under a <code>data/</code> folder (created at first run). Configuration lives in <code>server/config/paths.js</code> (paths to the data directory) and <code>server/config/defaults.js</code> (default settings). Shared helpers in <code>server/utils/helpers.js</code> provide validation and file‑IO utilities used across most routes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins with <strong><code>public/index.html</code></strong> → <strong><code>public/js/app.js</code></strong> → <code>api.js</code> which issues HTTP requests to <strong><code>server/index.js</code></strong> (started by <code>npm start</code>). <code>server/index.js</code> creates an HTTP server and attaches <strong><code>server/router.js</code></strong>. The router imports the most‑connected module <strong><code>server/config/paths.js</code></strong> (9 inbound imports, 0 outbound) and dispatches to route handlers:</p>
+<div class="table-scroll"><table><thead><tr><th>Route file</th><th>Primary responsibilities</th><th>Outbound imports</th></tr></thead><tbody><tr><td><code>server/routes/accounts.js</code></td><td>List/create/update/delete accounts</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/categories.js</code></td><td>Manage categories &amp; subcategories</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/payees.js</code></td><td>CRUD for payees</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/recurring.js</code></td><td>Schedule recurring transactions</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/transactions.js</code></td><td>Record one‑off transactions</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/backup.js</code></td><td>Export/import JSON backup files</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/settings.js</code></td><td>Persist UI settings</td><td><code>helpers.js</code>, <code>data.js</code></td></tr><tr><td><code>server/routes/transfers.js</code></td><td>Move funds between accounts</td><td><code>helpers.js</code>, <code>data.js</code></td></tr></tbody></table></div>
+<p>All route files read/write the same JSON store via <code>server/utils/data.js</code>. The most‑connected module <strong><code>server/router.js</code></strong> imports nine other modules and forwards requests, giving it the widest blast radius: a change here can affect every API endpoint. No circular dependencies were detected, so the import graph is acyclic.</p>
+<p>On the client, <code>public/js/dashboard.js</code> (986 lines) pulls aggregated data via <code>/api/*</code> endpoints and renders charts. The UI updates the JSON store through the same API, completing a full round‑trip from browser to file system in three hops: browser → <code>api.js</code> → server route → <code>data.js</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Quick one‑liner install (Ubuntu) – exact from README
+curl -fsSL https://raw.githubusercontent.com/CoppingEthan/Brisk-Budget/main/deploy.sh | sudo bash
+
+# Manual install
+git clone https://github.com/moses-y/Brisk-Budget.git /opt/brisk-budget
+cd /opt/brisk-budget
+npm install
+npm start          # runs server/index.js, listening on http://localhost:3000</code></pre>
+<p>The UI is reachable at <code>http://localhost:3000</code>. No environment variables are required; configuration is stored in the JSON data directory created automatically.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A family of four installs the app on a home Raspberry Pi. Each member accesses <code>http://pi.local:3000</code> on their phone, logs daily expenses, and the dashboard shows net‑worth trends without any external service. Periodic backups are downloaded via the <strong>Backup</strong> page and stored on a NAS for disaster recovery.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 23 source files, zero test files.</li><li><strong>High – No CI workflow</strong> – repository lacks any GitHub Actions or other CI config.</li><li><strong>Medium – Dependabot missing</strong> – only <code>package.json</code>/<code>package-lock.json</code> present, no automated dependency updates.</li><li><strong>Medium – Large binary in repo</strong> – <code>public/images/bg.png</code> (14.3 MB) should be moved to Git LFS or external storage.</li></ul>
+<p>Additional observations from the repository layout:</p>
+<ul><li>License file present (<code>MIT</code>).</li><li>npm lockfile present, confirming npm usage.</li><li>No Dockerfile, no <code>.github/</code> CI definitions, and no test directory.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Brisk‑Budget delivers a functional, zero‑dependency personal finance tracker with a clear separation between a thin Express‑style API and a vanilla‑JS front end. The codebase is small enough for rapid onboarding but suffers from duplicated logic, deep nesting, and a lack of automated testing or CI. It is suitable for hobbyists or small households willing to accept the maintenance overhead of a manually‑tested, file‑based system.</p>
             </div>
 
             
@@ -91,18 +117,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">48<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>JavaScript</span><i style="width:100%"></i><b>23</b></li><li><span>JSON</span><i style="width:9%"></i><b>2</b></li><li><span>Markdown</span><i style="width:4%"></i><b>1</b></li><li><span>Shell</span><i style="width:4%"></i><b>1</b></li><li><span>CSS</span><i style="width:4%"></i><b>1</b></li><li><span>HTML</span><i style="width:4%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Express</span></p>
                     </div>
                 </div>
 
@@ -146,6 +172,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1158422920">Open in Code Brain &rarr;</a>

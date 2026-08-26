@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,34 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Claude Code is smart, but its memory is a joke. You can have a 200K context window and still lose every decision, bugfix, or dumb Slack argument between sessions. It’s like paying for an AI intern who forgets everything by morning. If you want persistent memory without duct-taping a database, you’re out of luck.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>claude-brain fixes this with one file: .claude/mind.mv2. No databases, no cloud, no API keys, no “just spin up a Postgres instance.” The core is native Rust for speed—sub-millisecond searches, even with thousands of memories. The guts live in src/core/mind.ts and the CLI hooks are in src/scripts/. Want to see what gets injected? Check src/hooks/session-start.ts and src/hooks/post-tool-use.ts. Every memory, decision, and bug is auto-captured and versionable. You can literally git commit your AI’s brain and hand it to a new teammate.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>You’re halfway through a project, and the auth bug comes back. Instead of slamming your head on the desk, you run /mind search &quot;auth&quot; in Claude Code. It pulls up every relevant fix, decision, and Slack rant, instantly. Or, if you’re a CLI junkie, memvid find .claude/mind.mv2 &quot;JWT&quot; spits out the timeline in seconds. The memory file stays under 5MB for a year of use, so you can toss it around with scp or drop it in a repo without worrying about bloat.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you want persistent AI memory without the usual database nonsense, claude-brain is the simplest solution I’ve seen. It’s fast, dead simple, and actually practical. If you’re running a one-person project, maybe overkill—but for teams and serious workflows, it’s a no-brainer. Just don’t expect fancy dashboards or analytics. It’s a brain in a file, not an ERP suite.</p>
+            <div class="post-content" id="post-content">
+                
+                <h2>The Problem</h2>
+<p>Claude Code has no persistent memory between sessions. Each conversation starts fresh, forcing users to repeat context, re-explain decisions, and waste cycles rediscovering what was already resolved. With 200K context windows and zero cross-session memory, the model behaves like a goldfish with a PhD — expensive capability squandered on constant reorientation.</p>
+<h2>What This Does</h2>
+<p><code>claude-brain</code> gives Claude photographic memory in a single <code>.mv2</code> file — no database, no SQLite, no ChromaDB. The repository is built as a GitHub plugin (<code>.claude-plugin/</code>) that integrates with Claude Code, capturing session context, decisions, and bugs auto-injected at session start. The core runtime is native Rust; the observable surface is TypeScript. Entry points are <code>src/index.ts</code> (source) and <code>dist/index.js</code> (compiled). The module graph has 19 internal modules with 21 import edges and zero circular dependencies. The most connected module is <code>src/core/mind</code> (Ca 4, Ce 3, instability 0.43), which owns the memory engine. Supporting hubs are <code>src/types</code> (Ca 5, Ce 0) and <code>src/utils/helpers</code> (Ca 6, Ce 0), both instability‑free. Hooks — <code>post-tool-use</code>, <code>session-start</code>, and <code>stop</code> — each have instability 1, meaning they are pure entry/exit points with no downstream dependencies beyond the core.</p>
+<h2>How It Is Wired</h2>
+<p>Execution starts at <code>src/index.ts</code>, which imports and exposes the public API. The hook chain flows through <code>src/hooks/session-start.ts</code> (Ca 0, Ce 2) to prime memory at session open, then <code>src/hooks/post-tool-use.ts</code> (Ca 0, Ce 4, instability 1) captures intent after each tool invocation, and finally <code>src/hooks/stop.ts</code> (Ca 0, Ce 3) on exit. Scripts — <code>ask.ts</code>, <code>find.ts</code>, <code>stats.ts</code>, and <code>timeline.ts</code> — are the consumer-facing commands; each has duplicated 6‑line blocks across the four files (25 repeated blocks total), violating DRY and raising maintainability risk. The <code>src/scripts/utils.ts</code> helper (Ca 4, Ce 0) is the natural extraction target. Search and ask logic funnels through <code>src/core/mind.ts</code>, the single-file memory engine written in Rust (compiled to WebAssembly or linked via <code>neon</code>/FFI). Types live in <code>src/types.ts</code> (Ca 5, Ce 0), a zero‑dependency contract layer. The only high‑instability module beyond the core is <code>src/hooks/post-tool-use.ts</code>, which has 72 branch points over 209 lines — high cognitive load that should be decomposed via strategy dispatch rather than nested if/else.</p>
+<p>Outside the repository: the <code>.mv2</code> file lives at <code>.claude/mind.mv2</code> per the README; it is a portable binary that can be git‑committed, scp‑ed, or shared. No database, no cloud, no API keys. The plugin metadata lives in <code>.claude-plugin/marketplace.json</code> and <code>.claude-plugin/plugin.json</code>.</p>
+<h2>How To Use It</h2>
+<p><strong>Setup</strong> — Install the GitHub plugin once (global git config adjustment required per the README), then in Claude Code:</p>
+<pre data-lang="bash"><code>/plugin add marketplace memvid/claude-brain</code></pre>
+<p>Enable the <strong>mind</strong> plugin, restart Claude Code. The <code>.mv2</code> file will be created at <code>.claude/mind.mv2</code> on first session.</p>
+<p><strong>Running it</strong> — No build step is needed for the end user. The <code>dist/</code> directory contains the compiled bundle; developers build with <code>pnpm build</code> (configured in <code>tsup.config.ts</code>/<code>package.json</code>). For CLI access outside Claude Code, <code>memvid-cli</code> can be installed globally (<code>npm install -g memvid-cli</code>) and invoked as:</p>
+<pre data-lang="bash"><code>memvid stats .claude/mind.mv2
+memvid find .claude/mind.mv2 "auth"
+memvid ask .claude/mind.mv2 "why JWT?"
+memvid timeline .claude/mind.mv2</code></pre>
+<p>Configuration is implicit — the <code>.mv2</code> file is the only artifact. Environment variables or keys are not required.</p>
+<h2>Real-World Use</h2>
+<p>A team onboards a new engineer. Instead of copying pastebins of previous sprint notes, the engineer types <code>/mind search "authentication"</code> in Claude Code. The <code>.mv2</code> file is auto‑injected, and Claude surfaces the exact JWT‑vs‑session decision, the PR link, and the mitigation that was applied three weeks ago. The team later commits <code>.claude/mind.mv2</code> alongside the code — version‑controlled memory that persists across <code>git clone</code>s and <code>scp</code> transfers.</p>
+<h2>Code Health &amp; Issues</h2>
+<p>The static analysis (MEASURED ANALYSIS block) found three categories of findings:</p>
+<ul><li><strong>[HIGH/clarity]</strong> Duplicated code blocks across <code>src/scripts/ask.ts</code>, <code>src/scripts/find.ts</code>, <code>src/scripts/timeline.ts</code>, <code>src/scripts/stats.ts</code> — 25 repeated 6‑line blocks. Extract shared helpers into <code>src/utils/helpers.ts</code>.</li><li><strong>[MEDIUM/cognitive_load]</strong> High branching density in <code>src/hooks/post-tool-use.ts</code> and <code>src/scripts/find.ts</code> — 72 branch points over 209 lines. Decompose decision logic into a dispatch table or strategy pattern.</li><li><strong>[LOW/clarity]</strong> 4 TODO/FIXME markers in <code>src/core/mind.ts</code> and <code>src/utils/compression.ts</code> — stale markers that should be triaged or resolved.</li></ul>
+<p>SDLC observations from the hygiene audit (8 findings, 0 critical):</p>
+<ul><li>Pin third‑party GitHub Actions to commit SHAs — <code>.github/workflows/release.yml</code> uses <code>softprops/action-gh-release@v1</code>; tags can move, so pin to the 40‑char SHA.</li><li>Declare least‑privilege permissions for <code>GITHUB_TOKEN</code> — <code>.github/workflows/ci.yml</code> has no <code>permissions</code> declaration; add <code>contents: read</code> at the top.</li><li>Enable Dependabot or Renovate — no update bot is configured; commit <code>.github/dependabot.yml</code> for repo ecosystems and <code>github-actions</code>.</li><li>Gate pull requests on dependency vulnerability scan — no dependency scan in CI; add <code>dependency-review-action</code> on <code>pull_request</code>.</li><li>Move large binaries to Git LFS or out — <code>tweet_cap.mp4</code> (35.5MB) and <code>video.mp4</code> (10.8MB) are committed bloating every clone; track with LFS or fetch in a setup step.</li><li>Remove generated build output from version control — <code>dist/</code> has 20 generated files committed; gitignore the output directory and build in CI.</li><li>Set <code>persist-credentials: false</code> on checkout — <code>ci.yml</code> keeps the token; add <code>with: persist-credentials: false</code> and pass explicit tokens only to pushing steps.</li><li>Set <code>timeout-minutes</code> on workflow jobs — two workflows have no job timeout; add realistic bounds.</li></ul>
+<h2>The Bottom Line</h2>
+<p>This repo solves a genuine pain point — zero‑effort persistent memory for Claude Code via a single portable file. The Rust core is impressive, and the plugin model integrates cleanly with Claude's existing tooling. However, the codebase shows its age: duplicated logic, high‑branching hooks, and committed build output + large binaries inflate clone size and CI cost. The hygiene audit reveals actionable CI/security gaps that should be addressed before promoting this to a production team. Use it if you need instant onboarding memory and are willing to maintain the duplicated scripts and CI fixes; otherwise, the duplicated code and unpinmed Actions present real friction for team adoption.</p>
             </div>
 
             
@@ -91,18 +116,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">66<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>TypeScript</span><i style="width:100%"></i><b>19</b></li><li><span>Markdown</span><i style="width:53%"></i><b>10</b></li><li><span>JavaScript</span><i style="width:53%"></i><b>10</b></li><li><span>JSON</span><i style="width:42%"></i><b>8</b></li><li><span>YAML</span><i style="width:16%"></i><b>3</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span></p>
                     </div>
                 </div>
 

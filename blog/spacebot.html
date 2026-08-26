@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 17, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">TSX</span>
+                    <span>6 min read</span>
+                    <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>spacebot</h1>
@@ -80,8 +80,59 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Most AI frameworks stall when faced with multiple users. You ask a question, and the AI goes quiet while it processes. This single-threaded approach can’t keep up in busy environments like Discord or Slack, where people expect instant responses. It’s frustrating when you&#39;re waiting for an AI to think while your teammates keep chatting.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Spacebot flips the script. It splits tasks into specialized processes so that conversations can happen concurrently without blocking. Check out the interface/src/App.tsx for the entry point, where it initializes multiple user interactions. The interface/src/hooks contains hooks like useCortexChat that manage chat states independently, allowing simultaneous conversations without a hitch.</p><p>Want to run multiple agents? The setup in docs/content/docs/(features)/multi-agent.mdx explains how to deploy a friendly Discord bot alongside a no-nonsense dev assistant in Slack—all under one umbrella. Each agent operates with its own memory and identity, thanks to the architecture in interface/src/lib.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine a chaotic Discord server where five users are throwing questions at the bot. Thanks to Spacebot&#39;s batching system, it can coalesce those messages and respond intelligently. For example, using the ChannelDetail.tsx component, it can provide context-specific answers without losing track of ongoing conversations.</p><p>If you&#39;re coding in a Slack channel, Spacebot can handle long-running tasks via workers, letting other users ask quick questions in parallel. The interface/src/routes/AgentConfig.tsx manages agent settings, allowing quick adjustments on the fly.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Spacebot is a solid choice for teams and communities that need an AI that doesn&#39;t go dark while processing tasks. It’s a bit heavy for small projects—if you’re just looking for a simple Q&amp;A bot for personal use, this might be overkill. But for larger groups where multiple conversations are the norm, this setup could save a lot of frustration.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Most AI‑agent frameworks run everything in a single LLM loop – conversation, thinking, tool execution, memory retrieval and compaction all share one thread. When the agent is working it cannot respond; when it is compacting it goes dark. In multi‑user spaces (Discord, Slack, Telegram) a single‑threaded session becomes a bottleneck the moment two people speak at once.</p>
+<p>Spacebot sidesteps this by splitting the monolith into specialized processes that each do one thing and delegate the rest. The architecture was built from the ground up for teams and communities that need concurrent, non‑blocking interactions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Spacebot is an AI‑agent runtime composed of three projects inside the repo:</p>
+<div class="table-scroll"><table><thead><tr><th>Project</th><th>Files</th><th>Role</th></tr></thead><tbody><tr><td><strong>src</strong></td><td>82 files (Rust)</td><td>Core runtime, agent orchestration, database migrations, and the binary entry point (<code>src/lib.rs</code>).</td></tr><tr><td><strong>interface</strong></td><td>80 files (TSX/TypeScript)</td><td>Web UI, forms, routing, and client hooks that let users configure channels, memories, and agents.</td></tr><tr><td><strong>migrations</strong></td><td>14 SQL files</td><td>Incremental schema changes for the internal PostgreSQL‑compatible store.</td></tr></tbody></table></div>
+<p>Key architectural pieces:</p>
+<ul><li><strong><code>src/agent/compactor.rs</code></strong> – handles context compaction without blocking the conversation thread.</li><li><strong><code>src/api/server.rs</code></strong> – thin HTTP gateway that forwards requests to the appropriate worker process.</li><li><strong><code>interface/src/ui/utils.tsx</code></strong> – hub module imported by <strong>30</strong> other UI modules; any change here has a high‑blast‑radius.</li><li><strong><code>interface/src/ui/utils.tsx</code></strong> and <strong><code>interface/src/ui/index.ts</code></strong> are the primary entry points for the React/Next.js front‑end (see <code>interface/index.html</code> and <code>interface/src/App.tsx</code>).</li></ul>
+<p>The system uses a <strong>delegation model</strong>: a lightweight “router” process receives a user message, looks up the appropriate worker (code execution, web search, file I/O), hands the work off, and immediately returns control to the UI so other users can continue. This lets fifty people interact simultaneously without each waiting for the LLM to finish.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Internal call graph</strong> – 85 modules, 77 import edges, zero circular dependencies.</p>
+<p><em>Entry → execution flow</em></p>
+<ol><li>User sends a message through Discord/Slack/Telegram → the platform’s webhook hits <strong><code>interface/src/hooks/useEventSource.ts</code></strong> (source‑event handling).</li><li>The hook forwards the payload to <strong><code>interface/src/router.tsx</code></strong>, which decides the agent route (e.g., <code>AgentCortex</code>, <code>AgentMemories</code>).</li><li><strong><code>interface/src/routes/AgentCortex.tsx</code></strong> (or the memories route) calls <strong><code>src/api/server.rs</code></strong> (<code>/api/run</code>) to spawn a worker process.</li><li>The worker runs the requested tool (code execution, browser, etc.) and returns results through the same API.</li><li>Results are stored in the internal DB (migrations under <code>migrations/</code>) and fed back into the conversation context via <strong><code>src/agent/compactor.rs</code></strong>.</li></ol>
+<p><strong>Most connected modules</strong> (Ca = importers, Ce = imports, instability = Ca/Ce ratio):</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th class="num">Ca</th><th class="num">Ce</th><th>instability</th></tr></thead><tbody><tr><td><code>interface/src/ui/utils</code></td><td class="num">30</td><td class="num">0</td><td>0 (stable hub)</td></tr><tr><td><code>interface/src/ui/index</code></td><td class="num">0</td><td class="num">25</td><td>1 (high out‑degree)</td></tr><tr><td><code>interface/src/ui/forms/index</code></td><td class="num">1</td><td class="num">7</td><td>0.88</td></tr><tr><td><code>interface/src/ui/forms/Form</code></td><td class="num">6</td><td class="num">1</td><td>0.14</td></tr><tr><td><code>interface/src/ui/Input</code></td><td class="num">5</td><td class="num">1</td><td>0.17</td></tr><tr><td><code>interface/src/ui/forms/SelectField</code></td><td class="num">1</td><td class="num">4</td><td>0.80</td></tr><tr><td><code>interface/src/ui/Button</code></td><td class="num">2</td><td class="num">2</td><td>0.50</td></tr><tr><td><code>interface/src/ui/forms/CheckBoxField</code></td><td class="num">1</td><td class="num">3</td><td>0.75</td></tr></tbody></table></div>
+<p>The <strong>hub</strong> <code>interface/src/ui/utils.tsx</code> is imported by 30 UI components; any modification ripples across the whole front‑end, which is why the measured findings flag it for “keep stable and small; move volatile logic out.”</p>
+<p><strong>What the code touches outside the repo</strong></p>
+<ul><li>Docker image (<code>Dockerfile</code>) builds a <code>rust:bookworm</code> + <code>debian:bookworm-slim</code> base, runs the binary as root (no <code>USER</code> directive – see code‑health audit).</li><li>GitHub Actions workflows (<code>.github/workflows/</code>) use mutable Action versions (<code>@v3</code>, <code>@v6</code>) and have no test invocation.</li><li>No Dependabot/ Renovate config is present.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repository (verbatim URL)
+git clone https://github.com/moses-y/spacebot
+
+# Install Rust toolchain (if not present)
+rustup default stable
+
+# Build the binary
+cargo build --release -p spacebot   # from repo root</code></pre>
+<p><strong>Configuration</strong></p>
+<p>Required environment variables are defined in <strong><code>interface/src/lib/providerIcons.tsx</code></strong> and read by the UI forms. The README lists the following keys (exact names may vary – check the file):</p>
+<ul><li><code>DISCORD_TOKEN</code>, <code>SLACK_BOT_TOKEN</code>, <code>TELEGRAM_BOT_TOKEN</code></li><li><code>DATABASE_URL</code> (PostgreSQL‑compatible)</li><li><code>OPENAI_API_KEY</code> (or whichever LLM provider the agent uses)</li></ul>
+<p>Place these in a <code>.env</code> file at the repo root or export them before running the binary.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># Start the Rust backend (binary from cargo build)
+./target/release/spacebot
+
+# In a separate terminal, launch the Next.js UI
+cd interface
+npm install &amp;&amp; npm run dev   # defaults to http://localhost:3000</code></pre>
+<p>The UI becomes reachable at <code>http://localhost:3000</code>; use it to create a new agent, attach a Discord/Slack/Telegram token, and invite the bot to your server.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A community admin drops Spacebot into a 200‑member Discord server.</p>
+<ul><li>Five users ask code‑review questions in separate threads.</li><li>Two users trigger a background research task (browser tool) while three others chat casually.</li><li>The router (<code>interface/src/router.tsx</code>) dispatches each request to its own worker; the LLM never blocks, and the UI stays responsive.</li><li>After the research task finishes, the compactor (<code>src/agent/compactor.rs</code>) trims the context and the bot replies with a concise answer, all while other conversations continue uninterrupted.</li></ul>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis, 86 total):</strong></p>
+<ul><li><strong>[HIGH/clarity] Hub module</strong> – <code>interface/src/ui/utils.tsx</code> is depended on by 30 modules; high‑blast‑radius churn.</li><li><strong>[HIGH/cognitive_load] Deep nesting x55</strong> – max indentation depth 8 in <code>interface/src/ui/NumberStepper.tsx</code>, <code>interface/src/ui/ToggleGroup.tsx</code>, <code>src/agent/compactor.rs</code>.</li><li><strong>[HIGH/clarity] Duplicated code blocks</strong> – 168 repeated 6‑line blocks across 35 files, e.g., <code>interface/src/components/ChannelCard.tsx</code>, <code>interface/src/routes/Overview.tsx</code>.</li><li><strong>[HIGH/cognitive_load] Oversized file x3</strong> – <code>src/api/server.rs</code>, <code>src/config.rs</code>, <code>interface/src/routes/Settings.tsx</code> each exceed 3 500 lines.</li></ul>
+<p><strong>Code‑health audit (8 findings, 0 critical):</strong></p>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHAs (<code>.github/workflows</code> uses <code>@v3</code>, <code>@v6</code>, etc.).</li><li><strong>HIGH</strong> – Make CI invoke the test suite it has (4 test files, no <code>test</code> command in any workflow).</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (3 manifests, no update bot).</li><li><strong>MEDIUM</strong> – Pin container base image by digest (<code>Dockerfile</code> uses <code>rust:bookworm</code>, <code>debian:bookworm-slim</code>).</li><li><strong>MEDIUM</strong> – Gate pull requests on a dependency vulnerability scan (absent from CI).</li><li><strong>MEDIUM</strong> – Add a non‑root USER to the Docker image (no <code>USER</code> directive).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs (release.yml has no job timeout).</li><li><strong>LOW</strong> – Add convention files (missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p><strong>Committed secrets</strong> – <code>src/secrets.rs</code> contains path‑shaped placeholders; the health audit confirms they are present and should be rotated/removed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Spacebot delivers a genuinely multi‑user AI‑agent experience by splitting work into independent processes, which is rare in the current landscape. The Rust core and TypeScript UI are well‑structured, but the codebase suffers from a high‑impact hub, deep nesting, duplicated logic, and oversized files that raise maintenance risk. Security hygiene also needs attention (action pinning, image digest pinning, test invocation, Dependabot).</p>
+<p><strong>Who should use it:</strong> teams or communities that need concurrent AI assistance across chat platforms and are comfortable investing in the outlined hygiene fixes. If you need a single‑user, turnkey bot with minimal ops overhead, another framework may be simpler; for multi‑agent, multi‑channel deployments Spacebot is a solid, if imperfect, choice.</p>
             </div>
 
             
@@ -91,18 +142,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">303<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TSX</span><i style="width:100%"></i><b>66</b></li><li><span>Markdown</span><i style="width:24%"></i><b>16</b></li><li><span>TypeScript</span><i style="width:24%"></i><b>16</b></li><li><span>JSON</span><i style="width:21%"></i><b>14</b></li><li><span>SQL</span><i style="width:21%"></i><b>14</b></li><li><span>YAML</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>87</b></li><li><span>TSX</span><i style="width:76%"></i><b>66</b></li><li><span>Markdown</span><i style="width:18%"></i><b>16</b></li><li><span>TypeScript</span><i style="width:18%"></i><b>16</b></li><li><span>JSON</span><i style="width:16%"></i><b>14</b></li><li><span>SQL</span><i style="width:16%"></i><b>14</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 
@@ -142,6 +193,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>src/secrets.rs</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159890860">Open in Code Brain &rarr;</a>

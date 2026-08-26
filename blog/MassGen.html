@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>6 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Modern LLMs are impressive, but running a single agent for complex tasks usually sucks. You get shallow answers, missed context, and zero cross-checking. Multi-agent setups are cool in theory, but most open-source tools are either half-baked, impossible to configure, or just run a chat loop and call it “collaboration.” MassGen tries to fix that: actual parallel agents, real convergence, and orchestration you can run from your terminal (not some cloud dashboard with 400 dependencies).</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MassGen spins up multiple AI agents—each with their own model, config, and task view—and has them work together on your problem. The core logic lives in AGENTS.md and AIUSAGE.md, with orchestration details buried in docs/devnotes/agentplanningcoordinationdesign.md. Agents don’t just chat: they monitor each other, refine answers, and vote on results. The system handles parallel runs, live updates, and context compression (see docs/devnotes/contextcompressiondesign.md).</p><p>Config is dead-simple: drop your secrets into .env.example, tweak Makefile to your liking, and you’re set. Docs are everywhere—README.md, docs/README.md, and about 150 other Markdown files if you get lost. CI/CD is handled with a bunch of GitHub Actions in .github/workflows/, so releases and tests are automated (and, shockingly, actually work).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’ve got a gnarly research question or need code review from multiple models. Fire up MassGen, pick your agents in AIUSAGE.md, and run:</p><p>Agents spin up in parallel, each tackles the problem, and you get a live visualization (check assets/massgen-demo.gif). They iterate, share context, and converge on a final answer—no babysitting required. Need to plug it into an LLM? There’s a full automation guide in AIUSAGE.md.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MassGen is legit if you’re tired of single-agent mediocrity and want real multi-agent workflows without fighting 40 dependencies. It’s overkill for tiny tasks, and the docs are a rabbit hole, but the orchestration is solid and the config is sane. If you care about agentic AI and want to tinker with parallel setups, this is worth your time. If you just want ChatGPT, skip it.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Complex autonomous tasks requiring coordination across multiple large language model agents currently require manual orchestration, with engineers stitching together separate API calls, managing state between agents, and handling error cases individually. This becomes increasingly brittle as task complexity grows and the number of agents scales beyond two or three.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>MassGen is a multi-agent scaling system that runs in your terminal and autonomously orchestrates frontier models and agents to collaborate, reason, and produce high-quality results. The core system lives in <code>massgen/</code> (1548 files, 830 code files) with Python as the dominant language (519 files). Entry points include <code>massgen/cli.py</code> for command-line invocation, and configuration lives in <code>massgen/configs/resources/</code> with versioned example directories. The system uses LangChain integration, vector stores, and Neo4j for knowledge representation. A web UI exists in <code>webui/</code> (88 files, 81 code files) built with React, Tailwind, and Django/Flask backend patterns. The project structure separates concerns into <code>massgen/</code> (agent orchestration), <code>webui/</code> (interface layer), <code>docs/</code> (documentation), and <code>openspec/</code> (specifications). Eighty-eight third-party packages are declared as dependencies, with several notably behind published major versions (e.g., textual at 8.2.8 vs. declared &gt;=0.47.0, websockets at 17.0.1 vs. &gt;=11.0.0).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>massgen/cli.py</code>, which parses commands and routes to the agent orchestration layer. The import graph analyzed 933 of 933 code files (Python 516, JavaScript 327, TypeScript 79) and found 922 internal modules connected by 1279 import edges, with 63 modules inside circular dependencies. Key hub modules with wide blast radius: <code>massgen/logger_config</code> (78 importers, 3 importers, instability 0.04, in a cycle), <code>massgen/tool/_result</code> (45 importers, 0 importers, instability 0), and <code>massgen/backend/base</code> (30 importers, 7 importers, instability 0.19, in a cycle). Thirteen modules participate in import cycles across <code>massgen/logger_config.py</code>, <code>massgen/backend/base.py</code>, and <code>massgen/agent_config.py</code>. Seven modules exceed 700 lines (<code>massgen/logger_config.py</code>, <code>massgen/backend/base.py</code>, <code>massgen/backend/response.py</code>), with <code>massgen/backend/base.py</code> reaching 724 lines and max indentation depth 7, creating high cognitive load. File-open-without-context-manager appears in <code>massgen/mcp_tools/hooks.py</code>, and <code>massgen/chat_agent.py</code> contains 253 branch points over 800 lines.</p>
+<p>Outside the core: <code>webui/</code> connects to the backend via HTTP, with CORS configuration in <code>massgen/frontend/web/server.py</code> currently using <code>allow_origins=["*"]</code> alongside credentials enabled—a configuration browsers prohibit for good reason. The Docker setup lives in <code>massgen/docker/</code> with multiple variant Dockerfiles (<code>Dockerfile</code>, <code>Dockerfile.custom-example</code>, <code>Dockerfile.overlay</code>, <code>Dockerfile.overlay.sudo</code>, <code>Dockerfile.sudo</code>). Tests exist in 336 files across the repository, but the CI workflows lack a test execution step.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/MassGen
+
+# Install Python dependencies
+cd MassGen
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+
+# Install frontend dependencies
+cd webui &amp;&amp; npm install</code></pre>
+<p><strong>Configuration:</strong> Copy <code>.env.example</code> to <code>.env</code> and set required keys. The file <code>.env.example</code> at the repository root documents environment variables the system expects. Additional configuration lives in <code>massgen/configs/resources/</code> with versioned examples.</p>
+<p><strong>Running it:</strong></p>
+<pre data-lang="bash"><code># From the repository root
+massgen &lt;command&gt;
+# or via Python module
+python -m massgen.cli &lt;command&gt;</code></pre>
+<p>The CLI entry point <code>massgen/cli.py</code> handles command dispatch to the orchestration engine. For the web interface, start the Django/Flask server from <code>webui/</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A research team needing to analyze 500 customer support tickets can invoke MassGen to distribute the workload across four specialized agents: one for classification, one for sentiment analysis, one for root-cause pattern detection, and one for recommendation generation. Each agent operates independently, observes the others' intermediate results, and iteratively refines its approach. The system converges on a consolidated report with categorized issues, priority rankings, and actionable recommendations—all from a single terminal command. The parallel-processing approach reduces what might take a human analyst a full workday to under an hour, with the consensus-building mechanism surfacing disagreements between agent interpretations for human review.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[HIGH] Pin third-party GitHub Actions to a commit SHA</strong> - <code>.github/workflows</code>: docker/setup-qemu-action@v3, docker/setup-buildx-action@v3, docker/login-action@v3, docker/build-push-action@v5 are pinned only to tags; a tag can be moved, so the action running with your token and secrets is whatever its owner last pushed.</li><li><strong>[HIGH] Replace the wildcard CORS origin with an explicit allow list</strong> - <code>massgen/frontend/web/server.py</code>: <code>allow_origins=["*"]</code> together with credentials enabled allows any page on the internet to call the API with the browser's cookies attached.</li><li><strong>[HIGH] Make CI invoke the test suite it has</strong> - <code>.github/workflows</code>: 255 test files exist but no test command appears in the 4 workflows read; a green check that never executed an assertion is worse than no check.</li><li><strong>[MEDIUM] Enable Dependabot or Renovate</strong>: 4 manifest(s) present, no update bot configured; without a bot a published advisory sits unpatched until someone audits by hand.</li><li><strong>[MEDIUM] Pin the container base image by digest</strong> - <code>massgen/docker/Dockerfile</code>: <code>python:3.11-slim</code> is an untagged mutable base; today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</li><li><strong>[MEDIUM] Gate pull requests on a dependency vulnerability scan</strong>: no dependency scan in CI; this is the one gate that would catch a known-vulnerable package before it reaches a build.</li><li><strong>[MEDIUM] Move large binaries to Git LFS</strong> - <code>docs/source/examples/case_studies/case_study_gifs/v0.0.22-new.gif</code> (91.6MB) and two other gifs over 40MB; every clone and CI checkout pays for data nobody diffs.</li><li><strong>[MEDIUM] Set persist-credentials: false on checkout</strong> - <code>.github/workflows/auto-release.yml</code>: checkout keeps the token, then dependencies are installed; the token stays in .git/config for every later step.</li><li><strong>[LOW] Set timeout-minutes on the workflow jobs</strong> - <code>.github/workflows/auto-release.yml</code>: 4 workflow(s) declare no job timeout; a wedged step runs to the six-hour platform default.</li></ul>
+<p>The static analysis also found 510 total issues (181 high, 328 medium, 1 low) across 7 categories: broad exception handling in 8 files including <code>massgen/logger_config.py</code>, <code>massgen/backend/base.py</code>, <code>massgen/subagent/models.py</code>; 13 modules in import cycles; 13 oversized files; 3 hub modules with high churn; 21 files with deep nesting (max depth 7); 1 file opened without context manager; and high branching density in <code>massgen/chat_agent.py</code> (253 branch points over 800 lines).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>MassGen delivers a functional multi-agent orchestration system with genuine parallel-processing capability and a working terminal interface, but the codebase shows significant structural debt: circular imports across core modules, several files exceeding 700 lines with deep nesting, and CORS configuration that could introduce security vulnerabilities. The 88 declared dependencies include several packages multiple major versions behind, and the CI pipeline runs checks that never execute the test suite. Teams that need rapid prototyping of multi-agent workflows will find value here, but engineers should expect to refactor the largest modules and tighten security configurations before production deployment.</p>
             </div>
 
             
@@ -146,6 +178,30 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>38</strong> of 88 declared dependencies are a major version behind. Resolved 88 of 88 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>textual</code></td>
+                            <td>&gt;=0.47.0</td><td>8.2.8</td>
+                            <td class="beh">8 major</td></tr><tr><td><code>websockets</code></td>
+                            <td>&gt;=11.0.0</td><td>17.0.1</td>
+                            <td class="beh">6 major</td></tr><tr><td><code>sphinx-autobuild</code></td>
+                            <td>&gt;=2021.3.14</td><td>2025.8.25</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>myst-parser</code></td>
+                            <td>&gt;=2.0.0</td><td>5.1.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>marked</code></td>
+                            <td>^15.0.12</td><td>18.0.9</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>shiki</code></td>
+                            <td>^1.29.2</td><td>4.4.3</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>datasets</code></td>
+                            <td>==3.2.0</td><td>5.0.1</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>sphinx</code></td>
+                            <td>&gt;=7.0.0</td><td>9.1.0</td>
+                            <td class="beh">2 major</td></tr>
+                    </table>
+                </div>
 
                 
 

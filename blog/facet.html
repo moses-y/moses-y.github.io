@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,50 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>We all have piles of photos, and sorting through them can feel like wading through molasses. Finding the best shots based on aesthetic appeal, composition, or even facial details is a pain in the neck. Traditional methods? Forget it. You need a tool that can analyze images intelligently and surface the gems without all the manual labor.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter facet, a multi-dimensional photo analysis engine that leverages various vision models to rank and categorize your images. Inside the api directory, you&#39;ll find files like auth.py and gallery.py, which handle user authentication and gallery management, respectively. The analyzers folder contains the heavy hitters — composition.py, face.py, and technical.py — that score photos based on aesthetic quality, facial detail, and technical metrics.</p><p>If you’re curious about how it all comes together, check out client/src/app/app.ts, which initializes the app, or client/src/features/gallery/gallery.component.ts, where the gallery functionality is implemented. With features like AI-powered scoring and advanced filtering options, you can sift through your collection like a pro.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you just shot a weekend trip and have hundreds of photos. You want to find the best ones for a photo book. Using facet, you can upload your images and let the system do its magic. It evaluates each photo using models like TOPIQ for quality and SAMP-Net for composition analysis. You can filter the results to show only photos with a high aesthetic score or specific composition patterns. The stats.component.ts helps you visualize which equipment worked best, giving you insights for future shoots.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>facet is a solid tool for photographers who need to analyze and manage large collections of images. It&#39;s packed with features, but be warned: it’s overkill if you’re just organizing family vacation photos. If you&#39;re a pro or serious hobbyist looking to refine your workflow, this could be worth your time. Just prepare to dive into some Python and TypeScript if you want to customize it.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Photographers and image‑rich applications need an automated way to rank large libraries by aesthetic, compositional, facial and technical quality. Manual curation is slow, error‑prone and does not scale across thousands of files.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>facet</code> bundles a FastAPI back‑end (<code>api/</code>) with an Angular front‑end (<code>client/</code>) and a set of Python vision models (<code>models/</code>, <code>processing/</code>). The back‑end loads image‑level scores via TOPIQ, SAMP‑Net, CLIP/Qwen and technical metrics, stores the results in a SQLite DB (<code>db/connection.py</code>), and exposes REST endpoints (e.g. <code>api/routers/gallery.py</code>, <code>api/routers/comparison.py</code>). The front‑end consumes those endpoints to render a dark‑themed gallery with infinite scroll, filter drawers, and person‑management UI (<code>client/src/app/...</code>).</p>
+<p>Key files:</p>
+<ul><li><code>api/config.py</code> – loads secret‑derived config, controls multi‑user mode.</li><li><code>api/db_helpers.py</code> – builds SQL filters used by many routers.</li><li><code>processing/scorer.py</code> – orchestrates model loading and per‑image scoring.</li><li><code>client/src/app/core/services/api.service.ts</code> – central HTTP client used by 17 other modules.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>run_api.py</code></strong> (line 22) which calls <code>main -&gt; get_connection</code>. <code>get_connection</code> (defined in <code>db/connection.py</code>) opens the SQLite DB and is the most‑called function (57 call sites). From there the flow is:</p>
+<ol><li><strong>Database init</strong> – <code>db/connection.py</code> → <code>init_database</code> (via <code>api/database.py</code>) creates tables, runs migrations, and registers pragmas.</li><li><strong>Request handling</strong> – FastAPI routes in <code>api/routers/*.py</code> invoke helpers in <code>api/db_helpers.py</code>. Functions like <code>add_range_filter</code> and <code>_add_tag_filter</code> are called from many routers (e.g., <code>gallery</code>, <code>stats</code>, <code>comparison</code>).</li><li><strong>Scoring pipeline</strong> – <code>processing/scorer.py</code> loads models (<code>models/model_manager.py</code>, <code>models/samp_net.py</code>) and calls <code>compute</code> which eventually invokes <code>get_db_connection</code> (again from <code>db/connection.py</code>) to write per‑image scores. The scorer also calls external commands (<code>tqdm</code> for progress, GPU libraries) and performs a single outbound network call when loading CLIP/Qwen weights.</li><li><strong>Front‑end interaction</strong> – The Angular service <code>client/src/app/core/services/api.service.ts</code> is the hub (Ca = 17) for all UI components; it forwards HTTP calls to the FastAPI back‑end. The i18n service and auth service are similarly central but have no internal imports, making them low‑risk to change.</li></ol>
+<p>The most blast‑radius modules are:</p>
+<ul><li><strong><code>db/__init__.py</code></strong> – imported by 17 modules, touches the DB in 7 places.</li><li><strong><code>api/config.py</code></strong> – secret‑derived config accessed by 15 modules, performs cryptographic hashing.</li><li><strong><code>client/src/app/core/services/api.service.ts</code></strong> – consumed by 17 UI components, any change ripples through the UI.</li></ul>
+<p>No circular import cycles were detected, but deep nesting (up to 6 levels) and duplicated 6‑line blocks across 29 files raise maintenance risk.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/facet
+cd facet
+
+# Python environment
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Front‑end
+cd client
+npm ci          # uses package-lock.json
+npm run build   # builds Angular app (output in dist/)
+
+# Initialise the DB (first run only)
+python run_api.py --init-db   # creates SQLite file via db/connection.py
+
+# Start the server
+python run_api.py            # FastAPI runs on http://127.0.0.1:8000</code></pre>
+<p>Configuration lives in <code>api/config.py</code>; it expects a secret value (derived from <code>SHARE_SECRET</code> env var) and optional <code>USER_CONFIG</code> JSON files. No <code>.env</code> template is provided, so the caller must set those variables before launch.</p>
+<p>The UI is served from <code>client/dist/</code> by FastAPI’s static mount (<code>api/__init__.py</code>). Access the gallery at <code>http://localhost:8000/</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A photo‑management service can point its ingestion pipeline at <code>processing/scorer.py::compute</code> to batch‑process new uploads. After scores are persisted, the Angular front‑end presents sortable, filterable galleries, while the <code>api/routers/comparison.py</code> endpoints enable human‑in‑the‑loop pairwise comparisons for active learning.</p>
+<pre data-lang="python"><code>from processing.scorer import compute
+compute(image_paths=["/data/img1.jpg", "/data/img2.jpg"])</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No CI pipeline</strong> – 127 source files, no <code>.github/workflows</code>.</li><li><strong>MEDIUM – Dependabot missing</strong> – only <code>requirements.txt</code> and <code>client/package.json</code> present.</li><li><strong>MEDIUM – Broad exception handling</strong> – generic <code>except:</code> in <code>api/config.py</code>, <code>api/db_helpers.py</code>, <code>api/types.py</code>.</li><li><strong>HIGH – Deep nesting</strong> – up to 6 indentation levels in <code>api/db_helpers.py</code>, <code>faces/processor.py</code>, <code>models/model_manager.py</code>.</li><li><strong>HIGH – Duplicated code blocks</strong> – identical 6‑line snippets across 29 files (e.g., filter construction).</li><li><strong>MEDIUM – File opens without context manager</strong> – <code>models/samp_net.py</code>, <code>api/routers/thumbnails.py</code>, <code>db/maintenance.py</code>.</li><li><strong>HIGH – Oversized files</strong> – <code>processing/scorer.py</code> (1 837 lines) and related config modules are hard to maintain.</li></ul>
+<p>No Dockerfile, license present, lockfiles exist, and no secrets were found in the history.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>facet</code> provides a complete end‑to‑end photo scoring stack with a functional UI and a rich set of vision models. It is usable out of the box for small‑to‑medium libraries, but the codebase suffers from deep nesting, duplicated logic and a lack of automated testing/CI. Teams that need a customizable scoring pipeline and are prepared to refactor the hub modules will find it valuable; otherwise the maintenance overhead may outweigh the benefits.</p>
             </div>
 
             

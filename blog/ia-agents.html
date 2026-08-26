@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 16, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,16 +80,55 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building intelligent agents that can handle complex interactions, especially in multi-turn conversations, can be a nightmare. You want a framework that handles state, allows for tool integration, and lets you customize behavior without reinventing the wheel. Enter the ia-agents repository, which wraps the Gemini Interactions API in a more manageable package.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The ia-agents repo offers a minimalistic agent framework designed to simplify the creation and management of agents. Key files include packages/agent/src/index.ts and packages/agents-core/src/index.ts, where the core logic resides. The framework features a Streaming Agent Loop that supports multi-modal interactions. It uses a hooks system to allow you to intercept lifecycle events—check out packages/agent/src/hooks/index.ts for the available hooks.</p><p>Tool calling is straightforward; you define tools in JSON Schema, and the framework executes them. If you want to block specific commands (like rm -rf), the beforeToolExecute hook lets you do just that. Check out the example in examples/agent-with-hooks.ts for a practical use case.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re developing a chat application that needs to execute user commands but also filter out dangerous ones. You can set up an agent using the createAgentSession method from @philschmid/agent, register your tools, and implement a blocking mechanism for harmful commands. Here&#39;s a quick example:</p><p>const session = createAgentSession({
-  model: &#39;gemini-3-flash-preview&#39;,
-  tools: [&#39;read&#39;, &#39;bash&#39;],
-});</p><p>session.on(&#39;beforeToolExecute&#39;, (event) =&gt; {
-  if (event.toolName === &#39;bash&#39; &amp;&amp; event.arguments.command.includes(&#39;rm -rf&#39;)) {
-    return { allow: false, reason: &#39;Destructive command blocked&#39; };
-  }
-  return { allow: true };
-});</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>ia-agents is a solid choice for developers looking to build intelligent agents without the headache of handling everything from scratch. The modular approach with agents-core and agent packages allows for flexibility, but you might find it overkill for simple projects. If you need a lightweight solution with powerful capabilities, give it a shot. Just be ready to dive into TypeScript if you’re not already familiar.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building AI‑driven assistants need a lightweight, type‑safe framework that can stream LLM responses, call tools, and let callers intercept lifecycle events. Existing monolithic SDKs often force heavy runtimes or hide the hook points that teams want to audit or extend.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>ia‑agents</code> provides two npm packages:</p>
+<ul><li><strong><code>@philschmid/agents‑core</code></strong> – the minimal streaming loop and tool execution engine (<code>packages/agents‑core/src/agent-loop.ts</code>, <code>src/tool.ts</code>).</li><li><strong><code>@philschmid/agent</code></strong> – a wrapper that adds a hook system, built‑in tools (file I/O, bash, web‑search, etc.), skill loading, and session management (<code>packages/agent/src/index.ts</code>, <code>src/hooks/*</code>, <code>src/tools/*</code>).</li></ul>
+<p>All source files are TypeScript; the public API lives in the <code>src/index.ts</code> files of each package. Documentation and examples are under <code>docs/</code> and <code>examples/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution typically starts at a CLI entry point:</p>
+<ul><li><strong><code>examples/cli.ts</code></strong> → imports <code>createAgentSession</code> from <code>packages/agent/src/index.ts</code>.</li><li>The session constructor (<code>src/context.ts</code> → <code>src/hooks/runner.ts</code>) builds a <code>HooksRunner</code> that registers default hooks and any user‑supplied callbacks.</li><li>When <code>session.send()</code> is called, the runner invokes <strong><code>agentLoop</code></strong> from <code>packages/agents‑core/src/agent-loop.ts</code>. This function streams interactions to the Gemini model, yields <code>Interaction</code> objects, and, when a tool call is detected, resolves the tool name against the <strong>tool registry</strong> (<code>packages/agent/src/tools/index.ts</code>).</li><li>Tool execution is delegated to the concrete implementation in <code>packages/agent/src/tools/&lt;tool&gt;/index.ts</code> (e.g., <code>read-file</code>, <code>bash</code>). Each tool returns a JSON‑serializable result that is fed back into the loop.</li><li>Hook callbacks (<code>onAgentStart</code>, <code>beforeToolExecute</code>, etc.) are invoked around the loop via <code>HooksRunner</code> (<code>src/hooks/runner.ts</code>). The most widely referenced module is <code>packages/agent/src/tools/index.ts</code> (14 outgoing imports, 4 incoming), making it a hotspot for change impact.</li><li>The import graph contains two cycles involving <code>packages/agent/src/tools/index.ts</code> and <code>packages/agent/src/tools/subagent/index.ts</code>; breaking these would reduce instability (currently 0.78) and simplify future refactors.</li></ul>
+<p>The flow therefore touches <strong>four core files</strong> (<code>cli.ts</code>, <code>index.ts</code>, <code>agent-loop.ts</code>, <code>tools/index.ts</code>) and spreads outward only through the selected tool modules, keeping the blast radius predictable.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ia-agents.git
+cd ia-agents
+
+# Install dependencies with Bun (preferred) or npm
+bun install          # reads package.json and bun.lock
+# or: npm ci         # no lockfile present, reproducibility not guaranteed
+
+# Build the two packages
+bun run build        # runs the tsup config in each package
+
+# Run a ready‑made example
+bun examples/simple.ts</code></pre>
+<p>Configuration is type‑safe via <code>packages/agent/src/config.ts</code>. Environment variables prefixed with <code>AGENT_</code> are merged with a JSON <code>settings.json</code> (if present). No additional secrets are required for the bundled examples.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A micro‑service that needs to process user queries could import <code>createAgentSession</code>, register a <code>beforeToolExecute</code> hook to block destructive shell commands, and stream the response back over WebSockets:</p>
+<pre data-lang="ts"><code>import { createAgentSession, printAgentStream } from '@philschmid/agent';
+
+const session = createAgentSession({
+  model: 'gemini-3-flash-preview',
+  tools: ['read', 'bash', 'web_search'],
+});
+
+session.on('beforeToolExecute', ev =&gt;
+  ev.toolName === 'bash' &amp;&amp; ev.arguments.command?.includes('rm -rf')
+    ? { allow: false, reason: 'blocked' }
+    : { allow: true }
+);
+
+session.send('List recent log files');
+await printAgentStream(session.stream(), { verbosity: 'verbose' });</code></pre>
+<p>The hook runs in the same process, guaranteeing immediate policy enforcement without an external proxy.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses <code>oven-sh/setup-bun@v2</code>. Replace with a 40‑character commit SHA.</li><li><strong>High – CI never runs tests</strong> – 15 test files exist but no workflow step executes them. Add a <code>bun test</code> step to the existing workflow.</li><li><strong>Medium – No Dependabot/Renovate</strong> – Four manifest files lack an update bot; add <code>.github/dependabot.yml</code>.</li><li><strong>Medium – No dependency‑vulnerability scan</strong> – No <code>dependency-review-action</code> or <code>osv-scanner</code> in CI; add to pull‑request workflow.</li><li><strong>Low – Missing job timeout</strong> – <code>deploy-docs.yml</code> omits <code>timeout-minutes</code>; set a reasonable bound (e.g., 20 min).</li></ul>
+<p>Additional observations: the repo has a license, a CI pipeline, but no lockfile for the root <code>package.json</code>, making reproducible builds unreliable. Import cycles in <code>tools/index.ts</code> and <code>tools/subagent/index.ts</code> increase maintenance risk.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>ia‑agents</code> delivers a clear, modular agent framework with a solid hook system and ready‑to‑use tools, making it suitable for teams that need fine‑grained control over LLM interactions. The codebase is functional but suffers from a few high‑impact health gaps—unpinned actions, missing test execution, and circular imports—that should be addressed before adopting it in production.</p>
             </div>
 
             
@@ -99,18 +138,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">156<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>TypeScript</span><i style="width:100%"></i><b>80</b></li><li><span>Markdown</span><i style="width:34%"></i><b>27</b></li><li><span>JSON</span><i style="width:14%"></i><b>11</b></li><li><span>Shell</span><i style="width:3%"></i><b>2</b></li><li><span>YAML</span><i style="width:1%"></i><b>1</b></li><li><span>CSS</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span></p>
                     </div>
                 </div>
 
@@ -147,6 +186,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>docs/package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1159335967">Open in Code Brain &rarr;</a>

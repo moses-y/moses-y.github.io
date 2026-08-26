@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 17, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#building-a-multi-tenant-rag-api-with-rag-api">Building a Multi-Tenant RAG API with rag-api</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="building-a-multi-tenant-rag-api-with-rag-api">Building a Multi-Tenant RAG API with rag-api</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Dealing with document Q&amp;A at scale is a nightmare. PDFs, images, Word files—every format demands its own parsing, and don’t get me started on OCR. Add multi-tenancy into the mix, with isolated data and custom logic per tenant, and you&#39;re drowning in complexity. Most open-source tools give you one piece of the puzzle: vector search, OCR, or maybe a knowledge graph. But what if you need all of it, and it has to just work?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>rag-api is a multi-tenant Retrieval-Augmented Generation (RAG) service that combines LightRAG and RAG-Anything for intelligent document Q&amp;A. It auto-selects the best parser—DeepSeek-OCR, MinerU, or Docling—based on document complexity (src/smartparserselector.py). No need to guess which tool to use; it figures it out.</p><p>The project is cleanly organized. The api/ folder handles endpoints like documents.py (file ingestion), query.py (retrieval), and tenant.py (tenant management). The brains of the operation live in src/, where modules like documentcomplexity.py and rag.py handle parsing and retrieval. Oh, and deployment? Dead simple. There&#39;s a Dockerfile, docker-compose.yml, and even a deploy.sh script to get you started in minutes.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you&#39;re building a SaaS platform where businesses upload contracts, invoices, and scanned forms for Q&amp;A. Here&#39;s what your workflow might look like:
-Deploy the service (docker-compose up).
-Upload a batch of files via the /documents endpoint (check out api/documents.py).
-Behind the scenes, smartparserselector.py picks the best parser (OCR for images, direct insertion for text).
-Query the data using /query (hello, hybrid retrieval with LightRAG).</p><p>Example cURL request to upload files:</p><p>curl -X POST -F &quot;file=@contract.pdf&quot; http://localhost:8000/documents</p><p>And retrieving info:</p><p>curl -X GET &quot;http://localhost:8000/query?question=What%20is%20the%20contract%20value?&quot;</p><p>Multi-tenancy? Each tenant has isolated storage and config (api/tenantconfig.py), so no cross-contamination.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>rag-api is overkill for small projects but perfect for enterprise-level document Q&amp;A with multi-tenancy. It’s opinionated but flexible: great parser selection, hybrid retrieval, and Redis-based task persistence. Just don’t expect hand-holding—the docs are there, but you’ll need to dig in. If you&#39;re wrangling complex document processing at scale, this is your new best friend.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises that need to expose document‑wide question‑answering across many customers run into two issues: (1) keeping each tenant’s data isolated while sharing the same retrieval infrastructure, and (2) handling the wide variety of file formats (PDF, Word, images, tables, formulas) without building a custom parser stack for every use‑case.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>rag-api</code> delivers a multi‑tenant Retrieval‑Augmented Generation service that couples <strong>LightRAG</strong> (graph‑based retrieval) with <strong>RAG‑Anything</strong> (multimodal parsing). The code base is organized around three domains:</p>
+<ul><li><strong><code>src/</code></strong> – core engine (config, multi‑tenant manager, parsers, rate‑limiter, metrics).</li><li><code>src/multi_tenant.py</code> creates per‑tenant LLM and embedding functions and is the hub for tenant isolation.</li><li><code>src/smart_parser_selector.py</code> picks the best parser (DeepSeek‑OCR, MinerU, Docling) using the complexity scorer in <code>src/document_complexity.py</code>.</li><li><code>src/rag.py</code> runs the LightRAG retrieval pipeline.</li></ul>
+<ul><li><strong><code>api/</code></strong> – FastAPI request handlers (<code>documents.py</code>, <code>insert.py</code>, <code>query.py</code>, etc.) that translate HTTP calls into engine actions.</li></ul>
+<ul><li><strong><code>scripts/</code></strong> – operational helpers; <code>scripts/migrate_tenant.py</code> is the only CLI entry that performs tenant migration.</li></ul>
+<p>The top‑level <code>main.py</code> starts the FastAPI server, wiring the router defined in <code>api/__init__.py</code> to the engine modules.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Startup</strong> – <code>python main.py</code> (or the Docker entrypoint) creates the FastAPI app.</li><li><strong>Request flow</strong> – an incoming HTTP call hits a handler in <code>api/</code>. For a document upload the path is:   <code>api/insert.insert_document</code> → <code>src/multi_tenant.get_tenant_lightrag</code> (called from <strong>9</strong> places) → <code>src/rag.process_document_task</code> → parser selection (<code>src/smart_parser_selector.select_parser</code>) → concrete parser (<code>src/deepseek_ocr_client</code>, <code>src/mineru_client</code>, or <code>src/docling_client</code>) → vector store write (Qdrant via <code>src/rate_limiter.acquire</code> and <code>src/tenant_config</code>) → task persistence (<code>api/task_store</code>).</li></ol>
+<p>The most fan‑in functions are <code>src/logger</code> (22 imports) and <code>api/insert</code> (high instability). Changing <code>src/logger</code> has the widest blast radius.</p>
+<ol><li><strong>External effects</strong> –   <em> <strong>File system</strong> – parsers open PDFs/Docs (<code>open</code> without context manager in <code>src/deepseek_ocr_client.py</code> and <code>src/document_complexity.py</code>). </em> <strong>Network</strong> – OCR calls (<code>requests.get</code> in <code>deepseek_ocr_client</code>), MinerU remote API (<code>src/mineru_client</code>), and tenant config fetches. * <strong>Database</strong> – task CRUD (<code>api/task_store</code>) writes to Redis/DragonflyDB; tenant config reads/writes JSON files (<code>src/tenant_config.py</code>).</li></ol>
+<ol><li><strong>Rate limiting</strong> – every outbound call passes through <code>src/rate_limiter.acquire</code>, which is invoked from <strong>8</strong> locations, making it a critical throttling point.</li></ol>
+<ol><li><strong>Metrics</strong> – <code>src/metrics.py</code> records response times and error rates; these are called from the monitoring endpoints in <code>api/monitor.py</code>.</li></ol>
+<p>The internal call graph shows 290 resolved intra‑repo edges; the most reused utilities (<code>get_tenant_config_manager</code>, <code>DocumentFeatures</code>, <code>ParseOptions</code>) appear in <strong>5–7</strong> places each, indicating they are natural extension points.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/rag-api
+cd rag-api
+
+# Build the container (uses uv for dependency resolution)
+docker build -f Dockerfile -t rag-api:latest .
+
+# Run the stack (FastAPI + Qdrant vector store)
+docker compose up -d   # uses docker-compose.yml
+
+# The API is now reachable at http://localhost:8000
+# Swagger UI: http://localhost:8000/docs</code></pre>
+<p><em>Configuration</em> – tenant isolation and parser keys are read from files under <code>src/tenant_config.py</code> and environment variables referenced there (e.g., <code>DEEPSEEK_API_KEY</code>). No secret files are committed; provide them at container start.</p>
+<p><em>CLI migrations</em> – to migrate an existing tenant configuration:</p>
+<pre data-lang="bash"><code>python scripts/migrate_tenant.py --old-id old_tenant --new-id new_tenant</code></pre>
+<p>The script uses <code>src/multi_tenant</code> to copy vector data and task records.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider can spin up a single <code>rag-api</code> service behind a tenant‑aware gateway. When a client uploads a contract PDF, the service routes the request to <code>api/insert</code>, the smart selector chooses DeepSeek‑OCR for complex layout, stores embeddings in Qdrant, and later answers queries via <code>api/query</code> using LightRAG’s hybrid graph retrieval. All tenant data remains isolated by the per‑tenant manager in <code>src/multi_tenant.py</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/ci-basic.yml</code>).</li><li><strong>HIGH</strong> – No LICENSE file – redistribution rights undefined.</li><li><strong>MEDIUM</strong> – GITHUB_TOKEN permissions not declared (<code>.github/workflows/ci-basic.yml</code>).</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate configuration.</li><li><strong>MEDIUM</strong> – Base Docker image not pinned by digest (<code>Dockerfile</code>).</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – Container runs as root; no non‑root <code>USER</code> directive.</li><li><strong>MEDIUM</strong> – Test coverage is minimal (1 test file vs 29 source files).</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li></ul>
+<p>Additional static findings: deep nesting (max depth 9) in <code>src/multi_tenant.py</code> and related modules, file handles opened without <code>with</code>, and broad <code>except:</code> clauses in request handlers. These increase maintenance risk and should be refactored.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>rag-api</code> provides a functional, container‑ready multi‑tenant RAG service with solid architecture (FastAPI + LightRAG + auto‑parser selection). It is usable out of the box but needs hardening: add a license, tighten CI security, improve test coverage, and refactor the most complex modules before extending it in production. Suitable for teams comfortable with Python, Docker, and FastAPI who can invest in the outlined cleanup.</p>
             </div>
 
             
@@ -95,9 +129,9 @@ Query the data using /query (hello, hybrid retrieval with LightRAG).</p><p>Examp
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -106,7 +140,7 @@ Query the data using /query (hello, hybrid retrieval with LightRAG).</p><p>Examp
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>29</b></li><li><span>Markdown</span><i style="width:93%"></i><b>27</b></li><li><span>Shell</span><i style="width:28%"></i><b>8</b></li><li><span>YAML</span><i style="width:10%"></i><b>3</b></li><li><span>TOML</span><i style="width:7%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Docker</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -160,6 +194,12 @@ Query the data using /query (hello, hybrid retrieval with LightRAG).</p><p>Examp
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1160264409">Open in Code Brain &rarr;</a>

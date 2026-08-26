@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 17, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,50 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Deploying AI agents without solid security checks is like sending a toddler into a candy store—chaos ensues. These agents often have wide-reaching permissions and can be manipulated through various attack vectors like prompt injections or tool misuse. SuperClaw targets these vulnerabilities before your agents wreak havoc, ensuring they don’t become a security nightmare.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SuperClaw is a security testing framework specifically designed for AI coding agents. It lets you set up scenario-driven tests to identify weaknesses in your agents. The src/superclaw/attacks/ directory contains various attack types like promptinjection.py and toolbypass.py, which simulate real-world threats against your agents. Meanwhile, the src/superclaw/reporting/ folder handles output formats, so you can get your reports in HTML, JSON, or SARIF—whatever floats your boat.</p><p>The docs/guides/ci-cd.md file even shows how to integrate this with your existing CI/CD pipelines, so you can automate security checks alongside your regular builds. This isn&#39;t just security theater; it&#39;s actionable, evidence-based testing.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let&#39;s say you&#39;ve got an AI agent that processes sensitive data. You can run a quick test by executing a scenario defined in docs/guides/problem-definition.md. Use the superclaw CLI tool from src/superclaw/cli.py to kick off the tests, and it spits out a report detailing any vulnerabilities found. You can check out the src/superclaw/cli.py for commands that let you run these tests with ease.</p><p>python src/superclaw/cli.py run --scenario &quot;promptinjection&quot; --agent &quot;myagent&quot;</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SuperClaw is a solid option for teams seriously concerned about the security of their AI agents. It&#39;s a bit heavy-handed if you&#39;re just tinkering or working on small projects, but for anything that interacts with sensitive data, it’s a must-have. Just remember, ethical use is critical—this isn’t a toy. Get permission, run tests in isolation, and take findings seriously.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizations deploying autonomous LLM‑driven agents have no systematic way to verify that the agents resist prompt injection, tool abuse, or configuration drift before they are released. The result is costly post‑deployment breaches that could have been caught in a pre‑flight test.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>SuperClaw</code> is a scenario‑driven red‑team framework for AI agents.  Attack techniques live under <code>src/superclaw/attacks/</code> (e.g., <code>jailbreaks.py</code>, <code>prompt_injection.py</code>) and are executed against a target adapter defined in <code>src/superclaw/adapters/</code> (the default mock adapter is <code>mock.py</code>; the OpenClaw integration is <code>openclaw.py</code>).  Security‑related behaviours – such as <code>protocol_security.py</code> or <code>sandbox_isolation.py</code> – are implemented in <code>src/superclaw/behaviors/</code> and can be composed into a test run.</p>
+<p>The CLI (<code>src/superclaw/cli.py</code>) orchestrates configuration (<code>src/superclaw/config/</code>), selects attacks, runs them through the chosen adapter, evaluates results with the <code>codeoptix</code> engine, and emits reports via <code>src/superclaw/reporting/</code> in HTML, JSON, or SARIF.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – <code>src/superclaw/cli.py</code> parses command‑line options, loads settings from <code>src/superclaw/config/settings.py</code>, and builds a <code>SuperClawRunner</code> (conceptually) that:</p>
+<ol><li><strong>Adapter selection</strong> – imports the adapter module (<code>adapters/openclaw.py</code> or <code>adapters/mock.py</code>) and instantiates its class.</li><li><strong>Attack dispatch</strong> – iterates over the attack package. The most‑imported module is <code>attacks/base.py</code> (Ca = 5), which defines the <code>Attack</code> base class and common helpers. Specific attacks (<code>encoding.py</code>, <code>jailbreaks.py</code>, etc.) subclass it and are invoked via a simple factory in <code>attacks/__init__.py</code>.</li><li><strong>Behavior enforcement</strong> – each attack optionally registers behaviour checks (<code>behaviors/*</code>). The behaviours are lightweight; the most‑connected behaviour file is <code>behaviors/protocol_security.py</code>, which contains deep nesting (indentation depth 8) and thus high cognitive load.</li><li><strong>Evaluation</strong> – the <code>codeoptix/engine.py</code> runs the agent’s output through the <code>evaluator.py</code> to extract evidence. This module shares duplicated helper blocks with <code>attacks/__init__.py</code> (identified as a high‑severity DRY violation).</li><li><strong>Reporting</strong> – final results are handed to <code>reporting/html.py</code>, <code>json_report.py</code>, or <code>sarif.py</code>. All reporting modules write only to the filesystem; no external services are contacted.</li></ol>
+<p>The static import graph shows <strong>43 internal modules</strong> with only <strong>5 import edges</strong> and <strong>no circular dependencies</strong>, indicating a very low coupling surface. The hub is <code>attacks/base.py</code>, which is imported by five other modules but imports none itself, limiting blast radius when changes are made there.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/superclaw
+cd superclaw
+
+# Install dependencies (uv is declared in pyproject.toml)
+uv pip install -e .
+
+# Run a quick sanity check (default mock adapter + all attacks)
+python -m superclaw.cli --adapter mock --attacks all --report html</code></pre>
+<p><em>Configuration</em> – edit <code>src/superclaw/config/settings.py</code> or supply a YAML file referenced with <code>--config path/to/file.yml</code>. The OpenClaw adapter requires the environment variable <code>SUPERCLAW_AUTH_TOKEN</code> (checked in <code>adapters/openclaw.py</code>). No other secret files are present.</p>
+<p><em>Reporting</em> – output files are written to the current working directory; choose format with <code>--report {html,json,sarif}</code>.</p>
+<p>If any of the above files are missing (e.g., a Dockerfile), the repository does not support container‑based execution out of the box.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can embed SuperClaw as a gate before releasing a new version of an autonomous coding assistant:</p>
+<pre data-lang="yaml"><code>- name: Run security tests
+  run: |
+    python -m superclaw.cli \
+      --adapter openclaw \
+      --attacks jailbreaks,prompt_injection \
+      --report sarif &gt; superclaw.sarif
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v2
+  with:
+    sarif_file: superclaw.sarif</code></pre>
+<p>The SARIF report can be consumed by GitHub’s security tab, giving developers immediate feedback on newly introduced agent vulnerabilities.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Measured audit (7 findings)</em></p>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/*.yml</code>).</li><li><strong>HIGH</strong> – No test suite; 43 source files lack corresponding tests.</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> (<code>.github/workflows/ci.yml</code>).</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (<code>.github/dependabot.yml</code> missing).</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan step in CI.</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on <code>actions/checkout</code>.</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to workflow jobs.</li></ul>
+<p><em>Additional static findings</em></p>
+<ul><li><strong>HIGH</strong> – Duplicated 6‑line code blocks across 21 files (e.g., <code>attacks/__init__.py</code>, <code>codeoptix/engine.py</code>).</li><li><strong>HIGH</strong> – Deep nesting (max depth 8) in several modules, making logic hard to follow.</li><li><strong>MEDIUM</strong> – Broad <code>except:</code> clauses in <code>adapters/openclaw.py</code>, <code>attacks/__init__.py</code>, <code>codeoptix/engine.py</code>.</li><li><strong>MEDIUM</strong> – Oversized CLI file (<code>src/superclaw/cli.py</code>, 791 lines).</li><li><strong>MEDIUM</strong> – High branching density in <code>attacks/multi_turn.py</code> (57 branches/202 lines).</li></ul>
+<p>No lockfile is present (<code>pyproject.toml</code> only), so reproducible builds depend on the current state of PyPI.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>SuperClaw</code> provides a concrete, extensible framework for pre‑deployment security testing of AI agents, with a clear separation of adapters, attacks, behaviours, and reporting. The codebase is lightweight and low‑coupled but suffers from a lack of automated tests, duplicated logic, and deep nesting that will hinder maintenance. It is suitable for teams that can invest in adding a test suite and refactoring hot spots, and who need a programmable red‑team harness integrated into CI pipelines.</p>
             </div>
 
             
@@ -91,18 +133,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">0<span> files</span></div>
+                        <div class="an-score">77<span> files</span></div>
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>43</b></li><li><span>Markdown</span><i style="width:53%"></i><b>23</b></li><li><span>YAML</span><i style="width:9%"></i><b>4</b></li><li><span>CSS</span><i style="width:2%"></i><b>1</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Django</span></p>
                     </div>
                 </div>
 
@@ -133,6 +175,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1160206916">Open in Code Brain &rarr;</a>

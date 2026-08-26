@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 22, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tracking down info on a phone number, username, or IP address usually means juggling a bunch of sketchy web tools, ads, and inconsistent results. GhostTrack cuts through that noise by giving you one place to run OSINT lookups, without having to surrender your browser history to questionable sites.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Everything happens in GhostTR.py—the main Python script. Once you fire it up, you get a menu for three things: IP tracking, phone number lookup, and username search. The asset/ folder is just full of PNGs for the UI (if you’re into visual feedback, I guess). Actual heavy lifting happens in GhostTR.py; you don’t need to poke around beyond that and requirements.txt for dependencies.</p><p>Setup is classic Python: clone the repo, install from requirements.txt, and run the script. No Docker, no weird configs—just plain pip and python3. The phone tracker grabs info about a number (think carrier, maybe location), the IP tracker pulls details on an IP, and the username tracker checks social media profiles. All local, no nonsense.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re poking around for info on a spammy number that keeps calling you. Fire up GhostTrack:</p><p>Pick “Phone Tracker” from the menu, drop in the number, and get the basics—no third-party web search required. Same workflow for IPs and usernames. If you’re running this on Termux, it’s just as easy. Bonus: pair it with the Seeker tool if you want to grab IPs from social engineering shenanigans.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GhostTrack is barebones but effective. The UI is nothing fancy, but it gets the job done for basic OSINT tasks. If you need to quickly check phone numbers or usernames without hunting down browser plugins or web tools, it’s solid. Don’t expect deep recon or fancy reporting—use it if you want a local, no-BS info grabber.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Investigators and OSINT practitioners often need a quick, script‑based way to fetch public data about an IP address, phone number, or username. Existing tools are fragmented, requiring separate installations and manual API calls, which slows down real‑time analysis.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>GhostTR.py</code> implements a single‑file CLI that presents a text menu for three lookup modes: <strong>IP Tracker</strong>, <strong>Phone Tracker</strong>, and <strong>Username Tracker</strong>. The menu logic lives in <code>run_banner()</code> and <code>option()</code>, while the actual lookups are performed by the functions <code>IP_Track()</code>, <code>phoneGW()</code>, and <code>TrackLu()</code>. Supporting assets (icons and screenshots) are stored under <code>asset/</code>. The only external dependency list is <code>requirements.txt</code>, which the README installs with <code>pip3 install -r requirements.txt</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <code>main</code> function defined near line 296 of <code>GhostTR.py</code>. <code>main</code> calls <code>clear()</code>, displays the banner via <code>run_banner()</code>, and then hands control to <code>option()</code>.</p>
+<ul><li><strong><code>run_banner()</code></strong> → <code>clear()</code> (clears the terminal) and prints the static menu.</li><li><strong><code>option()</code></strong> reads the user’s choice, validates it with <code>is_option()</code>, and dispatches to <code>execute_option()</code>.</li><li><strong><code>execute_option()</code></strong> invokes the selected workflow (<code>IP_Track</code>, <code>phoneGW</code>, or <code>TrackLu</code>) and finally returns to <code>main</code>.</li></ul>
+<p>The internal call graph contains 11 resolved edges; the most‑used functions are <code>clear</code> (called from three places) and <code>main</code> (called from two places). All network calls are made inside the three tracker functions, each using <code>requests.get</code> without a timeout (identified by the static analysis). No external modules are imported beyond the Python standard library and <code>requests</code>, so the code’s side‑effects are limited to HTTP requests and console output.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the original upstream (the fork you are reviewing)
+git clone https://github.com/moses-y/GhostTrack.git
+cd GhostTrack
+
+# Install Python 3 and pip if not present (see README for Linux/Termux hints)
+pip3 install -r requirements.txt
+
+# Run the CLI
+python3 GhostTR.py</code></pre>
+<p>The script expects no configuration files or environment variables; all prompts are interactive. The README’s “Usage Tool” section matches these steps verbatim.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security analyst could embed the CLI in a larger Bash automation loop:</p>
+<pre data-lang="bash"><code>for target in $(cat ip_list.txt); do
+    echo "$target" | python3 GhostTR.py &lt;&lt;EOF
+1   # select “IP Tracker”
+$target
+EOF
+done</code></pre>
+<p>The loop feeds each IP to the menu, collects the printed JSON response, and stores it for later correlation.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Deep nesting</strong> – <code>GhostTR.py</code> reaches an indentation depth of 20, making the control flow hard to follow. Refactor with early returns or guard clauses.</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> – Only <code>requirements.txt</code> is present; a Dependabot config (<code>.github/dependabot.yml</code>) would automate security updates.</li><li><strong>MEDIUM – Outbound requests lack timeout</strong> – Three <code>requests.get</code> calls in the tracker functions have no <code>timeout=</code> argument, risking hangs. Add a reasonable timeout or use a configured <code>Session</code>.</li><li><strong>MEDIUM – No test suite</strong> – No <code>tests/</code> directory; untested paths increase regression risk.</li><li><strong>MEDIUM – No CI pipeline</strong> – Absence of GitHub Actions or similar means changes are not automatically verified.</li><li><strong>MEDIUM – No LICENSE</strong> – Redistribution rights are unclear without a license file.</li><li><strong>LOW – No lockfile</strong> – <code>requirements.txt</code> alone makes reproducible installs harder; consider adding <code>requirements-lock.txt</code> or a <code>pipfile</code>.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>GhostTrack</code> provides a quick, menu‑driven way to gather public IP, phone, and username data, but the implementation is a single monolithic script with deep nesting and minimal safeguards. It is suitable for ad‑hoc investigations or as a prototype, but production use should address the noted health issues—especially adding request timeouts, a test suite, and CI automation—before relying on it in a repeatable workflow.</p>
             </div>
 
             

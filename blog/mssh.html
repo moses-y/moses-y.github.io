@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 19, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>SSHing into machines behind NAT is a pain. Either you’re stuck with clunky VPNs, or you resort to hacks like port knocking and reverse tunnels that break every time your IP changes. Nobody wants to babysit OpenVPN configs or deal with junk like dynamic DNS.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>mssh is a Go tool that sets up a “rendezvous” server (internal/server/server.go) on a public host. Machines behind NAT run the agent (internal/agent/agent.go), which keeps a persistent connection back to that server. When you want to SSH in, you use either the built-in client or run mssh proxy as a ProxyCommand in your ssh config.</p><p>Setup is dead simple: drop the binary with install/install.sh, run the server, and launch the agent. The agent auto-reconnects if the session dies—no fiddling required. Config is handled in internal/config/config.go, and you get per-node overrides in ~/.mssh/config.yaml. The project avoids overengineering: no database, no TLS in-app (just proxy it), and you can use your own SSH keys. CI is minimal (just .github/workflows/release.yml).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’ve got a production database server on a remote VPC, and you need SSH access from time to time. You deploy the rendezvous server on a VPS, run mssh agent prod-db-1 --server rendezvous.example.com:8443 on the NAT’d host, and then add this to your ~/.ssh/config:</p><p>Now, you just run ssh prod-db-1. No VPN, no port forwarding, no “call me when your IP changes.” The agent keeps your host reachable, and you use your SSH keys as usual.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>mssh is what you reach for when you want SSH behind NAT without the headaches of VPNs or reverse tunnels. It’s minimal, easy to set up, and doesn’t try to be your PKI or firewall. The downside? No built-in TLS or access controls—so use a proxy and don’t be dumb about security. Great for small teams and personal projects; probably not enough for big enterprise setups.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>SSH access to hosts behind NAT or firewalls normally requires a VPN, port‑forwarding, or manual reverse tunnels. Setting up and maintaining those solutions adds operational overhead and breaks the standard <code>ssh</code> workflow.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>mssh</code> provides a minimal rendezvous service that lets a NATed machine keep a persistent outbound connection to a public server. The server then proxies inbound SSH sessions to the agent, so users can run the ordinary <code>ssh</code> client or use a <code>ProxyCommand</code> without extra networking tricks.</p>
+<ul><li>The CLI lives in <code>cmd/mssh/main.go</code> and parses sub‑commands (<code>server</code>, <code>agent</code>, <code>proxy</code>).</li><li>Core networking is in <code>internal/server/server.go</code> (server listener, client registration) and <code>internal/agent/agent.go</code> (agent keep‑alive and reverse connection).</li><li>Stream handling (<code>Wrap</code>, <code>Pipe</code>) and SSH key loading (<code>internal/sshutil/auth.go</code>) are factored into small utility packages.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <strong><code>cmd/mssh/main.go</code></strong> (line 38). <code>main</code> loads configuration (<code>loadConfig</code>), then dispatches to one of four runners:</p>
+<div class="table-scroll"><table><thead><tr><th>Runner</th><th>File</th><th>Key functions (calls)</th></tr></thead><tbody><tr><td><code>runServer</code></td><td><code>cmd/mssh/main.go</code></td><td><code>New</code> → <code>Run</code> (internal/server)</td></tr><tr><td><code>runAgent</code></td><td><code>cmd/mssh/main.go</code></td><td><code>ParseServerAddr</code> → <code>runOnce</code> (internal/agent)</td></tr><tr><td><code>runProxy</code></td><td><code>cmd/mssh/main.go</code></td><td><code>Dial</code> (internal/proxy) → <code>Pipe</code> (internal/stream)</td></tr><tr><td><code>runSSH</code></td><td><code>cmd/mssh/main.go</code></td><td><code>Dial</code> → <code>Wrap</code> (internal/stream) → SSH client logic</td></tr></tbody></table></div>
+<p><em><code>runServer</code></em> creates a <code>Server</code> via <code>internal/server.New</code> (10‑function reach) and calls <code>Server.Run</code>, which accepts connections and hands them to <code>registerAgent</code> or <code>handleClient</code>.</p>
+<p><em><code>runAgent</code></em> resolves the node ID (<code>sanitizeNodeID</code>), builds a connection to the server (<code>Dial</code>), then repeatedly calls <code>runOnce</code> to open a reverse stream (<code>internal/stream/buffered_conn.New</code>).</p>
+<p><em><code>runProxy</code></em> and <em><code>runSSH</code></em> share the <code>Dial</code> helper (called from three places) to open a TCP stream to the server, then either pipe raw bytes (<code>Pipe</code>) or wrap the connection with SSH framing (<code>Wrap</code>).</p>
+<p>The most‑connected symbols are <code>Dial</code>, <code>Wrap</code>, <code>New</code>, <code>Run</code>, and <code>ParseServerAddr</code>, each referenced from four call sites, indicating they are change‑impact hotspots. No circular import cycles are present, and the internal call graph contains 58 edges, keeping the codebase relatively flat.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/mssh
+cd mssh
+
+# Build the binary
+go build ./cmd/mssh
+
+# Install (optional systemd wrapper)
+sudo bash install/install.sh          # drops /usr/local/bin/mssh
+
+# Start the rendezvous server (public host)
+sudo mssh server --host 0.0.0.0 --port 8443
+
+# On a NATed host, start the agent (node ID optional)
+sudo mssh agent prod-db-1 --server &lt;public‑host&gt;:8443 --ssh-port 22
+
+# From a client, connect via built‑in client
+mssh alice@prod-db-1
+
+# Or via ProxyCommand (no binary on client needed)
+ssh -o ProxyCommand="mssh proxy prod-db-1 --server &lt;public‑host&gt;:8443" alice@localhost</code></pre>
+<p>Configuration files live under <code>~/.mssh/config.yaml</code> and are created with <code>mssh config init</code> (the command exists in the source but is not exercised in the current binary). Keys are auto‑loaded from the standard <code>~/.ssh</code> directory or via <code>SSH_AUTH_SOCK</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A cloud‑based monitoring server runs <code>mssh server</code> behind an Nginx TLS terminator. Each on‑premise database instance runs <code>mssh agent</code> to maintain a reverse tunnel. Operators can then <code>ssh db-admin@prod-db-1</code> from any workstation without opening inbound ports on the databases, preserving existing firewall policies.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Pin GitHub Action versions</strong> – <code>.github/workflows/release.yml</code> uses <code>softprops/action-gh-release@v2</code>. Replace with a fixed SHA to avoid supply‑chain drift.</li><li><strong>HIGH – Missing LICENSE</strong> – No license file; default “all rights reserved” blocks reuse. Add MIT or Apache‑2.0.</li><li><strong>MEDIUM – Enable Dependabot</strong> – Only one manifest (<code>go.mod</code>). Add <code>.github/dependabot.yml</code> for Go modules and GitHub Actions.</li><li><strong>MEDIUM – Add dependency‑vulnerability scan</strong> – CI lacks a scan step; incorporate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>LOW – Set workflow timeouts</strong> – <code>release.yml</code> omits <code>timeout-minutes</code>; add a reasonable bound to prevent overlapping runs.</li><li><strong>MEDIUM – Duplicated code blocks</strong> – Six‑line snippets repeat across <code>install/install.sh</code>, <code>install/uninstall.sh</code>, <code>internal/agent/agent.go</code>, and <code>internal/proxy/proxy.go</code>. Extract shared helpers to a common package/script.</li></ul>
+<p>No test files are present, so code paths are currently unverified by automated tests. CI runs only the release workflow.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>mssh</code> delivers a lightweight, Go‑based SSH rendezvous service that eliminates the need for VPNs or manual reverse tunnels, with a clear CLI and modest codebase. It lacks automated tests, a license, and some CI hardening, so teams should add those before adopting it in production. Suitable for engineers comfortable extending Go code and managing simple systemd services.</p>
             </div>
 
             
@@ -91,9 +132,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +154,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1161693478">Open in Code Brain &rarr;</a>
