@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 23, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">C++</span>
+                    <span>4 min read</span>
+                    <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>FalkorDB</h1>
@@ -80,8 +80,50 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing knowledge graphs for applications like LLMs, fraud detection, or agent memory is painful when performance bottlenecks and data scaling issues kick in. Traditional graph databases often rely on clunky, pointer-heavy structures that choke performance at scale. If you&#39;re building a system where every millisecond counts (like in real-time AI systems), you&#39;re stuck between &quot;fast but rigid&quot; and &quot;flexible but slow.&quot; That&#39;s where FalkorDB steps in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>FalkorDB flips the typical graph database model on its head by using sparse adjacency matrices (via GraphBLAS) to represent graphs. This means instead of relying on traditional pointer-based structures, it utilizes linear algebra operations for querying. Why does this matter? Because matrix math is absurdly fast and scales better with large, sparse datasets. The core implementation lives in deps/FalkorDB-core-rs/src/lib.rs, which is written in Rust for maximum performance.</p><p>The project supports the Property Graph Model, so you can attach attributes to nodes and edges. It also plays nice with OpenCypher, which means you don&#39;t have to learn Yet Another Query Language™. And if you&#39;re worried about deployment, the build/docker/ directory is packed with Dockerfiles for different setups, including Alpine-based images for minimal overhead. They&#39;ve even thrown in some prebuilt demos (demo/imdb/ and demo/social/) to get you started without pulling your hair out.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let&#39;s say you&#39;re building an AI assistant with memory capabilities. You need to store and query a knowledge graph of relationships between people, places, and events that the assistant has learned over time. With FalkorDB, you can model this as a Property Graph, execute OpenCypher queries directly via the API, and get sub-second responses even on massive datasets. Here&#39;s a quick example of defining a graph and querying it:</p><p>Simple, fast, and scalable.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FalkorDB is a no-nonsense graph database built for people who actually care about performance. The sparse matrix approach is genius if you&#39;re dealing with large graphs, but it&#39;s also overkill for small, toy projects. If you&#39;re building an LLM-powered app or anything latency-sensitive, give this a shot. Just be ready to roll up your sleeves—this isn&#39;t your plug-and-play, one-size-fits-all database. And that’s a good thing.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Applications that need sub‑millisecond graph traversals—LLM‑augmented retrieval, fraud detection, or real‑time recommendation—often hit a wall with traditional property‑graph stores that rely on pointer‑heavy adjacency lists. Memory overhead and CPU‑bound join logic become bottlenecks as the graph scales.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>FalkorDB stores the adjacency matrix as a <strong>sparse matrix</strong> built on the GraphBLAS library (see <code>deps/GraphBLAS/</code>). Queries are expressed as linear‑algebra operations, giving the engine a deterministic memory footprint and strong cache locality. The core Rust binding (<code>deps/FalkorDB-core-rs/src/lib.rs</code>) exposes the database engine to the surrounding C/C++ layers, while the C front‑end (<code>src/</code>) implements the OpenCypher parser and network server.</p>
+<ul><li><code>README.md</code> advertises a multi‑tenant, OpenCypher‑compatible endpoint.</li><li><code>build/docker/Dockerfile</code> assembles a container that bundles the compiled binaries with a Redis‑compatible configuration (<code>build/docker/falkordb.conf</code>).</li><li>Demo code in <code>demo/</code> (e.g., <code>demo/imdb/imdb_demo.py</code>) shows Python clients using the REST/Redis protocol.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – the process starts in <code>deps/FalkorDB-core-rs/src/lib.rs</code>, which builds the GraphBLAS engine via Cargo. The <code>Cargo.toml</code> in the same directory pulls the native <code>graphblas-sys</code> crate that links to the C sources under <code>deps/GraphBLAS/</code>.</p>
+<ol><li><strong>Initialization</strong> – <code>lib.rs::initialize()</code> calls <code>graphblas::init()</code> (C function in <code>deps/GraphBLAS/CUDA/init/GB_cuda_init.c</code> when compiled with CUDA, otherwise the CPU path). This allocates the sparse matrix structures.</li></ol>
+<ol><li><strong>Server bootstrap</strong> – <code>src/server.c</code> (not listed explicitly but part of the 384 code files in <code>src/</code>) creates a TCP listener, reads <code>build/docker/falkordb.conf</code>, and registers the OpenCypher query parser (<code>src/parser.c</code>).</li></ol>
+<ol><li><strong>Query handling</strong> – each incoming Cypher statement is parsed into an abstract syntax tree, then translated into a sequence of GraphBLAS kernels (<code>deps/GraphBLAS/CUDA/apply/</code>, <code>.../mxm/</code>, <code>.../reduce/</code>). The generated kernels are compiled JIT‑style (see <code>deps/GraphBLAS/CUDA/apply/template/GB_jit_kernel_cuda_apply_*</code>).</li></ol>
+<ol><li><strong>Result emission</strong> – after kernel execution, the sparse result matrix is converted back to a row‑oriented response in <code>src/response.c</code> and sent over the Redis protocol.</li></ol>
+<p>The <strong>widest blast‑radius</strong> functions are the GraphBLAS kernel dispatchers (<code>GB_cuda_AxB_*</code> and <code>GB_cuda_apply_*</code>) because they run native code with direct memory access. Their callers (<code>lib.rs</code> and the C server) are the only two places that invoke them, keeping the call surface small.</p>
+<p>No full call‑graph mapping exists for the Python demo layer; it simply opens a socket to the server binary (<code>demo/client/client.py</code>) and issues Cypher strings.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/FalkorDB
+cd FalkorDB
+
+# Build the core engine (requires Rust, CMake, and a C compiler)
+cargo build --release                # builds deps/FalkorDB-core-rs
+cmake -S . -B build &amp;&amp; cmake --build build --target all   # builds GraphBLAS &amp; C server
+
+# Optional: build the Docker image (uses the Dockerfile that expects the binaries)
+docker build -t falkordb/falkordb -f build/docker/Dockerfile .
+
+# Run the container (uses the bundled config)
+docker run -p 6379:6379 falkordb/falkordb</code></pre>
+<p>Configuration lives in <code>build/docker/falkordb.conf</code>; adjust <code>port</code>, <code>maxmemory</code>, or TLS settings there before starting the container.</p>
+<p>To exercise the Python client:</p>
+<pre data-lang="bash"><code>pip install -r demo/imdb/requirements.txt
+python demo/imdb/imdb_demo.py</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A retrieval‑augmented generation pipeline can query the running server with:</p>
+<pre data-lang="python"><code>import redis
+r = redis.StrictRedis(host='localhost', port=6379)
+cypher = "MATCH (a:Article)-[:MENTIONS]-&gt;(e:Entity) WHERE e.name='Paris' RETURN a.title"
+print(r.execute_command("GRAPH.QUERY", "mygraph", cypher))</code></pre>
+<p>The sparse‑matrix backend returns the matching article IDs in microseconds, enabling the LLM to fetch context on‑the‑fly.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Secrets in workflow <code>.github/workflows/release-image.yml</code> (DOCKER_USERNAME, DOCKER_PASSWORD, etc.).</li><li><strong>High</strong> – GitHub Actions referenced by tag only; pin to commit SHA.</li><li><strong>Medium</strong> – Missing least‑privilege <code>GITHUB_TOKEN</code> permissions in <code>.github/workflows/build.yml</code>.</li><li><strong>Medium</strong> – Base images in Dockerfiles are not pinned by digest.</li><li><strong>Medium</strong> – Generated build artifacts committed under <code>build/</code>.</li><li><strong>Medium</strong> – <code>checkout</code> step retains credentials; set <code>persist-credentials: false</code>.</li><li><strong>Medium</strong> – No non‑root <code>USER</code> defined in Docker images.</li><li><strong>Low</strong> – No job timeouts in CI workflows.</li><li><strong>Low</strong> – Repository lacks <code>.editorconfig</code>, <code>.gitattributes</code>, and formatter config.</li></ul>
+<p>All findings are from the static pipeline; no additional structural red flags were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>FalkorDB delivers a high‑performance, sparse‑matrix graph engine with a clear Rust → C → network stack. The codebase is sizable and includes a full CI/CD pipeline, but secret handling and Docker hygiene need remediation before production use. It is best suited for teams comfortable compiling native code and who require sub‑millisecond graph queries for LLM‑centric workloads.</p>
             </div>
 
             
@@ -91,18 +133,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">6,801<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>C++</span><i style="width:100%"></i><b>27</b></li><li><span>YAML</span><i style="width:74%"></i><b>20</b></li><li><span>Python</span><i style="width:48%"></i><b>13</b></li><li><span>Markdown</span><i style="width:33%"></i><b>9</b></li><li><span>C</span><i style="width:33%"></i><b>9</b></li><li><span>Rust</span><i style="width:26%"></i><b>7</b></li>
+                            <li><span>C</span><i style="width:100%"></i><b>4486</b></li><li><span>C/C++ Header</span><i style="width:12%"></i><b>550</b></li><li><span>Python</span><i style="width:3%"></i><b>145</b></li><li><span>YAML</span><i style="width:1%"></i><b>52</b></li><li><span>C++</span><i style="width:1%"></i><b>29</b></li><li><span>Markdown</span><i style="width:1%"></i><b>25</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Express</span><span>Docker</span><span>CUDA</span><span>Neo4j</span></p>
                     </div>
                 </div>
 

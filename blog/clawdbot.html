@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 19, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,46 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>In an era where productivity tools are proliferating yet often fail to integrate seamlessly across platforms, the challenge of managing personal tasks and communications has never been more pressing. Developers often find themselves juggling multiple applications to handle messages, reminders, and workflows, leading to fragmentation and inefficiency. Enter Clawdbot, a personal AI assistant that aims to centralize this experience by allowing users to interact with their devices through familiar channels—whether it&#39;s WhatsApp, Slack, or Discord—while maintaining full control over their data and the AI&#39;s capabilities.</p><p>Clawdbot is built on the foundation of OpenClaw, a well-regarded open-source project that has garnered significant attention with over 168,000 stars on GitHub. What sets Clawdbot apart is its commitment to providing a self-hosted solution, empowering users to run their personal AI assistant on any operating system or platform that supports Node.js. This flexibility, combined with its robust multi-channel communication capabilities, allows users to interact with their assistant in a way that feels natural and immediate. The onboarding wizard simplifies the setup process, guiding users through the configuration of the gateway, workspace, channels, and skills, making it accessible even for those who are not technically inclined.</p><p>A closer look at Clawdbot&#39;s architecture reveals a thoughtful design that promotes modularity and maintainability. The presence of multiple GitHub workflows, such as .github/workflows/ci.yml for continuous integration and .github/workflows/docker-release.yml for Docker deployments, indicates a strong emphasis on quality assurance and deployment flexibility. The use of TypeScript as the primary programming language not only enhances type safety but also facilitates a more robust development experience. The configuration files, such as .npmrc and .prettierignore, suggest an intention to maintain a clean codebase while ensuring that dependencies are managed effectively. Additionally, the inclusion of .detect-secrets.cfg implies a proactive approach to security, ensuring sensitive information does not make its way into the codebase.</p><p>Clawdbot opens the door to numerous practical applications that developers can leverage. For instance, a development team could utilize Clawdbot to manage deployment notifications across Slack and Discord, ensuring that all team members are aligned without needing to switch between multiple applications. Moreover, a freelance developer may find value in using Clawdbot to automate reminders for upcoming deadlines or meetings, integrating seamlessly with their existing communication tools. Lastly, organizations looking to enhance their customer support can implement Clawdbot to handle queries via WhatsApp or Telegram, streamlining their interactions with clients while providing a consistent experience.</p><p>Ultimately, Clawdbot represents a significant step toward a future where personal AI assistants are not just tools but integral components of our daily workflows. By offering a self-hosted, multi-channel solution, it empowers users to take control of their interactions in a way that aligns with their preferences and security needs. As the demand for personalized, efficient tools continues to grow, projects like Clawdbot highlight the importance of open-source solutions that prioritize user autonomy and integration, paving the way for more intelligent and cohesive digital ecosystems.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users who want a locally‑run, always‑on personal assistant must stitch together multiple messaging APIs, voice pipelines, and LLM back‑ends themselves. Maintaining the glue code, handling secrets, and keeping the system up‑to‑date is error‑prone and fragments across many language runtimes.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>clawdbot</code> (a fork of <strong>OpenClaw</strong>) bundles a set of self‑contained extensions that each speak a channel (WhatsApp, Discord, BlueBubbles, Matrix, etc.) and a core gateway that routes messages to LLM providers (Anthropic, OpenAI).</p>
+<p>Key source locations:</p>
+<ul><li><strong><code>extensions/</code></strong> – 9 independent channel adapters, each with its own <code>index.ts</code> entry (e.g., <code>extensions/discord/index.ts</code>).</li><li><strong><code>src/agents/</code></strong> – payload helpers for Anthropic (<code>anthropic-payload-log.ts</code>).</li><li><strong><code>extensions/memory-lancedb/</code></strong> – the default vector store implementation; <code>extensions/memory-lancedb/index.ts</code> contains the <code>execute</code> function (line 316) that initializes the DB and is the most isolated entry point (reaches 205 functions, called nowhere else).</li></ul>
+<p>Common utilities (<code>parse</code>, <code>delete</code>, <code>resolve</code>, <code>normalizeAccountId</code>) appear in 60+ call sites each, making them the highest‑impact change nodes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in one of the extension entry points or a script. The most visible script entry is <code>scripts/bench-model.ts</code> (<code>main</code> at line 81) which calls 125 functions and is invoked by a single caller.</p>
+<p>A typical message flow (e.g., a Discord inbound DM) follows:</p>
+<ol><li><strong><code>extensions/discord/index.ts</code></strong> receives the webhook and calls <code>handleIncomingDM</code> (found in <code>extensions/tlon/src/monitor/index.ts</code>, line 160).</li><li><code>handleIncomingDM</code> → <code>processMessage</code> → <code>sendGroupMessage</code> → <strong><code>poke</code></strong> (filesystem write via <code>this.open</code>).</li><li>Core routing uses <code>resolve</code> (61 call sites) to map a channel‑specific payload to a unified internal format.</li></ol>
+<p>Database writes go through the LanceDB adapter:</p>
+<ul><li><code>execute</code> → <code>initiateCall</code> → <code>persistCallRecord</code> → <code>fsp.appendFile</code> (filesystem).</li></ul>
+<p>The vector store resolves embeddings via <code>createFeishuClient</code> (22 call sites) and <code>runZca</code> (21 call sites).</p>
+<p>The most “blast‑radius” functions are <code>delete</code> (65 callers) and <code>parse</code> (61 callers); any change here ripples through most extensions and the core gateway. The call graph shows a dense hub around the <code>resolve*</code> family, indicating that routing logic is the primary integration point.</p>
+<p>External effects are limited to five functions: three network calls, one model inference, and one cryptographic operation (<code>validateTwilioSignature</code> in <code>extensions/voice-call/src/webhook-security.ts</code>). File I/O occurs in the DB persistence path, asset copying (<code>scripts/bench-model.ts</code> → <code>copyA2uiAssets</code>), and runtime state loads (<code>ensureRuntime</code> → <code>loadActiveCallsFromStore</code>).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (exact URL required)
+git clone https://github.com/moses-y/clawdbot.git
+cd clawdbot
+
+# Install dependencies with pnpm (lockfile present)
+pnpm install
+
+# Create a runtime config from the example
+cp .env.example .env   # edit .env to add your LLM API keys, channel tokens, etc.
+
+# Build and run the gateway in Docker (Dockerfile present)
+docker build -t clawdbot:latest .
+docker run -d -p 18789:18789 --env-file .env clawdbot:latest</code></pre>
+<p>The gateway listens on port 18789 (see <code>Dockerfile</code> and runtime docs). Channel adapters are loaded automatically from the <code>extensions/</code> folder; each one registers its webhook routes during the Docker container start‑up.</p>
+<p>If you prefer a local Node process, the package’s <code>bin</code> (defined in <code>package.json</code>) exposes the <code>openclaw</code> CLI used in the upstream README (<code>openclaw gateway --port 18789 --verbose</code>). The CLI reads the same <code>.env</code> file.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A small office deploys the Docker container on a Raspberry Pi. The <code>.env</code> contains an Anthropic API key and a Discord bot token. Incoming Discord messages trigger <code>extensions/discord/index.ts</code>, which resolves the payload, calls the LLM via the gateway, and returns the assistant’s reply on the same channel. All conversation history is persisted in the LanceDB store (<code>extensions/memory-lancedb/</code>), enabling context‑aware responses without external services.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – <code>vendor/a2ui/renderers/angular/.npmrc</code> is tracked despite <code>.gitignore</code>; likely contains credentials. Remove with <code>git rm --cached</code> and rotate secrets.</li><li><strong>High</strong> – GitHub Actions use mutable tags (<code>@v3</code>, <code>@v4</code>). Pin each to a commit SHA to prevent supply‑chain hijack.</li><li><strong>Medium</strong> – Workflows lack explicit <code>permissions</code> for <code>GITHUB_TOKEN</code>; add <code>permissions: contents: read</code> (or finer).</li><li><strong>Medium</strong> – Dockerfile uses mutable base <code>node:22-bookworm</code>; replace with digest (<code>node@sha256:&lt;digest&gt;</code>).</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Checkout step keeps the token (<code>persist-credentials: true</code>); set to <code>false</code> and pass explicit token only where needed.</li><li><strong>Low</strong> – CI jobs lack <code>timeout-minutes</code>; set reasonable limits to avoid overlapping runs.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>clawdbot</code> delivers a modular, multi‑channel personal assistant with a clear separation of channel adapters and a shared LLM gateway. The codebase is large (6 k files) but well‑structured; the call‑graph hubs (<code>delete</code>, <code>parse</code>, <code>resolve*</code>) are the primary levers for change. Health issues are mostly operational (unpinned actions, secret leakage) rather than functional bugs. It is suitable for teams comfortable managing Docker containers and secret rotation, but requires careful remediation of the high‑severity findings before production use.</p>
             </div>
 
             
@@ -91,18 +128,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">6,080<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Kotlin</span><i style="width:100%"></i><b>66</b></li><li><span>YAML</span><i style="width:42%"></i><b>28</b></li><li><span>Markdown</span><i style="width:41%"></i><b>27</b></li><li><span>Swift</span><i style="width:38%"></i><b>25</b></li><li><span>TypeScript</span><i style="width:6%"></i><b>4</b></li><li><span>JSON</span><i style="width:5%"></i><b>3</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>4171</b></li><li><span>Markdown</span><i style="width:19%"></i><b>797</b></li><li><span>Swift</span><i style="width:12%"></i><b>498</b></li><li><span>JSON</span><i style="width:3%"></i><b>115</b></li><li><span>Kotlin</span><i style="width:2%"></i><b>77</b></li><li><span>Shell</span><i style="width:1%"></i><b>53</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Angular</span><span>Express</span><span>Docker</span><span>Transformers</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -113,6 +150,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>.detect-secrets.cfg, .secrets.baseline</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1135469037">Open in Code Brain &rarr;</a>

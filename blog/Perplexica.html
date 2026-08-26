@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 4, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Sick of AI tools that shove your data onto some sketchy cloud server and call it a day? Yeah, me too. Whether you&#39;re tired of handing over your search history to Big Tech™ or just want an AI that respects your privacy and actually does useful things, there’s a gaping hole in the landscape of &quot;answer engines&quot; that actually work for you. Enter Perplexica.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>At its core, Perplexica is a self-hosted, privacy-first AI search assistant that doesn’t treat your data like its lunch. It combines local LLMs (via Ollama) and popular cloud APIs (OpenAI, Claude, etc.) with a web search layer powered by SearxNG. What really sets it apart? Cited sources, customizable search modes (src/lib/agents/search/index.ts), and smart widgets (just check out src/components/Widgets).</p><p>The src folder is the heart of this thing—125 files of TypeScript and TSX goodness. The src/lib/agents directory is where the magic happens. It features modular search &quot;agents&quot; like search/researcher/actions/webSearch.ts for scraping, and a clean widget system (src/lib/agents/search/widgets) that handles things like weather, stock prices, and basic calculations. The UI side is powered by React and Next.js (src/app) with all the modern DX you&#39;d expect—layout.tsx is your app’s backbone, while MessageRenderer and ChatWindow drive the actual conversation.</p><p>Dockerize it, run it locally with docker-compose.yaml, and you&#39;re good. Oh, and there&#39;s GitHub Actions (.github/workflows/docker-build.yaml), so you can even automate deployments if you’re into that kind of thing.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re a developer trying to troubleshoot a bug while planning a weekend hike. Fire up Perplexica, ask it to search for a solution to your error (leveraging OpenAI for deep tech answers), and then check the weather for your favorite trail using the built-in weather widget (src/components/WeatherWidget.tsx). Need to scan a PDF manual for a specific API? Just upload it—Perplexica gets it (src/lib/agents/search/researcher/actions/uploadsSearch.ts).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Perplexica is the perfect tool for devs, researchers, and anyone who hates being data-mined. It’s not small-project-friendly (unless you love over-engineering your life), and you’ll need some Docker chops to set it up. But if privacy and extensibility are top of mind, this is worth a serious look.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users who need on‑premise, citation‑backed answers must stitch together a web server, LLM providers, a search backend and a UI. Doing this manually requires wiring many moving parts, handling secret keys, and keeping the data flow private.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Perplexica delivers a self‑hosted Next.js application that exposes a REST‑style API (<code>src/app/api/**</code>) and a React front‑end. The search flow lives in <code>src/lib/agents/search/</code>, with provider adapters in <code>src/lib/models/providers/</code> (e.g., OpenAI, Anthropic, Ollama). Configuration and persistence are handled by <code>src/lib/config/</code> and <code>src/lib/db/</code>.</p>
+<p>Key files:</p>
+<ul><li><code>src/app/api/search/route.ts</code> – HTTP handler that starts a search (<code>start</code>).</li><li><code>src/lib/agents/search/index.ts</code> – <code>searchAsync</code> orchestrates the researcher.</li><li><code>src/lib/models/providers/anthropic/index.ts</code> – loads chat and embedding models (<code>loadChatModel</code>, <code>loadEmbeddingModel</code>).</li><li><code>src/lib/hooks/useChat.tsx</code> – central hook that maintains chat state and talks to the model.</li></ul>
+<p>The UI components (<code>src/components/**</code>) render messages, settings and widgets (weather, stock, calculation) that are injected by the search agents.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins when Next.js routes a POST to <code>/api/search</code>. The handler in <strong><code>src/app/api/search/route.ts</code></strong> (function <code>start</code> at line 119) validates the request and calls <strong><code>src/lib/agents/search/index.ts</code> → <code>searchAsync</code></strong>.</p>
+<p><code>searchAsync</code> (line 13) creates a <code>Researcher</code> (<code>src/lib/agents/search/researcher/index.ts</code>) and invokes its <code>research</code> method. <code>research</code> (line 10) runs a registry of actions (<code>src/lib/agents/search/researcher/actions/registry.ts</code>) that eventually call <strong><code>search</code></strong> (in <code>src/lib/agents/search/researcher/actions/webSearch.ts</code> etc.).</p>
+<p><code>search</code> updates the chat block via <strong><code>src/lib/hooks/useChat.tsx</code> → <code>updateBlock</code></strong>, then calls the selected provider. For cloud models the path is:</p>
+<pre><code>searchAsync → research → streamText → this.openAIClient.chat.completions.create</code></pre>
+<p>For local Ollama models the call chain is:</p>
+<pre><code>searchAsync → research → streamText → src/lib/models/providers/ollama/ollamaLLM.ts → generateText</code></pre>
+<p>All database writes funnel through <code>src/lib/db/index.ts</code> (e.g., persisting chat history). File uploads are managed by <code>src/lib/uploads/manager.ts</code> and stored via <code>src/lib/uploads/store.ts</code>.</p>
+<p>The most‑used internal symbols are <code>useChat</code> (called from 13 places) and <code>saveConfig</code> (8 callers). <code>src/lib/agents/search/types.ts</code> is a hub module with 17 inbound imports; changes there have a wide blast radius.</p>
+<p>Circular imports involve 11 modules, notably <code>src/lib/models/types.ts</code>, <code>src/components/ChatWindow.tsx</code>, and <code>src/lib/types.ts</code>. These cycles increase build‑time fragility and make refactoring risky.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Perplexica
+cd Perplexica
+
+# Install dependencies (Yarn is the declared manager)
+yarn install
+
+# Run locally with Next.js
+yarn dev   # starts the dev server on http://localhost:3000
+
+# Or spin up the Docker composition (Dockerfile and docker‑compose.yaml are present)
+docker compose up --build</code></pre>
+<p>Configuration files are expected under <code>src/lib/config/</code> (e.g., <code>clientRegistry.ts</code>, <code>serverRegistry.ts</code>). The repository does <strong>not</strong> contain a sample <code>.env</code> – you must supply API keys for any external LLM provider (OpenAI, Anthropic, etc.) and the SearxNG endpoint as described in the docs (<code>docs/API/SEARCH.md</code>).</p>
+<p>The API is reachable at <code>POST /api/search</code> with a JSON body matching <code>SearchRequestBody</code> (defined in <code>src/lib/types.ts</code>). The UI is served from the same Next.js process.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A corporate knowledge‑base portal could embed Perplexica as a micro‑service. An internal tool sends a user query to <code>/api/search</code>; the service fetches web results via SearxNG, runs them through a locally hosted Ollama LLM, and returns a markdown answer with citations. The front‑end component <code>src/components/MessageRenderer/CodeBlock</code> renders any code snippets, while <code>src/components/Widgets/Weather.tsx</code> displays weather widgets when relevant.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHAs (<code>.github/workflows/docker-build.yaml</code>).</li><li><strong>HIGH</strong> – No test suite; 160 source files lack any test files.</li><li><strong>MEDIUM</strong> – GitHub token permissions are not declared (<code>docker-build.yaml</code>).</li><li><strong>MEDIUM</strong> – Dependabot/Renovate not configured (<code>package.json</code> present, no bot).</li><li><strong>MEDIUM</strong> – Docker base image not pinned by digest (<code>Dockerfile</code>).</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – Large binary (<code>.assets/demo.gif</code>, 31 MB) should be moved to LFS or external storage.</li><li><strong>LOW</strong> – CI jobs lack <code>timeout-minutes</code> (<code>docker-build.yaml</code>).</li></ul>
+<p>Additional static findings: 11 import cycles, deep nesting in several UI components, a 712‑line <code>useChat.tsx</code> hook, duplicated route logic across API files, and an empty catch block in <code>src/app/api/search/route.ts</code>.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Perplexica provides a functional, privacy‑first AI answering stack with a clear separation between search, LLM providers and UI. It runs out‑of‑the‑box via Docker or Yarn, but the codebase suffers from missing tests, import cycles and several maintainability hotspots. It is suitable for teams that need a self‑hosted answer engine and are prepared to invest in refactoring and test coverage.</p>
             </div>
 
             

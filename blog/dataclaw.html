@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,58 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#dataclaw-taking-back-your-data-from-ai-models">Dataclaw: Taking Back Your Data from AI Models</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="dataclaw-taking-back-your-data-from-ai-models">Dataclaw: Taking Back Your Data from AI Models</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>So, you’ve been chatting with AI models like Claude Code or Codex, getting them to write your scripts, debug your code, and maybe even naming your variables. But here’s the kicker: while you’re feeding them your data and ideas, they’re walking away with it. Anthropic, OpenAI, you name it—they’re happy to hoard your input for their training sets, but make it painfully hard for you to extract your own data. Enter dataclaw, a Python tool that lets you take control of your AI session logs, clean them up, and publish them as structured datasets to Hugging Face with a single command. It’s part data pipeline, part middle finger to the closed-data playbook.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>dataclaw is a CLI-based tool designed to turn your AI session logs into datasets you own. The main entry point is dataclaw/cli.py, which powers commands for setup, configuration, data processing, and publishing. It’s smart enough to parse logs, redact sensitive info (using dataclaw/anonymizer.py), and even handle custom user configs (dataclaw/config.py). The pyproject.toml handles dependencies, and CI/CD is baked in via GitHub Actions (.github/workflows/).</p><p>The process is deliberately step-by-step to ensure you don’t accidentally leak your secrets. First, you run dataclaw prep to set up the environment. Then, you configure your scope (dataclaw config --source) and pick which folders to exclude (dataclaw config --exclude). Once that’s done, you export the data locally for review (dataclaw export --no-push), confirm any redactions, and only then publish to Hugging Face (dataclaw export --publish-attestation). The guardrails are strict—this thing is built to err on the side of caution.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’ve been using Claude Code to prototype a new app. Over weeks, you’ve racked up a ton of conversations with useful snippets, but now you want to make a public dataset documenting AI-human collaboration. dataclaw lets you:
-Install it: pip install dataclaw (or clone it if you’re old-school).
-Configure it to pull Claude logs: dataclaw config --source claude.
-Exclude anything sensitive: dataclaw config --exclude &quot;private-projects,scratch&quot;.
-Review the export locally: dataclaw export --no-push.
-Confirm redactions and publish: dataclaw confirm followed by dataclaw export --publish-attestation.</p><p>All without exposing your personal or client data, thanks to the built-in anonymization and review workflows.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>dataclaw is a niche tool for a niche problem, but it’s damn good at what it does. The CLI is clear, the steps are well-documented, and the safety features are robust (in the good way). That said, it’s overkill if all you want is a quick-and-dirty log dump. But if you care about controlling your data and want to contribute to an open, distributed dataset, dataclaw is worth a look. Just be ready to jump through a lot of “did you really mean to do that?” hoops along the way.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who interact with Claude Code or Codex generate conversation logs that contain personal identifiers and API keys. Extracting those logs, sanitising them, and publishing them as a reusable dataset is tedious and error‑prone, especially when the same tooling must be repeated across multiple machines.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>dataclaw</code> is a small Python CLI that turns Claude Code / Codex session histories into a Hugging‑Face‑ready JSONL dataset.</p>
+<ul><li><strong>Parsing</strong> – <code>dataclaw/parser.py</code> walks the local <code>~/.cache/claude</code> (or Codex) directory tree, discovers projects and extracts per‑session JSONL records (<code>parse_project_sessions</code>).</li><li><strong>Redaction</strong> – <code>dataclaw/secrets.py</code> scans each text line for high‑entropy strings, mixed‑character tokens, and user‑defined patterns, then replaces them via <code>redact_text</code> / <code>redact_custom_strings</code>.</li><li><strong>Anonymisation</strong> – <code>dataclaw/anonymizer.py</code> hashes usernames (<code>_hash_username</code>) and rewrites file‑system paths (<code>anonymize_path</code>).</li><li><strong>Export</strong> – <code>dataclaw/cli.py</code> builds the final dataset, writes a local file (<code>export_to_jsonl</code>) and optionally pushes it to Hugging Face (<code>session.get</code> inside <code>redact_session</code>).</li></ul>
+<p>All configuration (source selection, exclusions, custom redaction lists) lives in <code>dataclaw/config.py</code> (<code>load_config</code> / <code>save_config</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>dataclaw/cli.py::main</code> (line 1149). The command dispatcher routes to sub‑commands:</p>
+<ul><li><code>prep</code> → <code>dataclaw/cli.py::prep</code> (line 1076) – discovers projects via <code>parser.discover_projects</code> and writes a config file (<code>save_config</code>).</li><li><code>list</code> → <code>dataclaw/cli.py::list_projects</code> (line 271) – reads the same config and prints project metadata.</li><li><code>export</code> → <code>dataclaw/cli.py::_run_export</code> (line 1291) – iterates selected sessions, calls <code>redact_session</code> (via <code>secrets.scan_text</code> → <code>secrets.redact_text</code>), then writes JSONL (<code>export_to_jsonl</code>). The export path touches the filesystem (<code>CONFIG_DIR.mkdir</code>, <code>dest.parent.mkdir</code>) and makes a network request (<code>session.get</code>) to Hugging Face if <code>--publish</code> is used.</li><li><code>confirm</code> → <code>dataclaw/cli.py::confirm</code> (line 906) – recomputes redaction stats (<code>_scan_pii</code>) and writes an attestation file.</li></ul>
+<p>Key internal hot‑spots:</p>
+<ul><li><code>scan_text</code> (in <code>secrets.py</code>) is invoked from 37 locations, making it the most widely used function.</li><li><code>_hash_username</code> (in <code>anonymizer.py</code>) is called from 12 places, handling all user‑identifier hashing.</li></ul>
+<p>The import graph shows <code>dataclaw/cli.py</code> as the central hub (imports 4 modules, is imported by 1). No circular imports exist, so refactoring a single module has predictable ripple effects.</p>
+<p>External interactions:</p>
+<ul><li>Filesystem – config read/write, project discovery, dataset output (26 distinct functions).</li><li>Network – <code>urllib.request.urlopen</code> in <code>cli.update_skill</code>, <code>session.get</code> in <code>secrets.redact_session</code>.</li><li>Cryptography – SHA‑256 hashing in <code>anonymizer._hash_username</code>.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install from PyPI (or the repo if that fails)
+pip install dataclaw
+# Or:
+git clone https://github.com/moses-y/dataclaw.git /tmp/dataclaw &amp;&amp; pip install /tmp/dataclaw
+
+# Initialise config and pick a source
+dataclaw prep
+dataclaw config --source "claude|codex|both"
+
+# Review discovered projects
+dataclaw list --source both
+
+# Optional: exclude or add custom redactions
+dataclaw config --exclude "personal,scratch"
+dataclaw config --redact "my-secret.com,api_key"
+
+# Export locally first
+dataclaw export --no-push --output /tmp/dataclaw_export.jsonl
+
+# Review the PII report, then attest and publish
+dataclaw confirm \
+  --full-name "YOUR NAME" \
+  --attest-full-name "Scanned export for full name." \
+  --attest-sensitive "No sensitive data found." \
+  --attest-manual-scan "Manual review completed."
+
+dataclaw export --publish-attestation "User approved publishing."</code></pre>
+<p>All commands are defined in <code>dataclaw/cli.py</code>; the <code>--help</code> flag lists available options.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team that archives internal code‑review sessions can run the above workflow nightly on a CI runner. The resulting Hugging‑Face dataset can be consumed by downstream models without exposing proprietary identifiers, because <code>dataclaw</code> guarantees deterministic hashing (<code>_hash_username</code>) and entropy‑based redaction (<code>scan_text</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Pin GitHub Actions</strong> – <code>.github/workflows/*.yml</code> uses <code>pypa/gh-action-pypi-publish@release/v1</code>. Replace with a commit SHA.</li><li><strong>HIGH – Missing lockfile</strong> – <code>pyproject.toml</code> declares dependencies but no <code>poetry.lock</code>/<code>requirements.txt</code>. Generate and commit a lockfile.</li><li><strong>MEDIUM – Unrestricted GITHUB_TOKEN</strong> – <code>.github/workflows/test.yml</code> lacks a <code>permissions:</code> block. Add <code>contents: read</code>.</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> – No automated update config. Add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM – No dependency‑vulnerability scan</strong> – CI lacks a review step. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM – Checkout persists credentials</strong> – <code>.github/workflows/publish.yml</code> should set <code>persist-credentials: false</code>.</li><li><strong>LOW – No job timeout</strong> – Add <code>timeout-minutes:</code> to each workflow job.</li></ul>
+<p>Additional observations from the static audit:</p>
+<ul><li>Two files (<code>dataclaw/cli.py</code>, <code>tests/test_cli.py</code>) exceed 1 300 lines, creating high cognitive load. Splitting by responsibility (e.g., separate command modules) would reduce risk.</li><li>Deep nesting (max depth 6) appears in <code>parser.py</code> and related tests; refactoring to early returns will improve readability.</li><li><code>secrets.py</code> contains 62 branch points over 170 lines; a strategy‑pattern dispatch could simplify the decision tree.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>dataclaw</code> delivers a focused, reproducible pipeline for sanitising and publishing Claude/Codex conversation logs, but the codebase suffers from oversized, deeply nested modules and a few CI‑security gaps. It is suitable for teams that need an immediate, auditable export tool and are prepared to invest in modest refactoring and CI hardening.</p>
             </div>
 
             
@@ -96,9 +141,9 @@ Confirm redactions and publish: dataclaw confirm followed by dataclaw export --p
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -144,6 +189,12 @@ Confirm redactions and publish: dataclaw confirm followed by dataclaw export --p
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>dataclaw/secrets.py, tests/test_secrets.py</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1166361501">Open in Code Brain &rarr;</a>

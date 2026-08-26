@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 3, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Obsidian is great for Markdown and personal knowledge management, but when it comes to handling code files, it’s useless. No syntax highlighting, no editing tools, no structure navigation—nothing. You’re stuck juggling external editors for anything code-related, which kills the workflow if you’re trying to manage projects or even just embed some code snippets.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Obsidian-CodeSpace turns Obsidian into a semi-respectable tool for managing, editing, and embedding code files. It’s built on React and leans heavily on CodeMirror 6 for the magic behind syntax highlighting and editing.</p><p>The plugin introduces four “spaces” (fancy term for features):  
-Management Space: Think of it as a visual dashboard for your code files. It lives in the src/dashboardview.ts and provides dynamic filtering (by extension, filename, etc.) and standard file operations like rename and delete.  
-Editing Space: This is where src/codeview.ts and src/outlineview.ts step in, giving you an IDE-lite experience—syntax highlighting, search/replace with regex, and even a code outline navigator.  
-Embedding Space: Using Obsidian’s [[link]] syntax, you can embed code files or specific line ranges directly into Markdown. No more screenshots or copy-paste hacks.  
-Mount Space: Need to reference code outside your Obsidian vault? Just mount external folders via system symlinks. Handled by src/externalmount.ts.</p><p>It’s all configurable through the src/settings.ts, and the .json files in the root folder handle version tracking and manifest details. The interface looks polished, with the img/ folder full of nice preview shots showing off the dashboard and embedding syntax.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re documenting your Python project. With this plugin, you’d:  
-Drop your .py files into the designated folder.  
-Open the dashboard to filter by .py extension and quickly find the file you need.  
-Use the code editor to tweak your functions, search for all instances of a variable, or navigate through your classes via the outline view.  
-Document your work in Markdown, embedding specific functions or lines using ![[my_script.py#20-40]] for a clean, dynamic reference.  
-If you’re working across projects, mount an external folder and manage everything in one place.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you’re a developer who uses Obsidian as more than just a glorified notebook, this plugin is worth a look. The dashboard and editor are solid, though don’t expect full-on VS Code functionality—it’s more “utility” than “replacement.” It’s overkill for small projects but invaluable for larger codebases or power users who want better code organization inside Obsidian.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Obsidian’s native vault view cannot open, edit, or embed raw source files. Users who keep code alongside notes must switch to external editors, losing context and navigation features.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The plugin supplies a full‑stack code workspace inside Obsidian.</p>
+<ul><li><code>src/dashboard_view.ts</code> renders the <strong>management space</strong> – a grid dashboard that lists vault code files and offers rename, move, delete, and external‑open actions.</li><li><code>src/code_view.ts</code> implements the <strong>editing space</strong> with a CodeMirror 6 editor, syntax highlighting, outline navigation, and a search‑replace panel.</li><li><code>src/code_embed.ts</code> and <code>src/outline_view.ts</code> provide the <strong>embedding space</strong>, exposing the <code>![[file#L20-L40]]</code> syntax and a clickable outline for jump‑to definitions.</li><li><code>src/external_mount.ts</code> creates <strong>mount space</strong> by linking external directories into the vault via OS symlinks.</li></ul>
+<p>All UI components are wired through the plugin entry point <code>src/main.ts</code>. The <code>onload</code> method registers commands, builds the dashboard, and injects the editor view. Settings are handled by <code>src/settings.ts</code>, while locale strings live under <code>src/lang/locale/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Obsidian loads the plugin and calls <code>onload</code> in <code>src/main.ts</code> (line 111). This routine:</p>
+<ol><li>Calls <code>display</code> (the most‑invoked function, 28 × from <code>display -&gt; t</code>).</li><li><code>display</code> builds the dashboard via <code>buildPanelContent</code>, which creates UI elements (<code>createOptionButton</code>, <code>createNavButton</code>) and registers callbacks.</li><li>User actions (e.g., “Open file”) invoke <code>t</code> – the translation helper from <code>src/lang/helpers.ts</code> – which is imported by seven modules, making it the central utility.</li></ol>
+<p><code>src/code_view.ts</code> (1064 LOC) houses the editor lifecycle: <code>constructor</code> → <code>initCodeMirror</code> → <code>render</code> → <code>onChange</code>. Each of these ultimately calls <code>t</code> for UI text and interacts with the filesystem through helpers in <code>src/external_mount.ts</code> (<code>getFs</code>, <code>getPath</code>).</p>
+<p>The import graph shows six circular dependencies, the largest cycle linking <code>src/main.ts</code>, <code>src/code_view.ts</code>, and <code>src/settings.ts</code>. Because each module both imports and exports types used by the others, a change in any of them forces recompilation of the whole cycle and risks hidden runtime errors.</p>
+<p>Responsibility snapshot (by call traffic):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>External effect</th></tr></thead><tbody><tr><td><code>src/code_view.ts</code></td><td>editor UI, file read/write, outline generation</td><td>Reads/writes files (6 functions)</td></tr><tr><td><code>src/external_mount.ts</code></td><td>OS‑level symlink creation, path resolution</td><td>Reads/writes files</td></tr><tr><td><code>src/dashboard_view.ts</code></td><td>file list UI, bulk actions</td><td>Reads files</td></tr><tr><td><code>src/dropdown.ts</code></td><td>generic dropdown component used by several views</td><td>UI only</td></tr><tr><td><code>src/main.ts</code></td><td>plugin bootstrap, command registration</td><td>UI only</td></tr><tr><td><code>src/settings.ts</code></td><td>settings panel, persistence</td><td>UI only</td></tr></tbody></table></div>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/Obsidian-CodeSpace
+cd Obsidian-CodeSpace
+
+# Install dependencies
+npm ci
+
+# Build the plugin (esbuild config present)
+npm run build   # assumes a "build" script in package.json</code></pre>
+<p>Copy the generated <code>main.js</code> (or the <code>dist</code> folder, per the build script) into an Obsidian vault’s <code>&lt;vault&gt;/.obsidian/plugins/obsidian-codespace/</code>. Enable the plugin in Obsidian’s community‑plugins settings. The plugin reads <code>manifest.json</code> for metadata and <code>styles.css</code> for UI styling; no additional environment variables are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A software‑engineer keeps a personal “dev‑notes” vault. With the plugin installed, they open a Python module directly from the dashboard, edit it with line numbers and auto‑indent, and embed a snippet in a markdown note using <code>![[utils.py#L10-L20]]</code>. The embedded view updates automatically when the source file changes on disk.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Import cycles</strong> – <code>src/main.ts</code>, <code>src/code_view.ts</code>, <code>src/settings.ts</code> form circular dependencies.</li><li><strong>High – Deep nesting</strong> – Max indentation depth 7 in the same three files, making logic hard to follow.</li><li><strong>High – Duplicated blocks</strong> – Repeated 6‑line snippets across four files (<code>code_embed.ts</code>, <code>code_view.ts</code>, <code>dashboard_view.ts</code>, <code>main.ts</code>).</li><li><strong>Medium – Oversized file</strong> – <code>src/code_view.ts</code> exceeds 1000 LOC, increasing change impact.</li><li><strong>Medium – Branching density</strong> – <code>src/code_embed.ts</code> and <code>src/code_parser.ts</code> have 182 branch points in 583 lines.</li></ul>
+<p>Additional SDLC findings (from the health audit):</p>
+<ul><li><strong>High – No test suite</strong> – 15 source files, zero test files.</li><li><strong>High – No CI pipeline</strong> – No <code>.github/workflows</code> or similar.</li><li><strong>Medium – Dependabot missing</strong> – No automated dependency update config.</li></ul>
+<p>Four dependencies lag behind current major releases (<code>@types/node</code>, <code>globals</code>, <code>typescript</code>, <code>@eslint/js</code>).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers a functional Obsidian plugin that brings IDE‑like code handling into the note‑taking workflow, with clear separation of dashboard, editor, and embed features. However, the codebase suffers from import cycles, deep nesting, and a lack of automated testing or CI, which raise maintenance risk for production use. It is suitable for teams comfortable with refactoring and adding test/CI scaffolding before extending the plugin.</p>
             </div>
 
             

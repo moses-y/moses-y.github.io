@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Property listings in Nairobi are a mess. Prices are inconsistent (&quot;45k&quot;, &quot;Ksh 45,000&quot;, &quot;45000&quot;), bedroom counts are buried in random text (&quot;2br&quot;, &quot;2 bed&quot;, &quot;Two Bedroom&quot;), and the data is scattered across various sites. If you&#39;re trying to figure out where you can afford to live—or just analyzing the market—you&#39;ll spend more time cleaning data than actually using it.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo is a full pipeline for scraping, cleaning, and analyzing Nairobi property data. The scrapelistings.py script pulls raw data from websites, dumping it into allrawlistings.csv. From there, cleanproperties.py handles price normalization and bedroom extraction using hardcoded logic in parser.py (no fancy machine learning, just regex and string parsing that actually works). The cleaned output lands in cleanedproperties.csv.</p><p>Once the data is usable, scripts like buildsummary.py and eda.py generate insights: average prices, price-per-bedroom, and location summaries (locationsummaryclean.csv). The real cherry on top is the interactive map (nairobiaffordabilitymap.html), built using Nairobi&#39;s geoJSON boundaries (nairobicounty.geojson). It visualizes affordability metrics by neighborhood.</p><p>Bonus: the repo includes a bunch of pre-generated charts in the charts/ folder, so you don’t have to set up matplotlib just to see results.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re moving to Nairobi and need a 2-bedroom place under 50k Ksh/month. Run the pipeline, then filter cleanedproperties.csv or explore the nairobiaffordabilitymap.html to quickly find affordable neighborhoods.</p><p>Or, maybe you&#39;re a data analyst working on urban planning. Use the location summary data (locationsummaryclean.csv) to identify rental hotspots or compare premium vs. affordable areas.</p><p>Want to hack on it? Extend the scraper (nairobipropertyscraper_v2.py) to include more websites or tweak parser.py to handle even messier input.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo does what it says: it turns Nairobi&#39;s chaotic property data into something useful. The code is Python-heavy and a bit procedural, but it&#39;s clear and easy to follow. If you&#39;re working with Nairobi real estate data, this is a solid starting point. Just know you&#39;ll likely want to tweak things—it’s not plug-and-play for non-technical users.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Real‑estate analysts in Nairobi spend hours manually downloading listings, cleaning price strings, and inferring bedroom counts from noisy titles. The lack of a repeatable pipeline makes cross‑sectional market analysis slow and error‑prone.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a full ETL chain for Nairobi property data.</p>
+<ul><li><strong>Scraping</strong> – <code>nairobi_property_scraper_v2.py</code> and <code>scrape_listings.py</code> drive HTTP calls to sites (e.g., Jiji, Pigiame) and write raw rows to <code>all_raw_listings.csv</code>.</li><li><strong>Cleaning &amp; Enrichment</strong> – <code>clean_properties.py</code>, <code>prepare_properties.py</code>, and <code>parser.py</code> normalize price fields, extract bedroom numbers, and compute per‑bedroom affordability. The cleaned output lands in <code>cleaned_properties.csv</code> and <code>location_summary_clean.csv</code>.</li><li><strong>Analysis &amp; Visualization</strong> – <code>eda.py</code> produces summary tables and charts under <code>charts/</code>; <code>map_nairobi.py</code> builds the interactive HTML map <code>nairobi_affordability_map.html</code>.</li></ul>
+<p>All scripts are pure Python, managed with <code>requirements.txt</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>only explicit entry point</strong>: the <code>main</code> function in <code>audit_data.py</code> (line 151).</p>
+<ol><li><code>main</code> orchestrates the pipeline, calling:   <em> <code>audit</code> – validates raw data. </em> <code>clean</code> – invokes <code>clean_properties.clean_properties</code> (the sole function in that module). * <code>detect_unit_scale</code> – determines price units.</li><li><code>audit</code> reaches out to the filesystem via <code>save_csv</code>, which creates the target directory (<code>Path(filepath).parent.mkdir</code>). This is the only external write path observed.</li><li>The most heavily used internal helpers are in <code>scrape_listings.py</code> and <code>nairobi_property_scraper_v2.py</code>:   <em> <code>make_record</code> → <code>clean</code> (7 calls) prepares each scraped row. </em> <code>delay</code>, <code>sleep</code>, <code>asleep</code> introduce throttling; they are invoked from 11, 4, and 3 distinct places respectively, giving them the widest “blast radius”. * Network calls occur inside <code>nairobi_property_scraper_v2.py</code> (functions <code>c</code>, <code>row</code>, <code>fetch</code>) and <code>scrape_listings.py</code> (functions <code>scrape_jiji</code>, <code>scrape_pigiame</code>, etc.).</li><li>The call graph contains <strong>90 resolved edges</strong> but no circular imports; each module stands alone, which eases isolated testing.</li></ol>
+<p>File‑by‑file responsibilities (derived from the “WHAT EACH FILE IS RESPONSIBLE FOR” block):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>External effect</th></tr></thead><tbody><tr><td><code>nairobi_property_scraper_v2.py</code></td><td>16 functions, network fetch, throttling</td><td>outbound HTTP</td></tr><tr><td><code>scrape_listings.py</code></td><td>13 functions, file I/O, record creation</td><td>read/write CSV</td></tr><tr><td><code>audit_data.py</code></td><td>4 functions, orchestration, CSV write</td><td>filesystem</td></tr><tr><td><code>eda.py</code></td><td>15 functions, chart generation</td><td>writes PNG charts</td></tr><tr><td><code>map_nairobi.py</code></td><td>9 functions, geocoding, map HTML creation</td><td>outbound geocode API</td></tr><tr><td><code>build_summary.py</code></td><td>6 functions, statistical aggregation</td><td>none</td></tr><tr><td><code>prepare_properties.py</code></td><td>2 functions, bedroom extraction</td><td>none</td></tr><tr><td><code>clean_properties.py</code></td><td>1 function, data cleaning</td><td>none</td></tr><tr><td><code>parser.py</code></td><td>1 function, bathroom parsing</td><td>none</td></tr></tbody></table></div>
+<p>No module imports another, so changes to one script rarely ripple through others, but the high nesting depth (up to 12 levels) and broad exception blocks increase cognitive load when modifying the scraper modules.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/nairobi_property_pricing.git
+cd nairobi_property_pricing
+
+# Install dependencies
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt</code></pre>
+<p>No configuration files or environment variables are referenced in the code; the scripts use hard‑coded URLs and default output paths.</p>
+<p>Run the full pipeline:</p>
+<pre data-lang="bash"><code>python audit_data.py</code></pre>
+<p>The command executes <code>main</code>, which scrapes, cleans, and writes the final CSVs and charts. Individual stages can be invoked directly (e.g., <code>python nairobi_property_scraper_v2.py</code> to fetch raw listings).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A market‑research team could schedule <code>python audit_data.py</code> nightly via cron. The resulting <code>location_summary_clean.csv</code> feeds a BI dashboard, while <code>nairobi_affordability_map.html</code> is embedded in a client‑facing web portal for interactive exploration.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Missing LICENSE</strong> – no <code>LICENSE</code> file; default “all rights reserved” blocks reuse.</li><li><strong>HIGH – No CI/CD</strong> – repository lacks any GitHub Actions, Travis, etc.; changes are not automatically built or tested.</li><li><strong>HIGH – No build gate for deployable artifacts</strong> – charts (e.g., <code>charts/01_top_bottom_prices.png</code>) are produced but never validated by a pipeline.</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> – only <code>requirements.txt</code> present; no automated dependency updates.</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>nairobi_property_scraper_v2.py</code> and <code>scrape_listings.py</code> use bare <code>except</code> clauses, swallowing errors and complicating debugging.</li><li><strong>MEDIUM – Deep nesting</strong> – <code>eda.py</code>, <code>nairobi_property_scraper_v2.py</code>, <code>scrape_listings.py</code> reach 12‑level indentation, making the control flow hard to follow.</li><li><strong>MEDIUM – Oversized file</strong> – <code>scrape_listings.py</code> spans 636 lines, a single change can have wide impact.</li></ul>
+<p>Additional observations: no test suite, no lockfile (<code>requirements.txt</code> only), and no Dockerfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a functional end‑to‑end pipeline for Nairobi property data, but the codebase suffers from maintainability issues (deep nesting, large monolithic scripts) and lacks the SDLC scaffolding needed for production confidence (license, CI, tests). It is suitable for internal prototyping or as a foundation to be refactored and hardened before client deployment.</p>
             </div>
 
             
@@ -93,7 +124,7 @@
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">2<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +144,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1162369507">Open in Code Brain &rarr;</a>

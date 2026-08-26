@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C++</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Reverse-engineering Android apps isn&#39;t exactly a walk in the park. You need a solid IDE that can handle .smali files, APK decompilation, and all the annoying boilerplate that comes with it. Most tools are either clunky or require a PhD to set up. Enter APK Studio, which aims to make your life a tad easier.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>APK Studio is a Qt6-based IDE that brings a user-friendly layout and essential features for reverse-engineering APKs. The sources/ directory contains all the magic—check out main.cpp for the entry point and mainwindow.cpp for the core UI functionality. It supports syntax highlighting for .smali and has built-in tools for decompiling, recompiling, and signing APKs.</p><p>The project even automates tool downloads like Java and Apktool, so you don’t have to hunt around for them. Just fire it up, and it handles the setup for you—assuming you’re okay with the default tools. If you prefer custom setups, you can configure them in the settings.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re tasked with modifying an Android app but don&#39;t want to spend half your day wrestling with command-line tools. With APK Studio, you can right-click on an .apk file, choose &quot;Open with APK Studio,&quot; and watch it decompile in a snap. Need to find a specific method in your .smali code? Use the quick search feature to locate it in the project tree without the hassle of manual navigation.</p><p>A few commands, and you&#39;re ready to go.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>APK Studio is a solid choice for anyone serious about reverse-engineering Android apps. The automatic tool management is a nice touch, but the project feels a bit rough around the edges—zero stars suggest it might not be widely adopted yet. If you&#39;re looking for a simple way to tinker with APKs without diving deep into the command line, give it a shot. Just don’t expect the polish of more mature IDEs.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers and security analysts need a desktop UI that can decompile, edit, and re‑sign Android APKs without switching between command‑line tools. Existing workflows require manual tool installation, piecemeal editors, and platform‑specific scripts, which slows reverse‑engineering and introduces version‑skew.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>apkstudio</code> ships a Qt 6 application that bundles the full toolchain (Java, Apktool, JADX, ADB, Uber APK Signer) and presents a single IDE‑like window. The UI lives in <code>sources/mainwindow.{cpp,h}</code> and coordinates workers such as <code>sources/apkdecompileworker.{cpp,h}</code> and <code>sources/apkinstallworker.{cpp,h}</code> to run external binaries. Syntax‑highlighted editing of <code>.smali</code> files is provided by <code>sources/themedsyntaxhighlighter.{cpp,h}</code> and <code>sources/sourcecodeedit.{cpp,h}</code>.</p>
+<p>The project is built with CMake (<code>CMakeLists.txt</code>). All resources—icons, themes, and Qt resource collection (<code>resources/all.qrc</code>)—are compiled into the binary, so the executable runs out‑of‑the‑box on Linux, macOS, and Windows.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>sources/main.cpp</code>:</p>
+<ol><li><strong><code>main()</code></strong> creates a <code>QApplication</code>, reads the version from Git (<code>processutils.cpp</code>), and instantiates <code>MainWindow</code> (<code>mainwindow.cpp</code>).</li><li><strong><code>MainWindow</code></strong> builds the central UI: a <code>QTreeView</code> for the APK file tree, a <code>SourceCodeEdit</code> widget for code view, and dockable dialogs (e.g., <code>ApkDecompileDialog</code>). It also connects menu actions to slots that launch workers.</li><li><strong>Tool workers</strong> (<code>ToolDownloadWorker</code>, <code>ApkDecompileWorker</code>, <code>ApkRecompileWorker</code>, <code>ApkSignWorker</code>, <code>AdbInstallWorker</code>) inherit from <code>QObject</code> and run heavy external commands in a <code>QThread</code>. Their <code>run()</code> methods construct command‑line strings, invoke <code>QProcess</code>, and emit progress signals back to <code>MainWindow</code>.</li><li><strong>Settings dialogs</strong> (<code>AppearanceSettingsWidget</code>, <code>BinarySettingsWidget</code>, <code>KeystoreGenerateDialog</code>) read/write the INI‑style configuration stored in <code>resources/*.def</code> files.</li><li><strong>File viewers</strong> (<code>ImageViewerWidget</code>, <code>HexEdit</code>) are instantiated on demand from the tree view and display binary assets using Qt’s painting APIs.</li></ol>
+<p>The only external side‑effects are file system writes (decompiled sources, rebuilt APKs) and subprocess invocations of the bundled tools. No network or database access is present. The call graph is shallow: <code>MainWindow</code> is the hub, workers are leaf nodes, and UI widgets are isolated helpers. There are no circular dependencies detected.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone with submodules (the upstream repo uses a .gitmodules entry)
+git clone --recursive https://github.com/moses-y/apkstudio.git
+cd apkstudio
+
+# Configure a Release build (Qt 6 must be on the PATH or provide CMAKE_PREFIX_PATH)
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+# Build the binary
+cmake --build build --config Release</code></pre>
+<p>Run the resulting executable (<code>build/apkstudio</code> on Unix, <code>apkstudio.exe</code> on Windows). The first launch triggers a download of required tools; you can override paths later via <strong>Settings → Tools</strong>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security analyst can drop an <code>.apk</code> onto the application, click <strong>Decompile</strong>, edit a suspicious <code>smali</code> method, then select <strong>Recompile &amp; Sign</strong>. The rebuilt APK can be installed directly from the UI using the <strong>ADB Install</strong> button, eliminating manual <code>adb install</code> calls and ensuring the same tool versions are used throughout the analysis.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Pin GitHub Actions</strong> – <code>.github/workflows/build.yml</code> uses tags (<code>jurplel/install-qt-action@v4</code>, <code>softprops/action-gh-release@v1</code>). Replace tags with fixed commit SHA to avoid supply‑chain drift.</li><li><strong>HIGH – No test suite</strong> – 29 source files, zero test files. Add unit tests for public APIs (e.g., <code>ApkDecompileWorker::run</code>) and integrate them into CI.</li><li><strong>LOW – Missing job timeouts</strong> – <code>build.yml</code> lacks <code>timeout-minutes</code>; set a reasonable bound (e.g., <code>timeout-minutes: 30</code>) to prevent runaway jobs.</li></ul>
+<p>Measured static findings:</p>
+<ul><li><strong>HIGH – Deep nesting</strong> in <code>apkdecompiledialog.cpp</code>, <code>appearancesettingswidget.cpp</code>, <code>binarysettingswidget.cpp</code> (max indentation depth 14). Refactor with early returns or extract helper functions.</li><li><strong>HIGH – Oversized files</strong> <code>mainwindow.cpp</code> (≈ 1449 LOC) and <code>tooldownloadworker.cpp</code>. Split by responsibility (e.g., separate UI layout from worker orchestration).</li><li><strong>MEDIUM – Duplicated code</strong> across <code>keystoregeneratedialog.cpp</code>, <code>settingsdialog.cpp</code>, and the keystore worker files. Consolidate shared logic into a utility class.</li></ul>
+<p>No license issues, no committed secrets, CI is present, but Docker support and a lockfile are absent.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>apkstudio</code> delivers a functional, cross‑platform Qt IDE for APK reverse engineering with all required tooling bundled. The codebase works but suffers from large, deeply nested source files and a complete lack of automated tests, which raises maintenance risk. It is suitable for teams that need a quick GUI front‑end and are prepared to invest in refactoring and test coverage before extending the project.</p>
             </div>
 
             
@@ -91,9 +119,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +141,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1162822106">Open in Code Brain &rarr;</a>

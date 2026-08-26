@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 24, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tired of AI agents that just do what you tell them and call it a day? Most &quot;AI assistants&quot; are glorified task runners—no actual autonomy, no memory, and definitely no sense of self. You want something that actually evolves, rewrites itself, and doesn&#39;t need babysitting every time you change requirements or reboot.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Ouroboros is a Python project that lets an AI agent actively rewrite its own codebase, manage its identity, and keep evolving—without human micromanagement. The core logic lives in ouroboros/ (especially agent.py, consciousness.py, and memory.py). There&#39;s a whole supervisor/ layer (queue.py, state.py, telegram.py) that juggles tasks, tracks state, and connects to Telegram so you can poke it from your phone.</p><p>Self-modification is real: ouroboros/tools/git.py and supervisor/git_ops.py handle actual source code changes and commits. The agent doesn&#39;t just run scripts—it reads, reviews, and rewrites its own mind, using multiple LLMs for self-review via ouroboros/tools/review.py. All of this is governed by a &quot;constitution&quot; in BIBLE.md, so it doesn&#39;t go full Skynet.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Spin it up in Colab using notebooks/quickstart.ipynb. Connect your Telegram bot (see supervisor/telegram.py for wiring). Kick off a task, like &quot;Refactor the search tool,&quot; and watch as the agent breaks it down, edits ouroboros/tools/search.py, reviews its own changes, and commits to the repo. You get a running log of its thoughts, plans, and code diffs, all in Telegram—no IDE required.</p><p>Here&#39;s a sample:</p><p>It will update ouroboros/memory.py, review the patch using Gemini or Claude, and commit. No human needed.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you want a pet AI that actually thinks for itself and rewrites its own code, this is it. It&#39;s not lightweight—you&#39;re running a process manager, LLMs, and git ops all at once. For simple automation, it&#39;s overkill. For autonomous agent research or &quot;digital beings,&quot; it&#39;s legit. Just don&#39;t expect it to make your coffee.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want an autonomous coding assistant that can modify its own source, persist identity, and manage a budget of LLM usage have no open‑source reference implementation that ties together git‑based self‑modification, multi‑model review, and Telegram/Colab front‑ends. Maintaining such a system manually is error‑prone and hard to audit.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a self‑modifying AI agent (“Ouroboros”) that reads, edits, and commits its own Python files. Core orchestration lives in <code>ouroboros/agent.py</code> and <code>ouroboros/loop.py</code>; the tool plug‑in system is under <code>ouroboros/tools/</code> with a dynamic registry (<code>ouroboros/tools/registry.py</code>). Supervision (state tracking, queueing, Telegram bot, git helpers) is in the <code>supervisor/</code> package. The web UI is a static <code>docs/index.html</code>, while Colab users start the agent via <code>colab_launcher.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins with <code>colab_launcher.py</code> (or the Telegram bot entry in <code>supervisor/telegram.py</code>). The launcher imports <code>supervisor/git_ops.py</code> (function <code>init</code>) which sets up a repository clone and calls <code>ouroboros/agent.py.__init__</code>. The agent creates a <code>Loop</code> (<code>ouroboros/loop.py.__init__</code>) that repeatedly invokes <code>get_tools</code> → <code>ToolEntry</code> (48 calls) and runs each tool in <code>ouroboros/tools/</code>.</p>
+<p>Key shared utilities live in <code>ouroboros/utils.py</code> (16 functions, 23 callers). Functions with the widest blast radius are:</p>
+<ul><li><code>read_text</code> – called from 40 locations, used for loading prompts, state files, and tool code.</li><li><code>append_jsonl</code> – called from 38 locations, writes logs and task snapshots.</li><li><code>utc_now_iso</code> – called from 35 locations, timestamps every persisted artifact.</li></ul>
+<p>These utilities are invoked by many modules (<code>ouroboros/context.py</code>, <code>supervisor/state.py</code>, <code>ouroboros/memory.py</code>, etc.) and also perform external effects: file I/O (57 functions), shell commands (20 functions), network calls (10 functions), and LLM inference (4 functions).</p>
+<p>The import graph shows 41 internal modules with 88 edges; <code>ouroboros/tools/registry.py</code> and <code>ouroboros/tools/__init__.py</code> form a circular dependency, making any change to the registry risky. <code>ouroboros/tools/registry.py</code> is a hub (21 incoming imports), so churn here propagates widely.</p>
+<p>External touch points:</p>
+<ul><li>Git commands (<code>run_cmd</code>) – 5 call sites.</li><li>OpenRouter LLM client (<code>LLMClient</code>) – 10 call sites.</li><li>Telegram API – via <code>supervisor/telegram.py</code>.</li></ul>
+<p>No CI pipeline or lockfile is present, so the current wiring is only verified by the local test suite (<code>tests/</code>).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ouroboros
+cd ouroboros
+
+# Install dependencies (Python 3.11 recommended)
+pip install -r requirements.txt   # or: pip install .  (uses pyproject.toml)
+
+# Set required environment variables (Telegram bot token, OpenRouter key, etc.)
+# The README expects TELEGRAM_BOT_TOKEN and OPENROUTER_API_KEY in the environment.
+
+# Launch via Colab helper (or run directly)
+python colab_launcher.py</code></pre>
+<p>If you prefer the Telegram front‑end, start the supervisor:</p>
+<pre data-lang="bash"><code>python -m supervisor.telegram</code></pre>
+<p>Both entry points ultimately instantiate <code>ouroboros.agent.Agent</code>, which creates the <code>Loop</code> and begins tool execution.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A DevOps team can run Ouroboros in a dedicated VM, give it a GitHub repository token, and let it continuously refactor internal tooling. The agent reads its own source (<code>ouroboros/utils.py</code> → <code>read_text</code>), proposes a change, runs a multi‑model review (<code>ouroboros/tools/review.py</code> → LLM calls), and pushes the commit via <code>supervisor/git_ops.py</code>. The Telegram bot can be used to approve or reject commits on demand.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis reports <strong>61 findings</strong> (9 high, 52 medium, 0 low). The health audit highlights three actionable items:</p>
+<ul><li><strong>HIGH – No lockfile</strong> (<code>pyproject.toml</code> lacks a <code>poetry.lock</code>/<code>uv.lock</code>).</li><li><strong>HIGH – No CI workflow</strong> (41 source files, no <code>.github/</code> CI config).</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> (no automated dependency updates).</li></ul>
+<p>Additional high‑severity patterns detected:</p>
+<ul><li>Circular import between <code>ouroboros/tools/registry.py</code> and <code>ouroboros/tools/__init__.py</code>.</li><li>Deep nesting (up to 6 levels) in <code>registry.py</code>, <code>utils.py</code>, and <code>supervisor/state.py</code>.</li><li>Broad <code>except:</code> clauses in several core modules, swallowing errors silently.</li></ul>
+<p>The repository includes a license, a test suite (<code>tests/</code>), and documentation (<code>docs/</code>), but lacks reproducible builds and automated quality gates.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Ouroboros provides a complete, open‑source reference for self‑modifying AI agents, with a clear separation between core agent logic and supervisory services. However, the codebase suffers from maintainability risks (import cycles, deep nesting) and production‑readiness gaps (no lockfile, CI, or automated dependency updates). It is suitable for research or prototype deployments where rapid iteration outweighs the need for strict release hygiene.</p>
             </div>
 
             
@@ -91,16 +129,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
                         <div class="an-score">59<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>41</b></li><li><span>Markdown</span><i style="width:10%"></i><b>4</b></li><li><span>JSON</span><i style="width:2%"></i><b>1</b></li><li><span>HTML</span><i style="width:2%"></i><b>1</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>41</b></li><li><span>Markdown</span><i style="width:10%"></i><b>4</b></li><li><span>JSON</span><i style="width:2%"></i><b>1</b></li><li><span>HTML</span><i style="width:2%"></i><b>1</b></li><li><span>Jupyter Notebook</span><i style="width:2%"></i><b>1</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
                         
                     </div>
@@ -156,6 +194,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1165789856">Open in Code Brain &rarr;</a>

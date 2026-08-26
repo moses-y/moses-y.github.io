@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 23, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Building a Custom Data Compressor: Squeezing Every Byte Out of Cricsheet JSONs</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Cricsheet JSONs are massive. If you’ve ever worked with them, you know they pile up fast—multiple gigabytes of structured cricket data that are 99% predictable and 1% useful. Standard compression tools like gzip and 7z only go so far because they treat the files as generic text and miss the patterns in the schema. The problem? You need an efficient way to shrink these datasets without sacrificing their integrity.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo&#39;s compressor/ directory holds a custom data compressor that takes advantage of the predictable structure of Cricsheet JSONs. The magic happens in compressor/main.py, which implements a schema-aware compression algorithm. Instead of treating the data like a blob of random bytes, it intelligently encodes the known fields, removing redundancy that traditional compressors don’t catch.</p><p>There’s a writeup in compressor/README.md that walks you through the math behind the approach (spoiler: it involves entropy). The results are impressive—this technique shrinks a 2.87GB dataset down to just 42MB. Combine it with 7z, and you’re looking at 8.9MB. That’s absurdly small for something this large. Bonus points: the repo even includes visual evidence of the entropy reduction (compressor/media/entropy.png, because why not flex?).</p><p>The folder also has compressor/driver.py, which presumably handles batch processing or testing (the docs don’t say), and a few sample media files for... reasons. But the real action is in main.py.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re running a cricket analytics platform. You need to store and process years of JSON data for matches without breaking the bank on storage. Here’s how you might use this:</p><p>Boom. Now your 3GB of data fits on a thumb drive, and your AWS bill won’t make you cry.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This project is a niche but elegant solution for anyone drowning in structured JSON data. If you’re not working with Cricsheet or similar datasets, you probably don’t need this—it’s not a general-purpose compression tool. The lack of stars and documentation polish might scare off casual users, but the results speak for themselves. If you’re into Algorithmic Information Theory or just want to geek out over squeezing every last byte, give it a look.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Large, schema‑stable JSON dumps (e.g., Cricsheet match data) occupy gigabytes of storage and strain backup pipelines. Generic compressors leave tens of megabytes on the table because they cannot exploit the predictable field layout.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo implements a bespoke, schema‑aware compressor that reduced a 2.87 GB cricket dataset to ≈ 42 MB, beating gzip and 7‑zip. Core logic lives in <code>compressor/driver.py</code> (CLI driver) and <code>compressor/main.py</code> (compression primitives). The driver computes the source folder size (<code>folder_size_bytes</code>) and processes each file with <code>compress_one</code>. The actual encoding/decoding algorithms are in <code>compressor/main.py</code>’s <code>compress</code> and <code>decompress</code> functions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>entry point</strong> <code>compressor/driver.py</code> line 24:</p>
+<pre data-lang="python"><code>if __name__ == '__main__':
+    main()</code></pre>
+<p><code>main()</code> (driver) performs two distinct actions, reflected in the <strong>internal call graph</strong>:</p>
+<div class="table-scroll"><table><thead><tr><th>Caller</th><th>Callee</th><th class="num">Frequency</th></tr></thead><tbody><tr><td><code>main</code></td><td><code>folder_size_bytes</code></td><td class="num">2</td></tr><tr><td><code>main</code></td><td><code>compress_one</code></td><td class="num">1</td></tr></tbody></table></div>
+<ol><li><strong><code>folder_size_bytes</code></strong> walks the target directory, summing file sizes. It has no outbound calls within the repo, so its blast radius is limited to filesystem reads.</li><li><strong><code>compress_one</code></strong> selects a single input file, opens it, and forwards the byte stream to <code>compressor/main.py</code>’s <code>compress</code> function (imported but not listed in the static call graph). <code>compress</code> writes the custom‑encoded output; <code>decompress</code> provides the inverse operation.</li></ol>
+<p>Both <code>compress</code> and <code>decompress</code> reside in <code>compressor/main.py</code>. That file contains the only <strong>high‑cognitive‑load</strong> issue: a nesting depth of eight levels, making the control flow hard to follow. Refactoring with early returns or extracting inner blocks would improve readability and reduce the risk of regression.</p>
+<p>No other modules import or are imported by these files, so the <strong>import graph</strong> is flat (2 modules, 0 edges). Consequently, any change to <code>compressor/main.py</code> propagates only through the two driver calls.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/challenges.git
+cd challenges
+
+# Run the compressor on a directory of JSON files
+python compressor/driver.py /path/to/cricsheet_json</code></pre>
+<ul><li>The script expects a single positional argument: the root folder containing the JSON files to compress.</li><li>Output files are written alongside the inputs with a custom extension (implementation detail in <code>compress_one</code>).</li><li>To decompress, invoke the same driver with a <code>--decompress</code> flag if the code supports it (check <code>compressor/driver.py</code> for CLI options).</li></ul>
+<p>No additional dependencies, Dockerfile, or build steps are present.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑engineering pipeline could replace a nightly <code>gzip -9</code> step with:</p>
+<pre data-lang="python"><code>import subprocess, pathlib
+subprocess.run(['python', 'compressor/driver.py', str(pathlib.Path('/data/cricsheet'))])</code></pre>
+<p>The resulting archive is ~20 % smaller than gzip and can be fed directly to downstream analytics jobs that understand the custom format.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Deep nesting</strong> – <code>compressor/main.py</code> reaches 8‑level indentation; flattening is recommended.</li><li><strong>Medium – Untested code</strong> – No test files detected; core functions lack automated verification.</li><li><strong>Medium – Missing CI</strong> – No <code>.github/</code> workflows or other CI configuration present.</li><li><strong>Medium – No license</strong> – Repository lacks a LICENSE file, leaving redistribution rights ambiguous.</li></ul>
+<p>No secrets or lockfiles were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers a demonstrably effective, schema‑specific compressor in a minimal Python codebase. Its simplicity makes it easy to integrate, but the lack of tests, CI, and licensing, plus the deep nesting in <code>compressor/main.py</code>, pose maintainability risks. It is suitable for exploratory data‑reduction tasks where the custom format can be safely adopted.</p>
             </div>
 
             
@@ -93,7 +124,7 @@
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">2<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +144,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1165032985">Open in Code Brain &rarr;</a>

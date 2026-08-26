@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLMs are great at generating content, but they’re only as good as the data you feed them. If you’ve ever tried to do actual research with an LLM, you know the pain: limited context windows, outdated training data, and the constant side-eye from your browser as you copy-paste between 12 tabs. Oh, and if you want to keep things local for privacy reasons? Good luck finding a solution that doesn’t involve selling your soul to some cloud API.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>local-deep-researcher automates the research process and keeps it all local. It uses LLMs you host yourself (via Ollama or LMStudio) to generate search queries, summarize web results, identify gaps, and iterate until it has a well-rounded understanding of your topic. Then, it spits out a tidy Markdown report with all its sources linked.</p><p>The core logic lives in src/ollamadeepresearcher/. Files like graph.py and state.py handle the brainy stuff—managing the research flow and summarizing results. Configuration is centralized in configuration.py, and you can tweak everything by editing .env or the defaults in that file. It even supports multiple search tools like DuckDuckGo, SearXNG, and Perplexity, configurable through—you guessed it—the .env file. No hardcoding nonsense here.</p><p>As for setup, the Dockerfile means you’re a docker-compose up away from spinning this thing up, and the pyproject.toml keeps your Python dependencies clean.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re writing a report on &quot;The Impact of AI on Privacy.&quot; Here’s how this could work:
-Fire up the Ollama app, pull a local model like deepseek-r1:8b, and configure .env with:
-Add a search tool, like DuckDuckGo, or throw in your own SearXNG API key:
-Run the script. The system will generate its first search query using prompts in prompts.py, fetch results, summarize them, and keep iterating until you’ve got a complete Markdown report. It’s like having an intern, minus the awkward coffee orders.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you need local, privacy-first research automation, this project delivers. It’s not beginner-friendly—expect to wrestle with .env files and Docker—but the payoff is a fully customizable, offline research assistant. Perfect for researchers, privacy enthusiasts, or anyone tired of sharing their queries with Big Tech. Not for you if you just need a quick Google search.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users who want a fully local research assistant must stitch together a language model, web‑search APIs, and custom summarisation logic. Doing that manually leads to version drift, secret leakage, and brittle scripts that are hard to maintain.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>local-deep-researcher</code> provides a single Python package that coordinates an LLM (via <strong>Ollama</strong> or <strong>LMStudio</strong>) with a configurable web‑search backend (DuckDuckGo, SearXNG, Tavily, Perplexity). The core workflow lives in <code>src/ollama_deep_researcher/graph.py</code> and implements:</p>
+<ul><li><strong>Search‑query generation</strong> – <code>generate_search_query_with_structured_output</code> builds a query from the current research state.</li><li><strong>Web retrieval</strong> – <code>web_research</code> calls one of the search helpers (<code>duckduckgo_search</code>, <code>searxng_search</code>, etc.) and deduplicates the results.</li><li><strong>Summarisation &amp; reflection</strong> – <code>summarize_sources</code> and <code>reflect_on_summary</code> feed the LLM (via <code>get_llm</code> → <code>ChatLMStudio</code>) to produce a markdown report and identify knowledge gaps.</li></ul>
+<p>Configuration (model URLs, API keys, number of cycles) is read from <code>.env</code> and wrapped by <code>src/ollama_deep_researcher/configuration.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with a call to <code>web_research</code> (the public entry point) in <strong>graph.py</strong>. The call chain is:</p>
+<ol><li><code>web_research</code> → <code>from_runnable_config</code> (5 callers) to load <code>Configuration</code>.</li><li><code>web_research</code> → <code>get_config_value</code> (utility for env look‑ups).</li><li><code>web_research</code> → one of the search functions (<code>duckduckgo_search</code>, <code>searxng_search</code>, <code>tavily_search</code>, <code>perplexity_search</code>, <code>searxng_search</code>). Each makes an outbound HTTP request (no timeout – see health).</li><li>Results → <code>deduplicate_and_format_sources</code> → <code>format_sources</code> (both in <strong>utils.py</strong>).</li><li>Summarisation path: <code>web_research</code> → <code>generate_search_query_with_structured_output</code> → <code>get_llm</code> → <code>ChatLMStudio</code> (instantiates the LLM client).</li><li><code>ChatLMStudio</code> → <code>_generate</code> runs the model inference.</li></ol>
+<p>The <strong>graph</strong> module owns eight functions and two types, acting as the hub (≈22 internal call edges). <strong>utils.py</strong> supplies nine helper functions; it is the only file that performs network I/O outside the search helpers. No circular imports exist, and each module is isolated: <code>configuration.py</code>, <code>state.py</code>, <code>prompts.py</code>, <code>lmstudio.py</code>, and <code>__init__.py</code> have zero import edges.</p>
+<p>The repository touches external resources in two ways:</p>
+<ul><li><strong>Model inference</strong> – via the LLM client in <code>lmstudio.py</code>.</li><li><strong>Web search</strong> – via HTTP calls in the search helpers inside <code>graph.py</code> (and the single outbound call in <code>utils.py</code>).</li></ul>
+<p>Because the import graph is flat, changes to a helper function (e.g., <code>strip_thinking_tokens</code>) have limited ripple effects, but the deep nesting in <code>utils.py</code> (13‑level indentation) makes its logic hard to follow and increases cognitive load for modifications.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the forked repo (use the exact URL as required)
+git clone https://github.com/moses-y/local-deep-researcher.git
+cd local-deep-researcher
+
+# Install dependencies (uv is recommended because uv.lock is present)
+uv sync          # creates a virtualenv and installs from pyproject.toml
+
+# Copy example environment and edit as needed
+cp .env.example .env
+# Edit .env: set LLM_PROVIDER, model name, API keys for the chosen search service
+
+# Build and run the container (optional)
+docker build -t local-deep-researcher .
+docker run --rm -e $(cat .env | xargs) local-deep-researcher</code></pre>
+<p>The package does not expose a CLI script; programmatic use is via:</p>
+<pre data-lang="python"><code>from ollama_deep_researcher.graph import web_research
+
+report = web_research(topic="quantum computing", cycles=3)
+print(report)</code></pre>
+<p>Adjust <code>topic</code> and <code>cycles</code> to control depth. The <code>Configuration</code> class will read values from the environment.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A knowledge‑base microservice can import <code>web_research</code> to generate on‑demand research briefs. For example:</p>
+<pre data-lang="python"><code>def get_brief(topic):
+    return web_research(topic=topic, cycles=2)</code></pre>
+<p>This call runs entirely locally, avoiding external SaaS costs while still harvesting fresh web content.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Secret <code>ANTHROPIC_API_KEY</code> is hard‑coded in <code>.github/workflows/claude.yml</code>. Move secret‑using steps to a <code>workflow_run</code> job or gate them behind a protected environment.</li><li><strong>High</strong> – GitHub Actions are referenced by mutable tags (<code>anthropics/claude-code-action@beta</code>, <code>docker/setup-qemu-action@v3</code>, etc.). Pin each to a full commit SHA.</li><li><strong>Medium</strong> – Base image <code>python:3.11-slim</code> is not pinned by digest; use <code>python@sha256:&lt;digest&gt;</code>.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Outbound HTTP calls lack a timeout (see <code>utils.py</code>). Supply <code>timeout=</code> or a configured <code>requests.Session</code>.</li><li><strong>Medium</strong> – Checkout step retains the GITHUB_TOKEN; set <code>persist-credentials: false</code> and pass the token only where needed.</li><li><strong>Medium</strong> – Dockerfile runs as root; add a non‑root user and switch with <code>USER</code>.</li><li><strong>Low</strong> – Workflow jobs have no <code>timeout-minutes</code>; set a reasonable bound to avoid overlapping runs.</li></ul>
+<p>Additional observations: the repo contains no test suite, and the Python dependencies are not locked (no <code>requirements.txt</code> or <code>poetry.lock</code>). The presence of <code>uv.lock</code> suggests a lockfile exists but is not used by the CI pipeline.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>local-deep-researcher</code> stitches together local LLMs and web search into a single, easy‑to‑invoke Python function, which is valuable for privacy‑focused research pipelines. However, the codebase suffers from security‑critical workflow secrets, missing dependency pinning, and a lack of automated tests, making it risky for production without remediation. It is best suited for internal prototypes or teams prepared to harden the CI/CD and add test coverage.</p>
             </div>
 
             

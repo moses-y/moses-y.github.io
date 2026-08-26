@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 25, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">TSX</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>plano</h1>
@@ -80,8 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building agentic applications is a nightmare when you have to deal with all the routing, orchestration, and data management. You end up spending way too much time on boilerplate code instead of actually building features that matter. Every new agent means more code to manage, and your app starts looking like a tangled mess of spaghetti.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Plano is here to pull the plumbing out of your codebase. It offloads the heavy lifting of routing and orchestration into its own data plane. Check out the apps/www/src/app/api/contact/route.ts for an example of how you can define your API routes without getting bogged down in the backend logic.</p><p>Using Filter Chains, you can easily implement moderation and memory hooks without writing a ton of boilerplate. You can find the configuration details in config/planoconfigschema.yaml, which makes it straightforward to customize your setup. Want to add a new agent? Just drop it in and let Plano handle the rest.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re building a travel agent app that interacts with multiple APIs for booking flights, hotels, and car rentals. With Plano, you can set up your agents to handle each task without hardcoding the logic into your app. You’d use apps/www/src/components/research/ResearchGrid.tsx to display results, while the routing and orchestration happen behind the scenes. Just define your agents in the cli/planoai/templates directory and let Plano manage the communication.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Plano is a solid choice if you’re tired of boilerplate and want to focus on building your agentic apps. It’s great for medium to large projects that need robust routing and orchestration but might be overkill for simple applications. If you&#39;re dealing with multiple agents and need a flexible, scalable solution, give Plano a shot. Just be ready to dive into the weeds of its configuration.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building agentic applications quickly reveals a “hidden middleware” problem: routing logic, guardrails, observability, and model‑provider quirks are scattered across frameworks and application code, forcing every team to reinvent the same plumbing before reaching production.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Plano is a collection of five semi‑independent projects (crates, apps, demos, cli, packages) that move core delivery concerns into an out‑of‑process data plane.</p>
+<ul><li><strong>Crates</strong> (<code>crates/brightstaff</code>) – Rust‑based core: agent selection, function calling, LLM handling, and signal pipeline processing. Files such as <code>crates/brightstaff/src/handlers/agent_selector.rs</code>, <code>crates/brightstaff/src/handlers/function_calling.rs</code>, and <code>crates/brightstaff/src/signals/analyzer.rs</code> are oversized (≈1 650 loc) and have deep nesting (max indent 8), making control flow hard to follow.</li><li><strong>Apps</strong> (<code>apps/www</code>, <code>apps/katanemo-www</code>) – Next.js front‑ends that consume the data plane; they contain duplicated next‑config and layout boilerplate (1292 repeated 6‑line blocks across 98 files).</li><li><strong>Demos</strong> (<code>demos/</code>) – Small proof‑of‑concepts (e.g., <code>demos/filter_chains/http_filter/src/rag_agent/api</code>) that showcase filter chains, MCP integration, and rag‑agent APIs.</li><li><strong>CLI</strong> (<code>cli/planoai</code>) – Python entry point (<code>cli/planoai/main.py</code>) that exposes commands for tracing and model interaction.</li><li><strong>Packages</strong> (<code>packages/</code>) – Shared UI and utility code (<code>packages/ui/src/lib/utils</code>, <code>packages/ui/src/components/Navbar</code>).</li></ul>
+<p>Recurring techniques across the portfolio include filter chains for guardrails, model‑agile routing (by name, alias, or preference), and zero‑code agentic signal capture via OTEL.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The internal call graph contains <strong>125 modules</strong> and <strong>42 import edges</strong> with <strong>no circular dependencies</strong> (analyzed 253 of 253 code files).</p>
+<ul><li><strong>Entry points</strong> that start a run:</li><li><code>cli/planoai/main.py</code> – CLI dispatcher, parses commands and delegates to the data plane.</li><li><code>crates/brightstaff/src/main.rs</code> – Rust runtime that boots the proxy/agent orchestrator.</li><li><code>apps/www/src/components/research/index.ts</code> and <code>apps/www/schemaTypes/index.ts</code> – Front‑end types and UI that talk to the proxy over HTTP.</li></ul>
+<ul><li><strong>Control flow</strong>: CLI → Python wrapper → Rust crate (<code>brightstaff</code>) → internal handlers (<code>agent_selector</code>, <code>function_calling</code>, <code>pipeline_processor</code>). The handlers import from <code>packages/ui</code> for UI helpers and from each other via a small set of edges (e.g., <code>agent_selector</code> imports <code>function_calling</code>). The widest blast radius is in <code>crates/brightstaff/src/handlers/pipeline_processor.rs</code> (1 659 loc), where a change ripples through agent routing and signal aggregation.</li></ul>
+<ul><li><strong>Out‑of‑process data plane</strong>: The Rust crate listens on a Unix socket/HTTP port; front‑ends and demos communicate via REST/GRPC‑like calls, keeping agent logic isolated from framework specifics.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repo (verbatim URL)
+git clone https://github.com/moses-y/plano
+
+# Install Node deps for the web app
+cd apps/www &amp;&amp; npm install
+
+# Install Python deps for the CLI
+cd cli &amp;&amp; pip install -r pyproject.toml   # or `uv pip install -r pyproject.toml`
+
+# Build the Rust data plane
+cd crates/brightstaff &amp;&amp; cargo build --release</code></pre>
+<p><strong>Configuration</strong></p>
+<ul><li>Environment variables are read from <code>.env</code> files referenced in <code>cli/planoai/trace_cmd.py</code> and <code>apps/www/.env.example</code> (not committed). Key vars: <code>PLANO_BACKEND_URL</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>.</li><li>Docker base images are defined in <code>Dockerfile</code> (<code>rust:1.93.0</code>, <code>python:3.14-slim</code>, <code>docker.io/envoyproxy/envoy:v1.37.0</code>).</li></ul>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># Start the Rust data plane (background)
+cd crates/brightstaff &amp;&amp; ./target/release/brightstaff &amp;
+
+# Start the Next.js UI
+cd apps/www &amp;&amp; npm run dev   # http://localhost:3000
+
+# CLI example – trace a request
+cd cli &amp;&amp; python planoai/main.py trace --url http://localhost:8080 --model gpt-4o</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A travel‑agent demo (<code>demos/filter_chains/mcp_filter/src/rag_agent/api</code>) registers three agents (flight, hotel, car). Incoming user requests are routed by Plano’s model‑router (alias “budget‑travel”) through the filter chain that injects moderation policies and logs OTEL traces. The UI (<code>apps/www/src/components/research/index.ts</code>) displays the agent decisions and signal metrics, while the Rust core handles routing without any framework‑specific code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHAs: <code>.github/workflows</code> uses <code>@v3.0.1</code>, <code>@v3</code>, <code>@v6</code>, <code>@master</code> for <code>pre-commit/action</code>, <code>docker/setup-buildx-action</code>, <code>docker/build-push-action</code>, <code>aquasecurity/trivy-action</code>. Mutable tags can introduce supply‑chain risk.</li><li><strong>MEDIUM</strong> – Enable Dependabot/Renovate: 24 manifests, no update bot configured.</li><li><strong>MEDIUM</strong> – Pin container base images by digest: <code>Dockerfile</code> uses <code>rust:1.93.0</code>, <code>docker.io/envoyproxy/envoy:v1.37.0</code>, <code>python:3.14-slim</code> without digests.</li><li><strong>MEDIUM</strong> – Move large binaries out of repo: <code>docs/source/_static/img/tracing.png</code> is 8.6 MB; other blobs &gt;5 MB exist.</li><li><strong>MEDIUM</strong> – Add non‑root USER to Docker images: no <code>USER</code> directive present.</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on CI jobs: 4 workflows have no job timeout, risking overlap on a two‑hourly schedule.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Plano delivers a pragmatic data‑plane for agentic apps: orchestration, model‑agile routing, and observability are provided as reusable Rust services, while the five project buckets let teams pick the pieces they need. The code base is functional but suffers from oversized Rust files, duplicated Next.js config, and SDLC hygiene gaps (mutable Action pins, missing Dependabot, untagged Docker images). It is well‑suited for teams that want to offload routing, guardrails, and tracing without embedding those concerns in their application framework, provided they address the pinning and image‑security findings.</p>
             </div>
 
             
@@ -91,18 +131,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">566<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TSX</span><i style="width:100%"></i><b>40</b></li><li><span>Python</span><i style="width:48%"></i><b>19</b></li><li><span>Rust</span><i style="width:43%"></i><b>17</b></li><li><span>YAML</span><i style="width:40%"></i><b>16</b></li><li><span>TypeScript</span><i style="width:40%"></i><b>16</b></li><li><span>JSON</span><i style="width:30%"></i><b>12</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>103</b></li><li><span>YAML</span><i style="width:60%"></i><b>62</b></li><li><span>Python</span><i style="width:57%"></i><b>59</b></li><li><span>TSX</span><i style="width:44%"></i><b>45</b></li><li><span>Markdown</span><i style="width:29%"></i><b>30</b></li><li><span>reStructuredText</span><i style="width:29%"></i><b>30</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Tailwind</span><span>Docker</span><span>Transformers</span><span>LangChain</span></p>
                     </div>
                 </div>
 

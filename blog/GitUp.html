@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 26, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>GitUp: The Git Interface You Actually Want to Use</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Let’s face it: Git is powerful, but it’s also a hot mess of arcane commands that make even seasoned developers feel like they&#39;re performing dark magic. From accidentally overwriting history to untangling merge conflicts, Git’s &quot;helpful&quot; tools often leave you Googling Stack Overflow threads from 2012. Most Git GUIs? They’re clunky, slow, or just command-line wrappers with a prettier face. You deserve better.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>GitUp flips the script with a lightning-fast, Mac-native Git client that actually makes Git workflows intuitive. Instead of dealing with cryptic commands like git reset HEAD, you manipulate the repository graph directly. The GitUp/Application folder contains most of the magic, including WindowController.m for the main UI and DocumentController.m for handling repo state changes.</p><p>Key features include:
-A live repo graph that’s fully editable—merge, reorder, or fix commits like you’re dragging files on your desktop.
-Unlimited undo/redo (yes, even for rebases and merges) baked right into GitUpKit/Core.
-Snapshots for one-click rollbacks, powered by GCHistory.m and GCCommitDatabase.m. 
-Blazing-fast search across the repo, including diffs, thanks to some tight integration with Git’s internal storage.</p><p>It’s packed with functionality you don’t realize you need until you use it—like splitting commits visually (GIDiffContentsViewController.m) or browsing the unified reflog (GIUnifiedReflogViewController.h).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re in the middle of a gnarly rebase (god help you). With GitUp, you see your entire repo history as a graph in real time. Accidentally botched a conflict resolution? No problem. Hit undo and try again. Need to split a commit into two? Drag and drop in the visual splitter. Want to see every change made to a specific file? Instant search has your back.</p><p>It’s like having a Git time machine and a UI that actually respects your sanity.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GitUp isn’t for everyone. If you’re a CLI wizard who dreams in git rebase --interactive, you probably won’t need this. But for regular humans—or anyone who wants to handle Git with less pain—this is a killer tool. It’s fast, clean, and actually useful, unlike the bloated, half-baked GUIs you’ve tried before. Give it a shot. Your future self will thank you.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers spend disproportionate time translating UI actions into Git CLI commands, resolving merge conflicts, and undo‑ing accidental rewrites. The lack of a live, graph‑based view of a repository forces a manual, error‑prone workflow.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>GitUp</code> delivers a native macOS client that reads the Git object database directly. Core logic lives under <code>GitUpKit/Core/</code> – classes such as <code>GCLiveRepository.h/.m</code>, <code>GCDiff.h/.m</code>, and <code>GCCommit.h/.m</code> model branches, commits, and diffs without spawning external Git processes. The UI layer (<code>GitUp/Application/…</code>) builds on these models to provide interactive commit reordering, snapshot‑based rollbacks, and a unified reflog browser. The auxiliary command‑line tool in <code>GitUp/Tool/</code> (<code>main.m</code>) offers the same engine for scripted use.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><em>Entry point</em> – launching the app executes <code>GitUp/Application/main.m</code>, which creates an <code>NSApplication</code> and instantiates <code>AppDelegate</code>. The delegate loads the main window (<code>WindowController</code>) and injects a <code>GCLiveRepository</code> instance pointing at the user‑selected repository path.</p>
+<p><em>Core flow</em> – UI actions (e.g., “reorder commit”) invoke methods on <code>GCLiveRepository</code> (found in <code>GitUpKit/Core/GCLiveRepository+Conflicts.h/.m</code>). Those methods call <code>GCDiff</code> to compute delta trees, and use <code>GCCommitDatabase</code> to persist new commit objects. All file‑system writes target the <code>.git</code> directory directly; no external <code>git</code> binary is invoked.</p>
+<p><em>Supporting components</em> – <code>GCBranch</code>, <code>GCIndex</code>, and <code>GCError</code> provide lightweight wrappers around branch refs, staging area, and error handling. Tests under <code>GitUpKit/Core/*-Tests.m</code> validate each core class in isolation.</p>
+<p><em>Tool path</em> – <code>GitUp/Tool/main.m</code> parses command‑line arguments, constructs a <code>GCLiveRepository</code>, and forwards sub‑commands to the same core APIs, ensuring feature parity between UI and CLI.</p>
+<p><em>Wiring gaps</em> – The static import analysis reports 0 internal modules and no import edges, meaning the codebase relies on Objective‑C header imports rather than a modular graph. No circular dependencies were detected, but deep nesting (see health section) makes control flow hard to trace.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork (preserves submodule references)
+git clone --recursive https://github.com/moses-y/GitUp.git
+cd GitUp
+
+# Open the Xcode project and build
+open GitUp/GitUp.xcodeproj
+# In Xcode: select the “Application” target and hit Run</code></pre>
+<p>If you lack an Apple developer account, delete the <em>Code Signing Identity</em> setting in the <code>Application</code> target as described in the README. For CI, the repository already ships two GitHub Actions workflows (<code>.github/workflows/build.yml</code> and <code>test.yml</code>) that invoke <code>xcodebuild</code> on the same project.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can invoke the bundled tool to enforce repository policies without checking out a separate Git binary:</p>
+<pre data-lang="bash"><code>./GitUp/Tool/main commit --message "ci: enforce linear history"</code></pre>
+<p>The command runs inside the same process that the UI uses, guaranteeing identical diff calculations and conflict‑resolution logic.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Cognitive load (deep nesting)</strong> – Files <code>GitUpKit/Core/GCDiff.h</code>, <code>GitUpKit/Core/GCLiveRepository+Conflicts.h</code>, <code>GitUpKit/Core/GCLiveRepository.h</code> contain nesting depth up to 11, making the logic hard to follow. Refactor with early returns or guard clauses.</li><li><strong>MEDIUM – Least‑privilege <code>GITHUB_TOKEN</code></strong> – <code>.github/workflows/build.yml</code> declares no permissions, granting default write access. Add <code>permissions: contents: read</code> (and widen only where needed).</li><li><strong>MEDIUM – Large binaries</strong> – <code>GitUpKit/Third-Party/libcrypto.xcframework/ios-arm64/libcrypto.a</code> (≈10 MB) exceeds 5 MB; store via Git LFS or external storage to reduce clone/CI payloads.</li><li><strong>LOW – Missing job timeouts</strong> – Both workflows lack <code>timeout-minutes</code>; set a realistic bound to avoid overlapping runs.</li></ul>
+<p>The repo includes a full test suite (35 test files) and CI, a LICENSE file, and no committed secrets. No Dockerfile or lockfile is present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>GitUp</code> offers a mature, native macOS Git client with a powerful internal model that bypasses the CLI, backed by a solid test suite and CI. The codebase is functional but suffers from deep nesting and oversized binary assets that hinder maintainability and CI efficiency. It is suitable for teams needing a visual, undo‑friendly Git workflow on macOS and who are comfortable working in Objective‑C and Xcode.</p>
             </div>
 
             
@@ -95,16 +118,16 @@ Blazing-fast search across the repo, including diffs, thanks to some tight integ
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">777<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>38</b></li><li><span>JSON</span><i style="width:63%"></i><b>24</b></li><li><span>YAML</span><i style="width:5%"></i><b>2</b></li><li><span>Markdown</span><i style="width:3%"></i><b>1</b></li><li><span>Shell</span><i style="width:3%"></i><b>1</b></li>
+                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>432</b></li><li><span>JSON</span><i style="width:13%"></i><b>55</b></li><li><span>Shell</span><i style="width:2%"></i><b>9</b></li><li><span>Markdown</span><i style="width:1%"></i><b>3</b></li><li><span>YAML</span><i style="width:0%"></i><b>2</b></li><li><span>Swift</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
                         
                     </div>

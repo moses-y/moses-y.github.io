@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Juggling multiple AI agents across different platforms is a nightmare. You end up with a dozen browser tabs, lost context, and zero accountability. Tracking goals, budgets, and progress feels like herding cats — especially when you want everything running 24/7 without babysitting.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Paperclip acts as the central command for autonomous companies. You define goals, plug in your agents (Claude, Codex, OpenClaw, whatever), and Paperclip keeps everyone in line. The cli/ directory is the brains: commands for onboarding agents, setting goals, and approving strategies live in files like cli/src/commands/onboard.ts and cli/src/commands/approval.ts. Agent orchestration happens through adapters in cli/src/adapters/. Everything is tracked and audited — costs, activity, org charts — so you actually know what your bots are doing.</p><p>Setup is handled via Docker (docker-compose.yml, Dockerfile), and config is managed in files like .env.example and cli/src/config/env.ts. The React UI pulls it all together so you can monitor your &quot;company&quot; from your phone or browser. Documentation is everywhere (docs/, doc/), so you won&#39;t be lost.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you want to build an AI startup. You set your goal in the dashboard (&quot;Build the #1 AI note-taking app to $1M MRR&quot;), hire agents (CEO, CTO, engineers), and assign tasks. Agents connect via HTTP or process adapters (cli/src/adapters/http/index.ts, cli/src/adapters/process/index.ts), send heartbeats, and report progress. You approve budgets, monitor activity logs, and jump in if things go off the rails. If you want to automate onboarding, you can use the CLI:</p><p>And watch your bots execute, audit logs in real time, and enforce cost controls.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Paperclip is serious orchestration for anyone sick of micromanaging AI agents. If you want real accountability, org charts, and budget enforcement, it’s worth a look. Not lightweight — this is overkill for a single bot, but if you’re wrangling a swarm, it’s exactly what you need. Just read the docs before you dive in, or you’ll drown in YAML.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises that want to run fully autonomous AI “companies” need a single control plane that can hire agents, assign goals, track work, and enforce budgets. Building that plumbing from scratch requires a server, a UI dashboard, and a CLI for automation, all tied to a common data model.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>paperclip</code> delivers a ready‑made orchestration stack:</p>
+<ul><li><strong>Server</strong> – a Node/Express API (<code>server/src/app.ts</code>, <code>server/src/services/*</code>) that stores company, agent, and goal data in SQLite via the <code>packages/db</code> schema.</li><li><strong>UI</strong> – a React front‑end (<code>ui/src/*</code>) that consumes the API, provides context providers (<code>ui/src/context/CompanyContext.tsx</code>, <code>ui/src/context/DialogContext.tsx</code>) and renders dashboards (<code>ui/src/App.tsx</code>).</li><li><strong>CLI</strong> – a command‑line tool (<code>cli/src/index.ts</code>, adapters in <code>cli/src/adapters/*</code>) for provisioning agents, running health checks, and executing one‑off tasks such as <code>cli/src/commands/onboard.ts</code> or <code>cli/src/commands/heartbeat-run.ts</code>.</li></ul>
+<p>Common utilities (<code>ui/src/lib/utils.ts</code>, <code>packages/adapter-utils/src/server-utils.ts</code>) are heavily imported (47 and 18 modules respectively), making them stability anchors.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <strong>CLI</strong> (<code>cli/src/index.ts</code>) or the <strong>server</strong> (<code>server/src/app.ts</code>).</p>
+<ul><li><code>cli/src/index.ts</code> parses sub‑commands and dispatches to <code>runCommand</code> (<code>cli/src/commands/run.ts</code>). For the <code>onboard</code> workflow this eventually calls <code>cli/src/commands/onboard.ts → onboard → db.execute</code> (via <code>packages/db/src/backup.ts</code>), touching the SQLite DB (2 DB‑access functions).</li><li>The <strong>HTTP adapter</strong> (<code>cli/src/adapters/http/index.ts</code>) implements a thin wrapper around <code>fetch</code>; its <code>post</code> method is used by many checks (<code>cli/src/checks/*</code>) and by the UI when calling the server.</li><li>The <strong>server</strong> entry <code>createApp</code> (<code>server/src/app.ts</code>) wires Express routes (<code>server/src/routes/*</code>) to service layers (<code>server/src/services/*</code>). A request such as <code>GET /api/companies/:id</code> flows: route → <code>server/src/services/agents.ts</code> (e.g., <code>hashToken</code>, <code>createToken</code>) → <code>packages/db/src/schema/companies</code> → SQLite file I/O (<code>fs.readFileSync</code> paths appear in <code>cli/src/config/store.ts</code>).</li><li>Core “hub” modules: <code>ui/src/lib/utils.ts</code> (exporting <code>cn</code>, date formatters) and <code>ui/src/lib/queryKeys.ts</code> are imported by 45–47 other files; changes here have the widest blast radius.</li><li>Circular imports involve 17 modules (e.g., <code>cli/src/checks/index.ts</code> ↔ <code>ui/src/adapters/index.ts</code> ↔ <code>ui/src/components/AgentConfigForm.tsx</code>). These cycles increase cognitive load and risk of runtime undefined imports.</li></ul>
+<p>All external effects are limited to:</p>
+<ul><li><strong>Filesystem</strong> – config loading (<code>readConfigFile</code>), temporary paths (<code>cli/src/config/home.ts</code>), Dockerfile builds.</li><li><strong>Network</strong> – HTTP client calls from the CLI (<code>cli/src/client/http.ts</code>).</li><li><strong>Crypto</strong> – token generation in <code>server/src/services/agents.ts</code>.</li></ul>
+<p>No other runtime hooks (e.g., background workers) are visible in the static call graph.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/paperclip
+cd paperclip
+
+# Install dependencies (pnpm is the lockfile format)
+pnpm install
+
+# Build the UI (Vite/Webpack config lives in ui/; the repo uses pnpm workspaces)
+pnpm --filter ui run build
+
+# Start the stack with Docker (Dockerfile builds the server, docker-compose.yml wires UI, server, and DB)
+docker compose up --build</code></pre>
+<p><em>Configuration</em> – copy <code>.env.example</code> to <code>.env</code> and adjust <code>DATABASE_URL</code>, <code>PORT</code>, and any agent credentials required by the adapters (<code>packages/adapters/claude-local</code>, <code>codex-local</code>).</p>
+<p><em>Running the CLI</em> – invoke the entry script directly:</p>
+<pre data-lang="bash"><code>node ./cli/src/index.js onboard --company MyCo</code></pre>
+<p>The command reads configuration (<code>cli/src/config/store.ts</code>), validates it (<code>cli/src/checks/config-check.ts</code>), and writes the company record to SQLite.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS startup can deploy <code>paperclip</code> as a Docker service behind their internal network. When a new product line is approved, a product manager runs:</p>
+<pre data-lang="bash"><code>node cli/src/index.js onboard --company "NewProductCo"</code></pre>
+<p>The CLI creates a company entry, spins up a Claude Code agent via the <code>claude-local</code> adapter, and the UI instantly shows the new org chart and budget dashboard, allowing the manager to monitor cost and progress without writing code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – No LICENSE file (root).</li><li><strong>HIGH</strong> – No CI workflow; 465 source files are never built/tested automatically.</li><li><strong>HIGH</strong> – No Docker build gate; Dockerfile is present but never validated in CI.</li><li><strong>MEDIUM</strong> – Dependabot/Renovate missing (12 manifest files).</li><li><strong>MEDIUM</strong> – Base image not pinned (<code>node:20-bookworm-slim</code>).</li><li><strong>MEDIUM</strong> – Dockerfile runs as root; no non‑root USER.</li><li><strong>LOW</strong> – Repository convention files missing (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Additional observations from the hygiene report: tests exist (under <code>cli/src/__tests__</code>), a lockfile is present, but secrets are committed in docs (<code>docs/api/secrets.md</code>). The import graph shows 17 circular dependencies and several oversized files (e.g., <code>ui/src/components/AgentConfigForm.tsx</code> &gt; 1200 lines), which increase change risk.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>paperclip</code> provides a functional, Docker‑ready stack for orchestrating AI agents, with a clear separation between server, UI, and CLI. However, the codebase suffers from missing legal and operational scaffolding (license, CI, hardened Docker images) and several high‑impact architectural smells (hub modules, import cycles, large files). It is suited for teams comfortable with TypeScript monorepos who can invest in tightening the build pipeline and refactoring the identified hotspots.</p>
             </div>
 
             

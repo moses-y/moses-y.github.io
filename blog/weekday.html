@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Building an Open-Source Google Calendar Alternative with AI: Weekday</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Let’s face it: Google Calendar is fine, but it’s not perfect. Maybe you want more customization. Maybe you don’t want to hand over your entire life to Google. Or maybe you just want a calendar that doesn’t feel like a relic from 2010. Weekday aims to fix those problems by giving you a modern, open-source alternative with built-in AI smarts. Think Google Calendar meets Notion, but without handing over your data to Big Tech.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>At its core, weekday is a monorepo built with Next.js, TypeScript, and a bunch of other modern tools like tRPC for APIs, Drizzle ORM for database interactions, and Tailwind for styling. The app lives in apps/web/, while utilities like auth, api, and db live in packages/. This structure is powered by Turborepo to keep things modular and maintainable.</p><p>The meat of the calendar functionality is in apps/web/components/event-calendar/. Everything from draggable events (draggable-event.tsx) to different views like month-view.tsx and week-view.tsx is in there. Need to hook into the calendar? There’s a hooks/index.ts file ready for you.</p><p>AI features? Yep, it’s got those too. Check out apps/web/components/ai/ for things like actions.tsx (presumably for AI-driven suggestions) and response.tsx (likely for handling AI-generated responses). It even has a chat folder with tools for creating, updating, and deleting events, which could make managing your schedule feel less like a chore.</p><p>Don’t worry, backend folks, there’s something for you too. The API lives in packages/api/, with routes for accounts (routers/account.ts) and calendar management (routers/calendar.ts). It uses PostgreSQL (configured in packages/db/) and Drizzle ORM, which is a nice touch for database abstraction without adding the bloat of something like Prisma.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re a busy freelancer juggling multiple clients and projects. You could use Weekday to manage your schedule, but what makes it shine is its AI features. Need to find free slots for a meeting? The get-free-slots.tsx tool in apps/web/components/chat/tools/ can do the heavy lifting. Want to auto-suggest meeting times based on your availability? That’s where the AI magic happens, likely leveraging APIs like OpenAI or Anthropic (configured in .env).</p><p>Here’s a quick example of how easy it is to set up:</p><p>Boom. You’re up and running with a fully-featured calendar app that you can self-host and customize.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Weekday is ambitious. It’s modern, feature-packed, and has a clean codebase that’s easy to navigate. But let’s be real: with zero stars and being a fork, it’s got some work to do in terms of adoption. Still, if you’re tired of the usual suspects and want to tinker with a new approach to calendar management, this is worth a look. Just be ready to get your hands dirty with the setup.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that rely on Google Calendar or Notion often hit friction when trying to embed calendar data in custom workflows or add AI‑driven assistants. The proprietary APIs limit UI customisation and lock you into vendor‑specific authentication flows.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>weekday</code> is a self‑hosted calendar UI built with <strong>Next.js</strong>, <strong>tRPC</strong>, and <strong>Drizzle ORM</strong>. The core Google‑Calendar client lives in <code>packages/google-calendar/src/</code> (e.g., <code>client.ts</code>, <code>resources/calendars/events.ts</code>). UI components such as the month view (<code>apps/web/components/event-calendar/views/month-view.tsx</code>) and AI chat helpers (<code>apps/web/components/ai/*.tsx</code>) render events and let users create, edit, or delete them via the Google Calendar API. Authentication is provided by <code>packages/auth/index.ts</code> (Better Auth) and the data layer by <code>packages/db</code> (PostgreSQL schema in <code>drizzle/schema.ts</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in the Next.js server entry <code>apps/web/trpc/server.ts</code>, which registers tRPC routers from <code>packages/api/src/routers/*.ts</code>. The primary router (<code>api.ts</code>) exposes endpoints like <code>GET /api/trpc/calendar.list</code>. A request hits <code>packages/api/src/routers/calendar.ts</code>, which calls the Google client:</p>
+<pre><code>createGoogleCalendarClient -&gt; packages/google-calendar/src/client.ts (constructor)</code></pre>
+<p>From there, <code>client.ts</code> delegates to resource modules, e.g.:</p>
+<ul><li><code>packages/google-calendar/src/resources/calendars/events.ts</code> – defines <code>list</code>, <code>create</code>, <code>update</code>, <code>delete</code>.</li><li><code>packages/google-calendar/src/resources/calendars/acl.ts</code> – ACL helpers.</li></ul>
+<p>The most‑used internal function is <code>cn</code> in <code>apps/web/lib/utils.ts</code> (called from 43 files). The hub module <code>packages/google-calendar/src/internal/request-options.ts</code> is imported by 12 other modules, making it a high‑blast‑radius point.</p>
+<p>The import graph contains <strong>19 circular dependencies</strong> (e.g., <code>client.ts ↔ core/api-promise.ts ↔ core/resource.ts</code>), which inflate the cognitive load and increase risk when refactoring. Several files exceed 800 lines (<code>client.ts</code>, <code>events.ts</code>, <code>event-dialog.tsx</code>), and deep nesting (up to 9 levels) appears in <code>month-view.tsx</code> and chat tools. These patterns mean a change in one of the hub modules or oversized files can ripple through many components.</p>
+<p>Database interaction occurs in <code>packages/auth/index.ts</code> (e.g., <code>this.db.query.account.findFirst</code>) and via the Drizzle ORM in <code>packages/db</code>. The only external side‑effect traced from an entry point is a call chain that eventually reaches the database through <code>methodRequest → request → makeRequestWithRefresh → refreshTokenIfNeeded → getGoogleAccount</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork that this briefing targets
+git clone https://github.com/moses-y/weekday.git
+cd weekday
+
+# Install (Bun is recommended; npm works as well)
+bun install
+
+# Copy environment template and fill required values
+cp .env.example .env
+# edit .env – set DATABASE_URL, AUTH_SECRET, GOOGLE_CLIENT_ID/SECRET, AI_API_KEY, etc.
+
+# Initialise the PostgreSQL schema
+bun run db:push   # defined in package.json scripts
+
+# Start the dev server
+bun run dev</code></pre>
+<p>A Docker alternative is provided:</p>
+<pre data-lang="bash"><code>docker compose up --build</code></pre>
+<p>The <code>docker-compose.yml</code> builds the Next.js app and a PostgreSQL container, using the same <code>.env</code> variables.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>An internal tool can embed the <code>Weekday</code> UI in an intranet portal, allowing employees to schedule meetings through the familiar Google Calendar flow while an AI assistant (via <code>packages/google-calendar</code> and <code>apps/web/components/ai</code>) suggests optimal times based on free‑slot queries (<code>get-free-slots.tsx</code>). The tRPC API lets other services fetch calendar data without exposing Google credentials directly.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Dependency advisory</strong>: <code>next@16.1.6</code> has CVE‑2026‑44575. Upgrade to the fixed version and commit a lockfile.</li><li><strong>High – No test suite</strong>: 170 source files, zero test files. Add unit/integration tests for each public entry point.</li><li><strong>High – No CI pipeline</strong>: No <code>.github/workflows</code> or other CI config. Introduce a GitHub Actions workflow that runs <code>bun install</code>, <code>bun run build</code>, and the test suite.</li><li><strong>High – No build gate for Docker</strong>: <code>docker‑compose.yml</code> is never validated. Add a workflow that builds the image and runs a health check.</li><li><strong>Medium – Missing Dependabot</strong>: No auto‑updates for the 8 manifest files. Add <code>.github/dependabot.yml</code>.</li><li><strong>Low – Missing repo conventions</strong>: No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config. Add those to enforce consistent line endings and style.</li><li><strong>High – Import cycles</strong>: 19 modules in circular imports (e.g., <code>client.ts</code>, <code>core/api-promise.ts</code>, <code>core/resource.ts</code>). Break cycles by extracting shared types or using lazy imports.</li><li><strong>High – Oversized files</strong>: <code>client.ts</code> (827 LOC) and <code>event-dialog.tsx</code> are hard to maintain; split by responsibility.</li><li><strong>High – Deep nesting</strong>: Max indentation depth of 9 in several UI components; refactor with early returns or extracted helpers.</li><li><strong>High – Duplicated code</strong>: Repeated 6‑line blocks across 23 files; consolidate into shared utilities.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>weekday</code> delivers a functional, AI‑enhanced calendar UI that can be self‑hosted and extended via a clear tRPC API. The codebase is usable but suffers from import cycles, large monolithic files, and a lack of automated testing and CI. It is suitable for teams comfortable refactoring TypeScript monorepos and willing to invest in test and CI scaffolding before production use.</p>
             </div>
 
             
@@ -91,16 +128,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">204<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>83</b></li><li><span>TSX</span><i style="width:99%"></i><b>82</b></li><li><span>JSON</span><i style="width:19%"></i><b>16</b></li><li><span>JavaScript</span><i style="width:6%"></i><b>5</b></li><li><span>SQL</span><i style="width:2%"></i><b>2</b></li><li><span>Markdown</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>83</b></li><li><span>TSX</span><i style="width:99%"></i><b>82</b></li><li><span>JSON</span><i style="width:23%"></i><b>19</b></li><li><span>JavaScript</span><i style="width:6%"></i><b>5</b></li><li><span>Markdown</span><i style="width:4%"></i><b>3</b></li><li><span>SQL</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Next.js</span><span>Docker</span></p>
                     </div>
@@ -169,6 +206,12 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>apps/web/package.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1166389079">Open in Code Brain &rarr;</a>

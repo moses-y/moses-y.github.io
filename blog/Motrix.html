@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing downloads—especially torrents, magnets, and direct links—sucks. Built-in browser downloaders choke on big files, don&#39;t resume, and have zero support for BitTorrent. Windows users get weird .exe wrappers, Linux users get cryptic CLI tools, and Mac users get the privilege of paying for apps that half-work. You want one tool that handles it all without making your desktop look like 2003.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Motrix is a download manager that actually supports HTTP, FTP, BitTorrent, and Magnet links in one desktop app. The main logic sits in src/main/—stuff like Engine.js and EngineClient.js wrap the download backend, which is basically aria2c (check out the extra/*/engine/aria2c binaries for each OS/arch). The renderer, in src/renderer/components/, is mostly Vue, and the UI is clean, not a Frankenstein of Electron and Bootstrap.</p><p>Config files like .eslintrc.js and electron-builder.json keep the build sane, and the CI/CD is handled via Travis CI and .github/workflows/release.yml, so you actually get working releases across platforms. Menus are handled with JSON files per OS (src/main/menus/win32.json, etc.), making it easy to hack your own context menus if you care.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you want to download a Linux ISO from a torrent, a movie from a magnet link, and some giant FTP backup file. Fire up Motrix, paste your links into the UI (see src/renderer/components/Browser/index.vue), and let it rip. Downloads show up in the task list. Pause, resume, restart—all there. Want to automate? The API layer in src/renderer/api/Api.js exposes functions you can call from scripts or extensions.</p><p>Example: Need to add a magnet link from the clipboard? The CommandManager in src/renderer/components/CommandManager/index.js handles stuff like that. No need to write your own download handler or parse links manually.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Motrix does what most download managers promise but rarely deliver. It’s not lightweight—if you just want to grab a PDF, use your browser. But if you regularly wrangle torrents, FTP, or weird download links across OSes, Motrix is worth your time. The UI doesn’t suck, and the guts are solid. If you like tinkering, the code is readable and hackable. If you hate Electron, well, tough luck—so does every cross-platform app these days.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users need a desktop download manager that can handle HTTP, FTP, BitTorrent and Magnet links with a native UI on Windows, macOS and Linux. Existing managers often lack a single‑code‑base Electron implementation or expose a fragmented configuration surface.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Motrix</code> is an Electron‑based download manager built on the <strong>electron‑vue</strong> stack. Core logic lives under <code>src/main/</code> (e.g., <code>src/main/Application.js</code>, <code>src/main/core/Logger.js</code>) while the UI lives under <code>src/renderer/</code> (Vue components such as <code>src/renderer/components/Preference/Advanced.vue</code>). The build pipeline is driven by <strong>yarn</strong> and the <code>electron-builder.json</code> configuration, with CI defined in <code>.travis.yml</code> and GitHub Actions.</p>
+<p>Key files:</p>
+<ul><li><code>src/main/index.js</code> – boots the Electron main process.</li><li><code>src/renderer/api/Api.js</code> – wraps the aria2 RPC client used for download control.</li><li><code>src/main/core/Engine.js</code> – starts the bundled aria2 engine binaries found in <code>extra/</code>.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>src/main/index.js</code></strong>, which creates an instance of <code>src/main/Application.js</code>. The <code>Application</code> constructor (<code>src/main/Application.js:66</code>) immediately calls <code>init</code> (10 calls) to set up context, config managers, and UI managers (Tray, Menu, Window).</p>
+<p><code>init</code> loads user and system config via <code>src/main/utils/index.js:getUserConfig</code> (called from 17 places) and <code>src/main/utils/index.js:getSystemConfig</code> (6 places). These config objects feed the <code>src/main/core/Engine.js</code> that spawns the bundled aria2 binary (<code>extra/*/engine/aria2c*</code>). The only outward‑facing operation is the file‑system open performed in <code>src/main/Application.js</code> → <code>this.client.open</code> (the sole external call).</p>
+<p>The UI layer imports <code>src/renderer/api/Api.js</code>, which uses <code>src/shared/aria2/lib/JSONRPCClient.js</code> to issue JSON‑RPC commands over a local websocket to the engine. UI components such as <code>Preference/Advanced.vue</code> consume the API via <code>src/renderer/components/CommandManager/index.js</code>.</p>
+<p>The most connected modules are:</p>
+<ul><li><code>src/main/core/Logger.js</code> – 15 dependents, zero outgoing imports (instability 0).</li><li><code>src/main/Application.js</code> – imports 18 other modules (instability 0.95).</li></ul>
+<p>No circular imports were detected, but deep nesting (indentation depth 11) appears in the Preference Vue files, making future changes risky.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Motrix.git
+cd Motrix
+
+# Install dependencies
+yarn install
+
+# Build the Electron app (production)
+yarn electron:build   # defined in package.json scripts via electron-builder
+
+# Run locally (development)
+yarn electron:start   # starts main and renderer processes with hot reload</code></pre>
+<p>Configuration files are located under <code>src/main/configs/</code> (e.g., <code>engine.js</code>, <code>protocol.js</code>). The bundled aria2 binaries are in <code>extra/</code> for each platform; no external download of aria2 is required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A corporate IT desk can ship the built installer (<code>dist/*.exe</code> or <code>.AppImage</code>) to employee machines. When a user adds a torrent URL, the UI component calls <code>Api.addUri</code>, which forwards the request to the local aria2 engine via JSON‑RPC, stores the session file (<code>/var/cache/aria2.session</code> on Linux) and updates the UI through the <code>Task</code> Vue store (<code>src/renderer/store/modules/task.js</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses tag references (<code>@v2</code>). Replace with fixed commit SHAs.</li><li><strong>High – No Test Suite</strong> – 415 source files, zero test files; add tests for each public entry point.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>.github/workflows/release.yml</code> lacks a <code>permissions</code> block.</li><li><strong>Medium – Enable Dependabot</strong> – No <code>dependabot.yml</code> present.</li><li><strong>Medium – Dependency‑vulnerability gate</strong> – CI lacks a vulnerability scan step.</li><li><strong>Medium – Large binaries in repo</strong> – <code>extra/*/engine/aria2c*</code> exceed 5 MiB; move to Git LFS or download at setup.</li><li><strong>Medium – Remove generated <code>build/</code> output</strong> – 12 generated files are version‑controlled.</li><li><strong>Low – Set workflow timeouts</strong> – <code>.github/workflows/codeql-analysis.yml</code> has no <code>timeout-minutes</code>.</li></ul>
+<p>Additional observations: the repository contains a full CI configuration (Travis) but no unit or integration tests, and the LICENSE file is present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Motrix delivers a complete Electron‑based download manager with a clear separation between core engine control and UI, but the codebase suffers from high‑impact hubs, deep nesting, and a lack of automated testing. It is suitable for teams comfortable extending Electron apps and willing to invest in test coverage and dependency hygiene.</p>
             </div>
 
             
@@ -91,18 +124,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">561<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JavaScript</span><i style="width:100%"></i><b>80</b></li><li><span>Vue</span><i style="width:14%"></i><b>11</b></li><li><span>Markdown</span><i style="width:11%"></i><b>9</b></li><li><span>YAML</span><i style="width:10%"></i><b>8</b></li><li><span>JSON</span><i style="width:10%"></i><b>8</b></li><li><span>HTML</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>JavaScript</span><i style="width:100%"></i><b>371</b></li><li><span>Vue</span><i style="width:12%"></i><b>46</b></li><li><span>JSON</span><i style="width:3%"></i><b>10</b></li><li><span>Markdown</span><i style="width:2%"></i><b>9</b></li><li><span>YAML</span><i style="width:2%"></i><b>8</b></li><li><span>SCSS</span><i style="width:2%"></i><b>6</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Vue</span></p>
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Express</span></p>
                     </div>
                 </div>
 
@@ -144,6 +177,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1162539479">Open in Code Brain &rarr;</a>

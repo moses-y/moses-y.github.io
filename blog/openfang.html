@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 26, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#openfang-an-open-source-agent-operating-system-i">OpenFang: An Open-Source Agent Operating System in Rust</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="openfang-an-open-source-agent-operating-system-i">OpenFang: An Open-Source Agent Operating System in Rust</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Most &quot;AI agent&quot; tools are just glorified chatbots. They wait for you to type something and spit out a response that sounds smart but often falls apart when you push it. Worse, they’re scattered across a million Python scripts with a web of fragile dependencies, eating up your time with debugging and Docker hell. If you’re trying to build production-grade, always-on agents that do actual work, you’re out of luck.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OpenFang takes a hard stance against the chaos. It’s a Rust-based Agent Operating System that packages everything into a single binary. You get a real, production-grade system that runs pre-built autonomous agents—called “Hands”—24/7 without hand-holding.</p><p>The architecture is clean and modular, with 14 crates under crates/. For example, crates/openfang-api handles the API and dashboard (check out server.rs and routes.rs), while crates/openfang-cli gives you a slick terminal UI (tui/ is where the magic happens). There’s even a desktop app in crates/openfang-desktop, built with Tauri for those who like shiny GUIs. Configuration is straightforward with .env.example and Cargo.toml files scattered thoughtfully across the repo.</p><p>The real stars, though, are the agents in agents/. Each agent has a agent.toml manifest that lays out its tools, triggers, and guardrails. This isn’t just some YAML to make you feel productive—it’s how the system enforces operational rules. Want to tweak the &quot;Lead&quot; agent to deliver CSVs via Slack instead of Telegram? Modify agents/lead/agent.toml and you’re done.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re running a startup. You need to generate leads, manage your social media, and monitor competitors—all while, you know, running the company. You set up OpenFang, and suddenly you’ve got the &quot;Lead&quot; agent pulling qualified prospects daily and the &quot;Clip&quot; agent cranking out TikToks from your webinar recordings.</p><p>From there, it’s plug-and-play. The &quot;Lead&quot; agent digs through LinkedIn, enriches data, scores leads, and sends them to your CRM. The &quot;Clip&quot; agent uses FFmpeg and yt-dlp to break videos into bite-sized social media gold. All while you sleep.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OpenFang is not for hobbyists. It’s over-engineered (in a good way) and assumes you want serious agents doing serious work. If you’re looking for a chatbot toy, move along. But if you’re tired of duct-taped Python scripts and want a no-nonsense, high-performance system built to last, OpenFang delivers. Just don’t expect hand-holding—it’s Rust, not Rails.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises that need autonomous software agents today must stitch together multiple LLM wrappers, schedule cron jobs, and maintain separate services for persistence, networking, and tooling. The result is fragile integration work, duplicated binaries, and unpredictable security posture.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OpenFang delivers a single‑binary <strong>Agent Operating System</strong> written in Rust. The repository is a portfolio of four self‑contained projects:</p>
+<ul><li><strong>openfang‑cli</strong> – the command‑line driver (<code>crates/openfang-cli/src/main.rs</code>).</li><li><strong>openfang‑api</strong> – an HTTP front‑end exposing agent actions (<code>crates/openfang-api/src/*</code>).</li><li><strong>openfang‑channels</strong> – adapters for external services such as Bluesky (<code>crates/openfang-channels/src/bluesky.rs</code>).</li><li><strong>openfang‑runtime / kernel</strong> – the core scheduler, state store and model inference layer (<code>crates/openfang‑runtime/src/*</code>, <code>crates/openfang‑kernel/src/kernel.rs</code>).</li></ul>
+<p>Agents (“Hands”) are defined by TOML manifests under <code>agents/</code> and are compiled into the binary, so no runtime package manager is required.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the CLI entry point:</p>
+<ul><li><code>crates/openfang-cli/src/main.rs:745</code> → <code>main</code> (calls <code>run</code>).</li><li><code>run</code> (<code>crates/openfang-cli/src/launcher.rs:183</code>) boots the runtime (<code>boot_kernel</code>) and, depending on sub‑command, starts the API server or a channel bridge.</li></ul>
+<p>From <code>main</code> the call graph follows the most‑used functions:</p>
+<ol><li><strong><code>validate</code></strong> → <code>Err</code> (56 times) and <strong><code>is_empty</code></strong> (49 times) – guard clauses that gate every user‑initiated action.</li><li><strong><code>api_send_message</code></strong> (used by the API bridge) → <code>status</code> (46 times) → network POST to <code>/api/shutdown</code> (e.g., <code>main -&gt; cmd_stop</code>).</li><li><strong><code>daemon_client</code></strong> (50 calls) creates an HTTP client for outbound calls such as token validation in <code>crates/openfang‑channels/src/bluesky.rs</code>.</li><li><strong><code>record</code></strong> (via <code>run -&gt; shutdown</code>) writes to the SQLite store (<code>conn.execute</code>).</li><li><strong><code>boot_kernel</code></strong> → <code>MemorySubstrate::open</code> accesses the embedded file‑based KV store.</li></ol>
+<p>Key effect owners:</p>
+<div class="table-scroll"><table><thead><tr><th>Effect</th><th>File</th><th>Functions that cause it</th><th>Reach</th></tr></thead><tbody><tr><td>DB read/write</td><td><code>crates/openfang‑api/src/routes.rs</code> (172 functions) – e.g., <code>spawn_agent</code>, <code>list_agents</code></td><td>55 callers, 38 callees</td><td>Broad</td></tr><tr><td>Network outbound</td><td><code>crates/openfang‑channels/src/bluesky.rs</code> (<code>validate_token</code>, <code>api_send_message</code>)</td><td>31 callers</td><td>Medium</td></tr><tr><td>File I/O</td><td><code>crates/openfang‑kernel/src/kernel.rs</code> (<code>open</code>, <code>save_agent</code>)</td><td>22 callers</td><td>Limited</td></tr><tr><td>Model inference</td><td><code>crates/openfang‑runtime/src/a2a.rs::new</code> (calls inference)</td><td>47 callers</td><td>Medium</td></tr></tbody></table></div>
+<p>The import graph shows only two edges and no circular dependencies, so the modules are loosely coupled. The most‑connected module is <code>sdk/javascript/index</code> (imported by two other modules), but it does not participate in the core runtime.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/openfang
+cd openfang
+
+# Build the single binary (requires Rust toolchain)
+cargo build --release          # produces target/release/openfang
+
+# Run the CLI (see built‑in help)
+./target/release/openfang --help
+
+# Example: start the API server
+./target/release/openfang api serve
+
+# Example: launch a specific hand (agent)
+./target/release/openfang start --hand lead</code></pre>
+<p>A Docker image can be built with the provided <code>Dockerfile</code>:</p>
+<pre data-lang="bash"><code>docker build -t openfang:0.1.0 .
+docker run --rm -p 4200:4200 openfang:0.1.0 api serve</code></pre>
+<p>Configuration files such as <code>agents/&lt;name&gt;/agent.toml</code> and the optional <code>.env.example</code> supply required keys (e.g., LLM API tokens, database URL). No additional package managers are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS provider wants daily prospect generation. They place the <code>lead</code> hand under <code>agents/lead/agent.toml</code>, configure the OpenAI key in <code>.env</code>, and run <code>openfang start --hand lead</code>. The binary schedules the hand, writes qualified leads to the embedded SQLite store, and pushes a CSV to a configured webhook—all without external orchestration tools.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>wasmtime@41</code> vulnerable to CVE‑2026‑34971 (pinned). Fix: upgrade version and update <code>Cargo.lock</code>.</li><li><strong>High</strong> – Pin GitHub Actions to commit SHA (<code>.github/workflows/*.yml</code>). Fix: replace <code>@vN</code> with full SHA.</li><li><strong>High</strong> – Upgrade vulnerable crates: <code>tokio@1</code> (CVE‑2021‑45710), <code>rmp-serde@1</code>, <code>aes-gcm@0.10</code>. Fix: bump to patched releases.</li><li><strong>High</strong> – Wildcard CORS (<code>packages/whatsapp-gateway/index.js</code>). Fix: enumerate allowed origins.</li><li><strong>Medium</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/ci.yml</code>).</li><li><strong>Medium</strong> – Enable Dependabot/Renovate for 17 manifests.</li><li><strong>Medium</strong> – Pin Docker base images by digest (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout (<code>.github/workflows/release.yml</code>).</li><li><strong>Medium</strong> – Add non‑root <code>USER</code> to container (<code>Dockerfile</code>).</li><li><strong>Low</strong> – Add <code>timeout-minutes</code> to CI jobs (<code>.github/workflows/ci.yml</code>).</li></ul>
+<p>All findings are derived from the static analysis report; no additional issues were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>OpenFang offers a cohesive, single‑binary platform for autonomous agents, with a well‑structured Rust codebase and complete test suite. Security‑related dependency pinning and CI hardening need immediate attention before production use. It is best suited for teams that want a Rust‑native agent runtime without managing a microservice mesh.</p>
             </div>
 
             
@@ -91,18 +131,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">482<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>104</b></li><li><span>TOML</span><i style="width:39%"></i><b>41</b></li><li><span>JavaScript</span><i style="width:19%"></i><b>20</b></li><li><span>Markdown</span><i style="width:6%"></i><b>6</b></li><li><span>JSON</span><i style="width:6%"></i><b>6</b></li><li><span>CSS</span><i style="width:4%"></i><b>4</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>236</b></li><li><span>Markdown</span><i style="width:38%"></i><b>90</b></li><li><span>TOML</span><i style="width:33%"></i><b>79</b></li><li><span>JavaScript</span><i style="width:10%"></i><b>24</b></li><li><span>JSON</span><i style="width:3%"></i><b>8</b></li><li><span>Python</span><i style="width:3%"></i><b>7</b></li>
                         </ul>
-                        <p class="an-fw"><span>Express</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span></p>
                     </div>
                 </div>
 

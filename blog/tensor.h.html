@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 2, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#building-a-tiny-tensor-library-in-raw-c">Building a Tiny Tensor Library in Raw C</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="building-a-tiny-tensor-library-in-raw-c">Building a Tiny Tensor Library in Raw C</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Machine learning libraries like TensorFlow and PyTorch make neural networks feel like magic. But if you want to actually understand how they work under the hood? Good luck wading through thousands of lines of abstracted C++ and Python. This repo is for anyone who wants to strip it all down and build a neural network framework from scratch in C—raw, unvarnished, no-nonsense C. No numpy, no hand-holding, just math and pointers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This project creates a minimal tensor library in C, with abstractions for tensor operations, autograd, and enough functionality to train basic neural networks. The key file is tensor.h, which includes the core tensor structure and operations like matrixmultiplication. The repo also has tensorcu.h for CUDA support if you want to offload operations to the GPU (assuming you&#39;re feeling adventurous).</p><p>Tests are in test.c (for CPU functionality) and testcuda.cu (for GPU). There&#39;s also a script, createmnist_csv.py, to preprocess the MNIST dataset into a CSV format for training. The README.md does a pretty solid job of walking you through the basics of neural networks and how the library works—great for anyone starting from scratch.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Want to see how backprop works without wading through someone else&#39;s framework? This is your playground. Here&#39;s a snippet to whet your appetite:</p><p>You can use the provided files to build, train, and test a neural net to classify MNIST digits. It&#39;s not going to beat GPT-4, but that&#39;s not the point. This is about learning.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you&#39;re just here to &quot;get stuff done,&quot; run back to your pytorch warm blanket. But if you&#39;re the kind of person who likes writing their own linked list for fun, this repo is your jam. It&#39;s rough, it&#39;s raw, and that&#39;s the point. Just don’t expect hand-holding or production-ready code—it’s a learning tool, not a silver bullet.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>C‑centric machine‑learning tutorials usually rely on heavyweight libraries (PyTorch, NumPy). For teams that need a minimal, portable implementation – e.g., embedded firmware, teaching environments without Python – the lack of a pure‑C tensor abstraction forces them to either write ad‑hoc code or pull in large dependencies.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository delivers a <strong>tiny tensor library</strong> written in plain C with optional CUDA acceleration. Core definitions live in <code>tensor.h</code> (CPU) and <code>tensor_cu.h</code> (GPU). Simple example programs (<code>dev.c</code>, <code>dev/llama3.c</code>) and test harnesses (<code>test.c</code>, <code>test_cuda.cu</code>) show how to allocate tensors, perform element‑wise ops, and run a forward pass. A helper script, <code>create_mnist_csv.py</code>, converts the MNIST dataset to CSV for use with the C examples.</p>
+<p>Key files:</p>
+<ul><li><code>tensor.h</code> – <code>Tensor</code> struct, CPU memory management, basic ops (<code>matmul</code>, <code>relu</code>, <code>logsoftmax</code>).</li><li><code>tensor_cu.h</code> – GPU equivalents, thin wrappers around CUDA kernels.</li><li><code>dev.c</code> – minimal “hello‑tensor” driver that creates a tensor, runs a few ops, and prints results.</li><li><code>dev/llama3.c</code> – a larger example that builds a three‑layer network (the duplicated code blocks were flagged here).</li><li><code>test.c</code> / <code>test_cuda.cu</code> – unit‑style programs exercising the API on CPU and GPU respectively.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>There is <strong>no central runtime</strong>; the library is header‑only. Compilation of a user program pulls in the headers, which in turn define static inline functions and, for CUDA, external kernel prototypes. Execution flow is therefore:</p>
+<ol><li><strong>Entry point</strong> – a <code>main</code> function in an executable source file (e.g., <code>dev.c</code>).</li><li><code>main</code> calls <code>tensor_create</code> (defined in <code>tensor.h</code>) to allocate storage.</li><li>Operations such as <code>tensor_matmul</code> or <code>tensor_relu</code> are invoked; these are either pure C loops (<code>tensor.h</code>) or launch CUDA kernels (<code>tensor_cu.h</code>).</li><li>Results are read back (GPU case uses <code>cudaMemcpy</code> inside the helpers) and printed or fed to the next layer.</li></ol>
+<p>Only the example files drive the library; the library itself does not call external services or files. Consequently, the <strong>blast radius</strong> of a change is limited to the header files and any compiled kernels they expose. No circular imports are present, and the import graph consists of a single internal module with zero edges.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/tensor.h
+cd tensor.h
+
+# Build the CPU example
+gcc -Wall -O2 -o dev dev.c -I.
+
+# Build the CUDA example (requires nvcc and a CUDA‑capable device)
+nvcc -O2 -o dev_cuda dev.c -I.   # same source, CUDA paths resolved by headers
+
+# Run the MNIST conversion script (Python 3 required)
+python3 create_mnist_csv.py   # produces train.csv / test.csv used by examples</code></pre>
+<p>The repo provides no makefile, so compilation commands must be issued manually as above. No configuration files or environment variables are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A firmware team can embed <code>tensor.h</code> in a microcontroller project to run a fixed‑size inference network without pulling in a full ML stack. The workflow is:</p>
+<pre data-lang="c"><code>#include "tensor.h"
+
+int main() {
+    Tensor x = tensor_create(1, 784);          // input vector
+    Tensor w1 = tensor_load("w1.bin");       // pre‑trained weights
+    Tensor y = tensor_matmul(x, w1);
+    tensor_relu_inplace(&amp;y);
+    // ... continue layers, then softmax
+}</code></pre>
+<p>Compiled with the target C compiler, the code runs entirely from static memory, providing deterministic inference.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Duplicated code blocks</strong> – 30 repeated 6‑line fragments across <code>dev/llama3.c</code>, <code>tensor.h</code>, <code>tensor_cu.h</code>. Consolidating these helpers would reduce maintenance overhead.</li><li><strong>Medium – Missing CI/CD</strong> – No <code>.github/</code>, <code>Makefile</code>, or other automation; builds and tests must be run manually.</li><li><strong>Medium – No LICENSE</strong> – Repository lacks a license file, leaving usage and redistribution rights undefined.</li></ul>
+<p>No secrets were found in the history, and the test files (<code>test.c</code>, <code>test_cuda.cu</code>) are present but not integrated into an automated test runner.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo supplies a functional, header‑only tensor abstraction with optional CUDA support, useful for low‑overhead learning or embedded inference. However, duplicated helper code, absent CI, and lack of a license limit its readiness for production adoption. Engineers comfortable with manual builds can extract the core API, but a refactor to eliminate duplication and the addition of basic build scripts would improve maintainability.</p>
             </div>
 
             
@@ -91,9 +131,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -102,7 +142,7 @@
                         <ul class="an-bars">
                             <li><span>C</span><i style="width:100%"></i><b>3</b></li><li><span>C/C++ Header</span><i style="width:67%"></i><b>2</b></li><li><span>Markdown</span><i style="width:33%"></i><b>1</b></li><li><span>Python</span><i style="width:33%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -113,6 +153,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1170912914">Open in Code Brain &rarr;</a>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 20, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing multiple AI assistants across different platforms can be a headache. You might be juggling Discord, WhatsApp, and Telegram bots, each with its own quirks and configurations. Let&#39;s face it: setting up each bot separately is tedious, and keeping track of conversation contexts is a nightmare.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>TinyClaw simplifies this chaos by allowing you to run multiple isolated AI agents simultaneously. The src/ directory contains the core components, like discord-client.ts and telegram-client.ts, which handle communication with their respective platforms. The lib/ folder has utility scripts, such as messaging.sh and daemon.sh, that enable persistent sessions and parallel processing. You can manage everything with commands like tinyclaw start or tinyclaw logs queue to check message handling.</p><p>The setup is straightforward, thanks to the scripts/install.sh and an interactive setup wizard that guides you through channel selections and bot token entries. The configuration is all stored in settings.json, making it easy to tweak settings without diving into code.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re running a community on Discord while also engaging customers on WhatsApp. With TinyClaw, you can set up a Discord bot that handles moderation tasks while your WhatsApp bot deals with customer inquiries. You could simply run:</p><p>tinyclaw start</p><p>After that, the bots operate independently but still maintain their context, thanks to the persistent sessions feature. If your Discord bot needs to fetch user data, it can do so without overlapping with WhatsApp conversations.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>TinyClaw is a solid choice if you need to manage multiple AI assistants across different channels. It saves time and effort, but it might be overkill for simple projects or single-channel usage. If you’re handling diverse communication channels and want a consistent experience, give it a shot. Otherwise, keep it simple and stick to one channel.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizations that need a 24/7 multi‑channel AI assistant often inherit code bases riddled with duplicated logic and absent test coverage, making extensions and bug fixes disproportionately expensive. TinyClaw’s repository exhibits exactly these maintainability risks.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>TinyClaw is a team of AI agents that functions as a personal assistant, running multiple isolated agents with specialized roles and routing messages via a <code>@agent_id</code> syntax. The code base is organized into four channel‑specific TypeScript clients—<code>src/discord-client.ts</code>, <code>src/telegram-client.ts</code>, <code>src/whatsapp-client.ts</code>, and <code>src/queue-processor.ts</code>—each invoked from the CLI entry point <code>bin/tinyclaw</code> (or <code>./tinyclaw.sh</code>). Shared shell helpers live in <code>lib/</code> (<code>agents.sh</code>, <code>common.sh</code>, <code>daemon.sh</code>, <code>messaging.sh</code>, <code>setup-wizard.sh</code>, <code>heartbeat-cron.sh</code>, <code>update.sh</code>). Configuration is gathered by the interactive wizard in <code>lib/setup-wizard.sh</code> and stored as environment variables; AI providers (Anthropic Claude, OpenAI GPT) are selected there. The system uses a file‑based queue (<code>lib/messaging.sh</code>) to avoid race conditions and runs inside a tmux session for always‑on availability.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>The internal call graph contains four modules (<code>src/discord-client</code>, <code>src/queue-processor</code>, <code>src/telegram-client</code>, <code>src/whatsapp-client</code>) with <strong>zero import edges</strong> and <strong>no circular dependencies</strong>, simplifying changes to individual channels. Execution starts at <code>bin/tinyclaw</code> → <code>lib/setup-wizard.sh</code> → <code>lib/daemon.sh</code>, which spawns the three client processes and the queue processor. Each client handles its respective channel’s incoming messages, pushes them onto the shared file queue, and the queue processor dispatches them to the configured AI provider. The modules are otherwise independent; a modification to one client does not ripple through the others, but the duplicated 6‑line blocks (108 occurrences across six files) and nesting depth of up to eight indicate that future changes risk introducing inconsistencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repository (use the exact URL)
+git clone https://github.com/moses-y/tinyclaw.git
+cd tinyclaw
+
+# 2. Install dependencies
+npm install
+
+# 3. Start the interactive setup wizard (collects tokens, workspace name, AI provider)
+./tinyclaw start   # or: bin/tinyclaw start</code></pre>
+<p>The wizard writes a minimal config under <code>lib/</code> and launches the daemon. Required environment variables (bot tokens, API keys) are captured during setup; no manual editing of config files is needed for a basic deployment.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A distributed team wants an always‑on assistant that can answer queries on both Discord and Telegram. They add a new agent by editing <code>lib/agents.sh</code> and assign it an <code>@agent_id</code>. When a user mentions the ID, the relevant client posts the message to the file queue; the queue processor forwards it to the selected AI model (Claude Sonnet, for example). The team monitors activity with <code>tinyclaw logs queue</code> and can restart individual channels without affecting the others, thanks to the isolated client architecture.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Duplicated code blocks</strong> – 108 repeated 6‑line segments across <code>lib/common.sh</code>, <code>scripts/remote-install.sh</code>, <code>src/discord-client.ts</code>, <code>src/telegram-client.ts</code> … (extract shared helpers; DRY the logic).</li><li><strong>Deep nesting</strong> – Max indentation depth of 8 in <code>src/discord-client.ts</code>, <code>src/telegram-client.ts</code>, <code>src/whatsapp-client.ts</code>; flatten with guard clauses.</li><li><strong>High branching density</strong> – 108 branch points over 368 lines in <code>src/telegram-client.ts</code>; decompose decision logic (strategy or table dispatch).</li><li><strong>No test files</strong> – repository‑wide untested code paths.</li><li><strong>No LICENSE file</strong> – unclear usage/redistribution rights.</li></ul>
+<p><strong>Code‑health audit (static analysis):</strong></p>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/release.yml</code> uses <code>softprops/action-gh-release@v1</code>); a tag can move and run with whatever owner last pushed.</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (one manifest, no update bot configured).</li><li><strong>MEDIUM</strong> – Gate pull requests on a dependency vulnerability scan (no scan in CI).</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout (<code>.github/workflows/release.yml</code> keeps the token for later steps).</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to workflow jobs (release workflow declares no job timeout).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>TinyClaw delivers a functional, multi‑channel AI assistant with a clean modular structure and no circular dependencies, making it straightforward to add or remove channels. However, the code base suffers from extensive duplication, deep nesting, high branching density, missing tests, and no license—issues that raise maintenance overhead and limit production readiness. It is suitable for prototyping or internal use; any deployment that expects regular updates, compliance, or long‑term support should address the audit findings first.</p>
             </div>
 
             
@@ -91,9 +115,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +137,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1156080985">Open in Code Brain &rarr;</a>

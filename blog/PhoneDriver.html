@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Controlling Android devices programmatically is a royal pain. Sure, you can hack together some ADB scripts, but good luck handling dynamic screens, inconsistent layouts, or pixel-perfect taps. And trying to automate tasks like &quot;open Chrome and Google something&quot; using traditional tools? Forget it. You’ll be drowning in brittle XPath selectors and trial-and-error debugging.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PhoneDriver bridges the gap between visual understanding and mobile automation. With the Qwen3-VL vision-language model, it analyzes screenshots like a human would and uses ADB commands to act on them. The heavy lifting happens in qwenvlagent.py, where the Qwen3-VL model processes incoming screenshots and plans actions. The actual execution—ADB commands—is handled by phoneagent.py.</p><p>The repo also comes with a Gradio-based web UI (ui.py) that lets you describe tasks in plain English. No coding required. Type “Enable WiFi” or “Open Instagram,” and the agent figures out the rest. Configuration lives in config.json, where you can tweak screen resolution, model behavior, and execution timing.</p><p>Want to swap between dense and MoE Qwen3-VL models? You’ll need to edit qwenvl_agent.py and change imports and initialization logic. Yeah, it’s manual, but it’s not rocket science.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re testing a mobile app. Instead of manually clicking through screens, you fire up the web UI (python ui.py) and tell the agent:</p><p>The agent takes a screenshot, analyzes the UI with Qwen3-VL, identifies relevant buttons, and sends ADB commands to interact with them. If something goes wrong (e.g., a button isn’t found), the live log in Gradio tells you why.</p><p>Alternatively, if you’re more comfortable with code, you can skip the UI and use the CLI:</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PhoneDriver is solid if you need automation for Android devices that’s smarter than hardcoded scripts. The Qwen3-VL integration is impressive, but the setup feels a bit rough—you’re editing Python files to change models or tweak configs, which could’ve been more user-friendly. If you’re comfortable with Python and have a beefy GPU, this is worth it. For casual users or small projects, it’s probably overkill.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Automation of Android devices typically requires hand‑crafted UI scripts or brittle image‑matching pipelines. Teams that want to issue natural‑language commands need a way to translate visual context into reliable ADB actions without writing low‑level code.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>PhoneDriver</code> is a Python prototype that closes the loop between a vision‑language model (Qwen‑3‑VL) and an Android device.</p>
+<ul><li><code>phone_agent.py</code> implements the CLI driver (<code>PhoneAgent</code>) that orchestrates screenshot capture, model inference, and ADB command execution.</li><li><code>qwen_vl_agent.py</code> wraps the Qwen‑3‑VL model, exposing <code>analyze_screenshot</code>, <code>_generate_action</code>, and <code>_parse_action</code> to turn a screen image into a concrete action (tap, swipe, type, wait).</li><li><code>ui.py</code> launches a Gradio web UI (<code>main</code> at line 472) that forwards user‑entered natural‑language tasks to <code>PhoneAgent</code>.</li><li>Helper utilities (<code>qwen_vl_utils.py</code>) convert raw bytes to Pillow images and post‑process model output.</li></ul>
+<p>The repo ships a minimal <code>config.json</code> for screen dimensions, model temperature, and step delay, and a <code>README.md</code> that documents the required environment (Python 3.10+, ADB, GPU).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>ui.py</code></strong> → <code>main()</code> (line 472). The UI collects a task string, builds a <code>PhoneAgent</code> instance, and calls <code>PhoneAgent.execute_task(task)</code>.</p>
+<p><code>PhoneAgent.__init__</code> runs four setup helpers (<code>_setup_logging</code>, <code>_setup_directories</code>, <code>_check_adb_connection</code>, <code>_verify_screen_resolution</code>) and instantiates <code>QwenVLAgent</code>.</p>
+<p><code>execute_task</code> enters a loop that:</p>
+<ol><li>Calls <code>capture_screenshot</code> → <code>adb exec-out screencap -p</code> → <code>_run_adb_command</code> (the most‑called internal function, invoked from six places).</li><li>Passes the image to <code>QwenVLAgent.analyze_screenshot</code>.</li><li>Receives a textual action, which <code>QwenVLAgent._generate_action</code> parses via <code>_parse_action</code>.</li><li>Dispatches to one of the concrete executors (<code>_execute_tap</code>, <code>_execute_swipe</code>, <code>_execute_type</code>, <code>_execute_wait</code>), each of which ultimately calls <code>_run_adb_command</code> to issue the ADB instruction.</li></ol>
+<p>The internal call graph records <strong>39</strong> intra‑repo edges; the hub functions are <code>_run_adb_command</code> (6 callers) and <code>capture_screenshot</code> (3 callers). No circular imports exist, and the module dependency graph is shallow: <code>ui</code> → <code>phone_agent</code> → <code>qwen_vl_agent</code> → <code>qwen_vl_utils</code>.</p>
+<p>Deep nesting (max indentation depth 8) appears in <code>ui.py</code>, <code>phone_agent.py</code>, and <code>qwen_vl_agent.py</code>, making the control flow harder to follow. The most volatile module is <code>phone_agent.py</code>, which both imports and is imported by a single other module, giving it an instability score of 0.5.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork that contains the current code
+git clone https://github.com/moses-y/PhoneDriver
+cd PhoneDriver
+
+# Create and activate a virtual environment
+python -m venv phonedriver
+source phonedriver/bin/activate
+
+# Install the required Python packages
+pip install git+https://github.com/huggingface/transformers
+pip install pillow gradio qwen_vl_utils requests</code></pre>
+<ul><li>Verify ADB can see the device: <code>adb devices</code>.</li><li>Adjust <code>config.json</code> if the automatic resolution detection is insufficient.</li><li><strong>Web UI</strong>: <code>python ui.py</code> → open <code>http://localhost:7860</code> and type a task.</li><li><strong>CLI</strong>: <code>python phone_agent.py "Open the camera app"</code>.</li></ul>
+<p>No Dockerfile, CI configuration, or test suite is present, so the above steps are the only documented path to a running instance.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A QA team could embed <code>PhoneDriver</code> in a larger test harness: the harness calls <code>PhoneAgent.execute_task</code> for each high‑level test step, captures the resulting logs, and asserts that the final screen matches an expected visual fingerprint. Because actions are generated by a language model, the same test can be expressed in plain English without maintaining a separate script for each UI version.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – cognitive_load</strong> – Deep nesting (max indent 8) in <code>ui.py</code>, <code>phone_agent.py</code>, <code>qwen_vl_agent.py</code>. Refactor with early returns or helper functions.</li><li><strong>Medium – resource_safety</strong> – Files opened without a context manager in <code>qwen_vl_agent.py</code> and <code>qwen_vl_utils.py</code>. Replace <code>open(...)</code> with <code>with open(...) as f:</code>.</li><li><strong>Medium – resilience</strong> – Broad <code>except:</code> clauses in <code>qwen_vl_agent.py</code> swallow unexpected errors. Scope catches to specific exception types and log/re‑raise others.</li><li><strong>Medium – SDLC</strong> – No test files detected; code paths are unvalidated by automated tests.</li><li><strong>Medium – SDLC</strong> – No CI/CD pipeline; no automated linting or build gate.</li></ul>
+<p>No secrets were found, and a LICENSE file is present. The repo lacks a <code>requirements.txt</code> or <code>pyproject.toml</code>; dependency versions are only hinted at in the README.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>PhoneDriver</code> demonstrates a functional end‑to‑end loop from natural‑language intent to ADB actions, with a clear separation between UI, agent orchestration, and model inference. The codebase is small but suffers from deep nesting, unsafe file handling, and a lack of tests or CI. It is suitable for experimental or proof‑of‑concept integration, but production use will require refactoring, proper testing, and automated validation pipelines.</p>
             </div>
 
             

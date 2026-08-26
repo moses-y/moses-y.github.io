@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 2, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Go</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>Scriberr</h1>
@@ -80,8 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Audio transcription services are bloated with cloud dependencies, privacy issues, and subscription fees that make you question your life choices. If you’ve ever tried transcribing sensitive audio and cringed at the thought of sending it to some faceless server, you know the problem. Self-hosting solutions exist, but they’re either clunky, incomplete, or just a pain to set up. Scriberr aims to fix that by giving you a polished, offline transcription tool that doesn’t suck.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Scriberr is a self-hosted transcription app that runs locally, so your data stays on your machine. The core transcription logic lives in internal/transcription, with adapters (baseadapter.go, pyannoteadapter.go, etc.) for integrating different AI models like Whisper and NVIDIA Parakeet. For CLI fans, the cmd/scriberr-cli/main.go lets you automate transcription workflows without touching the UI. If you want the full experience, the polished web frontend (internal/web/frontend/index.html) is where Scriberr shines, offering tools like speaker diarization, note-taking, and transcript summaries.</p><p>The app isn’t just about transcription—it’s workflow-friendly. Features like Folder Watcher (internal/cli/watch.go) let you drop audio files into a folder and have them processed automatically. The api-docs/swagger.yaml defines the extensive API, so you can hook Scriberr into your favorite automation tools, like n8n. Want to record audio directly? There’s a built-in recorder (internal/audio/aupparser.go) for on-the-fly thoughts and ideas.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re a journalist handling sensitive interviews. You can record audio straight into Scriberr, annotate the transcript using the note-taking tools, and export it into multiple formats. Want to summarize a 2-hour interview? Use the Ollama/OpenAI integration (internal/api/openaihandler.go) to generate a summary in seconds. For automation nerds, set up the Folder Watcher to process recordings from your favorite recorder automatically—no manual clicks required.</p><p>Example:</p><p>Now every recording dropped into ~/recordings gets transcribed and saved into ~/transcripts. No cloud. No subscription. Just results.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Scriberr is perfect for self-hosters, privacy freaks, and anyone tired of paying subscription fees for basic functionality. The UI is polished, the features are solid, and the local-first approach is refreshing. Downsides? The setup isn’t trivial—be ready to deal with Dockerized environments and YAML configs (docker-compose.cuda.yml). If you’re running small-scale transcription for personal use, this is gold. For enterprise setups? It might be overkill.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises and privacy‑focused users need to transcribe audio/video locally without sending any data to cloud services. Existing cloud APIs expose recordings and incur recurring fees, while self‑hosted solutions are often fragmented or lack a polished UI.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Scriberr provides a full‑stack, offline transcription platform. The <strong>backend</strong> lives under <code>internal/</code> and <code>cmd/</code> and implements job orchestration, file handling, and API endpoints (see <code>cmd/server/main.go</code>, <code>internal/api/handlers.go</code>). The <strong>frontend</strong> is a React codebase in <code>web/</code> that talks to the backend via the generated OpenAPI spec (<code>api-docs/swagger.json</code>). Core transcription adapters live in <code>internal/transcription/adapters/</code> and wrap Python models (Parakeet, Canary, Whisper) through the <code>base_adapter.go</code> wrapper.</p>
+<p>Key entry scripts:</p>
+<ul><li><code>cmd/scriberr-cli/main.go</code> – CLI wrapper for one‑off transcription jobs.</li><li><code>cmd/server/main.go</code> – Starts the HTTP server exposing <code>/api/v1/*</code> routes.</li></ul>
+<p>Docker support is provided by <code>Dockerfile</code>, <code>Dockerfile.cuda*</code>, and several <code>docker‑compose*.yml</code> files for CPU or GPU deployments.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>cmd/server/main.go:func main()</code>. It builds a logger (<code>pkg/logger/logger.go</code>), loads configuration, then calls <code>SetupRoutes</code>. <code>SetupRoutes</code> registers HTTP handlers from <code>internal/api/handlers.go</code> and injects <code>AuthMiddleware</code>.</p>
+<p>Inside a request, <code>UploadAudio</code> (handler) stores the uploaded file via <code>internal/service/file_service.go:SaveUpload</code>, then creates a transcription job by calling <code>internal/transcription/unified_service.go:ProcessJob</code>. <code>ProcessJob</code> selects the appropriate adapter (<code>internal/transcription/adapters/canary_adapter.go</code> or others) and runs the external Python command (<code>exec.Command</code>) – one of the <strong>10 functions</strong> that invoke external processes. The adapter writes intermediate files; <code>file_service.go:RemoveFile</code> cleans them up later.</p>
+<p>The internal call graph shows the most widely used functions: <code>Info</code> (59 callers) and <code>Create</code> (44 callers) from <code>pkg/logger/logger.go</code> and repository layers, respectively. Changing these functions has the highest blast radius because they are called across many packages. No circular imports were detected, but several modules have high <em>instability</em> (e.g., <code>web/frontend/src/components/ChatSessionsSidebar</code> with 7 outgoing imports and none incoming), indicating they are leaf nodes that could be refactored without widespread impact.</p>
+<p>The code touches external resources in three ways:</p>
+<ul><li><strong>Filesystem/DB</strong> – <code>internal/database/database.go</code> opens a SQLite (or configured) DB and <code>file_service.go</code> manipulates uploaded media.</li><li><strong>External commands</strong> – adapters invoke Python scripts for model inference.</li><li><strong>Network</strong> – the server exposes a REST API; no outbound network calls are present in the core.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL required)
+git clone https://github.com/moses-y/Scriberr
+cd Scriberr
+
+# Build and run with Docker (CPU‑only example)
+docker-compose -f docker-compose.yml up --build
+
+# Or start the server locally
+go build -o scriberr-server cmd/server/main.go
+./scriberr-server   # listens on port 8080 by default
+
+# Run a one‑off transcription via CLI
+go build -o scriberr-cli cmd/scriberr-cli/main.go
+./scriberr-cli transcribe --file path/to/audio.wav</code></pre>
+<p>Configuration files are not explicitly listed; the server expects environment variables for model paths and optional API keys (e.g., for Ollama/OpenAI integration). Those variables are read in <code>internal/config</code> (not shown) and must be set before starting the server.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A media‑archiving pipeline can drop new recordings into a watched folder (<code>internal/cli/service.go:watchFiles</code>). The folder watcher triggers <code>ProcessJob</code>, which runs the selected model on GPU (via <code>Dockerfile.cuda</code>) and stores the resulting transcript in the SQLite DB. A downstream service queries <code>/api/v1/transcripts/:id</code> to fetch timed text for further analysis or UI rendering.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>golang.org/x/crypto@0.41.0</code> has CVE‑2026‑42508; upgrade and update <code>go.mod</code> lockfile.</li><li><strong>High</strong> – Pin GitHub Action <code>goreleaser/goreleaser-action@v6</code> to a commit SHA.</li><li><strong>High</strong> – <code>golang.org/x/net@0.43.0</code> carries CVE‑2026‑25680; upgrade.</li><li><strong>Medium</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> in <code>.github/workflows/ci.yaml</code>.</li><li><strong>Medium</strong> – Enable Dependabot or Renovate (<code>.github/dependabot.yml</code>).</li><li><strong>Medium</strong> – Pin Docker base images by digest in <code>Dockerfile</code>.</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan step to CI.</li><li><strong>Medium</strong> – Move large binaries (&gt;5 MiB) to Git LFS.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout steps.</li><li><strong>Medium</strong> – Add a non‑root <code>USER</code> to Docker images.</li></ul>
+<p>Additional static findings include deep nesting (max depth 8) in several React components, duplicated 6‑line blocks across 73 files, and oversized source files (&gt;5 k lines) that would benefit from modularization.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Scriberr delivers a complete offline transcription stack with a modern UI and GPU support, but the codebase suffers from several high‑severity dependency vulnerabilities and maintainability hotspots (deep nesting, duplicated logic). It is suitable for teams comfortable with Go, Docker, and React who can address the security fixes and refactor the most complex components before production use.</p>
             </div>
 
             
@@ -91,18 +126,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">432<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>73</b></li><li><span>YAML</span><i style="width:21%"></i><b>15</b></li><li><span>JavaScript</span><i style="width:18%"></i><b>13</b></li><li><span>Python</span><i style="width:16%"></i><b>12</b></li><li><span>HTML</span><i style="width:15%"></i><b>11</b></li><li><span>TOML</span><i style="width:5%"></i><b>4</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>103</b></li><li><span>Go</span><i style="width:83%"></i><b>85</b></li><li><span>TypeScript</span><i style="width:22%"></i><b>23</b></li><li><span>JSON</span><i style="width:16%"></i><b>16</b></li><li><span>YAML</span><i style="width:15%"></i><b>15</b></li><li><span>JavaScript</span><i style="width:15%"></i><b>15</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>CUDA</span></p>
                     </div>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 21, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,52 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-nanoclaw-does">What NanoClaw Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>OpenClaw and similar bots are bloated monsters—one Node.js process, dozens of modules, config files everywhere, and security that&#39;s just a checklist. You want your AI assistant talking to your WhatsApp, but you don&#39;t want to trust it with the keys to your whole machine. Good luck auditing OpenClaw&#39;s spaghetti. NanoClaw cuts the fat and actually isolates your agent in a container.</p><h3 class="post-h" id="what-nanoclaw-does">What NanoClaw Does</h3><p>NanoClaw runs your Claude-based assistant in a real Linux container. Look at container/Dockerfile and src/container-runtime.ts—agents get their own filesystem, and can&#39;t see anything you don&#39;t mount. WhatsApp integration lives in src/channels/whatsapp.ts. Group isolation is handled with per-group CLAUDE.md files (see groups/main/CLAUDE.md), and each group runs in its own sandbox. Scheduled tasks? That&#39;s just src/task-scheduler.ts. No abstraction layers, no magical runtime: you get a handful of files, mostly TypeScript, easy to read.</p><p>Skills are code, not config. Want Telegram support? Run /add-telegram, and NanoClaw patches your fork with code from .claude/skills/add-telegram/. You end up with only what you need—no deadweight features lurking in the background.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>You clone NanoClaw, run claude, and chat with your personal Claude via WhatsApp. Need Gmail? /add-gmail drops in the code. Want a scheduled weekly backup? Toss a job in src/task-scheduler.ts:</p><p>Every group you create gets its own container, memory file, and isolated mount. Your admin chat is totally private; other groups can&#39;t sniff it. Bash commands run inside the container, not on your host. If something goes sideways, just ask Claude to debug—no dashboards, no log hunting.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>NanoClaw is for people who hate bloat and want control. It&#39;s not a framework, it&#39;s working code you can actually read and hack. Security is real—container isolation, not some permission.json nonsense. Downsides: single-user focus, and if you want fancy features, you write code. Perfect for devs who want their own Claude, not a Frankenstein bot with 45 dependencies.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running a personal AI assistant that can read WhatsApp, schedule jobs, and keep per‑group memory normally requires a large, tangled codebase (e.g., OpenClaw) and a single host process with broad permissions. That makes security audits hard and customisation painful for a single user.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>nanoclaw</code> delivers the same core features in a repository that can be read in ≈ 8 minutes. The core runtime lives in <code>src/</code> (<code>src/index.ts</code> exports the main CLI) and the <strong>skills engine</strong> (<code>skills‑engine/</code>) provides the plug‑in model used by the Claude Agent SDK. Container isolation is defined in <code>container/Dockerfile</code> and the runner (<code>container/agent‑runner/src/index.ts</code>). All channel adapters (WhatsApp, Discord, Telegram, Gmail, etc.) are implemented as self‑contained Claude skills under <code>.claude/skills/…</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in the skill that boots the Discord integration:</p>
+<ul><li><strong>Entry point</strong> – <code>.claude/skills/add-discord/modify/src/index.ts</code> → function <code>main</code> (line 460).</li><li><code>main</code> loads the persisted state (<code>loadState</code> → <code>skills‑engine/state.readState</code>), registers groups, then starts the message loop (<code>startMessageLoop</code>).</li></ul>
+<p>From there the call chain is:</p>
+<pre><code>main → loadState → readState (skills-engine/state.ts)
+      → registerGroup → getAvailableGroups
+      → startMessageLoop → connect → on (Discord client)
+      → processGroupMessages → saveState → writeState (skills-engine/state.ts)
+      → sendMessage → findChannel → client.channels.fetch (network)</code></pre>
+<p>Key functions with the widest <em>blast radius</em>:</p>
+<div class="table-scroll"><table><thead><tr><th>Function</th><th>Callers</th><th>Callees</th><th>Why it matters</th></tr></thead><tbody><tr><td><code>readState</code></td><td>15 places</td><td>–</td><td>Centralised file‑based persistence; any change ripples to all skills.</td></tr><tr><td><code>writeState</code></td><td>10 places</td><td>–</td><td>Writes the same JSON file; errors affect every channel.</td></tr><tr><td><code>isGitRepo</code></td><td>9 places</td><td>–</td><td>Used by the merge helper; a change may break version‑control handling.</td></tr><tr><td><code>sendMessage</code></td><td>6 places</td><td><code>findChannel</code></td><td>Direct network call; bugs affect outbound traffic.</td></tr><tr><td><code>on</code> (event dispatcher)</td><td>6 places</td><td>–</td><td>Event routing hub; mis‑wiring can drop messages.</td></tr></tbody></table></div>
+<p>The <strong>hub modules</strong> identified by the import graph are <code>skills‑engine/constants.ts</code>, <code>skills‑engine/state.ts</code>, and <code>skills‑engine/types.ts</code>. They are imported by 14–17 other files, so they should stay stable and lightweight.</p>
+<p>External effects are limited to:</p>
+<ul><li><strong>Network</strong> – 4 functions (e.g., <code>client.channels.fetch</code> in Discord, WhatsApp API).</li><li><strong>Filesystem</strong> – 54 functions (state files, DB files, container snapshots).</li><li><strong>Database</strong> – 15 functions (SQLite via <code>src/db.ts</code>).</li><li><strong>Model inference</strong> – 1 function (Claude Agent SDK call inside the agent runner).</li></ul>
+<p>No circular imports were detected, and the internal call graph contains 485 resolved edges, indicating a fairly flat call hierarchy.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/nanoclaw
+cd nanoclaw
+
+# Install Node dependencies (root package.json)
+npm ci
+
+# Build the container image used for sandboxed agents
+docker build -t nanoclaw-agent -f container/Dockerfile .
+
+# Initialise the assistant (first‑run wizard)
+npx ts-node src/index.ts  # or use the provided `claude` wrapper if installed globally
+
+# Follow the on‑screen prompts to authenticate WhatsApp and register groups</code></pre>
+<p><em>Configuration</em> – the project ships <code>.env.example</code>; copy it to <code>.env</code> and fill the required tokens (WhatsApp, Discord, etc.). The skill manifest files (e.g., <code>.claude/skills/add-discord/manifest.yaml</code>) describe each integration’s metadata and are read by the Claude Agent SDK at runtime.</p>
+<p><em>Running a skill</em> – after setup, invoke a skill via the Claude chat interface, e.g., <code>/add-telegram</code>. The skill’s code lives in <code>.claude/skills/add-telegram/modify/src/index.ts</code> and follows the same load‑state → register → loop pattern as the Discord entry point.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A user wants a private WhatsApp‑backed assistant that can run a nightly “summarise today’s email” job. They:</p>
+<ol><li>Run the quick‑start steps above.</li><li>In the Claude chat, execute <code>/add-gmail</code> (skill located at <code>.claude/skills/add-gmail/</code>).</li><li>Add a scheduled task via <code>/schedule</code> that calls a custom script stored under <code>scripts/</code>.</li><li>The task runs inside an isolated Docker container (<code>container/agent‑runner</code>), reads the Gmail token from the mounted secret, writes a summary to the group’s <code>CLAUDE.md</code> file, and sends the result back through WhatsApp.</li></ol>
+<p>All actions are confined to the per‑group filesystem; a compromise in one group cannot affect another.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pushes go directly to the default branch (<code>.github/workflows/update-tokens.yml</code>). Fix: use a bot branch and PR workflow.</li><li><strong>Medium</strong> – GitHub token permissions are not scoped (<code>.github/workflows/skill-tests.yml</code>). Fix: add <code>permissions:</code> block.</li><li><strong>Medium</strong> – No Dependabot/Renovate configured. Fix: add <code>.github/dependabot.yml</code>.</li><li><strong>Medium</strong> – Base image not pinned (<code>container/Dockerfile</code> uses <code>node:22-slim</code>). Fix: pin by digest.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI. Fix: add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Large binary (<code>assets/nanoclaw-profile.jpeg</code> 5.6 MiB) stored in Git. Fix: use Git LFS or external storage.</li><li><strong>Medium</strong> – Checkout step keeps credentials (<code>persist-credentials</code> default). Fix: set <code>persist-credentials: false</code>.</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout‑minutes</code>. Fix: add reasonable timeouts.</li></ul>
+<p>Additional observations: tests exist (43 files) and run via GitHub Actions; a LICENSE file and npm lockfiles are present; no committed secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>nanoclaw</code> provides a minimal, container‑isolated Claude assistant that is easy to audit and extend for a single user. The codebase is small and well‑structured, but several hub modules carry a high change impact, and the repo would benefit from tighter CI controls and dependency management. It is suitable for engineers who need a personal AI chat‑assistant and are comfortable modifying TypeScript source directly.</p>
             </div>
 
             
@@ -91,9 +135,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">

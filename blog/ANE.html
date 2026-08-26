@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 2, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Training neural networks on the Apple Neural Engine (ANE) is a pain in the neck. Apple decided you can only use the ANE for inference, leaving developers to jump through hoops for training. It’s like having a powerful engine but only being allowed to drive in reverse. This repo tackles that by reverse-engineering private APIs to enable training directly on ANE hardware.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The ANE repo gives you a from-scratch implementation for training transformer models using the ANE. It’s not just a half-baked idea; it actually utilizes the private ANEClient and ANECompiler APIs to run custom compute graphs. Check out the training/trainlarge.m file for the main training loop, where the magic happens. Each training step involves six ANE kernels, as defined in the architecture section of the README, allowing for forward and backward passes right on the chip.</p><p>The training/Makefile sets everything up for you, so you can compile the training program without dealing with unnecessary dependencies. You can run ./trainlarge and watch your model train on the ANE without the need for CoreML or Metal. Pretty neat, right?</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re building a transformer model for a natural language processing task and you want to leverage the ANE&#39;s compute power. You can follow the setup in training/README.md to get started. Just tweak train.m or trainlarge.m to fit your model architecture. You can also peek at the training/test*.m files for unit tests on individual kernels to ensure everything is working as expected.</p><p>Here’s a quick snippet to kick things off:</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is a solid solution for those who want to push the limits of Apple’s hardware but don’t expect corporate-level support. It’s a bit niche and probably overkill for small projects, but if you&#39;re deep into machine learning and own Apple Silicon, you’ll find this useful. Just be prepared to dig into some reverse-engineering if you want to modify anything.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>There is no Apple‑provided training API for the Neural Engine (ANE).  The ANE is a 15.8 TFLOPS inference accelerator on Apple Silicon, but developers who want to run custom back‑propagation graphs must reverse‑engineer private <code>_ANEClient</code>/<code>_ANECompiler</code> APIs and the Model Intermediate Language (MIL) format.  This repo fills that gap, offering a from‑scratch forward+backward pipeline that runs on the ANE while the CPU handles norms, residuals, loss and optimizer updates.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The core training loop lives in <strong><code>training/train_large.m</code></strong> and pulls in the MIL generators from <strong><code>training/forward.h</code></strong>, <strong><code>training/backward.h</code></strong> and the ANE wrapper <strong><code>training/ane_runtime.h</code></strong>.  Six ANE kernels are dispatched per step:</p>
+<div class="table-scroll"><table><thead><tr><th>Kernel</th><th>Purpose</th><th>Key files</th></tr></thead><tbody><tr><td><code>kFwdAttn</code></td><td>RMSNorm + QKV + SDPA + output projection</td><td><code>forward.h</code></td></tr><tr><td><code>kFwdFFN</code></td><td>RMSNorm + SwiGLU FFN</td><td><code>forward.h</code></td></tr><tr><td><code>kFFNBwd</code></td><td>FFN backward (W₂ᵀ + SiLU_bwd + W₁ᵀ + W₃ᵀ)</td><td><code>backward.h</code></td></tr><tr><td><code>kSdpaBwd1</code></td><td>Woᵀ + SDPA backward part 1</td><td><code>backward.h</code></td></tr><tr><td><code>kSdpaBwd2</code></td><td>SDPA backward part 2 (softmax grad, dQ, dK)</td><td><code>backward.h</code></td></tr><tr><td><code>kQKVb</code></td><td>QKV backward → dx</td><td><code>backward.h</code></td></tr></tbody></table></div>
+<p>The CPU (Accelerate cblas) accumulates dW gradients, performs Adam updates, and runs RMSNorm backward.  IOSurface memory is laid out channel‑first <code>[1,C,1,S]</code> to eliminate transposes, and vDSP‑vectorised RMSNorm cuts the naive 6.7 ms to 0.7 ms.  An <code>exec()</code> restart bypasses the ~119‑compile limit per process.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point:</strong> <code>training/train_large.m</code> – <code>main()</code> parses hyper‑parameters, builds the MIL program via <code>ANECompiler</code> (resolved at runtime with <code>objc_msgSend</code>), and enters the step loop.</li><li><strong>Build:</strong> <code>Makefile</code> in <code>training/</code> invokes <code>clang -O2 -framework Foundation -framework IOSurface -framework CoreML -framework Accelerate -ldl -lobjc -o train_large training/train_large.m</code>.</li><li><strong>Import graph:</strong> static analysis of 11 files (9 C/C++ header, 2 Python) shows <strong>2 internal modules</strong> (<code>training/dashboard</code>, <code>training/tokenize</code>) with <strong>zero import edges</strong> and <strong>no circular dependencies</strong>.</li><li><strong>External touches:</strong> the process links against Foundation, IOSurface, CoreML and Accelerate; it reads/write check‑point blobs and writes <code>training/tiny_train.m</code> logs.  No network or database calls are made.</li><li><strong>Call‑flow cost:</strong> the deepest nesting (5 levels) appears in <code>training/backward.h</code>, <code>training/stories_io.h</code> and <code>training/dashboard.py</code>; control‑flow is hard to follow without guard‑clause refactoring.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (macOS 15+, Apple Silicon, tested on M4):</p>
+<pre data-lang="bash"><code># Build the training binary
+xcrun clang -O2 -framework Foundation -framework IOSurface \
+  -framework CoreML -framework Accelerate -ldl -lobjc \
+  -o train_large training/train_large.m</code></pre>
+<p><strong>Run</strong></p>
+<pre data-lang="bash"><code>./train_large</code></pre>
+<p>No environment variables or extra config files are required beyond the system frameworks.  The README also lists optional per‑kernel test binaries (<code>test_*.m</code>) that can be compiled individually with the same clang flags.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research team prototyping a transformer‑training pipeline on‑device can invoke <code>./train_large</code> to obtain 9.3 ms/step throughput (M4, dim 768, seq 512) while keeping all heavy compute on the ANE.  The resulting check‑point can be shipped to a GPU‑based production system for final fine‑tuning, or used to evaluate quantisation‑aware training tricks that need low‑precision ANE kernels.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (11 files) surface the following measured findings:</p>
+<ul><li><strong>HIGH/cognitive_load</strong> – Deep nesting ×5 in <code>training/backward.h</code>, <code>training/stories_io.h</code>, <code>training/dashboard.py</code>; control flow is hard to follow.</li><li><strong>MEDIUM/clarity</strong> – Duplicated 6‑line blocks (8 occurrences) across <code>training/ane_runtime.h</code>, <code>training/stories_config.h</code>, <code>training/backward.h</code>, <code>training/forward.h</code>; extract shared helpers.</li><li><strong>MEDIUM/resilience</strong> – Broad <code>except</code> in <code>training/dashboard.py</code> swallows errors indiscriminately; catch specific exceptions.</li><li><strong>MEDIUM/cognitive_load</strong> – <code>training/dashboard.py</code> is 760 lines; split into cohesive units by responsibility.</li><li><strong>MEDIUM/cognitive_load</strong> – <code>training/forward.h</code> has 41 branch points over 144 lines; decompose decision‑heavy logic (strategy dispatch table).</li></ul>
+<p><strong>SDLC observations</strong> (outside the measured block): no CI/CD pipeline (<code>.github/</code> or CI config absent), no Dockerfile, licence file present, no lockfile, no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This repo delivers a working, low‑level ANE training pipeline where Apple does not, achieving ~1.8 TFLOPS sustained on a single transformer layer.  The codebase is functional but suffers from deep nesting, duplicated logic and an oversized dashboard file that together raise maintenance risk.  It is best suited for experimenters and hardware‑research teams comfortable with private APIs and willing to refactor the identified hot‑spots for long‑term stability.</p>
             </div>
 
             
@@ -91,9 +115,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +137,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1170910505">Open in Code Brain &rarr;</a>

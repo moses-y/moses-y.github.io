@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 26, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#building-a-polymarket-rsi-macd-trading-bot-in-ty">Building a Polymarket RSI/MACD Trading Bot in TypeScript</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="building-a-polymarket-rsi-macd-trading-bot-in-ty">Building a Polymarket RSI/MACD Trading Bot in TypeScript</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Predictive trading on Polymarket&#39;s 15-minute markets isn’t exactly beginner-friendly. You’ve got RSI, MACD, and momentum signals to juggle, all while figuring out how to execute trades on their decentralized CLOB (Central Limit Order Book). Sure, you could YOLO your way through it, but manual strategies are slow, error-prone, and frankly, a pain in the ass to scale.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This bot automates trading decisions using technical indicators like RSI, MACD, and Momentum, with clear separation of concerns in the codebase. The entry point (src/main.ts) handles authentication, market discovery, and running your chosen mode—either simulation or live trading.</p><p>The heavy lifting happens in src/indicators.ts and src/strategies.ts. Indicators like RollingRSI and RollingMACD crunch market data, while decide() in strategies.ts applies strategy logic to generate buy/sell signals. Meanwhile, src/monitor.ts takes care of market data snapshots, and src/api.ts wraps Polymarket&#39;s Gamma API and CLOB functionality into a neat little package.</p><p>Configuration is managed in config.json. You’ll define stuff like your private key, API URLs, trading thresholds, and strategy settings (rsi, macd, etc.). There’s even flexibility to toggle between simulation and live modes with a simple CLI flag.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you want to run a momentum strategy on ETH’s 15-minute markets. You’d start by cloning the repo, running npm install, and copying config.json.example to config.json. Then, set your polymarket.private_key for live mode or leave it blank for simulations.</p><p>The bot will use your config to fetch market data (src/monitor.ts), calculate momentum signals (src/indicators.ts), and log trading decisions (simulation.ts). Want to go live? Swap --simulation for --live and watch it place actual orders via src/clob.ts.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Look, it’s a solid bot if you’re into algo trading on Polymarket. The code is clean, modular, and reasonably documented, though the lack of stars suggests it’s either underused or overshadowed by the original Rust version. If you’re comfortable with TypeScript and want a framework for experimenting with RSI/MACD strategies, this is worth cloning. Just don’t expect hand-holding—this is DIY trading, not a plug-and-play solution.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Polymarket’s 15‑minute prediction markets require fast, repeatable signal generation and optional order execution. Manual monitoring is error‑prone and cannot keep up with the rapid market cycles, leading to missed opportunities or unintended exposure.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo implements a TypeScript bot that computes RSI, MACD, and Momentum indexes for ETH and BTC 15‑minute markets and decides whether to place a trade. Core logic lives in <code>src/indicators.ts</code> (rolling calculations) and <code>src/strategies.ts</code> (decision engine). Configuration and CLI parsing are in <code>src/config.ts</code>; API interaction with Polymarket’s Gamma and CLOB endpoints is in <code>src/api.ts</code>. A simulation mode (<code>--simulation</code>) logs signals only, while <code>--live</code> forwards decisions to <code>src/clob.ts</code> for real order placement.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>src/main.ts</code> (<code>main</code> at line 26) parses CLI flags via <code>parseArgs</code> (in <code>config.ts</code>), loads <code>config.json</code>, and runs <code>discoverMarket</code> (monitor.ts).</li><li><strong>Market discovery</strong> – <code>discoverMarket</code> calls <code>PolymarketApi.getMarketBySlug</code> (api.ts) to obtain market metadata, then creates a dummy market object (<code>createDummyMarket</code>) for simulation or real use.</li><li><strong>Snapshot loop</strong> – <code>getSnapshot</code> (main.ts) repeatedly invokes <code>fetchSnapshot</code> (monitor.ts) → <code>fetchMarketData</code> (monitor.ts) → <code>PolymarketApi.getSidePrice</code>. The snapshot is converted to a <code>PricePoint</code> by <code>snapshotToPricePoint</code> (simulation.ts).</li><li><strong>Indicator update</strong> – Each new price is fed to <code>addPrice</code> (indicators.ts), which updates RSI (<code>getRSI</code>), MACD (<code>getMACD</code>), and Momentum (<code>getMomentum</code>). These functions are each called from two places (simulation loop and strategy decision).</li><li><strong>Decision</strong> – <code>decide</code> (strategies.ts) receives the current index via <code>calculateIndex</code> (strategies.ts) and the indicator state. It returns a <code>TradeAction</code> (BuyUp/BuyDown/Neutral).</li><li><strong>Execution</strong> – In live mode, the returned action routes to <code>placeLimitOrder</code> (clob.ts), which builds a signed order using the private key from <code>config.json</code>. In simulation mode the action is only logged.</li></ol>
+<p><strong>Call‑graph hot spots</strong></p>
+<ul><li><code>main</code> reaches 36 functions, the widest blast radius.</li><li><code>src/config.ts</code> is imported by five other modules, making it a stability anchor (instability 0).</li><li><code>src/indicators.ts</code> hosts 17 functions and is called from two files, central to the bot’s calculations.</li></ul>
+<p>No circular dependencies were detected, but <code>src/simulation.ts</code> and <code>src/clob.ts</code> contain dense branching (≈30 branches over 76 lines), raising cognitive load.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Polymarket-rsi-macd-index-trading-bot
+cd Polymarket-rsi-macd-index-trading-bot
+
+# Install dependencies
+npm install
+
+# Prepare configuration
+cp config.json.example config.json
+# Edit config.json – at minimum set polymarket.private_key for live mode
+
+# Run simulation (default)
+npm run dev   # or: npx tsx src/main.ts --simulation
+
+# Run live trading
+npx tsx src/main.ts --live</code></pre>
+<p>The CLI accepts <code>--config /path/to/config.json</code> to point at an alternative config file.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A market‑making service can embed this bot in a container that runs continuously. The service starts the bot with <code>--live</code>, monitors the log for “BuyUp” signals, and the bot automatically places limit orders via the CLOB client, keeping exposure aligned with the configured <code>position_size</code> and risk thresholds.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing LICENSE</strong> – No licence file at repository root; legal reuse is blocked.</li><li><strong>High – No CI pipeline</strong> – No <code>.github/workflows</code> or other CI config; builds and tests are never automatically verified.</li><li><strong>High – Dependabot not configured</strong> – No <code>dependabot.yml</code>; dependencies (<code>@types/node</code>, <code>typescript</code>, <code>ethers</code>) are several major versions behind.</li><li><strong>Medium – Duplicated code</strong> – Repeated 6‑line blocks in <code>src/config.ts</code> and <code>src/strategies.ts</code>; extract to a shared helper.</li><li><strong>Medium – High branching density</strong> – <code>src/clob.ts</code> and <code>src/simulation.ts</code> each have ~30 branch points in &lt;80 lines; refactor into smaller, testable functions.</li><li><strong>Medium – No tests</strong> – Repository contains no test files, leaving core calculation paths unvalidated.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The bot provides a functional, TypeScript‑based implementation of Polymarket RSI/MACD trading logic with clear separation of config, API, indicator, and strategy layers. It is ready for simulation but requires engineering effort to add licensing, CI, dependency updates, and test coverage before being safe for production deployment. Suitable for teams that can invest in these missing engineering practices.</p>
             </div>
 
             
@@ -91,9 +123,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -158,6 +190,12 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1167600930">Open in Code Brain &rarr;</a>
