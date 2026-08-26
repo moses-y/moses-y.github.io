@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 24, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,19 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers need a reliable way to turn an OpenAPI specification into ready‑to‑use TypeScript assets (SDKs, schemas, query hooks, etc.) without hand‑crafting boilerplate or maintaining divergent client codebases.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>openapi-ts is a code‑generator that consumes any OpenAPI document and emits TypeScript modules tailored to the chosen runtime. Core generation lives in dev/openapi-ts.config.ts, which defines the input spec and output locations. The generated SDK, schema, and utility files are placed under examples/openapi-ts-angular-common/src/client/ (e.g., client.gen.ts, schemas.gen.ts, types.gen.ts).</p><p>A rich plugin ecosystem lives in docs/openapi-ts/plugins/ and is referenced from the config file; each markdown file (e.g., plugins/axios.md, plugins/zod.md) documents a concrete plugin implementation. The repository also ships full framework examples (Angular, Vue, Next.js, etc.) under examples/, showing how the generated code integrates with real projects.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone &amp; install – the repo is mono‑repo style; each sub‑package has its own package.json. For a quick start, work inside the Angular example:</p><p>git clone https://github.com/hey-api/openapi-ts.git
-   cd openapi-ts/examples/openapi-ts-angular-common
-   npm ci        # installs exact lockfile versions
-Configure the generator – edit openapi-ts.config.ts (in the same folder) to point input at your OpenAPI JSON/YAML and set output to the src/client/ directory. The file follows the shape described in docs/openapi-ts/configuration/.md.
-Run the generator – the CLI is exported by the package @hey-api/openapi-ts. The example’s package.json defines a script &quot;generate&quot;: &quot;openapi-ts&quot; (verified in examples/openapi-ts-angular-common/package.json). Execute:</p><p>npm run generate</p><p>The command produces the .gen.ts files under src/client/.
-Consume the SDK – import the generated client in your Angular app, e.g.:</p><p>import { createClient } from &#39;./client/client.gen&#39;;
-   const api = createClient({ baseUrl: &#39;https://api.example.com&#39; });
-   api.getUser({ userId: &#39;123&#39; }).then(console.log);</p><p>Similar import patterns apply to the other framework examples.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A SaaS product that publishes an OpenAPI spec can add openapi-ts to its CI pipeline. After each spec change, npm run generate runs, producing a version‑locked TypeScript SDK that is published to an internal npm registry. Front‑end teams then import the SDK directly, guaranteeing type‑safe calls without hand‑rolled request wrappers.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low severity – Documentation depth – The repo contains 126 markdown files, including detailed plugin guides, but the top‑level README lacks a quick‑start snippet. New users must navigate to docs/openapi-ts/get-started.md.  
-Medium severity – Test coverage – Only four test files are present (tests/changelog.test.ts). No unit tests target the core generator logic, which may hide edge‑case bugs.  
-Low severity – CI configuration – GitHub Actions workflows (.github/workflows/ci.yml, coverage.yml) are defined and badge shows passing status, indicating basic CI health.  
-Low severity – Dependency hygiene – Multiple package.json files lock dependencies via npm ci; no lockfile is present at the repository root, which could lead to version drift when working outside the example folders.  
-Low severity – License &amp; Legal – MIT license is present (LICENSE.md). No obvious secret keys or credentials are committed.</p><p>Overall the codebase follows a clear separation: config (dev/), documentation (docs/), and consumable examples (examples/). No glaring architectural anti‑patterns are evident.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>openapi-ts delivers a practical, plugin‑driven pipeline for generating type‑safe TypeScript clients from any OpenAPI spec, with solid CI and an extensive docs set. The main drawbacks are minimal automated testing of the generator itself and a fragmented package layout that may require extra steps to set up in non‑example projects. Teams that need repeatable, typed API clients and are comfortable managing a mono‑repo will find it a strong fit; smaller projects may prefer a lighter‑weight generator with tighter test coverage.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a reliable way to turn an OpenAPI spec into ready‑to‑use TypeScript client code (SDKs, Zod schemas, TanStack Query hooks, etc.). Maintaining hand‑written adapters for each HTTP client quickly becomes a source of bugs and duplicated effort.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>openapi-ts</code> is a mono‑repo that bundles a <strong>code generator</strong> and a suite of <strong>framework‑specific adapters</strong>. The generator lives in <code>packages/</code> (e.g., <code>packages/openapi-ts/src/createClient.ts</code>) and produces files such as <code>examples/openapi-ts-axios/src/client/sdk.gen.ts</code> and the many <code>*.types.gen.ts</code> files found in each example.</p>
+<ul><li>Core generation logic (<code>createClient</code>, <code>makeMethodFn</code>, <code>makeSseFn</code>) is exercised 135 times each, stitching together request helpers, SSE support, and configuration merging.</li><li>The generated SDKs are framework‑agnostic; adapters for <strong>Axios</strong>, <strong>Fetch</strong>, <strong>Angular</strong>, <strong>Nuxt</strong>, <strong>Fastify</strong>, etc., live under <code>examples/</code> and simply re‑export the same client shape with a thin wrapper.</li><li>Plugins (20+) are discovered at build time and can inject extra code (e.g., Zod schema generation) without touching the core generator.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in the <strong>example entry points</strong>:</p>
+<div class="table-scroll"><table><thead><tr><th>Entry point</th><th>File</th><th>Reach</th></tr></thead><tbody><tr><td><code>App</code></td><td><code>examples/openapi-ts-axios/src/App.tsx:47</code></td><td>66 functions</td></tr><tr><td><code>setup</code></td><td><code>packages/nuxt/src/module.ts:42</code></td><td>151 functions</td></tr><tr><td><code>handler</code></td><td><code>dev/playground.ts:14</code></td><td>55 functions</td></tr><tr><td><code>buildServer</code></td><td><code>examples/openapi-ts-fastify/src/server.ts:9</code></td><td>67 functions</td></tr></tbody></table></div>
+<p>All of them eventually call the <strong>generator core</strong>:</p>
+<ol><li><strong><code>setup</code> → <code>createClient</code></strong> (in <code>packages/openapi-ts/src/createClient.ts</code>) – creates a client factory.</li><li><code>createClient</code> calls <strong><code>makeMethodFn</code></strong> and <strong><code>makeSseFn</code></strong> (135 calls each) to produce per‑operation functions.</li><li>Each method function invokes <strong><code>request</code></strong> → <strong><code>parse</code></strong> (21 edges) to perform HTTP calls and deserialize responses.</li><li>Configuration is merged via <strong><code>mergeConfigs</code></strong> (16 calls) and <strong><code>createConfig</code></strong> (16 calls).</li></ol>
+<p>A single outbound side‑effect is the <strong>filesystem write</strong> performed by <code>generateOutput</code> (called from <code>setup → createClient → generateOutput</code>) which uses <code>fs.writeFileSync</code>. One generated file (<code>examples/openapi-ts-openai/src/client/sdk.gen.ts</code>) also triggers a <strong>model inference</strong> call (e.g., an OpenAI request) as part of its SDK logic.</p>
+<p>The most‑central functions by call‑count are <code>resolve</code> (24 callers), <code>requestOptions</code> (20), and <code>createQueryKey</code> (16). Their wide usage means changes here have the highest blast radius across all generated SDKs.</p>
+<p>No cycles of high depth appear in the resolved call graph; the flow is essentially a tree from the entry point down to <code>request</code>/<code>parse</code> and finally to the network layer.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (exact URL required)
+git clone https://github.com/moses-y/openapi-ts
+cd openapi-ts
+
+# Install dependencies (pnpm is the declared manager)
+pnpm install
+
+# Run a concrete example – e.g., the Axios demo
+pnpm --filter openapi-ts-axios dev   # starts the React app (see App.tsx)
+
+# Or generate a client from a custom spec
+pnpm run generate --filter @hey-api/openapi-ts  # uses dev/openapi-ts.config.ts</code></pre>
+<p><em>Configuration</em> lives in <code>dev/openapi-ts.config.ts</code> (or the sibling <code>dev/openapi-python.config.ts</code> for Python). The file exports a <code>config</code> object consumed by the generator; no secret keys are required for the basic generation step.</p>
+<p><em>Running a server</em> example (Fastify) is done via:</p>
+<pre data-lang="bash"><code>pnpm --filter openapi-ts-fastify dev   # starts the Fastify server (see server.ts)</code></pre>
+<p>If you need a different HTTP client, replace the example folder (e.g., <code>openapi-ts-angular</code>) and run its <code>dev</code> script.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A microservice team can point <code>openapi-ts</code> at their OpenAPI spec, generate a TypeScript SDK, and drop the resulting <code>client/sdk.gen.ts</code> into a Next.js front‑end. The front‑end imports the SDK, calls <code>client.getPetById(id)</code>, and receives a fully typed response without manual request‑building code. The generated SDK can be swapped for an Axios‑based version simply by switching the example folder.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin third‑party GitHub Actions to commit SHA (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – Push directly to default branch in <code>contributors.yml</code> (use PRs).</li><li><strong>Medium</strong> – Add least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> (<code>.github/workflows/ci.yml</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI.</li><li><strong>Medium</strong> – Move large binary <code>docs/public/assets/raw/openapi-ts-hero.png</code> (5 MB) to Git LFS.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout (<code>.github/workflows/ci.yml</code>).</li><li><strong>Low</strong> – Define <code>timeout-minutes</code> on workflow jobs (<code>.github/workflows/ci.yml</code>).</li></ul>
+<p>All other hygiene checks pass: tests (<code>__tests__</code>), CI, license, lockfile, and no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>openapi-ts</code> delivers a production‑grade OpenAPI → TypeScript pipeline with a clear separation between the generator core and framework adapters. The codebase is well‑tested and CI‑protected, but CI configuration needs tightening (action pinning, PR‑only merges, token permissions). Teams that already use TypeScript and need auto‑generated, client‑library‑ready SDKs will find it ready to adopt; smaller projects may prefer a lighter‑weight generator until the CI hardening is applied.</p>
             </div>
 
             
@@ -109,11 +134,11 @@ Low severity – License &amp; Legal – MIT license is present (LICENSE.md). No
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">7,018<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>85</b></li><li><span>TypeScript</span><i style="width:40%"></i><b>34</b></li><li><span>JSON</span><i style="width:20%"></i><b>17</b></li><li><span>Vue</span><i style="width:11%"></i><b>9</b></li><li><span>YAML</span><i style="width:9%"></i><b>8</b></li><li><span>JavaScript</span><i style="width:7%"></i><b>6</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>6206</b></li><li><span>JSON</span><i style="width:4%"></i><b>238</b></li><li><span>Python</span><i style="width:2%"></i><b>134</b></li><li><span>YAML</span><i style="width:2%"></i><b>125</b></li><li><span>Markdown</span><i style="width:2%"></i><b>124</b></li><li><span>JavaScript</span><i style="width:0%"></i><b>23</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Vue</span><span>Angular</span><span>FastAPI</span><span>Express</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Vue</span><span>Svelte</span><span>Angular</span><span>FastAPI</span><span>Express</span><span>Tailwind</span><span>Transformers</span></p>
                     </div>
                 </div>
 

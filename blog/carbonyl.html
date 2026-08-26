@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#docker">Docker</a><a href="#binaries">Binaries</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Terminal users have long been stuck with text-only browsers like lynx or clunky framebuffer hacks like browsh. Neither handles modern web standards. lynx cannot run JavaScript, and browsh requires a Firefox instance and burns ~50x more CPU by downscaling a full framebuffer. Carbonyl solves this by embedding a real Chromium engine that renders natively to the terminal resolution.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Carbonyl is a Chromium-based browser that renders directly into a terminal. The architecture is split into two parts: a Rust &quot;core&quot; (src/lib.rs, src/browser/, src/output/) compiled into libcarbonyl, and a patched Chromium &quot;runtime&quot; that dynamically loads that library. The chromium/patches/ directory contains 16 patches that modify Chromium, Skia, and WebRTC to bridge rendering into the terminal.</p><p>The Rust core handles terminal I/O (src/input/), rendering (src/output/), and UI state (src/ui/). It uses a custom renderer (src/output/renderer.rs) with a KD-tree quantizer (src/output/kdtree.rs) to map Chromium&#39;s framebuffer to terminal cells. The src/browser/ directory contains the C++ bridge code that connects Blink to the Rust library.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README documents three installation paths:</p><h3 class="post-h" id="docker">Docker</h3><p>$ docker run --rm -ti fathyb/carbonyl https://youtube.com</p><p>npm
-$ npm install --global carbonyl
-$ carbonyl https://github.com</p><h3 class="post-h" id="binaries">Binaries</h3><p>Download from GitHub releases for macOS/Linux (amd64/arm64)</p><p>For development, the core Rust code builds with cargo build (per Cargo.toml). The full Chromium runtime requires scripts/build.sh and takes over an hour. Configuration is minimal — there are no environment variables or config files. The CLI entry point is src/cli.rs, which takes a URL as its argument. The Dockerfile provides a reproducible build path.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Carbonyl fits scenarios where a graphical browser is unavailable or undesirable: SSH sessions to headless servers, safe-mode console recovery, or CI environments that need to verify web pages render. It supports WebGL, WebGPU, audio/video, and animations, so it can run full web apps. A practical example: an operator SSHes into a remote server and runs carbonyl https://grafana.local/d/... to check a dashboard without X forwarding or a VNC tunnel.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High — No test files detected — the entire Rust core (src/) has zero tests. Given the complexity of the rendering pipeline (src/output/quantizer.rs, src/output/kdtree.rs), this is a significant risk.
-Medium — No CI/CD pipeline — .github/ contains only funding.yml. No automated build or test gate exists, which is concerning for a project with a multi-hour Chromium build.
-Medium — Heavy patching of Chromium — 16 patches across chromium/patches/ modify core rendering and text layout. These will break or need significant rework on every Chromium update.
-Low — package.json present but unclear role — likely for the npm distribution wrapper (scripts/npm-package.mjs), but the dependency surface is undocumented.
-Low — No license file — license.md exists but the README doesn&#39;t state the license. This matters for commercial use.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Carbonyl is an impressive technical achievement — a full Chromium browser that runs at 60 FPS in a terminal with 0% idle CPU. The architecture is sound: the Rust core is modular and the patch set is organized. However, the lack of tests and CI, combined with the fragile Chromium patching strategy, makes it risky for production use. It&#39;s best suited for developers who need a modern browser in constrained environments and are willing to maintain the build themselves.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Carbonyl brings a full Chromium-based browser into a terminal, allowing web rendering without a window server. It is useful for SSH‑based remote work, head‑less environments, or any scenario where a GUI is unavailable but web content must be displayed.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The project splits into a Rust core (<code>libcarbonyl</code>) and a modified Chromium head‑less shell (<code>carbonyl</code> executable). The core is built with <code>cargo build</code> and provides a small API; the runtime loads the core and handles the browser UI. Key files and their responsibilities (from the responsibility map) are:</p>
+<ul><li><code>src/lib.rs</code> – entry point that wires the core and runtime.</li><li><code>src/cli/cli.rs</code> – parses command‑line arguments (<code>parse</code>, <code>CommandLine</code>, <code>EnvVar</code>).</li><li><code>src/browser/bridge.rs</code> – the Rust‑to‑Chromium bridge (20 functions, 9 types).</li><li><code>src/input/tty.rs</code> – terminal I/O setup (<code>setup</code>, <code>teardown</code>, <code>stdin</code>, <code>enter_alt_screen</code>).</li><li><code>src/output/renderer.rs</code> – renders frames to the terminal (<code>enable_true_color</code>, <code>keypress</code>, mouse events).</li></ul>
+<p>The repository supports virtually all Web APIs—WebGL, WebGPU, audio, video— and starts in under a second, idling at 0 % CPU.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>build.rs:42</code>, which reaches 19 functions and is called from one place. From <code>main</code> the control flow goes through <code>parse</code> (<code>src/cli/cli.rs:39</code>), called from eight locations, then into the browser bridge and input handling. The internal call graph contains 84 resolved edges; the most‑connected functions are <code>parse</code> (8 callers), <code>render</code> (7 callers), and <code>cast</code> (5 callers).</p>
+<p>A traced path to the filesystem: <code>main → stdin [File::open]</code> and <code>setup → open_raw [Self::open]</code>. No other edges leave the process beyond these two routes. The module graph shows no circular dependencies; the most connected modules are <code>.refloat/config</code> and <code>scripts/npm-package</code>, both with zero importers and importers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<ul><li>Clone the repository:</li></ul>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/carbonyl</code></pre>
+<ul><li>For the Rust core:</li></ul>
+<pre data-lang="bash"><code>cd carbonyl
+cargo build          # builds libcarbonyl</code></pre>
+<ul><li>For the runtime binary (requires a full Chromium build, &gt;1 hour):</li></ul>
+<pre data-lang="bash"><code>scripts/build.sh     # orchestrates the Chromium build</code></pre>
+<p><strong>Configuration</strong></p>
+<ul><li>Environment variables are read from <code>scripts/env.sh</code>; the <code>.refloat/config.js</code> file holds runtime preferences.</li><li>The Dockerfile uses <code>rust:1.67</code> and <code>debian:bullseye-slim</code> (mutable base image; see the “Code Health &amp; Issues” section).</li></ul>
+<p><strong>Running it</strong></p>
+<ul><li>Via Docker (no local build needed):</li></ul>
+<pre data-lang="bash"><code>docker run --rm -ti fathyb/carbonyl https://youtube.com</code></pre>
+<ul><li>From the built binary:</li></ul>
+<pre data-lang="bash"><code>./target/release/carbonyl https://github.com</code></pre>
+<ul><li>npm global install (if the npm package is published):</li></ul>
+<pre data-lang="bash"><code>npm install --global carbonyl
+carbonyl https://example.com</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer SSH‑ed into a head‑less server can launch <code>carbonyl https://internal‑dashboard.com</code> and view the UI directly in the terminal, without X11 or VNC. Because the core is a shared library, it can also be embedded by other Rust projects that need a lightweight web view (e.g., documentation renderers or remote‑debugging tools).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured static‑analysis findings</strong> (11 total, 5 high, 6 medium, 0 low, 1 distinct kind):</p>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Deep nesting across 11 instances in <code>src/browser/bridge.rs</code>, <code>src/browser/host_display_client.cc</code>, and <code>src/cli/cli.rs</code>. Maximum indentation depth 8 makes control‑flow hard to follow. Remedy: flatten with early returns/guard clauses and extract inner blocks.</li></ul>
+<p><strong>SDLC observations (from the code‑health audit):</strong></p>
+<ul><li><strong>[HIGH]</strong> Add a test suite – the repo has 47 source files and no test files; without tests regressions go undetected.</li><li><strong>[HIGH]</strong> Add a CI/CD workflow that builds and tests on push/pull_request – currently no pipeline exists.</li><li><strong>[HIGH]</strong> Add a build gate for deployable artifacts (Dockerfile) – the Dockerfile has not been validated by an automated step.</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate – two manifests (Cargo.toml, package.json) are present but no update bot is configured.</li><li><strong>[MEDIUM]</strong> Pin the container base image by digest in the Dockerfile – currently <code>rust:1.67</code> and <code>debian:bullseye-slim</code> are mutable.</li><li><strong>[LOW]</strong> Add repository convention files – missing <code>.editorconfig</code>, <code>.gitattributes</code> (text=auto eol=lf), and a formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Carbonyl delivers a surprisingly capable Chromium experience inside a terminal, with low overhead and no window‑server requirement. The codebase is functional but lacks tests, CI, and image‑pinning safeguards; those gaps should be addressed before production use. It is well‑suited for developers, sysadmins, and anyone needing a lightweight web view in constrained environments.</p>
             </div>
 
             

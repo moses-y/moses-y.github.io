@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 26, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Java</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Polymarket traders and researchers face a fragmented toolchain: market data lives in multiple APIs, trade execution requires signed CLOB requests, and strategy research means stitching together data pipelines by hand. polybot consolidates this into a self-hosted trading infrastructure with data ingestion, analytics, execution, and research tooling.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>polybot is a Java 21 / Spring Boot multi-service system. polybot-core contains the shared trading primitives: Polymarket CLOB auth (PolymarketAuthHeaders.java, Eip712Signer.java), order construction (PolymarketOrderBuilder.java, LimitOrderRequest.java), WebSocket top-of-book streaming (ClobMarketWebSocketClient.java), and market discovery (PolymarketMarketDiscoveryService.java). The ingestor-service pulls market data, user trades, and on-chain Polygon receipts into ClickHouse via a 20+ file SQL migration chain under analytics-service/clickhouse/init/. The executor-service handles order placement, a paper-trading simulator (PaperExchangeSimulator.java), and on-chain settlement (PolymarketSettlementService.java). The analytics-service exposes query APIs over the ClickHouse data, and infrastructure-orchestrator-service manages Docker Compose lifecycles for the analytics and monitoring stacks.</p><p>The research/ directory contains Python scripts for backtesting (backtest/strategybacktest.py), data quality checks (dataqualityreport.py), and strategy replication analysis (finalstrategyfindings.py).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README documents a full local deployment. Prerequisites are Java 21, Maven 3.8+, Docker with Compose, and Python 3.11.</p><p>Setup and run:</p><p>git clone https://github.com/ent0n29/polybot.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Polymarket traders need a repeatable way to capture market‑making strategies, replay them against historic order‑book data, and evaluate profitability. Existing tooling is fragmented, manual, and ties together a mix of on‑chain ingestion, low‑latency execution, and post‑trade analytics. The result is high engineering overhead and unreliable back‑testing.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>polybot</code> supplies a self‑contained portfolio of seven micro‑services that together provide the full data‑to‑execution pipeline:</p>
+<ul><li><strong>polybot‑core</strong> – shared domain models, authentication (<code>polybot-core/src/main/java/com/polybot/hft/polymarket/auth/PolymarketAuthContext.java</code>) and market discovery utilities.</li><li><strong>ingestor‑service</strong> – consumes Polymarket trade streams, writes normalized rows into ClickHouse (<code>ingestor-service/src/main/java/com/polybot/hft/ingestor/ClickHouseWriter.java</code>).</li><li><strong>executor‑service</strong> – runs live or paper orders, monitors order status (<code>executor-service/src/main/java/com/polybot/hft/executor/order/ExecutorOrderMonitor.java</code>).</li><li><strong>strategy‑service</strong> – loads strategy implementations (e.g., <code>strategy-service/src/main/java/com/polybot/hft/polymarket/strategy/GabagoolDirectionalEngine.java</code>) and exposes runtime status via REST.</li><li><strong>analytics‑service</strong> – queries ClickHouse for position‑level metrics, exposing them through <code>AnalyticsController</code>.</li><li><strong>infrastructure‑orchestrator‑service</strong> – starts/stops the auxiliary stacks (ClickHouse, Redpanda, Prometheus) and reports health.</li><li><strong>research</strong> – Python notebooks and scripts (<code>research/deep_analysis.py</code>, <code>research/paper_trading_dashboard.py</code>) for offline back‑testing and metric generation.</li></ul>
+<p>All services are Maven‑built Java 21 Spring Boot apps, containerised via the Docker Compose files (<code>docker-compose.analytics.yaml</code>, <code>docker-compose.monitoring.yaml</code>). The ClickHouse schema lives under <code>analytics-service/clickhouse/init/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry points</strong> – each service launches from its <code>*Application.java</code> class (e.g., <code>AnalyticsServiceApplication</code>, <code>ExecutorServiceApplication</code>). Spring Boot creates the REST layer, injects beans from <code>polybot-core</code>, and starts the embedded Tomcat server.</p>
+<p><strong>Request flow (analytics example)</strong></p>
+<ol><li>HTTP GET <code>/api/analytics/status</code> → <code>AnalyticsController</code> (<code>analytics-service/src/main/java/com/polybot/analytics/web/AnalyticsController.java</code>).</li><li>Controller calls <code>UserPositionAnalyticsRepository</code> → concrete <code>JdbcUserPositionAnalyticsRepository</code>.</li><li>Repository obtains a JDBC connection (configured in <code>application.yaml</code>) and runs ClickHouse SQL defined in the <code>clickhouse/init</code> scripts.</li><li>Result set is mapped to POJOs and returned to the client.</li></ol>
+<p><strong>Execution flow (executor example)</strong></p>
+<ol><li>Order request arrives at <code>ExecutorOrderMonitor</code>.</li><li>Monitor validates via <code>PolymarketAuthContext</code> (shared core).</li><li>Calls <code>ExecutorMetricsService</code> for latency tracking, then dispatches to <code>ExecutorMarketOrderEvent</code> or <code>ExecutorLimitOrderEvent</code>.</li><li>For paper mode, <code>PaperExchangeSimulator</code> (large file) simulates fills; for live mode it invokes <code>PolymarketBankrollService</code> which signs and sends transactions using the private key from <code>.env.example</code>.</li></ol>
+<p><strong>Cross‑service coupling</strong> – the only shared artifact is <code>polybot-core</code>. No import cycles were detected; internal modules are isolated, keeping blast radius low. The most widely used core classes are the auth context and market discovery service, each referenced by executor, strategy, and ingestor.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact upstream repo
+git clone https://github.com/moses-y/polybot.git
 cd polybot
+
+# Install Java 21, Maven 3.8+, Docker Compose
 cp .env.example .env
-set -a; source .env; set +a
-./start-all-services.sh</p><p>Verify:</p><p>curl http://localhost:8080/actuator/health
-curl http://localhost:8123 --data &quot;SELECT 1&quot;</p><p>Configuration: Key env vars in .env.example include POLYMARKETTARGETUSER for research, and POLYMARKETPRIVATEKEY, POLYMARKETAPIKEY, POLYMARKETAPISECRET, POLYMARKETAPIPASSPHRASE for live trading. The README notes Spring Boot does not auto-load .env; export variables in your shell.</p><p>Running it: The start script builds Maven artifacts and launches all services with the develop profile. Services listen on ports 8080–8084. Manual startup commands are also documented in the README. Note: the README references a strategy-service on port 8081, but no such directory exists in the file structure—this is a discrepancy to verify.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical workflow: run the stack, use ingestor-service to pull a target user&#39;s trades into ClickHouse, then run research/finalanalysis.py to identify their strategies. Once a strategy is understood, configure executor-service to replicate it in paper mode first (ExecutorSimulationProperties.java), validate results via Grafana dashboards, then switch to live trading with the Polymarket credentials.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High - Missing CI/CD: No GitHub Actions or CI config detected. No automated build/test gate before changes merge.
-Med - Missing strategy-service: README references strategy-service on port 8081, but it&#39;s absent from the file tree. Either the README is stale or the service was removed.
-Med - Non-reproducible builds: Maven pom.xml files declare dependencies without a lockfile. Dependency versions can drift across builds.
-Low - Test coverage is thin: 14 test files across 200 total. Core crypto and discovery logic has tests; the ingestion and executor services have only application context tests.
-Low - Secrets risk: .env.example is present, which is good, but live trading keys in environment variables require careful handling. No evidence of committed secrets, but no secret-scanning tooling either.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a serious, working Polymarket trading stack with real depth in on-chain data ingestion and order signing. It&#39;s suited for developers who want to study Polymarket mechanics or run their own trading infrastructure, not for casual users—the multi-service setup and ClickHouse dependency carry real operational overhead. The missing CI and stale README references are the main concerns before production use.</p>
+set -a &amp;&amp; source .env &amp;&amp; set +a   # export needed vars
+
+# Build all services (skip tests for speed)
+./start-all-services.sh          # builds Docker images, starts ClickHouse, Redpanda, Prometheus, Grafana</code></pre>
+<p>The script runs <code>mvn clean package -DskipTests</code> for each module and then <code>docker compose -f docker-compose.analytics.yaml up -d</code> plus the monitoring stack. Health can be verified with the curl commands listed in the README (e.g., <code>curl http://localhost:8080/actuator/health</code>).</p>
+<p>To run a single service locally:</p>
+<pre data-lang="bash"><code>cd executor-service
+mvn spring-boot:run -Dspring-boot.run.profiles=develop</code></pre>
+<p>Environment variables required for live trading are documented in <code>.env.example</code> (<code>POLYMARKET_PRIVATE_KEY</code>, <code>POLYMARKET_API_KEY</code>, etc.). The research scripts can be executed directly with Python 3.11 (<code>python research/deep_analysis.py</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team can point the ingestor at Polymarket’s public Kafka feed, let <code>strategy-service</code> load a custom <code>Gabagool</code> market‑making engine, and use <code>analytics-service</code> dashboards to compare live P&amp;L against the back‑tested results produced by <code>research/paper_trading_dashboard.py</code>. The modular services allow swapping the strategy implementation without redeploying the whole stack.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – CI missing</strong> – No GitHub Actions or other pipeline; 169 source files are never built automatically.</li><li><strong>Medium – Dependabot absent</strong> – Only Maven <code>pom.xml</code> manifests exist; no bot to keep dependencies patched.</li><li><strong>Medium – Test coverage low</strong> – 8 test files vs. 169 source files (≈ 5 % coverage).</li></ul>
+<p>Static analysis also flagged deep nesting (max depth 9 in several strategy classes), duplicated repository logic, oversized files (&gt; 600 LOC), and broad exception handling, all of which increase maintenance cost.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>polybot</code> delivers a complete, containerised Polymarket research and execution platform with clear service boundaries and a reusable Java core. It is production‑ready in architecture but needs CI, dependency automation, and broader test coverage before large‑scale deployment. Teams comfortable with Spring Boot, Maven, and ClickHouse will find it a solid foundation for strategy reverse‑engineering.</p>
             </div>
 
             
@@ -107,9 +133,9 @@ Low - Secrets risk: .env.example is present, which is good, but live trading key
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">238<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Java</span><i style="width:100%"></i><b>126</b></li><li><span>SQL</span><i style="width:17%"></i><b>21</b></li><li><span>YAML</span><i style="width:13%"></i><b>16</b></li><li><span>Python</span><i style="width:10%"></i><b>13</b></li><li><span>Markdown</span><i style="width:5%"></i><b>6</b></li><li><span>JSON</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>Java</span><i style="width:100%"></i><b>147</b></li><li><span>Python</span><i style="width:15%"></i><b>22</b></li><li><span>SQL</span><i style="width:14%"></i><b>21</b></li><li><span>YAML</span><i style="width:12%"></i><b>18</b></li><li><span>Markdown</span><i style="width:4%"></i><b>6</b></li><li><span>JSON</span><i style="width:2%"></i><b>3</b></li>
                         </ul>
                         <p class="an-fw"><span>Spring</span><span>Kubernetes</span></p>
                     </div>

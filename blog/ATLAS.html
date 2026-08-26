@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 28, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#pull-the-quantised-qwen3-14b-model-script-placeh">Pull the quantised Qwen3‑14B model (script placeholder)</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#start-a-task-worker-process">Start a task‑worker process</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running large‑language‑model (LLM) pipelines locally typically requires fine‑tuning or costly API calls to reach competitive coding performance. Teams that need data‑privacy, predictable cost, or single‑GPU deployment lack a ready‑to‑run stack that combines structured generation, verification, and self‑repair.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>ATLAS supplies a self‑contained inference and refinement pipeline built around a frozen 14 B quantised model. The core orchestration lives in atlas/dashboard/app.py (FastAPI server) and the worker processes in atlas/task‑worker/worker.py. Benchmark utilities (benchmark/cli.py, benchmark/v3/) implement the “PlanSearch → Lens routing → self‑verified repair” flow that lifts pass@1 from ~40 % to 74.6 % on LiveCodeBench.</p><p>The repository also ships a Retrieval‑Augmented Generation API (rag‑api/main.py) and a lightweight web UI (api‑portal/src/main.py with api‑portal/templates/.html). Dockerfiles for each component (api‑portal/Dockerfile, atlas/dashboard/Dockerfile, atlas/task‑worker/Dockerfile, llama‑server/Dockerfile, llm‑proxy/Dockerfile) enable Kubernetes deployment via the manifests in manifests/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Build all containers (script uses the Dockerfiles above)
-./scripts/build-containers.sh</p><h3 class="post-h" id="pull-the-quantised-qwen3-14b-model-script-placeh">Pull the quantised Qwen3‑14B model (script placeholder)</h3><p>./scripts/download-models.sh</p><p>If you prefer a local Python environment, install the top‑level dependencies:
-pip install -r api-portal/requirements.txt
-pip install -r atlas/task-worker/requirements.txt
-pip install -r rag-api/requirements.txt
-pip install -r llm-proxy/requirements.txt</p><p>(Dependency versions are not locked; consider generating a requirements‑lock.txt with pip freeze.)</p><h3 class="post-h" id="configuration">Configuration</h3><p>atlas.conf.example must be copied to atlas.conf and populated with paths to the model checkpoint and any GPU settings.  
-api-portal/src/config.py reads environment variables DBURL and SECRETKEY; set them before launch.  
-Kubernetes manifests reference ConfigMaps named atlas-config and rag-api-config; create them from the corresponding *.conf files.</p><h3 class="post-h" id="running">Running</h3><p>Start the dashboard (FastAPI) locally
-python atlas/dashboard/app.py   # listens on 0.0.0.0:8000</p><h3 class="post-h" id="start-a-task-worker-process">Start a task‑worker process</h3><p>python atlas/task-worker/worker.py --queue redis://localhost:6379/0</p><p>For end‑to‑end evaluation:
-python benchmark/cli.py --pipeline v3 --tasks benchmark/custom/tasks.json</p><p>The CLI prints pass@k‑v(k=3) scores and stores logs under benchmark/.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A software‑testing team can deploy the Docker stack on an on‑prem K3s cluster, point their CI jobs at http://atlas-dashboard:8000/generate, and receive self‑validated code snippets without exposing proprietary code to external APIs. Example client call (Python):
-import requests
-payload = {&quot;prompt&quot;: &quot;def fib(n):&quot;, &quot;max_tokens&quot;: 256}
-resp = requests.post(&quot;http://atlas-dashboard:8000/v3/generate&quot;, json=payload)
-print(resp.json()[&quot;code&quot;])</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No CI/CD – No .github/workflows or other pipeline definitions; changes are not automatically linted or tested.  
-Low – Missing lockfiles – requirements.txt files are not version‑pinned, risking non‑reproducible builds.  
-Medium – Inconsistent entry points – Multiple main.py files (api-portal/src/main.py, rag-api/main.py, llm-proxy/main.py) each start a FastAPI server; documentation does not clarify which should be primary in a production deployment.  
-Low – Sparse error handling – Workers (atlas/task-worker/worker.py) assume successful Redis connections; no retry logic is present.  
-Low – Documentation gaps – README describes benchmark results but does not detail required environment variables beyond the example config file.  
-Medium – Potential race condition – atlas/task-worker/metrics.py updates shared in‑memory counters without locks; could corrupt metrics under high concurrency.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>ATLAS delivers a functional, containerised pipeline that pushes a frozen 14 B model to competitive coding performance without external APIs. The codebase is sizable and includes benchmarks, but it lacks CI, version‑locked dependencies, and robust production‑grade safeguards. It is suitable for teams comfortable managing Docker/Kubernetes deployments and willing to add missing CI and hardened error handling. Teams seeking an out‑of‑the‑box, fully vetted SaaS alternative should look elsewhere.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying a high‑performing code‑generation pipeline on a single consumer GPU normally requires fine‑tuning, paid API access, or complex cloud orchestration. Teams that need <strong>local, cost‑controlled execution</strong> must stitch together model inference, test‑case generation, and self‑repair without a ready‑made stack.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>ATLAS bundles a frozen 14 B quantised LLM with a <strong>constraint‑driven generation loop</strong> that iteratively produces, validates, and repairs code until it passes internally generated tests. The repo is a <em>portfolio</em> of six loosely coupled projects:</p>
+<ul><li><code>benchmark/</code> – CLI driver (<code>benchmark/cli.py</code>) and dataset / model runners (<code>benchmark/v3_runner.py</code>, <code>benchmark/models.py</code>).</li><li><code>rag‑api/</code> – FastAPI‑style service exposing retrieval‑augmented generation (<code>rag-api/main.py</code>).</li><li><code>atlas/</code> – Core orchestration: a Flask dashboard (<code>atlas/dashboard/app.py</code>), a sandbox executor (<code>atlas/sandbox/executor_server.py</code>), and a task‑worker daemon (<code>atlas/task-worker/worker.py</code>).</li><li><code>api‑portal/</code> – Small Flask UI (<code>api-portal/src/main.py</code>) with auth and DB helpers.</li><li><code>llm‑proxy/</code> – Minimal proxy exposing <code>chat_completions</code> (<code>llm-proxy/main.py</code>).</li><li><code>scripts/</code> – Helper scripts for data preparation and CI‑adjacent tasks.</li></ul>
+<p>Key files: <code>benchmark/cli.py</code> (entry for experiments), <code>atlas/task-worker/worker.py</code> (background job runner), <code>rag-api/main.py</code> (service entry), <code>api-portal/src/main.py</code> (web UI entry).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Execution starts</strong> at one of the documented entry points:</p>
+<ul><li><code>benchmark/cli.py::main</code> (line 474) – the primary benchmark driver.</li><li><code>atlas/task-worker/worker.py::run</code> (line 42) – launches the autonomous task‑worker daemon.</li><li><code>llm-proxy/main.py::chat_completions</code> – handles incoming LLM chat requests.</li><li><code>rag-api/main.py::sync_project</code> – syncs a project definition to the RAG store.</li></ul>
+<p>From each entry the call graph fans out:</p>
+<div class="table-scroll"><table><thead><tr><th>Entry</th><th>Reach</th><th>Notable hubs</th><th>External effect</th></tr></thead><tbody><tr><td><code>benchmark/cli.py::main</code></td><td>287 functions</td><td><code>MockLLM</code> (99 callers), <code>ReplayBuffer</code> (48)</td><td>Writes JSON results (<code>atomic_write_json</code> → filesystem) and updates Redis (<code>db.from_url</code>).</td></tr><tr><td><code>atlas/task-worker/worker.py::run</code></td><td>212 functions</td><td><code>to_dict</code> (46 callers), <code>solve</code> (37)</td><td>Persists task status (<code>atomic_write_json</code>), may invoke external commands (<code>subprocess</code> via <code>run_check_cycle</code>).</td></tr><tr><td><code>llm-proxy/main.py::chat_completions</code></td><td>72 functions</td><td><code>log</code> (26 callers)</td><td>Rate‑limit check uses <code>hashlib.sha256</code> (crypto) and logs to file.</td></tr><tr><td><code>rag-api/main.py::sync_project</code></td><td>71 functions</td><td><code>generate_project_id</code> (crypto)</td><td>Calls <code>client.post</code> (outbound network) to store embeddings.</td></tr></tbody></table></div>
+<p>The <strong>largest blast‑radius module</strong> is <code>benchmark/models.py</code>, imported by 19 other modules; any change here risks widespread breakage. <code>benchmark/v3_runner.py</code> and <code>v3_ablation_runner.py</code> are oversized (≈1 200 lines each) and host many of the above calls, making them hot spots for refactoring.</p>
+<p><strong>Data flow</strong> examples:</p>
+<ul><li><code>run → log</code> (47 occurrences) records task progress.</li><li><code>run → atomic_write_json</code> creates a JSONL file under the repo’s <code>results/</code> directory.</li><li><code>chat_completions → check_rate_limit</code> hashes the API key, then proceeds to <code>client.post</code> for LLM inference.</li><li><code>sync_project → generate_project_id</code> hashes project content, then <code>client.post</code> stores embedding vectors.</li></ul>
+<p><strong>External touch points</strong> (aggregated across the repo): 70 outbound network calls, 66 filesystem writes, 37 external command executions, and 2 model inference calls.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ATLAS
+cd ATLAS
+
+# Install Python deps for the component you need
+# Example: benchmark driver
+pip install -r benchmark/requirements.txt   # (requirements file inferred from top‑level)
+# Example: API portal container build
+docker build -t atlas-api-portal -f api-portal/Dockerfile .</code></pre>
+<p>Configuration files:</p>
+<ul><li><code>api-portal/src/config.py</code> – expects environment variables for DB URL (<code>DATABASE_URL</code>) and JWT secret (<code>SECRET_KEY</code>).</li><li><code>atlas/dashboard/app.py</code> – reads <code>atlas.conf.example</code>; copy to <code>atlas.conf</code> and adjust <code>model_path</code>, <code>gpu_id</code>.</li><li><code>rag-api/main.py</code> – requires a vector‑store endpoint at <code>RAG_ENDPOINT</code>.</li></ul>
+<p>Running a component:</p>
+<pre data-lang="bash"><code># Benchmark CLI (default dataset)
+python -m benchmark.cli --config benchmark/config.py
+
+# Start the task‑worker daemon
+python -m atlas.task-worker.worker
+
+# Launch the API portal (Flask)
+python -m api-portal.src.main</code></pre>
+<p>If you prefer containers, build each Dockerfile (<code>api-portal/Dockerfile</code>, <code>atlas/dashboard/Dockerfile</code>, etc.) and run the resulting images, supplying the same env vars.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can spin up a single‑GPU node, run <code>benchmark/cli.py</code> to evaluate code‑generation on their internal test suite, and then deploy <code>atlas/task-worker/worker.py</code> as a background service that continuously processes incoming code requests, self‑repairing failures without ever sending data to external APIs.</p>
+<pre data-lang="python"><code>from atlas.task_worker import worker
+worker.run()   # daemon monitors a Redis queue, pulls tasks, writes results locally</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – lockfile missing</strong> – <code>pyproject.toml</code> has no lockfile.</li><li><strong>High – no CI workflow</strong> – 150 source files, no <code>.github/workflows</code>.</li><li><strong>High – no build gate for Docker artifact</strong> – <code>api-portal/Dockerfile</code> is never built by CI.</li><li><strong>Medium – enable Dependabot</strong> – 5 manifests, no update bot.</li><li><strong>Medium – pin base image</strong> – <code>api-portal/Dockerfile</code> uses mutable <code>python:3.11-slim</code>.</li><li><strong>Medium – large binary in repo</strong> – <code>rag-api/geometric_lens/gate_embeddings.json</code> (6 MB).</li><li><strong>Medium – run container as non‑root</strong> – <code>api-portal/Dockerfile</code> lacks a <code>USER</code> directive.</li></ul>
+<p>Additional observations: tests exist (<code>tests/</code>), licence file is present, but no lockfile and no CI/CD pipeline. Dockerfiles are provided for several services, but container security hardening is incomplete.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>ATLAS delivers a reproducible, self‑hosted code‑generation pipeline with impressive benchmark scores, but the codebase is fragmented, contains several high‑impact hotspots, and lacks essential production safeguards (lockfiles, CI, hardened containers). It is suitable for research teams comfortable navigating deep nesting and adding their own CI/CD scaffolding; production deployments will require refactoring of oversized modules and implementation of the missing DevOps practices.</p>
             </div>
 
             
@@ -116,11 +143,11 @@ Medium – Potential race condition – atlas/task-worker/metrics.py updates sha
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">236<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>115</b></li><li><span>Markdown</span><i style="width:14%"></i><b>16</b></li><li><span>Shell</span><i style="width:13%"></i><b>15</b></li><li><span>YAML</span><i style="width:10%"></i><b>11</b></li><li><span>HTML</span><i style="width:5%"></i><b>6</b></li><li><span>JSON</span><i style="width:3%"></i><b>3</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>150</b></li><li><span>Markdown</span><i style="width:11%"></i><b>17</b></li><li><span>Shell</span><i style="width:10%"></i><b>15</b></li><li><span>YAML</span><i style="width:7%"></i><b>11</b></li><li><span>HTML</span><i style="width:4%"></i><b>6</b></li><li><span>JSON</span><i style="width:2%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>Flask</span><span>Docker</span><span>Kubernetes</span></p>
+                        <p class="an-fw"><span>Flask</span><span>Docker</span><span>Kubernetes</span><span>Vector store</span></p>
                     </div>
                 </div>
 

@@ -80,25 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#linux-curl-installer">Linux (curl installer)</a><a href="#build-from-source-requires-rust-toolchain">Build from source (requires Rust toolchain)</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#scan-a-specific-directory">Scan a specific directory</a><a href="#ci-friendly-quality-check-exit-code-0-1">CI‑friendly quality check (exit code 0/1)</a><a href="#baseline-before-an-ai-driven-session">Baseline before an AI‑driven session</a><a href="#compare-after-the-session">Compare after the session</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI coding assistants can generate code quickly, but they lack a concrete, real‑time signal of architectural health. Without a sensor that scores structural quality, agents drift, introduce regressions, and require costly manual review.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>sentrux ships a native Rust binary that scans a project with 52 tree‑sitter language plugins (see plugins/). It builds a dependency graph (sentrux-core/src/analysis/graph/mod.rs), applies a rules engine (sentrux-core/src/app/mod.rs), and produces a live treemap UI (sentrux-core/src/app/panels/.rs). The binary can also run head‑less (sentrux check) and expose a Model‑Context‑Protocol (MCP) server (sentrux-core/src/app/mcpserver/mod.rs) so an external AI agent can query quality signals during a coding session.</p><p>Key files:  
- sentrux-bin/src/main.rs – CLI entry point, parses sub‑commands (check, gate, --mcp).  
- sentrux-core/src/analysis/plugin/loader.rs – discovers the .toml plugin manifests.  
- sentrux-core/src/app/panels/healthdisplay.rs – renders the “quality signal” gauge shown in the README demo.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>macOS (Homebrew)
-brew install sentrux/tap/sentrux</p><h3 class="post-h" id="linux-curl-installer">Linux (curl installer)</h3><p>curl -fsSL https://raw.githubusercontent.com/sentrux/sentrux/main/install.sh | sh</p><h3 class="post-h" id="build-from-source-requires-rust-toolchain">Build from source (requires Rust toolchain)</h3><p>git clone https://github.com/sentrux/sentrux.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI‑generated code often drifts after a few iterations: functions disappear, imports become stale, and quality metrics degrade without a concrete signal. Developers need a fast, language‑agnostic way to surface structural health so an agent can correct itself before the breakage reaches production.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>sentrux</code> ships a single native binary (built from the <code>sent‑rux‑bin</code> crate) that scans a project with 52 tree‑sitter language plugins (see <code>plugins/*/plugin.toml</code>). It builds a dependency graph, computes metrics (fan‑in/out, modularity, DSM), and exposes a real‑time UI. Core analysis lives in <code>sent‑rux‑core/src/analysis/*</code> and the UI in <code>sent‑rux‑core/src/app/*</code>. The CLI entry points are <code>sent‑rux‑bin/src/main.rs</code> (calls <code>run</code> in <code>main_impl.rs</code>) and <code>sent‑rux‑bin/src/lib.rs</code> which expose the library API.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>sent‑rux‑bin/src/main.rs:1</code> → <code>main</code>. <code>main</code> invokes <code>run</code> defined in <code>sent‑rux‑bin/src/main_impl.rs:178</code>. <code>run</code> traverses 257 functions, most of which are in the core crate:</p>
+<ul><li><code>insert</code> (called from 78 places) and <code>entry</code> (43 places) are the primary registry mutators; they live in <code>sent‑rux‑core/src/analysis/resolver/suffix.rs</code> and <code>sent‑rux‑core/src/analysis/lang_registry.rs</code>.</li><li><code>compute_health</code> (40 callers) aggregates metric scores in <code>sent‑rux‑core/src/metrics/mod.rs</code>.</li><li><code>build_graphs</code> (33 callers) and <code>snap_with_edges</code> (30 callers) construct the structural graph (<code>sent‑rux‑core/src/analysis/graph/mod.rs</code>).</li></ul>
+<p>The most central module is <code>sent‑rux‑core/src/analysis/parser/mod.rs</code> (22 functions, referenced by 36 files). It parses source files and hands AST nodes to the resolver. The UI panels (<code>dsm_panel.rs</code>, <code>metrics_panel.rs</code>, etc.) render the graph but do not own core logic.</p>
+<p>No circular import edges were detected, but three files (<code>suffix.rs</code>, <code>main_impl.rs</code>, <code>metrics/mod.rs</code>) exceed 800 lines and contain nesting depths of eight, making changes high‑risk. Duplicated 6‑line blocks appear in 18 files (e.g., test suites and panel code), inflating maintenance cost.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/sentrux.git
 cd sentrux
-cargo build --release   # produces ./target/release/sentrux</p><p>The repository contains a Cargo.toml workspace and per‑crate manifests (sentrux-bin/Cargo.toml, sentrux-core/Cargo.toml). No other runtime dependencies are required.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Optional rule overrides live in .sentrux/rules.toml.  
- MCP server activation is a CLI flag (--mcp) – no external config file is needed beyond the standard binary options.</p><h3 class="post-h" id="running-it">Running it</h3><p>Launch the interactive UI on the current project
-./target/release/sentrux</p><h3 class="post-h" id="scan-a-specific-directory">Scan a specific directory</h3><p>./target/release/sentrux /path/to/project</p><h3 class="post-h" id="ci-friendly-quality-check-exit-code-0-1">CI‑friendly quality check (exit code 0/1)</h3><p>./target/release/sentrux check .</p><h3 class="post-h" id="baseline-before-an-ai-driven-session">Baseline before an AI‑driven session</h3><p>./target/release/sentrux gate --save .</p><h3 class="post-h" id="compare-after-the-session">Compare after the session</h3><p>./target/release/sentrux gate .</p><p>To expose the MCP endpoint for an AI agent:
-./target/release/sentrux --mcp</p><p>The agent can then call the server per the MCP spec (see claude-plugin/.claude-plugin/plugin.json for an example integration).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A development team using Claude Code can prepend each generation cycle with sentrux gate --save . to record a health baseline. After the model writes new code, sentrux gate . returns a non‑zero status if the score drops, allowing an automated CI gate or a feedback loop that prompts the model to revise. The MCP server lets a live assistant query GET /health and adjust its output in real time.</p><p>{
-  &quot;mcpServers&quot;: {
-    &quot;sentrux&quot;: { &quot;command&quot;: &quot;sentrux&quot;, &quot;args&quot;: [&quot;--mcp&quot;] }
-  }
-}</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing language‑specific tests – Plugins are largely data files (plugins//plugin.toml) without unit tests for parser integration.  
-Medium – Binary size risk – 52 tree‑sitter grammars are compiled into the binary (plugins/*/queries/tags.scm), which can increase startup time on constrained hardware.  
-Low – Limited documentation of MCP API – Only a brief JSON example exists; no OpenAPI spec or client library is provided.  
-Low – No explicit security audit – No cargo audit results are shown; external dependencies (e.g., winit, wgpu) should be vetted for CVEs.  
-Low – CI coverage – GitHub Actions (.github/workflows/ci.yml) runs cargo test and builds Docker images, but coverage metrics are not reported.</p><p>Overall the repo includes a full test suite (sentrux-core/src/analysis/graph/tests.rs, etc.), a permissive MIT license, and a reproducible build pipeline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>sentrux delivers a functional, Rust‑native sensor that can quantify architectural health and feed that signal to AI coding assistants via a simple CLI or MCP server. It is production‑ready for teams that already adopt model‑driven development and need an automated quality gate. The main trade‑offs are the large binary footprint and modest documentation around the MCP protocol; otherwise the codebase is well‑structured and test‑covered.</p>
+
+# Build the release binary
+cargo build --release        # produces target/release/sentrux
+
+# Run the GUI on the current directory
+./target/release/sentrux
+
+# Run a CI‑friendly check (exit code 0/1)
+./target/release/sentrux check .</code></pre>
+<p>Configuration files live under <code>.sentrux/</code> (e.g., <code>rules.toml</code>) and can be edited to add custom quality rules. The binary respects <code>--mcp</code> to expose a Model‑Context‑Protocol server, as described in the README.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can invoke <code>sentrux check .</code> after a pull request; the exit status blocks merges when health drops. An autonomous coding agent can keep a baseline with <code>sentrux gate --save .</code> before a generation cycle, then call <code>sentrux gate .</code> after the agent finishes to detect regressions and feed the diff back into its prompting loop.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Critical</em> – privileged <code>checkout</code> of PR code in <code>.github/workflows/ci-release.yml</code>. <em>High</em> – unpinned actions (<code>softprops/action-gh-release@v2</code>, <code>dtolnay/rust-toolchain@stable</code>). <em>High</em> – steps discard exit codes or use <code>continue-on-error</code> in <code>.github/workflows/build-grammars.yml</code>. <em>High</em> – lacking least‑privilege <code>GITHUB_TOKEN</code> permissions. <em>Medium</em> – no Dependabot setup. <em>Medium</em> – no dependency‑vulnerability scan in CI. <em>Medium</em> – large binary assets (<code>demo.gif</code> 8.9 MiB) should be moved to LFS. <em>Medium</em> – checkout keeps credentials; set <code>persist-credentials: false</code>. <em>Medium</em> – test coverage low (22 test files vs. 121 source files). <em>Medium</em> – deep nesting (max depth 8) in <code>suffix.rs</code>, <code>main_impl.rs</code>, <code>graph/mod.rs</code>. <em>Medium</em> – duplicated 6‑line blocks across 18 files. <em>Low</em> – three stray <code>TODO/FIXME</code> markers in <code>main_impl.rs</code>.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>sentrux</code> provides a functional Rust‑based sensor that can feed real‑time architectural metrics into AI‑assisted development workflows. The core is well‑structured, but several large, deeply nested modules and duplicated code raise the maintenance burden, and the CI configuration contains serious security gaps. Teams comfortable with Rust and willing to tighten the CI pipelines will benefit most.</p>
             </div>
 
             
@@ -115,9 +126,9 @@ Low – CI coverage – GitHub Actions (.github/workflows/ci.yml) runs cargo tes
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">297<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TOML</span><i style="width:100%"></i><b>56</b></li><li><span>Rust</span><i style="width:88%"></i><b>49</b></li><li><span>HTML</span><i style="width:20%"></i><b>11</b></li><li><span>Markdown</span><i style="width:13%"></i><b>7</b></li><li><span>YAML</span><i style="width:7%"></i><b>4</b></li><li><span>JSON</span><i style="width:5%"></i><b>3</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>121</b></li><li><span>TOML</span><i style="width:46%"></i><b>56</b></li><li><span>HTML</span><i style="width:9%"></i><b>11</b></li><li><span>Markdown</span><i style="width:6%"></i><b>7</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li><li><span>JSON</span><i style="width:2%"></i><b>3</b></li>
                         </ul>
                         <p class="an-fw"><span>Docker</span></p>
                     </div>

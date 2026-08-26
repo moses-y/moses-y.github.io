@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 30, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,53 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building speech applications on Apple Silicon typically means juggling separate model families for TTS, STT, and speech enhancement, each with its own inference stack and format handling. mlx-audio consolidates these into a single MLX-native library, removing the need to bridge PyTorch models or manage multiple runtime dependencies on M-series hardware.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>mlx-audio is a Python library covering TTS, STT, and speech-to-speech (STS) pipelines, all optimized for Apple&#39;s MLX framework. The mlxaudio/ package is organized by capability: stt/ (e.g., canary, cohereasr, fireredasr2), tts/ (e.g., kokoro, qwen3tts, csm), and sts/ (e.g., moshi, deepfilternet, mossformer2se). Each model directory contains its own config, model definition, and tests.</p><p>The library also includes a codec layer (mlxaudio/codec/) with implementations like encodec, mimi, and snac for audio compression, plus utilities for audio I/O (audioio.py), DSP (dsp.py), and conversion (convert.py). A REST server (mlxaudio/server.py) exposes an OpenAI-compatible API, and a Swift package enables iOS/macOS integration. An example project (examples/bible-audiobook/) demonstrates a full TTS pipeline with TypeScript tooling.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pip (pip install mlx-audio) or, for CLI tools, uv tool install mlx-audio. Development setup uses pip install -e &quot;.[dev]&quot;. The examples/bible-audiobook/ project uses bun (a bun.lock is present) and TypeScript.</p><p>Configuration: Model weights are pulled from Hugging Face Hub (e.g., mlx-community/Kokoro-82M-bf16). No environment variables are required for basic use.</p><p>Running it: The primary interface is the CLI, e.g.:</p><p>mlxaudio.tts.generate --model mlx-community/Kokoro-82M-bf16 --text &#39;Hello, world!&#39; --langcode a</p><p>Or via Python:</p><p>from mlxaudio.tts.utils import loadmodel
-model = loadmodel(&quot;mlx-community/Kokoro-82M-bf16&quot;)
-for result in model.generate(&quot;Hello from MLX-Audio!&quot;, voice=&quot;afheart&quot;):
-    print(f&quot;Generated {result.audio.shape[0]} samples&quot;)</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical use case: an audiobook generation pipeline on a Mac Studio. The examples/bible-audiobook/ project does exactly this—it reads a text file (bibles/bible-akjv.txt), generates per-verse WAV files using afheart and ammichael voices, then converts them to MP3 via a TypeScript script (src/convert-to-mp3.ts). The same pattern applies to podcast production, voice cloning demos, or real-time speech-to-speech translation using the moshi model.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Large monorepo with mixed concerns: 169 Python files in mlxaudio/ mixing model implementations, DSP, server, and CLI. The sts/models/mossformer2_se/ directory alone has 20+ files. This makes maintenance and onboarding harder than a flatter structure.
-Low - Missing lockfile for npm example: examples/bible-audiobook/package.json declares dependencies but only a bun.lock is present, not a package-lock.json. Reproducibility depends on the toolchain.
-Low - Test coverage is uneven: 21 test files exist, but they are concentrated in codec/ and sts/. The stt/ and tts/ directories have few or no test files, despite being the primary user-facing APIs.
-Low - No explicit license in repo root: A LICENSE file is present at the root, but its contents are not described in the analysis. Verify it matches the original Blaizzy/mlx-audio license.
-Med - Heuristic issue only: The analysis flags a dependency-without-lockfile issue, but bun.lock is present, so this is likely a false positive for the bible-audiobook example.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a serious, well-organized library for Apple Silicon speech work, with a broad model catalog and a functional CLI/server. The main caveat is its scope—169 Python files across TTS, STT, STS, and codecs means a steep learning curve for contributors. It&#39;s best suited for teams already committed to MLX and needing a single speech toolkit, not for someone looking for a minimal, focused TTS library.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers targeting Apple‑silicon need a speech stack that runs entirely on‑device, avoids the latency of cloud APIs, and can be embedded in Python or a web UI. Existing toolkits either rely on heavyweight frameworks (PyTorch, TensorFlow) or lack native Apple‑MLX acceleration, making real‑time TTS/STT/STS on M‑series chips impractical.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>mlx-audio</code> implements end‑to‑end speech models (TTS, STT, STS) on top of Apple’s <strong>MLX</strong> tensor library. The core Python package lives in <code>mlx_audio/</code> (≈540 files) and includes:</p>
+<ul><li>Model loaders and inference in <code>mlx_audio/tts/</code>, <code>mlx_audio/stt/</code>, <code>mlx_audio/sts/</code>.</li><li>Low‑level audio I/O (<code>mlx_audio/audio_io.py</code>), DSP utilities (<code>mlx_audio/dsp.py</code>), and a generic codec layer (<code>mlx_audio/codec/</code>).</li><li>A small HTTP server (<code>mlx_audio/server.py</code>) exposing a REST API and a browser UI in <code>mlx_audio/ui/</code> (React/Next.js).</li></ul>
+<p>Key entry points are:</p>
+<ul><li><strong>CLI</strong> – <code>mlx_audio/tts/utils.py</code> provides the <code>mlx_audio.tts.generate</code> console command.</li><li><strong>Server</strong> – <code>mlx_audio/server.py:main</code> (line 893) starts the API and UI.</li><li><strong>Programmatic API</strong> – <code>mlx_audio/tts/utils.load_model</code> returns a model object whose <code>generate</code> method yields <code>Result</code> objects containing an <code>mx.array</code> waveform.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>mlx_audio/server.py:main</code>. The function builds a FastAPI app, registers routes, and then calls <code>add_model</code> (line 227) to load a default model. <code>add_model</code> invokes <code>load_model</code> → <code>from_pretrained</code>, which reads model files from the filesystem (e.g., <code>shutil.copy</code> of a cached checkpoint).</p>
+<p>When a client POSTs to <code>/tts</code>, the handler calls <code>mlx_audio/tts/models/base.generate</code>. Inside <code>generate</code> the call chain includes:</p>
+<ul><li><code>eval</code> (called 173 times across the repo) to switch model mode,</li><li><code>clear_cache</code> (36 calls) to free MLX buffers,</li><li><code>pad</code> (35 calls) for waveform alignment,</li><li><code>norm</code> (65 calls) for audio post‑processing.</li></ul>
+<p>The <strong>blast‑radius</strong> modules are:</p>
+<ul><li><code>mlx_audio/utils.py</code> – 38 inbound imports, 6 outbound; part of a circular import with <code>mlx_audio/tts/utils.py</code> and <code>mlx_audio/stt/utils.py</code>.</li><li><code>mlx_audio/tts/models/base.py</code> – 40 inbound imports, no outbound imports; a hub for all TTS model classes.</li></ul>
+<p>The import graph contains 25 cycles; the most visible cycle is among the three utils files, which increases maintenance risk because a change in one forces reloads of the others.</p>
+<p>Large, deeply nested files (<code>mlx_audio/tts/models/qwen3_tts/qwen3_tts.py</code>, <code>mlx_audio/stt/models/wav2vec/wav2vec.py</code>, <code>mlx_audio/tts/models/bailingmm/bailingmm.py</code>) each exceed 2 k lines and have indentation depths of 8, making them hard to reason about and error‑prone.</p>
+<p>External interactions are limited to:</p>
+<ul><li>Filesystem reads/writes (31 functions, e.g., model checkpoint loading).</li><li>A handful of network calls (9 functions) performed by the REST server.</li><li>One subprocess call to <code>ffmpeg</code> for audio conversion (<code>mlx_audio/convert.py</code>).</li></ul>
+<p>No database or persistent secret handling is present.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install the core library (Python 3.11+, Apple Silicon)
+pip install mlx-audio
+
+# Run the built‑in server (exposes /tts, /stt, /sts)
+python -m mlx_audio.server
+# Server starts on http://127.0.0.1:8000 and serves the React UI.
+
+# One‑off TTS from the CLI
+mlx_audio.tts.generate \
+    --model mlx-community/Kokoro-82M-bf16 \
+    --text "Hello, world!" \
+    --lang_code a \
+    --output_path ./out</code></pre>
+<p>The CLI documentation lives in <code>README.md</code>; the server UI source is under <code>mlx_audio/ui/</code>. No additional configuration files are required beyond the optional <code>.env</code> for a custom HuggingFace token (refer to <code>mlx_audio/server.py</code> where <code>os.getenv("HF_TOKEN")</code> is read).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A media‑playback app on macOS can embed <code>mlx-audio</code> to generate voice‑overs on‑device:</p>
+<pre data-lang="python"><code>from mlx_audio.tts.utils import load_model
+
+model = load_model("mlx-community/Kokoro-82M-bf16")
+for chunk in model.generate("Chapter 1 intro", voice="af_heart"):
+    play(chunk.audio)          # mx.array → numpy → sounddevice.play</code></pre>
+<p>All inference runs on the M‑series GPU/CPU via MLX, delivering sub‑second latency without external bandwidth.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses <code>pypa/gh-action-pypi-publish@v1.13.0</code>. Replace <code>@v1.13.0</code> with a full SHA to avoid supply‑chain drift.</li><li><strong>Medium – Least‑privilege GITHUB_TOKEN</strong> – <code>tests.yml</code> declares no permissions; add <code>permissions: contents: read</code>.</li><li><strong>Medium – Enable Dependabot</strong> – No <code>dependabot.yml</code> present; add one for Python, npm, and GitHub Actions.</li><li><strong>Medium – Dependency‑vulnerability scan</strong> – CI lacks a review step; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Checkout persist‑credentials</strong> – <code>python-publish.yml</code> should set <code>persist-credentials: false</code>.</li><li><strong>Low – Job timeouts</strong> – No <code>timeout-minutes</code> in CI jobs; add a reasonable limit (e.g., 30 min).</li><li><strong>Low – Missing lockfile</strong> – <code>examples/bible-audiobook/package.json</code> has no <code>package-lock.json</code>; consider committing a lockfile for reproducible npm builds.</li></ul>
+<p>The repo includes a full test suite (<code>mlx_audio/*/tests/</code>) and CI runs on every PR, but the import cycles and oversized modules increase the risk of regression when extending functionality.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>mlx-audio</code> delivers a functional, Apple‑MLX‑accelerated speech stack with a usable CLI, Python API, and web UI, making on‑device TTS/STT/STS feasible on M‑series hardware. However, the codebase suffers from import cycles, very large files, and deep nesting, which raise the maintenance burden. It is suitable for teams comfortable navigating a complex Python project and willing to address the identified health issues.</p>
             </div>
 
             
@@ -105,11 +143,11 @@ Med - Heuristic issue only: The analysis flags a dependency-without-lockfile iss
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">574<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>163</b></li><li><span>Markdown</span><i style="width:9%"></i><b>14</b></li><li><span>YAML</span><i style="width:2%"></i><b>4</b></li><li><span>TypeScript</span><i style="width:2%"></i><b>3</b></li><li><span>JSON</span><i style="width:1%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>484</b></li><li><span>Markdown</span><i style="width:7%"></i><b>32</b></li><li><span>TSX</span><i style="width:3%"></i><b>16</b></li><li><span>JSON</span><i style="width:2%"></i><b>8</b></li><li><span>YAML</span><i style="width:1%"></i><b>4</b></li><li><span>TypeScript</span><i style="width:1%"></i><b>4</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Tailwind</span><span>Transformers</span></p>
                     </div>
                 </div>
 

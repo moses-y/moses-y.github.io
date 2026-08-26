@@ -80,34 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#create-an-isolated-env-the-repo-recommends-uv">Create an isolated env (the repo recommends uv)</a><a href="#install-the-package-with-the-desired-backend">Install the package with the desired backend</a><a href="#configuration">Configuration</a><a href="#running-a-forecast">Running a Forecast</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Many organizations need accurate, long‑horizon forecasts for irregular time‑series (e.g., sales, weather, sensor data) but building a custom model from scratch is costly and error‑prone. Existing libraries either lack pretrained large‑scale foundation models or require extensive feature engineering.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>timesfm delivers a decoder‑only, pretrained foundation model (TimesFM 2.5) that can be invoked directly from Python. The core implementation lives in src/timesfm/ with separate back‑ends:</p><p>Torch – src/timesfm/torch/transformer.py, dense.py, util.py expose the model as TimesFM2p5200Mtorch.  
- Flax/JAX – src/timesfm/flax/transformer.py and related utilities provide the same architecture for GPU/TPU acceleration.</p><p>Model checkpoints are loaded via the Hugging‑Face hub (frompretrained). The timesfm-forecasting/ folder contains ready‑to‑run examples (anomaly detection, covariate forecasting, global‑temperature animation) that show end‑to‑end usage of the API.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone and enter repo
-git clone https://github.com/google-research/timesfm.git
-cd timesfm</p><h3 class="post-h" id="create-an-isolated-env-the-repo-recommends-uv">Create an isolated env (the repo recommends uv)</h3><p>uv venv
-source .venv/bin/activate</p><h3 class="post-h" id="install-the-package-with-the-desired-backend">Install the package with the desired backend</h3><p>uv pip install -e .[torch]      # PyTorch backend
-or
-uv pip install -e .[flax]       # JAX/Flax backend
-optional XReg support for covariates
-uv pip install -e .[xreg]</p><p>The pyproject.toml defines the optional extras (torch, flax, xreg).</p><h3 class="post-h" id="configuration">Configuration</h3><p>No runtime config files are required. Forecast parameters are passed via timesfm.ForecastConfig (see src/timesfm/configs.py). Example flags such as maxcontext, maxhorizon, and usecontinuousquantilehead are documented in the README and the class definition.</p><h3 class="post-h" id="running-a-forecast">Running a Forecast</h3><p>import numpy as np, torch, timesfm</p><p>model = timesfm.TimesFM2p5200Mtorch.frompretrained(
-    &quot;google/timesfm-2.5-200m-pytorch&quot;
-)</p><p>model.compile(
-    timesfm.ForecastConfig(
-        maxcontext=1024,
-        maxhorizon=256,
-        normalizeinputs=True,
-        usecontinuousquantilehead=True,
-        forceflipinvariance=True,
-    )
-)</p><p>point, quant = model.forecast(
-    horizon=12,
-    inputs=[np.linspace(0, 1, 100), np.sin(np.linspace(0, 20, 67))],
-)
-print(point.shape, quant.shape)   # (2,12) (2,12,10)</p><p>For a full script, see timesfm-forecasting/examples/covariates-forecasting/democovariates.py.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A retail analytics pipeline could ingest daily sales data, call the above snippet nightly, and store the 12‑step point forecast together with 10‑quantile confidence bands in a data warehouse. Downstream dashboards would display both the median prediction and the prediction interval, enabling inventory planning with quantified risk.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing comprehensive test suite – Only v1/tests/test_timesfm.py exists; the newer src/ code lacks dedicated unit tests.  
-Medium – Optional dependency drift – Extras (torch, flax, xreg) are not pinned in pyproject.toml; updates of PyTorch/JAX could introduce incompatibilities.  
-Low – Documentation gaps – Docstrings in src/timesfm/* are sparse; users must rely on the example scripts for API details.  
-Low – CI only validates basic lint – GitHub Actions (.github/workflows/main.yml) runs a generic CI but does not enforce type checking (e.g., mypy) or coverage thresholds.  
-None – License present – LICENSE at repo root and in v1/ clarifies usage.</p><p>Overall, the repository builds cleanly, respects standard Python packaging, and includes CI, but the lack of systematic tests and pinned dependencies are the main risk factors.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>timesfm provides a ready‑to‑use, pretrained time‑series foundation model with both PyTorch and Flax back‑ends, suitable for teams that need high‑quality forecasts without model development overhead. The codebase is well‑structured and installable, yet production adopters should add their own test coverage and verify backend compatibility before large‑scale deployment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Time‑series teams need a high‑capacity pretrained model that can be fine‑tuned or used out‑of‑the‑box for short‑ and long‑horizon forecasts, but building such a model from scratch is expensive and error‑prone.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships the <strong>TimesFM 2.5</strong> decoder‑only foundation model with both <strong>PyTorch</strong> and <strong>Flax/JAX</strong> back‑ends. Core model code lives in <code>src/timesfm/torch/</code> and <code>src/timesfm/flax/</code>; the higher‑level API is exposed through <code>src/timesfm/__init__.py</code> (e.g. <code>TimesFM_2p5_200M_torch</code>). Example notebooks (<code>v1/notebooks/finetuning_torch.ipynb</code>) and the <code>timesfm-forecasting/examples/</code> scripts demonstrate end‑to‑end forecasting, including covariate handling via <code>src/timesfm/utils/xreg_lib.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong> – a typical run starts at a script such as <code>timesfm-forecasting/examples/anomaly-detection/detect_anomalies.py</code> (line 391 defines <code>main</code>). The function calls the public <code>forecast</code> method (via <code>TimesFM_2p5_200M_torch.forecast</code>).</li></ul>
+<ul><li><strong>Core call chain</strong> – <code>forecast</code> → <code>forecast_with_covariates</code> → <code>fit</code> → <code>_to_padded_jax_array</code> (4 calls) and <code>forecast</code> → <code>decode</code> → <code>revin</code> (8 calls). The most‑fan‑in functions are <code>forecast</code> (called from 8 places) and <code>revin</code> (5 places).</li></ul>
+<ul><li><strong>Data flow</strong> – <code>forecast</code> consumes NumPy arrays, builds a covariate matrix (<code>create_covariate_matrix</code> → <code>_unnest</code>, <code>_repeat</code>), and ultimately invokes the transformer decoder (<code>src/timesfm/torch/transformer.py</code>).</li></ul>
+<ul><li><strong>File system touches</strong> – the only external I/O observed from the entry point is <code>plot_results</code> which creates <code>OUTPUT_DIR</code> via <code>mkdir</code>. Scripts under <code>timesfm-forecasting/scripts/</code> also read/write CSVs (<code>forecast_csv.py</code>).</li></ul>
+<ul><li><strong>High‑impact modules</strong> – <code>v1/src/timesfm/pytorch_patched_decoder.py</code> (33 functions, 9 classes) and <code>v1/src/timesfm/timesfm_base.py</code> (17 functions, 3 classes) are called from many other files; changes here have the widest blast radius.</li></ul>
+<ul><li><strong>No circular imports</strong> – the static import graph contains 49 internal modules with 20 edges and zero cycles, simplifying refactoring.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (exact URL required)
+git clone https://github.com/moses-y/timesfm.git
+cd timesfm
+
+# Create a venv and install the desired backend (requires poetry or uv)
+uv venv
+source .venv/bin/activate
+uv pip install -e .[torch]   # or .[flax] / .[xreg] as needed</code></pre>
+<p><em>No additional environment variables are required; the model is fetched from Hugging Face on first call.</em></p>
+<p>Run an example:</p>
+<pre data-lang="bash"><code>python timesfm-forecasting/examples/anomaly-detection/detect_anomalies.py</code></pre>
+<p>Or forecast a CSV:</p>
+<pre data-lang="bash"><code>python timesfm-forecasting/scripts/forecast_csv.py \
+    --model google/timesfm-2.5-200m-pytorch \
+    --input data.csv \
+    --output forecast.csv</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A monitoring service can stream recent sensor readings into a NumPy array, call <code>TimesFM_2p5_200M_torch.from_pretrained(...)</code> and invoke <code>model.forecast(horizon=24, inputs=[sensor_series])</code>. The returned point and quantile forecasts can be stored in a time‑series database for downstream alerting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pinned vulnerable dependencies (e.g. <code>idna@3.10</code>, <code>click@8.3.0</code>, <code>filelock@3.19.1</code>). Upgrade to fixed versions.</li><li><strong>HIGH</strong> – Absolute path in <code>v1/notebooks/finetuning.ipynb</code>. Replace with repo‑relative paths.</li><li><strong>HIGH</strong> – No lockfile accompanies <code>pyproject.toml</code>. Generate and commit a <code>poetry.lock</code>.</li><li><strong>MEDIUM</strong> – GitHub Actions lack least‑privilege <code>GITHUB_TOKEN</code> permissions. Add <code>permissions: contents: read</code>.</li><li><strong>MEDIUM</strong> – No automated dependency update bot. Add <code>dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – No CI step runs a dependency‑vulnerability scan. Insert <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Checkout step keeps credentials; set <code>persist-credentials: false</code>.</li><li><strong>MEDIUM</strong> – Test coverage is low (1 test file vs. 42 source files). Add unit tests for high‑fan‑in modules (<code>forecast</code>, <code>revin</code>).</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>. Define reasonable limits.</li></ul>
+<p>Additional observations: the repository includes a license, CI config, and documentation files, but no Dockerfile for containerized deployment.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>TimesFM provides a ready‑to‑use pretrained transformer for time‑series forecasting with clear PyTorch/Flax APIs and useful example scripts. The codebase is modestly sized, well‑structured, and free of circular imports, but it ships vulnerable dependency pins, missing lockfiles, and limited test coverage. Teams comfortable adding their own CI hardening and expanding tests can adopt it quickly for production forecasting workloads.</p>
             </div>
 
             
@@ -126,9 +134,9 @@ None – License present – LICENSE at repo root and in v1/ clarifies usage.</p
                         <span class="an-lab">Composition</span>
                         <div class="an-score">93<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>49</b></li><li><span>Markdown</span><i style="width:27%"></i><b>13</b></li><li><span>JSON</span><i style="width:8%"></i><b>4</b></li><li><span>YAML</span><i style="width:4%"></i><b>2</b></li><li><span>TOML</span><i style="width:4%"></i><b>2</b></li><li><span>Shell</span><i style="width:4%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>49</b></li><li><span>Markdown</span><i style="width:27%"></i><b>13</b></li><li><span>JSON</span><i style="width:8%"></i><b>4</b></li><li><span>Jupyter Notebook</span><i style="width:8%"></i><b>4</b></li><li><span>YAML</span><i style="width:4%"></i><b>2</b></li><li><span>TOML</span><i style="width:4%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>PyTorch</span></p>
                     </div>
                 </div>
 

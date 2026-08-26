@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 23, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,19 +79,38 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#start-frontend-new-terminal">Start frontend (new terminal)</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Error monitoring tools generate raw alerts but leave the hard part to engineers: figuring out what code caused the error, whether it&#39;s a known issue, and how severe it is. This agent addresses that gap by clustering similar errors and enriching them with context from your codebase, ticketing system, and Slack history before deciding what to alert on.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The backend (backend/main.py) runs a pipeline that ingests errors from Sentry, Azure Log Analytics, or a custom source, clusters them by root cause (backend/pipeline/clustering.py), searches for relevant code, tickets, and Slack threads via Airweave (backend/clients/airweaveclient.py), and classifies severity with suppression logic (backend/pipeline/analysis.py). The frontend (frontend/src/App.tsx) provides an interactive visualization of the pipeline using sample data.</p><p>The system reduces alert noise: 20 raw errors become 4 actionable clusters. It also integrates with Linear (backend/clients/linearclient.py) and Slack (backend/clients/slackclient.py) to preview what alerts would look like without creating real tickets or messages.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The backend uses Python with dependencies in backend/requirements.txt. The frontend uses npm with frontend/package.json.</p><p>Configuration: Copy .env.example to .env and set DATASOURCE (sentry, azure, or default sample). Optional: add OPENAIAPIKEY or ANTHROPICAPIKEY for smarter clustering. For Sentry: SENTRYAUTHTOKEN, SENTRYORGSLUG. For Azure: AZURETENANTID, AZURECLIENTID, AZURECLIENTSECRET, AZURELOGANALYTICSWORKSPACEID.</p><p>Running it (from README):
-Start backend
-cd backend
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> Production systems generate a flood of raw error events that alert‑ing tools surface without context. Engineers spend time hunting the related code, existing tickets, or Slack discussions to decide whether an alert is new, a regression, or already being handled. The lack of semantic linkage drives noise and slows incident response.</p>
+<p><strong>What This Does</strong> The repository implements an end‑to‑end agent that ingests raw errors, clusters them by root cause, enriches each cluster with code snippets, Linear tickets, and Slack threads via <strong>Airweave</strong>, and emits a single actionable alert per cluster. The pipeline lives in <code>backend/</code> (Python) while a minimal React/Tailwind UI in <code>frontend/</code> visualises the flow (e.g., <code>frontend/src/App.tsx</code>, <code>frontend/src/components/pipeline-visualizer.tsx</code>). Core data models live in <code>backend/schemas.py</code> (e.g., <code>RawError</code>, <code>ErrorCluster</code>). Configuration defaults are provided in <code>.env.example</code> and <code>backend/config.py</code>.</p>
+<p><strong>How It Is Wired</strong></p>
+<ol><li><strong>Entry point</strong> – <code>backend/main.py</code> runs a FastAPI server. The two public routes are:   <em> <code>run_demo</code> (line 544) – triggers the demo pipeline, traversing 33 functions. </em> <code>websocket_endpoint</code> (line 555) – streams live pipeline state, touching 34 functions.</li></ol>
+<ol><li><strong>Pipeline kickoff</strong> – <code>run_demo</code> calls <code>run_pipeline</code> (line 100). <code>run_pipeline</code> constructs a <code>PipelineStep</code> chain and invokes <code>run_pipeline -&gt; broadcast</code> (18 calls) and <code>run_pipeline -&gt; PipelineStep</code> (5 calls).</li></ol>
+<ol><li><strong>Core processing</strong> – Within <code>backend/pipeline/</code> the steps are:   <em> <strong>Clustering</strong> (<code>backend/pipeline/clustering.py::cluster_errors</code>) → creates clusters via <code>_create_cluster</code> (called from 6 places). </em> <strong>Enrichment</strong> (<code>backend/pipeline/enrichment.py::enrich</code>) → builds Airweave queries (<code>_search_code</code>) and calls the LLM (<code>_init_llm</code>). * <strong>Analysis</strong> (<code>backend/pipeline/analysis.py::analyze_errors</code>) → runs LLM‑based severity logic (<code>_llm_analyze</code>).</li></ol>
+<ol><li><strong>External touches</strong> –   <em> Filesystem I/O: <code>_read_json</code> / <code>_write_json</code> (both invoked from 7 places) read/write state under <code>backend/state.py</code>. </em> Network calls: <code>backend/clients/airweave_client.py::search</code> (Airweave API), <code>backend/clients/linear_client.py::create_issue</code>, and <code>backend/clients/slack_client.py::post_alert</code>.</li></ol>
+<ol><li><strong>State handling</strong> – <code>backend/state.py</code> owns 22 functions, is referenced by 5 other modules, and performs the only persistent reads/writes.</li></ol>
+<ol><li><strong>Module hot‑spots</strong> – The most connected module is <code>backend/pipeline/__init__</code> (imports 6 others, instability 1). Its high import count means any change ripples through the entire pipeline. No circular dependencies were detected.</li></ol>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/error-monitoring-agent
+cd error-monitoring-agent
+
+# Backend setup
+cp .env.example .env
 python -m venv venv &amp;&amp; source venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000</p><h3 class="post-h" id="start-frontend-new-terminal">Start frontend (new terminal)</h3><p>cd frontend
-npm install &amp;&amp; npm run dev</p><p>Open http://localhost:3000 and click Run Demo. The demo uses sample data and mock search results—no real tickets or messages are created.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>For a team running Sentry, this replaces the manual triage loop. Configure DATA_SOURCE=sentry, point the agent at your project, and it groups errors by root cause, pulls the relevant GitHub code and past Linear tickets, and sends a single Slack alert per cluster instead of one per error. Custom sources are straightforward: implement backend/sources/base.py and return a list of RawError objects.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No tests: No test files exist anywhere in the repo. The clustering and analysis logic in backend/pipeline/ is untested, which is risky for a tool that decides alert severity.
-Med - No CI/CD: No .github/ directory or CI config. No automated build or test gate.
-Med - No LICENSE: Usage and redistribution rights are undefined.
-Low - Hardcoded sample data: backend/samples/errors.py is the default source, which is fine for demos but means the production path (sentry/azure) is exercised less.
-Low - Tight coupling: backend/pipeline/actions.py handles both analysis and alert creation; separating these would improve testability.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a well-structured demo of an intelligent error monitoring pipeline, with clean separation between sources, pipeline stages, and clients. It&#39;s useful as a reference implementation or a starting point for a production system, but the lack of tests and CI means it needs hardening before deployment. Best suited for teams already using Sentry or Azure Log Analytics who want to reduce alert fatigue without building this from scratch.</p>
+pip install -r backend/requirements.txt
+uvicorn backend/main:app --reload --port 8000   # starts FastAPI (run_demo available at /demo)
+
+# Frontend setup
+cd frontend
+npm install
+npm run dev   # Vite serves UI at http://localhost:3000</code></pre>
+<p><em>Configuration</em> – Populate <code>.env</code> with Airweave keys (<code>AIRWEAVE_API_KEY</code>) and, for production, one of the data‑source blocks (e.g., <code>SENTRY_AUTH_TOKEN</code>, <code>AZURE_CLIENT_ID</code>). The <code>backend/config.py</code> module validates required variables.</p>
+<p><em>Running the demo</em> – Open the UI, click <strong>Run Demo</strong>; the backend executes <code>run_demo</code>, which walks the pipeline, stores interim state in JSON files, and returns a visual summary.</p>
+<p><strong>Real‑World Use</strong> A SaaS platform can replace the sample source (<code>backend/sources/sample_source.py</code>) with <code>backend/sources/sentry_source.py</code> by setting <code>DATA_SOURCE=sentry</code>. Errors streamed from Sentry feed into <code>run_pipeline</code>, which clusters them, pulls matching code and tickets via Airweave, and posts a single Slack message (via <code>backend/clients/slack_client.py::post_alert</code>) and Linear issue (via <code>backend/clients/linear_client.py::create_issue</code>). This reduces alert volume from hundreds to a handful of actionable items per hour.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>High – No LICENSE</strong> (<code>root/</code>): add MIT or Apache‑2.0.</li><li><strong>High – No test suite</strong> (35 source files): introduce unit tests for public entry points, gate with CI.</li><li><strong>High – No CI/CD</strong> (<code>.github/</code> absent): add a GitHub Actions workflow that installs <code>requirements.txt</code>, runs <code>pytest</code>, and builds the frontend.</li><li><strong>High – Wildcard CORS</strong> (<code>backend/main.py</code>): replace <code>allow_origins=["*"]</code> with an explicit whitelist.</li><li><strong>Medium – Dependabot missing</strong>: add <code>.github/dependabot.yml</code>.</li><li><strong>Medium – Large binary</strong> (<code>docs/error-monitoring-agent-demo.mp4</code> 8 MB): move to LFS or external storage.</li><li><strong>Low – Missing repo conventions</strong>: add <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config.</li></ul>
+<p><strong>The Bottom Line</strong> The agent delivers a functional, end‑to‑end error‑context pipeline with clear separation between data ingestion, clustering, enrichment, and alerting. It is usable out‑of‑the‑box for demos, but production adoption requires adding licensing, tests, CI, and tightening security (CORS). Engineers modifying the pipeline should start at <code>backend/main.py</code> → <code>run_pipeline</code> and be aware that <code>backend/pipeline/__init__</code> is the primary import hub.</p>
             </div>
 
             

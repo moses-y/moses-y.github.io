@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 26, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#or-build-a-static-docker-image">Or build a static Docker image</a><a href="#docker">Docker</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Self‑hosted AI assistants often rely on ad‑hoc file‑based “memory” and single‑user designs that break under concurrent use, lack proper scheduling, and expose security gaps. Teams that need isolated histories, reliable task execution, and a durable graph‑based knowledge store have few ready‑made alternatives.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OpenLobster replaces OpenClaw’s flat‑file memory with a graph database (Neo4j) and a pluggable file backend (apps/backend/internal/application/memory/...). The codebase implements true multi‑user support: each user/channel is modeled as a distinct entity with its own conversation history (domain/models/user.go, domain/repositories/user/...).</p><p>A production‑grade scheduler lives in domain/services/scheduler/schedulerservice.go, exposing cron‑style recurring jobs and one‑off ISO‑8601 tasks, visible via the GraphQL UI (serve/graphql.go). The daemon entry points (apps/backend/cmd/openlobster/daemon/.go) launch the agent as a background service on Linux, macOS, or fall back to a stub on unsupported platforms.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup – Build the binary or container.  
-Build locally
-go build -o openlobster ./apps/backend/cmd/openlobster</p><h3 class="post-h" id="or-build-a-static-docker-image">Or build a static Docker image</h3><p>docker build -f .docker/Dockerfile.static -t openlobster:latest .</p><p>The Go module is defined in apps/backend/go.mod; dependencies are vendored via go.sum.</p><p>Configuration – Runtime settings are read by apps/backend/cmd/openlobster/config/config.go. Required fields (e.g., Neo4j URI, auth token) are expected as environment variables; the repo does not provide a sample .env, so operators must create one based on the struct fields in that file.</p><p>Running – Start the service with the compiled binary or Docker container.  
-Binary
-./openlobster daemon start   # launches the platform‑specific daemon</p><h3 class="post-h" id="docker">Docker</h3><p>docker run -d -p 8080:8080 \
-  -e NEO4JURI=bolt://neo4j:7687 \
-  -e NEO4JUSER=neo4j -e NEO4JPASS=secret \
-  openlobster:latest</p><p>The GraphQL endpoint is served by serve/http.go on port 8080, and the UI assets are under apps/backend/cmd/openlobster/public/.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A SaaS provider can deploy OpenLobster behind their internal network, configure separate Neo4j databases per tenant, and let each employee interact via Slack, Discord, or Telegram. The scheduler can trigger daily knowledge‑graph refreshes, while the per‑user histories keep conversations isolated.</p><p>query GetHistory($userId: ID!) {
-  user(id: $userId) {
-    conversations { id, messages { text, timestamp } }
-  }
-}</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Platform stub – daemon/unsupported.go logs “unsupported OS” but returns no error; invoking the daemon on an unknown OS will silently fail.  
-Medium – Missing env‑var docs – config/config.go expects several variables (Neo4j credentials, API keys) but the repo lacks a .env.example or documentation of required names.  
-Low – Limited test coverage for daemon – Tests exist for most domain services, but daemon startup (daemon/.go) has no unit tests, increasing risk of runtime regressions.  
-Low – No vulnerability scanning – CI workflows include tests.backend-ci.yaml but no Dependabot or Snyk step; security of third‑party Go modules is not automatically checked.  
-None – Structural health – go.mod, golangci.yml, and GitHub Actions pipelines are present; 60 test files run successfully in CI, indicating a mature test suite.  
-None – Licensing – GPL‑v3 license is included (LICENSE.md), satisfying legal requirements.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OpenLobster delivers a solid, Go‑native backend for a self‑hosted AI assistant with graph‑based memory, true multi‑user isolation, and a built‑in scheduler. It is ready for containerized deployment, but teams must supply their own configuration (environment variables) and consider adding OS‑agnostic daemon tests and automated dependency scanning. Suitable for organizations that need controllable, multi‑tenant AI agents and can manage the required Neo4j infrastructure.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Self‑hosted AI assistants often rely on ad‑hoc file storage and a single‑user scheduler, which makes concurrent use brittle and creates a large attack surface when secrets are checked into the repo. OpenClaw’s memory lives in a flat <code>MEMORY.md</code>, its scheduler is a hard‑coded heartbeat loop, and credentials are scattered in plaintext files.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OpenLobster replaces the markdown memory with a proper graph store (Neo4j) and a lightweight file backend (<code>apps/backend/internal/application/graphql/dto/adapters.go</code>). User sessions, channel histories and tool permissions are first‑class entities stored in the database (<code>apps/backend/internal/infrastructure/persistence/database.go</code>). The original heartbeat daemon is swapped for a configurable cron‑style scheduler (<code>apps/backend/internal/domain/services/scheduler/scheduler_service.go</code>). The frontend (<code>apps/frontend/src/App.tsx</code>) talks to the GraphQL API via the client in <code>apps/frontend/src/graphql/client.ts</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>apps/backend/cmd/openlobster/main.go</code> → <code>main</code> (line 39) which invokes the <code>Execute</code> function (called from 90 places). <code>Execute</code> reaches out over the network via <code>t.Tools.Browser.Fetch</code> (a browser tool wrapper) and eventually starts the HTTP server defined in <code>apps/backend/cmd/openlobster/serve/app.go</code> → <code>Run</code>. <code>Run</code> builds the GraphQL server (<code>NewGraphQLServer</code> – 76 callers) and the database connection (<code>GormDB</code> – 111 callers).</p>
+<p>From the server, request handling flows through the health endpoint (<code>ServeHTTP</code> in <code>apps/backend/internal/application/health/handler.go</code>) and webhook handlers (<code>serveTwilio</code>, <code>serveWhatsApp</code>). The most widely used internal symbols are <code>Close</code> (135 callers) and <code>New</code> (109 callers), giving them the highest blast radius.</p>
+<p>The frontend entry <code>apps/frontend/src/App.tsx</code> imports 23 other modules (hub) and participates in a circular import cycle with <code>Modal</code> and <code>AccessTokenModal</code>. The GraphQL client (<code>apps/frontend/src/graphql/client.ts</code>) contains 14 branch points in 44 lines, contributing to cognitive load.</p>
+<p>Database writes are performed in resolver tests such as <code>apps/backend/internal/application/graphql/resolvers/resolver_test.go</code>, which also triggers cryptographic helpers and file I/O, making that test file a hot spot (162 functions, 62 callers).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/OpenLobster
+cd OpenLobster
+
+# Install pnpm (if not present) and install JS/TS deps
+pnpm install          # reads apps/frontend/package.json and apps/backend/package.json
+
+# Build the backend container (base image pinned by digest is recommended)
+docker build -f .docker/Dockerfile.basic -t openlobster:latest .
+
+# Run Neo4j (or use the file backend) – see docs/architecture for connection details
+docker run -d --name neo4j -p 7474:7474 neo4j:5
+
+# Start the backend (binary produced by the Go build)
+go build -o bin/openlobster ./apps/backend/cmd/openlobster
+./bin/openlobster serve   # entry point main → Execute → Run → HTTP server
+
+# In another terminal, start the UI
+pnpm --filter frontend dev   # runs Vite per vite.config.ts</code></pre>
+<p>Configuration lives in <code>apps/backend/cmd/openlobster/config/config.go</code> and is overridden by environment variables. The repository currently commits a development <code>.env</code> file (<code>apps/frontend/.env.development</code>) that must be removed and replaced with a <code>.env.example</code> before production use.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A company can deploy the Docker image behind its internal network, point the UI at <code>http://localhost:3000</code>, and let each employee interact with the same agent via Slack, Discord or Twilio. The agent stores per‑user conversation graphs in Neo4j, enabling personalized context without file‑based clashes. Scheduler jobs (e.g., nightly data cleanup) are defined in the database and executed by <code>scheduler_service.go</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Static analysis findings (68 total):</strong></p>
+<ul><li><strong>High – Import cycles</strong> (14 files, e.g., <code>App.tsx</code>, <code>Modal/index.ts</code>) – break cycles by extracting shared types.</li><li><strong>Medium – High branching density</strong> in <code>apps/frontend/src/graphql/client.ts</code> – refactor to strategy tables.</li><li><strong>High – Deep nesting</strong> (max depth 8) in several UI components – flatten with early returns.</li><li><strong>Medium – Hub modules</strong> (<code>App.tsx</code>, <code>graphql/client.ts</code>) – keep these stable, move volatile logic out.</li><li><strong>High – Duplicated code blocks</strong> across daemon and migration files – extract common helpers.</li><li><strong>High – Oversized files</strong> (e.g., <code>schemas/config.schema.ts</code> &gt; 600 lines) – split by responsibility.</li></ul>
+<p><strong>Code‑health audit (8 findings):</strong></p>
+<ul><li><strong>HIGH</strong> Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> Remove committed <code>.env.development</code> and rotate its secrets.</li><li><strong>MEDIUM</strong> Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>tests.backend-ci.yaml</code>).</li><li><strong>MEDIUM</strong> Pin Docker base images by digest (<code>.docker/Dockerfile.basic</code>).</li><li><strong>MEDIUM</strong> Add a dependency‑vulnerability scan to CI.</li><li><strong>MEDIUM</strong> Install a pre‑commit secret‑scan hook.</li><li><strong>MEDIUM</strong> Set <code>persist-credentials: false</code> on checkout in <code>release.upload-binaries.yml</code>.</li><li><strong>LOW</strong> Define <code>timeout-minutes</code> on workflow jobs (<code>release.docker-images.yaml</code>).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>OpenLobster delivers a functional, multi‑user AI assistant with a proper graph backend and a configurable scheduler, but the codebase suffers from import cycles, deep nesting and duplicated platform‑specific logic. It is suitable for teams comfortable fixing architectural debt and enforcing stricter CI/CD hygiene before production deployment.</p>
             </div>
 
             
@@ -107,18 +129,18 @@ None – Licensing – GPL‑v3 license is included (LICENSE.md), satisfying leg
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">530<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>160</b></li><li><span>YAML</span><i style="width:10%"></i><b>16</b></li><li><span>Markdown</span><i style="width:6%"></i><b>10</b></li><li><span>JSON</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>232</b></li><li><span>TypeScript</span><i style="width:36%"></i><b>84</b></li><li><span>TSX</span><i style="width:28%"></i><b>64</b></li><li><span>Markdown</span><i style="width:22%"></i><b>50</b></li><li><span>CSS</span><i style="width:13%"></i><b>31</b></li><li><span>JSON</span><i style="width:9%"></i><b>21</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>GraphQL</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -153,6 +175,12 @@ None – Licensing – GPL‑v3 license is included (LICENSE.md), satisfying leg
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>apps/frontend/.env.development, docs/architecture/protecting-secrets.md</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1192359527">Open in Code Brain &rarr;</a>

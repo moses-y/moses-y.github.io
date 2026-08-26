@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 31, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,40 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Estimating depth from a single defocused image without ground‑truth supervision is still a research‑grade capability. Practitioners need a reproducible reference implementation that can evaluate the Zero‑Shot Depth from Defocus (ZEDD) benchmark and, eventually, train the FOSSA model on their own data.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository provides the FOSSA model – a Vision‑Transformer‑style backbone (FOSSAModel/fossa/fossa.py) together with a motion‑module and a custom CUDA extension (powerexppsf/powerexppsfcuda.cpp/.cu). The codebase implements:</p><p>Inference / evaluation – entry point eval.py loads a trained checkpoint, builds the model, and runs the ZEDD benchmark (see zeddtest/ utilities).  
- Dataset handling – dataset/ contains parsers for HAMMER, DDFF‑12, and the ZEDD dataset (dataset/hammer.py, dataset/ddff12val.py, dataset/zedd.py).  
- Utility scripts – training scaffolding (util/train.py), validation (util/val.py), and rendering helpers (util/render.py).</p><p>All model components are pure Python except the defocus PSF operator, which must be compiled via powerexppsf/setup.py.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Environment
-conda create -n fossa python=3.8
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p>Here's a concise, professional technical briefing for the FOSSA repository, written in the style of a consultant's briefing.</p>
+<hr>
+<h3 id="the-problem">The Problem</h3>
+<p>This repository is a collection of six loosely coupled projects bundled under one organization, centered on <strong>Zero-Shot Depth from Defocus</strong>. The primary artifact is a PyTorch implementation of the FOSSA model (official code for the arXiv preprint 2603.26658), but the repo also contains ZEDD benchmark tools, power-exp PSF CUDA extensions, dataset loaders, and utility scripts. There is no single unified architecture—each sub-project has its own entry point, dependencies, and execution model.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo implements zero-shot depth estimation from lens defocus, a technique that recovers scene depth from out-of-focus blur without requiring ground-truth depth supervision. The core model lives in <code>FOSSAModel/fossa/</code>, built around a <code>FocusStackTransformer</code> backbone with motion‑module attention. Defocus kernels are generated via a custom CUDA extension (<code>power_exp_psf/power_exp_psf_cuda.cpp</code> and <code>.cu</code>), which is <strong>required</strong> for both training and evaluation when synthetic defocus effects are needed.</p>
+<p>The ZEDD benchmark module (<code>zedd_test/</code>) provides evaluation pipelines that load a dataset from Hugging Face (<code>venkatsubra/ZEDD</code>), run the model, and save depth‑from‑defocus outputs. The <code>eval.py</code> entry point reaches 48 functions and orchestrates the full validation flow: model loading → inference → output saving via <code>save_zedd_outputs</code>.</p>
+<p>Dataset loading is handled by <code>dataset/ddff12_val.py</code> and <code>dataset/zedd.py</code>, which read HAMMER and DDFF-12 splits. The power‑exp PSF build step (<code>power_exp_psf/setup.py</code>) must be run before any model execution, and the resulting extension is imported via <code>PYTHONPATH</code> manipulation.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>eval.py:14</code> (<code>main</code>), which reaches 48 functions and is called from a single place. The call graph shows <code>Normalize</code> and <code>to_cuda</code> as the most broadly invoked helpers (5 and 4 callers respectively). The CUDA extension <code>power_exp_psf_cuda</code> is imported early and used during PSF generation; its import failure blocks model execution.</p>
+<p>The model forward pass routes through <code>FocusStackTransformer</code> → <code>forward_features</code> → backbone layers (<code>block</code>, <code>attention</code>, <code>mlp</code>), with residual functions (<code>attn_residual_func</code>, <code>ffn_residual_func</code>) appearing frequently in the internal call graph. The <code>dataset/base.py</code> module is a hub for data preprocessing (<code>get_center_crop_origin</code>, <code>get</code>), called from multiple dataset loaders.</p>
+<p>Files that read or write the filesystem: <code>util/log.py</code>, <code>dataset/zedd.py</code>, <code>zedd_test/zedd_test.py</code>, and the build script <code>power_exp_psf/setup.py</code>. The shortest path from entry to filesystem writes is <code>main → load_model_for_validation → save_zedd_outputs [via os.makedirs]</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> Create a conda environment and install dependencies:</p>
+<pre data-lang="bash"><code>conda create -n fossa python=3.8
 conda activate fossa
-Dependencies (exact versions not locked)
-pip install -r requirements.txt
-Build the CUDA extension (required for both training and evaluation)
-cd powerexppsf
-python setup.py buildext --inplace
-Verify import
-python - &lt;&lt;&#39;PY&#39;
-import powerexppsfcuda
-print(&quot;CUDA extension loaded from&quot;, powerexppsfcuda.file)
-PY
+pip install -r requirements.txt</code></pre>
+<p><strong>Build the CUDA extension</strong> (required)</p>
+<pre data-lang="bash"><code>cd power_exp_psf
+python setup.py build_ext --inplace
+# verify
+python -c "import power_exp_psf_cuda; print('OK')"
 cd ..
-Make the extension importable
-export PYTHONPATH=$PWD/powerexppsf:$PYTHONPATH
-Download datasets (example for HAMMER)
-mkdir -p dataset/datasets &amp;&amp; cd dataset/datasets
-wget https://huggingface.co/datasets/Ruicheng/monocular-geometry-evaluation/resolve/main/HAMMER.zip
-unzip HAMMER.zip &amp;&amp; rm HAMMER.zip
-cd ../../..
-Run evaluation on the ZEDD benchmark
-python eval.py --config config/val.py --ckpt path/to/fossacheckpoint.pth</p><p>Configuration: config/val.py contains the model hyper‑parameters and dataset paths used by eval.py. No additional environment variables are required beyond the PYTHONPATH tweak.</p><p>Training: When the training code is released (roadmap states April 2026), util/train.py will be the entry point; currently only evaluation is functional.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A robotics perception pipeline can call the model as a library:</p><p>from FOSSAModel.fossa.fossa import FOSSA
-import torch, powerexppsfcuda</p><p>model = FOSSA(pretrained=&#39;path/to/checkpoint.pth&#39;)
-model.eval()
-depth = model(singledefocusedimage.unsqueeze(0))  # Tensor, Bx1xHxW</p><p>The output depth map can be fused with SLAM or used for scene understanding without needing multi‑view data.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – requirements.txt is not version‑pinned; reproducible builds depend on the current PyPI state.  
-Medium – No CI/CD – No .github/, travis.yml, or other pipeline; tests (zedd_test/.py) are present but not automatically exercised.  
-Low – Limited documentation – README covers installation but lacks API docs for FOSSAModel classes; developers must read source.  
-Low – CUDA extension build assumes a compatible GPU/driver – No fallback or informative error handling if compilation fails.  
-Low – License present – LICENSE is included, mitigating legal risk.  
-Low – Test coverage – Only four test files; they validate format checking rather than model correctness.</p><p>Overall the code follows a standard PyTorch project layout, with clear separation between model (FOSSAModel/), data (dataset/), and utilities (util/). No obvious security secrets are stored.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FOSSA delivers a functional reference implementation for zero‑shot depth‑from‑defocus evaluation, with a clean modular structure and a working CUDA extension. The main drawbacks are the absence of reproducible dependency locking and an automated test pipeline. It is suitable for research teams that can manage their own CI and environment reproducibility, but not for production deployments without additional engineering effort.</p>
+export PYTHONPATH=$PWD/power_exp_psf:$PYTHONPATH</code></pre>
+<p><strong>Download datasets</strong> HAMMER: wget from Hugging Face into <code>dataset/datasets/</code>. DDFF-12: download the DFV split <code>.h5</code> from the Sharepoint link and place it as <code>dfv_trainVal.h5</code> inside <code>dataset/datasets/ddff12_val_generation/</code>.</p>
+<p><strong>Run evaluation</strong></p>
+<pre data-lang="bash"><code>python eval.py</code></pre>
+<p>Configuration is read from <code>config/validation_configs.py</code>; environment variables and dataset paths are resolved in <code>util/config.py</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A research team wants to benchmark depth-from-defocus performance on the ZEDD test set. They clone the repo, run the build step for the CUDA PSF extension, download the ZEDD and DDFF-12 datasets, and invoke <code>python eval.py --config config/validation_configs.py</code>. The pipeline loads a pretrained FOSSA model, generates defocus kernels via the CUDA extension, runs inference on the test images, and writes per-image depth estimates to disk. The entire flow executes in under 30 seconds on a single A100 for the 64‑image ZEDD subset.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>The static analysis found 12 findings across 5 kinds:</p>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Deep nesting x7 — files <code>util/init.py</code>, <code>FOSSAModel/fossa/backbone.py</code>, <code>dataset/ddff12_val.py</code>. Max indentation depth 13; control flow is hard to follow. Fix: flatten with guard clauses.</li><li><strong>[MEDIUM/resource_safety]</strong> File opened without context manager x2 — <code>util/log.py</code>, <code>dataset/zedd.py</code>. <code>open(...)</code> not wrapped in <code>with</code>; handle may leak on error. Fix: use <code>with open(...) as f:</code>.</li><li><strong>[HIGH/clarity]</strong> Duplicated code blocks x18 — 35 repeated 6-line blocks across <code>attention.py</code>, <code>block.py</code>, <code>drop_path.py</code>, <code>mlp.py</code>, etc. Fix: extract shared helpers; DRY the repeated logic.</li><li><strong>[MEDIUM/resilience]</strong> Broad exception handling — <code>dataset/ddff12_val.py</code>. Bare <code>Exception</code> swallows errors indiscriminately. Fix: catch specific exceptions; re-raise or log the rest.</li><li><strong>[MEDIUM/cognitive_load]</strong> High branching density — <code>util/init.py</code>. 22 branch points over 64 lines. Fix: decompose decision-heavy logic; consider table/strategy dispatch.</li></ul>
+<p>SDLC observations: no CI/CD pipeline, no lockfile for the 21 declared dependencies (numpy pinned to ==1.23.1, which is 1 major behind the current 2.5.2), Dependabot/Renovate not configured, 1 test file against 44 source files (ratio 0.023). A published advisory exists for <code>openexr@3.3.1</code> (CVE-2026-34588, high severity).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This repo is a functional, research‑grade implementation of zero-shot depth-from-defocus, with a working evaluation pipeline and a required CUDA extension for defocus kernel generation. The codebase shows signs of rapid prototyping—high nesting, duplicated blocks, and missing reproducibility tooling. It is suitable for researchers who need to reproduce the FOSSA results or extend the defocus synthesis pipeline, but it is not production‑ready without addressing the dependency lockfile, CI gaps, and the nested‑control‑flow hotspots that increase cognitive load for anyone modifying the backbone or dataset logic.</p>
             </div>
 
             
@@ -134,7 +137,7 @@ Low – Test coverage – Only four test files; they validate format checking ra
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>43</b></li><li><span>Shell</span><i style="width:5%"></i><b>2</b></li><li><span>Markdown</span><i style="width:2%"></i><b>1</b></li><li><span>JSON</span><i style="width:2%"></i><b>1</b></li><li><span>C++</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>CUDA</span></p>
                     </div>
                 </div>
 

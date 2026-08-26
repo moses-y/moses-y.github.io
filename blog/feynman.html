@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 26, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,37 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Researchers and engineers need a repeatable way to gather, synthesize, and verify scientific information without manually juggling web searches, paper PDFs, and code audits. The current process is error‑prone, time‑consuming, and hard to automate across projects.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>feynman is a command‑line AI research agent built on the Pi runtime. The core CLI lives in src/cli.ts and is exported from src/index.ts. It dispatches four built‑in agents—researcher, reviewer, writer, and verifier—that coordinate tasks such as literature search (extensions/research-tools/alpha.ts), code‑base auditing (prompts/audit.md), and multi‑agent synthesis (prompts/deepresearch.md).</p><p>The repository ships a curated set of skills (e.g., skills/alpha-research/SKILL.md, skills/docker/SKILL.md) that are synced to ~/.feynman/agent/skills/ on first run (src/bootstrap/sync.ts). Documentation for each workflow is generated from the website/ Astro site, with source Markdown in website/src/content/docs/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone and prepare the development environment
-git clone https://github.com/getcompanion-ai/feynman.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers and researchers need a repeatable, source‑grounded way to turn a natural‑language query into a structured research artefact (literature review, audit, replication plan, etc.). Manual searching, note‑taking and synthesis are fragmented and error‑prone, especially when the output must stay linked to original papers or code.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>feynman</code> is a CLI‑driven AI research agent built on the <strong>Pi</strong> runtime. The core commands live under <code>src/</code> (<code>src/cli.ts</code>, <code>src/index.ts</code>) and invoke a set of reusable <strong>Pi skills</strong> stored in <code>.feynman/</code> and the <code>skills/</code> directory. The web front‑end in <code>website/</code> renders generated artefacts, while <code>extensions/research-tools/</code> provides command‑specific helpers (e.g., <code>header.ts</code>, <code>project.ts</code>).</p>
+<p>Key entry points:</p>
+<ul><li><code>src/cli.ts</code> – parses sub‑commands (<code>deepresearch</code>, <code>lit</code>, <code>audit</code>, …) and dispatches to handlers such as <code>handleAlphaCommand</code> and <code>handleModelCommand</code>.</li><li><code>src/index.ts</code> – exports a <code>run</code> function used by the bundled binary <code>bin/feynman.js</code>.</li></ul>
+<p>The CLI ultimately calls UI helpers in <code>src/ui/terminal.ts</code> (printing, colour handling) and model‑resolution logic in <code>src/model/commands.ts</code> and <code>src/model/catalog.ts</code>. All network or filesystem interactions are confined to the “setup/doctor”, “pi/web‑access”, and “system/executables” modules.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/cli.ts:278</code> (<code>main</code>). <code>main</code> reaches 87 functions, the largest blast‑radius hub is <code>src/cli</code> (instability 0.92, imports 12 other modules). From <code>main</code> the flow is:</p>
+<ol><li><strong>Command parsing</strong> → calls a handler (<code>handleAlphaCommand</code>, <code>handleModelCommand</code>, <code>handleSearchCommand</code>, etc.).</li><li>Handlers invoke <strong>model resolution</strong> (<code>src/model/commands.ts</code> → <code>resolveAvailableModelSpec</code>, <code>selectOAuthProvider</code>).</li><li>UI output is funneled through <code>src/ui/terminal.ts</code> (<code>printInfo</code>, <code>paint</code>, <code>rgb</code>). <code>printInfo</code> is the most‑referenced function (12 callers).</li><li>For web or repo access, <code>src/pi/web-access.ts</code> provides <code>loadPiWebAccessConfig</code> and <code>formatRouteLabel</code>.</li><li>System binaries are located by <code>src/system/executables.ts: resolveExecutable</code>, called from four places.</li></ol>
+<p>The internal call graph shows 250 intra‑repo edges; no circular dependencies were detected. High‑instability modules (<code>src/setup/setup</code>, <code>src/model/commands</code>) import many utilities but are only imported by one other module, so changes there cascade widely. Low‑instability hubs (<code>src/pi/web-access</code>, <code>src/system/executables</code>) are pure providers with no outgoing imports.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (use the exact URL)
+git clone https://github.com/moses-y/feynman
 cd feynman
-nvm use || nvm install   # Node ≥20.18.1 as required by .env.example
-pnpm install              # npm lockfile present; pnpm works because scripts use pnpm
-Optional – install the pre‑built bundle (production use)
-curl -fsSL https://feynman.is/install | bash
-Run the CLI
-pnpm start -- &lt;command&gt;   # entry point src/cli.ts
-Example from README
-feynman &quot;what do we know about scaling laws&quot;</p><p>Configuration – A template environment file is provided at .env.example. Keys for external services (AlphaXiv, Gemini/Perplexity) must be added before invoking commands that require them (e.g., deepresearch, web-search). The runtime loads settings from src/pi/settings.ts and src/config/paths.ts.</p><p>Running a workflow – Use the slash‑style shortcuts documented in website/src/content/docs/workflows/.md. For example:</p><p>feynman deepresearch &quot;mechanistic interpretability&quot;</p><p>The command triggers the researcher and reviewer agents, then synthesizes a citation‑rich brief.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can embed a nightly literature‑review step in their CI pipeline:</p><p>.github/workflows/lit-review.yml
-name: Nightly Literature Review
-on:
-  schedule: [cron: &#39;0 2   &#39;]
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-uses: actions/checkout@v3
-run: curl -fsSL https://feynman.is/install | bash
-run: feynman lit &quot;large language model interpretability&quot;
-uses: actions/upload-artifact@v3
-        with:
-          name: review-output
-          path: ~/.feynman/outputs/.md</p><p>The generated markdown can be archived or posted to a documentation site automatically.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing API key handling – External services are required but no fallback or validation appears in src/pi/web-access.ts; missing keys will cause runtime failures.  
-Medium – Limited test coverage – 7 test files exist (tests/.test.ts), but core agent orchestration (src/pi/launch.ts) lacks direct unit tests.  
-Low – No root‑level lint config – Only the website folder contains eslint.config.js; the main TypeScript code relies on default tsconfig rules, which may miss style inconsistencies.  
-Low – No Dockerfile – Although a Docker skill is provided (skills/docker/SKILL.md), the repo does not ship a container definition for the CLI itself, requiring users to build their own if needed.  
-Low – License present – LICENSE is MIT, satisfying legal requirements.  
-Low – CI present – GitHub Actions workflow (.github/workflows/publish.yml) runs on push; however, it only publishes, not test, indicating a missing test‑run step in CI.</p><p>Overall, the codebase compiles cleanly, uses TypeScript typings (metadata/commands.d.mts), and includes documentation generated from source Markdown, indicating reasonable maintenance discipline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>feynman delivers a usable, extensible CLI for AI‑assisted research, with clear documentation and a modular skill system. It is well‑suited for teams that can provide required API keys and are comfortable with a Node.js environment. The primary gaps are sparse test coverage of core orchestration and the absence of built‑in containerization, which may require additional effort for production hardening.</p>
+
+# Install dependencies (npm works; the repo also supports pnpm)
+npm ci
+
+# Optional: copy example env (currently unused but present)
+cp .env.example .env
+
+# Run the CLI directly
+node bin/feynman.js deepresearch "mechanistic interpretability"
+# or via the TypeScript entry point
+npx ts-node src/cli.ts lit "RLHF alternatives"</code></pre>
+<p>The binary reads skill definitions from <code>~/.feynman/agent/skills/</code> on first run; the <code>install‑skills</code> scripts referenced in the README are wrappers around the same logic.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team wants a quick brief on recent RLHF literature. They run:</p>
+<pre data-lang="bash"><code>feynman lit "RLHF alternatives"</code></pre>
+<p>The CLI resolves the model (<code>src/model/commands.ts</code>), queries AlphaXiv via the Pi skill, formats the result with <code>src/ui/terminal.ts</code>, and writes a markdown artefact into <code>outputs/</code>. The artefact contains citations linked back to the original papers, ready for internal review.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – Enable Dependabot or Renovate</strong> – no automated dependency updates (<code>.github/dependabot.yml</code> missing).</li><li><strong>MEDIUM – Add dependency‑vulnerability scan to CI</strong> – no scan step in <code>.github/workflows</code>.</li><li><strong>MEDIUM – Set <code>persist-credentials: false</code> on checkout</strong> – token persists in CI steps (<code>publish.yml</code>).</li><li><strong>MEDIUM – Review install lifecycle script</strong> – <code>preinstall</code> script present; could run untrusted code.</li><li><strong>LOW – Add <code>timeout-minutes</code> to workflow jobs</strong> – jobs may run up to six hours.</li><li><strong>LOW – Add repository convention files</strong> – missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config.</li></ul>
+<p>Tests exist (<code>tests/</code>), CI runs via GitHub Actions, a LICENSE is present, and the lockfile is committed. No secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>feynman</code> delivers a functional, modular CLI for AI‑augmented research with a clear separation of concerns (command parsing, model handling, UI output). The codebase is healthy overall but suffers from duplicated logic, deep nesting in a few extension files, and lacks automated dependency hygiene. It is suitable for teams that need an extensible research automation layer and are comfortable managing the identified maintenance gaps.</p>
             </div>
 
             

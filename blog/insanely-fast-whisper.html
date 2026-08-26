@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 24, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,19 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#enable-flash-attention-2">Enable Flash‑Attention 2</a><a href="#use-a-different-model-distil-whisper">Use a different model (distil‑whisper)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Transcribing long audio (hours) with OpenAI’s Whisper is CPU‑bound and slow on typical hardware. Users need a lightweight, GPU‑accelerated CLI that can run Whisper‑large models on‑device without writing custom inference scripts.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>insanely-fast-whisper ships a single entry point (src/insanelyfastwhisper/cli.py) that wraps Hugging Face Transformers, Optimum, and Flash‑Attention 2. The CLI parses arguments, loads the requested model (e.g., openai/whisper-large-v3), and runs batched inference on the GPU. Utility code lives under src/insanelyfastwhisper/utils/ – diarizationpipeline.py and diarize.py handle optional speaker diarisation, while result.py formats the transcription output. The repository also includes two Jupyter notebooks (notebooks/*.ipynb) that demonstrate the same workflow in a notebook environment.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Recommended – isolates the tool and its heavy dependencies
-pipx install insanely-fast-whisper==0.0.15   # or latest version
-If Python 3.11 mis‑detects the version:
-pipx install insanely-fast-whisper --force --pip-args=&quot;--ignore-requires-python&quot;</p><p>The pyproject.toml declares dependencies (Transformers, Optimum, flash‑attn, etc.) and the lock file pdm.lock pins versions for reproducible builds.</p><h3 class="post-h" id="configuration">Configuration</h3><p>No separate config file is required. The CLI accepts flags for model selection, device, batching, and Flash‑Attention. Example defaults are defined in cli.py (e.g., --model-name openai/whisper-large-v3, --device-id cuda, --batch-size 24). For macOS you must add --device-id mps.</p><h3 class="post-h" id="running">Running</h3><p>Basic transcription
-insanely-fast-whisper --file-name path/to/audio.wav</p><h3 class="post-h" id="enable-flash-attention-2">Enable Flash‑Attention 2</h3><p>insanely-fast-whisper --file-name path/to/audio.wav --flash True</p><h3 class="post-h" id="use-a-different-model-distil-whisper">Use a different model (distil‑whisper)</h3><p>insanely-fast-whisper --model-name distil-whisper/large-v2 --file-name path/to/audio.wav</p><p>The command invokes src/insanelyfast_whisper/cli.py, which calls the utility functions in utils/ to perform inference and emit JSON/plain‑text results.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A media monitoring service can drop raw broadcast recordings into a shared folder and trigger the CLI via a cron job:</p><p>#!/usr/bin/env bash
-FILE=&quot;/data/incoming/${1}&quot;
-insanely-fast-whisper --file-name &quot;$FILE&quot; --model-name openai/whisper-large-v3 \
-    --flash True --batch-size 24 &gt; &quot;/data/processed/${1%.wav}.json&quot;</p><p>The resulting JSON can be streamed into an indexing pipeline (e.g., Elasticsearch) for searchable subtitles.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Missing CI/CD – No .github/workflows or other pipeline; automated testing is not enforced.  
-Low – Lockfile format – pdm.lock exists, but the project uses pyproject.toml without a requirements.txt; users unfamiliar with PDM may need extra steps.  
-Low – Sparse test coverage – Only one test module (tests/init.py) is present; no functional tests for CLI or utils.  
-Low – Documentation gaps – README covers install/CLI flags, but there is no API reference for the utility functions (e.g., diarize).  
-Low – Platform limitation – CLI is explicitly “opinionated” for NVIDIA GPUs or macOS MPS; no fallback to CPU is documented, which could cause runtime errors on unsupported hardware.</p><p>No obvious security secrets are committed, and the license file is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>insanely-fast-whisper delivers a practical, GPU‑accelerated Whisper CLI with clear install instructions and benchmarked performance. It is suitable for teams that need fast, on‑premise transcription and can manage the minimal testing and CI gaps. Organizations lacking dedicated NVIDIA hardware or requiring broader platform support will need to augment the repo.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#what-each-file-is-responsible-for">What Each File Is Responsible For</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p>Here's a concise, professional technical briefing for <code>insanely-fast-whisper</code>, written to consultant standards.</p>
+<hr>
+<h3 id="the-problem">The Problem</h3>
+<p>This repository provides a CLI for on-device Whisper transcription using 🤗 Transformers, Optimum, and flash-attn. It targets users who need fast, local transcription without relying on cloud APIs. The pain point it addresses is the latency gap between cloud Whisper services and local execution—particularly for long-form audio—while maintaining model quality. The project differentiates itself through Flash Attention 2 and batching optimizations, claiming 150 minutes of audio in under 2 seconds on A100 hardware.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The codebase is small: 8 Python files, 3 notebooks, and a CLI entry point. Execution flows through <code>src/insanely_fast_whisper/cli.py:main</code>, which orchestrates the transcription pipeline. The core work is distributed across the <code>utils/</code> subpackage: <code>diarize.py</code> handles audio preprocessing, diarization, and an outbound network call via <code>requests.get</code> (no timeout configured); <code>result.py</code> defines <code>JsonTranscriptionResult</code> and <code>build_result</code>; <code>diarization_pipeline.py</code> exposes a single <code>diarize</code> function; and <code>convert_output.py</code> defines formatters (<code>SrtFormatter</code>, <code>VttFormatter</code>, <code>TxtFormatter</code>) and chunk-processing utilities (<code>format_chunk</code>, <code>format_seconds</code>, <code>preamble</code>). The entry point <code>main</code> reaches 9 functions total, with the longest call chain being <code>main -&gt; diarize -&gt; preprocess_inputs</code> [network via requests.get].</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/insanely_fast_whisper/cli.py:111</code> (<code>main</code>). From there, the call graph resolves as follows:</p>
+<ul><li><code>main -&gt; convert</code> — handles model loading and the primary inference path.</li><li><code>main -&gt; convert -&gt; preamble</code> / <code>format_chunk</code> / <code>format_seconds</code> — output formatting.</li><li><code>main -&gt; diarize</code> — triggers the diarization pipeline.</li><li><code>diarize -&gt; preprocess_inputs</code> — makes an outbound network call to fetch diarization data via <code>requests.get</code> (no timeout).</li><li><code>diarize -&gt; diarize_audio</code> / <code>post_process_segments_and_transcripts</code> — internal audio processing.</li><li><code>main -&gt; build_result</code> / <code>convert</code> — final result assembly.</li></ul>
+<p>The outbound network call in <code>src/insanely_fast_whisper/utils/diarize.py</code> is the only edge leaving the process. No CI/CD pipeline is configured, and there is no dependency lockfile, meaning builds are not reproducible across environments.</p>
+<h3 id="what-each-file-is-responsible-for">What Each File Is Responsible For</h3>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Functions</th><th>Classes/Types</th><th>Outbound Effects</th></tr></thead><tbody><tr><td><code>convert_output.py</code></td><td>10</td><td>3 (TxtFormatter, SrtFormatter, VttFormatter)</td><td>Calls into 2 internal modules; defines formatting primitives used by the CLI.</td></tr><tr><td><code>src/insanely_fast_whisper/utils/diarize.py</code></td><td>3</td><td>–</td><td>Makes an outbound network call via <code>requests.get</code>; no timeout configured. Defines <code>preprocess_inputs</code>, <code>diarize_audio</code>, <code>post_process_segments_and_transcripts</code>.</td></tr><tr><td><code>src/insanely_fast_whisper/utils/result.py</code></td><td>1</td><td>1 (JsonTranscriptionResult)</td><td>Called from 1 other file; defines <code>build_result</code>.</td></tr><tr><td><code>src/insanely_fast_whisper/utils/diarization_pipeline.py</code></td><td>1</td><td>–</td><td>Called from 1 other file; defines <code>diarize</code>.</td></tr><tr><td><code>src/insanely_fast_whisper/cli.py</code></td><td>1 (<code>main</code>)</td><td>–</td><td>Entry point; reaches 9 function(s); itself called from 1 place.</td></tr></tbody></table></div>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> The project uses <code>pyproject.toml</code> for dependencies and tooling. No lockfile is committed, so installs should be pinned explicitly. Install via <code>pipx</code>:</p>
+<pre data-lang="bash"><code>pipx install insanely-fast-whisper==0.0.15 --force</code></pre>
+<p>Or with <code>pip</code> if you need to override Python version constraints:</p>
+<pre data-lang="bash"><code>pip install insanely-fast-whisper --ignore-requires-python</code></pre>
+<p><strong>Configuration</strong> No environment variables or config files are required for basic transcription. The only external dependency is network access for the diarization endpoint, which is invoked from <code>src/insanely_fast_whisper/utils/diarize.py</code> via <code>requests.get</code>.</p>
+<p><strong>Running it</strong> The CLI entry point is <code>insanely-fast-whisper</code>. From any path:</p>
+<pre data-lang="bash"><code>insanely-fast-whisper --file-name &lt;filename or URL&gt;</code></pre>
+<p>On macOS, add <code>--device-id mps</code>. To enable Flash Attention 2:</p>
+<pre data-lang="bash"><code>insanely-fast-whisper --file-name &lt;filename or URL&gt; --flash True</code></pre>
+<p>To use distil-whisper:</p>
+<pre data-lang="bash"><code>insanely-fast-whisper --model-name distil-whisper/large-v2 --file-name &lt;filename or URL&gt;</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A developer transcribing a 30-minute meeting recording on a workstation with an NVIDIA GPU can run:</p>
+<pre data-lang="bash"><code>insanely-fast-whisper --file-name meeting.wav --flash True</code></pre>
+<p>This loads the Whisper Large v3 model with Flash Attention 2 and batching, producing a timed transcript in under 2 minutes. The output can be formatted as SRT or VTT via the CLI flags. If the meeting requires speaker diarization, the built-in pipeline will make an outbound request to a diarization service—ensure network access is available and consider adding a timeout, as the request has none configured.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[MEDIUM/cognitive_load]</strong> <code>src/insanely_fast_whisper/utils/diarize.py</code> — Max indentation depth 6; control flow is hard to follow. Fix: flatten with early returns/guard clauses; extract inner blocks.</li><li><strong>[HIGH] No CI/CD pipeline</strong> — 8 source files, no automated build/test gate. Every change merges without having been built. Fix: add a workflow running the project build and test command on push and pull_request.</li><li><strong>[MEDIUM] No dependency lockfile</strong> — <code>pyproject.toml</code> declares dependencies without a lockfile, meaning builds are not reproducible. Fix: commit <code>pdm.lock</code> or add a <code>requirements.txt</code> pinned at the desired version.</li><li><strong>[MEDIUM] Outbound request has no timeout</strong> — <code>src/insanely_fast_whisper/utils/diarize.py</code> makes an unbounded <code>requests.get</code> call. Fix: pass <code>timeout=</code> on every call, or use a session with one configured.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers on its promise: a lightweight, opinionated CLI that transcribes hours of audio in minutes using Flash Attention 2 and batching. The codebase is focused and the performance claims are credible given the optimization stack (Transformers + Optimum + flash-attn). However, the absence of CI, a lockfile, and a timeout on the diarization network call are production-grade gaps. Use this for local, GPU-accelerated transcription workflows where network access is available and the diarization endpoint is acceptable. Teams requiring reproducible builds, automated testing, or hardened network calls should add the recommended CI and timeout fixes before depending on this in a service context.</p>
+<hr>
+<p><em>Word count: 512</em></p>
             </div>
 
             
@@ -111,9 +133,9 @@ Low – Platform limitation – CLI is explicitly “opinionated” for NVIDIA G
                         <span class="an-lab">Composition</span>
                         <div class="an-score">16<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>8</b></li><li><span>Markdown</span><i style="width:13%"></i><b>1</b></li><li><span>TOML</span><i style="width:13%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>8</b></li><li><span>Jupyter Notebook</span><i style="width:38%"></i><b>3</b></li><li><span>Markdown</span><i style="width:13%"></i><b>1</b></li><li><span>TOML</span><i style="width:13%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 
