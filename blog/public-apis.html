@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>You need to find APIs for your side project, hackathon, or production app, but Google searches give you dead links, marketing junk, or sketchy sources. Nobody wants to waste time digging through outdated lists or sign up for stuff just to test an endpoint.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The public-apis repo is basically a giant, crowd-sourced spreadsheet of free APIs, stored in Markdown and curated by actual humans. The heart of it is the list itself, but there’s more: the scripts/ folder holds Python tools for validating API links (scripts/validate/links.py) and checking format (scripts/validate/format.py). These aren’t rocket science, but they keep the list from turning into link rot. CI is handled by GitHub Actions in .github/workflows/, so every PR gets checked for broken links and formatting before it’s merged. Docs live in README.md and CONTRIBUTING.md, and there’s a bunch of templates so you know what info to submit.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you want to add a new API or just grab one for a quick prototype. Clone the repo, run python scripts/validate/links.py to make sure the links are alive, then browse README.md for the API you want. If you’re contributing, edit the Markdown, run the format validator, and push your PR. The CI will yell at you if you mess up the link or formatting. No magic, just basic automation so the list stays useful.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is the go-to for anyone hunting free APIs—students, devs, hobbyists. The tooling is simple but effective. It’s not fancy, and if you need something more dynamic (like an API marketplace), look elsewhere. For quick discovery and community-driven curation, it’s hard to beat. Just don’t expect anything beyond a well-maintained Markdown list and some sanity checks.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Projects that need a vetted list of free public APIs often have to search disparate sources, verify data formats, and check link health manually. Maintaining that list without automated validation quickly becomes error‑prone and time‑consuming.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository supplies a curated markdown catalog (root <code>README.md</code>) and a small Python validation suite under <code>scripts/</code>.</p>
+<ul><li><code>scripts/validate/format.py</code> checks each entry’s title, description, authentication tag, HTTPS usage, CORS header, alphabetical ordering and category consistency.</li><li><code>scripts/validate/links.py</code> extracts URLs from the markdown, deduplicates them, and performs a live HTTP GET to confirm the link is reachable.</li><li>Test modules in <code>scripts/tests/</code> (<code>test_validate_format.py</code>, <code>test_validate_links.py</code>) exercise the validation logic with a range of edge cases.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <code>main</code> function in <code>scripts/validate/format.py</code> (line 254). From there it calls a chain of 20 internal functions, the most frequently used being:</p>
+<ul><li><code>error_message</code> – invoked from 8 locations to produce consistent validation feedback.</li><li><code>check_file_format</code> – validates the overall markdown structure and uses <code>error_message</code> (5 calls).</li><li><code>check_description</code>, <code>check_auth</code>, <code>check_title</code> – each route through <code>error_message</code> to report field‑specific problems.</li></ul>
+<p>The format validator is called by the test suite (<code>scripts/tests/test_validate_format.py</code>) but can also be invoked directly from the CLI (the file is executable).</p>
+<p>When link validation runs, <code>main</code> → <code>start_links_working_checker</code> → <code>check_if_list_of_links_are_working</code> → <code>check_if_link_is_working</code> triggers a real network request via <code>requests.get</code> (the only outbound call). This path is the sole external side‑effect and lives entirely in <code>scripts/validate/links.py</code>.</p>
+<p>No circular imports appear; the internal import graph consists of six modules with zero edges, meaning each file can be edited in isolation without worrying about hidden dependency loops. The functions with the widest blast radius are <code>error_message</code> (8 callers) and <code>check_file_format</code> (5 callers); changes to those will affect most validation flows.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/public-apis.git
+cd public-apis
+
+# Install the Python dependencies listed for the scripts
+python -m pip install -r scripts/requirements.txt</code></pre>
+<p>The repo does not contain a dedicated CLI entry point, but the validation can be run by executing the format module directly:</p>
+<pre data-lang="bash"><code>python scripts/validate/format.py path/to/README.md</code></pre>
+<p>Replace <code>path/to/README.md</code> with the markdown file you want to check (the root <code>README.md</code> is the default target).</p>
+<p>To run the test suite locally:</p>
+<pre data-lang="bash"><code>python -m unittest discover -s scripts/tests</code></pre>
+<p>No additional configuration files or environment variables are required; the code relies only on the standard library and <code>requests</code> (installed via <code>requirements.txt</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline for a documentation site could invoke the validator on every pull request:</p>
+<pre data-lang="yaml"><code>- name: Validate API list
+  run: python scripts/validate/format.py README.md</code></pre>
+<p>If any <code>error_message</code> is returned, the job fails, preventing malformed entries from being merged.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium</strong> – Least‑privilege GITHUB_TOKEN not declared (<code>.github/workflows/test_of_push_and_pull.yml</code>).</li><li><strong>Medium</strong> – No Dependabot or Renovate configuration (<code>.github/dependabot.yml</code> missing).</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI (<code>.github/workflows/</code> lacks such step).</li><li><strong>Medium</strong> – Checkout step keeps token persisted (<code>.github/workflows/test_of_push_and_pull.yml</code>).</li><li><strong>Low</strong> – Jobs lack <code>timeout-minutes</code> (<code>.github/workflows/test_of_push_and_pull.yml</code>).</li></ul>
+<p>Additional observations: the repository ships a license (<code>LICENSE</code>) and a contributing guide, but it does not include a lockfile for the Python dependencies, which makes reproducible builds harder. Tests exist and GitHub Actions run them, satisfying basic CI coverage.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo provides a lightweight, well‑tested validator for the public‑API markdown catalog, with clear separation between format checks and live link verification. Its simplicity is a strength, but the lack of a dependency lockfile and missing security‑focused CI steps limit readiness for production‑grade automation. Teams that need a quick way to keep an API list tidy can adopt it, provided they add a lockfile and augment the CI with vulnerability scanning.</p>
             </div>
 
             
@@ -91,9 +124,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +146,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>scripts/requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176192405">Open in Code Brain &rarr;</a>

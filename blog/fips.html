@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 7, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,48 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Mesh Networking with FIPS: A Practical Guide to Self-Organizing Networks</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Building decentralized networks is a pain. Traditional routing protocols need centralized control, static configuration, or global knowledge of the network topology. If you want a mesh network that works across random transports (like Bluetooth, UDP, or even radio), good luck. Add encryption, multi-hop routing, and support for dynamic changes, and you&#39;re in for a world of hurt.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>FIPS (Free Internetworking Peering System) is a Rust-powered mesh routing protocol that builds self-organizing, decentralized networks. It assigns nodes cryptographic identities that double as routing addresses using Nostr keypairs (src/identity/). It creates a spanning tree, employs bloom filters for route discovery (src/bloom/), and uses Noise encryption for hop-by-hop and end-to-end security (src/noise/).</p><p>The protocol is designed to run on anything—LAN, Bluetooth, radio, or an internet overlay. You can even hook it into IPv6 via a TUN interface (src/upper/tun.rs) for seamless IP routing. Configuration is handled through fips.yaml files, with sane defaults baked in. It’s simple to bootstrap a node and join a network, as long as you have a peer address.</p><p>Testing and simulation tools are baked in, with two Docker setups (testing/chaos/Dockerfile, testing/static/Dockerfile) and Python scripts (testing/chaos/sim/) for chaos testing. You can simulate churn, bottlenecks, and even mixed transport scenarios using testing/chaos/scenarios/.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re deploying a disaster recovery mesh network. You spin up two nodes with minimal config files like this:</p><p>Node B points back to Node A, and they’ll automagically find each other and start routing traffic. You can inspect the network state in real-time with fipsctl (src/bin/fipsctl.rs) or simulate network failures in Docker using the chaos testing scripts.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FIPS is an alpha-stage project, and it shows—it’s not stable, and the docs are a bit scattered. But if you’re a network geek or building decentralized systems, it’s a fascinating playground. Just know going in: this isn’t plug-and-play. But if you’re comfortable with Rust, YAML, and reading source code, FIPS gives you powerful tools for building robust, encrypted, self-healing mesh networks.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>Technical Briefing – Free Internetworking Peering System (FIPS)</strong> Repository: <code>https://github.com/moses-y/fips</code></p>
+<hr>
+<h4 id="what-this-does">What This Does</h4>
+<p>FIPS implements a decentralized mesh‑routing protocol built on Nostr‑style <code>secp256k1</code> identities. Core Rust code lives under <code>src/</code>; the protocol stack, node lifecycle, and transport handling are defined in a handful of modules that together create a self‑organising network capable of spanning‑tree routing, bloom‑filter peer selection, and Noise‑based encryption. The <code>testing/</code> tree contains Docker‑based chaos‑simulation harnesses used for protocol stress‑testing.</p>
+<p>Key files:</p>
+<ul><li><code>src/bin/fips.rs</code> – binary entry point (<code>fn main</code>).</li><li><code>src/node/lifecycle.rs</code> – node start/stop logic (<code>fn start</code>).</li><li><code>src/control/queries.rs</code> – RPC entry point (<code>dispatch</code>).</li><li><code>src/transport/udp.rs</code> – UDP overlay implementation.</li><li><code>src/identity/local.rs</code> – generation of Nostr keypairs.</li></ul>
+<p>All configuration is read from a <code>fips.yaml</code> file (search order documented in the README).</p>
+<hr>
+<h4 id="how-it-is-wired">How It Is Wired</h4>
+<ol><li><strong>Program start</strong> – <code>cargo build --release</code> produces <code>target/release/fips</code>. Execution begins at <code>src/bin/fips.rs:21</code> (<code>main</code>).</li><li><code>main</code> parses CLI flags, then calls <code>src/node/lifecycle.rs:234</code> → <code>start</code>.</li><li><code>start</code> creates a <code>Node</code> (via <code>src/node/mod.rs:new</code>) and spawns the control socket (<code>src/control/mod.rs</code>).</li><li>The control socket registers RPC handlers; the primary dispatch function is <code>src/control/queries.rs:399</code> (<code>dispatch</code>), which reaches 42 other functions and is not called elsewhere.</li><li>Network I/O is handed to <code>src/transport/mod.rs</code> (123 functions). UDP transport is instantiated in <code>src/transport/udp.rs</code>, which ultimately calls <code>socket::bind</code> (external) and registers the packet channel.</li><li>Incoming packets are routed through <code>src/node/handlers/*</code>. The most heavily used handler is <code>src/node/handlers/forwarding.rs</code>, which participates in 8 distinct call paths.</li><li>Peer discovery and tree coordination rely on <code>src/protocol/*</code> and <code>src/bloom/*</code>. The bloom filter (<code>src/bloom/filter.rs</code>) is invoked from 48 other files and provides <code>insert</code>, <code>contains</code>, and serialization helpers.</li><li>Cryptographic identity handling flows through <code>src/identity/*</code>; <code>make_node_addr</code> (154 call sites) and <code>node_addr</code> (142 sites) are the highest‑fan‑out functions, making them the primary change‑impact points.</li></ol>
+<p>File‑level blast radius (calls from many places):</p>
+<ul><li><code>src/bloom/filter.rs</code> – 48 callers, 25 functions reachable.</li><li><code>src/transport/mod.rs</code> – 17 callers, 123 functions reachable.</li><li><code>src/node/mod.rs</code> – 25 callers, 76 functions reachable.</li></ul>
+<p>No circular module dependencies were detected, simplifying static analysis and future refactoring.</p>
+<hr>
+<h4 id="how-to-use-it">How To Use It</h4>
+<pre data-lang="bash"><code># Clone and build
+git clone https://github.com/moses-y/fips.git
+cd fips
+cargo build --release
+
+# Run a node (requires root for TUN)
+sudo ./target/release/fips          # defaults, generates ephe‑meral identity
+# or with explicit config
+sudo ./target/release/fips -c fips.yaml</code></pre>
+<p>Configuration (<code>fips.yaml</code>) lives in the current directory, <code>$HOME/.config/fips/</code>, or <code>/etc/fips/</code>. A minimal two‑node example is documented in the README and uses the <code>identity.nsec</code> field for a Nostr secret key; omitting it generates a fresh key on each start.</p>
+<p>For protocol‑level testing, the chaos harness can be built with Docker:</p>
+<pre data-lang="bash"><code>cd testing/chaos
+docker build -t fips-chaos .
+./scripts/chaos.sh  # runs predefined scenarios</code></pre>
+<p>The harness reads <code>testing/static/.env</code> (currently committed) for environment variables; replace or remove it before production use.</p>
+<hr>
+<h4 id="code-health-issues">Code Health &amp; Issues</h4>
+<p>Measured findings (static analysis):</p>
+<ul><li><strong>HIGH – Deep nesting</strong> – <code>src/control/mod.rs</code>, <code>src/node/handlers/encrypted.rs</code>, <code>src/node/handlers/forwarding.rs</code> (max depth 8).</li><li><strong>HIGH – Duplicated code</strong> – repeated 6‑line blocks across 44 files (e.g., <code>src/cache/coord_cache.rs</code>, <code>src/protocol/discovery.rs</code>).</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>testing/chaos/sim/runner.py</code> uses bare <code>except</code>.</li><li><strong>MEDIUM – Oversized files</strong> – <code>src/node/handlers/session.rs</code>, <code>src/node/mod.rs</code>, <code>src/node/tests/routing.rs</code> (&gt; 1 k LOC each).</li><li><strong>MEDIUM – High branching density</strong> – <code>src/identity/encoding.rs</code> (15 branches in 46 lines).</li></ul>
+<p>Code‑health audit adds:</p>
+<ul><li><strong>HIGH – No CI workflow</strong> – repository lacks any <code>.github/workflows/*</code>.</li><li><strong>HIGH – Deploy image not gated</strong> – <code>testing/chaos/Dockerfile</code> builds without CI validation.</li><li><strong>HIGH – Committed secret file</strong> – <code>testing/static/.env</code> should be removed and rotated.</li><li><strong>MEDIUM – Dependabot missing</strong> – only one manifest (<code>Cargo.toml</code>).</li><li><strong>MEDIUM – Base image not pinned</strong> – <code>testing/chaos/Dockerfile</code> uses <code>debian:bookworm-slim</code>.</li><li><strong>MEDIUM – No pre‑commit secret scan</strong>.</li><li><strong>MEDIUM – Docker image runs as root</strong> – add a non‑root <code>USER</code>.</li></ul>
+<p>All issues include concrete fix recommendations in the audit; no additional concerns were found.</p>
+<hr>
+<h4 id="the-bottom-line">The Bottom Line</h4>
+<p>FIPS delivers a complete Rust‑based mesh routing stack with documented design assets and a functional test harness. The codebase is functional but shows classic early‑stage technical debt: deep nesting, duplicated logic, and large modules that will hinder maintainability. Absence of CI/CD and the presence of a committed <code>.env</code> are immediate risks for production use. The project is suitable for teams comfortable with Rust and willing to invest in refactoring and CI integration before deploying in a security‑sensitive environment.</p>
             </div>
 
             
@@ -91,16 +130,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">211<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>92</b></li><li><span>Markdown</span><i style="width:20%"></i><b>18</b></li><li><span>Python</span><i style="width:17%"></i><b>16</b></li><li><span>YAML</span><i style="width:16%"></i><b>15</b></li><li><span>Shell</span><i style="width:2%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>92</b></li><li><span>Markdown</span><i style="width:20%"></i><b>18</b></li><li><span>YAML</span><i style="width:18%"></i><b>17</b></li><li><span>Python</span><i style="width:18%"></i><b>17</b></li><li><span>Shell</span><i style="width:8%"></i><b>7</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Docker</span></p>
                     </div>
@@ -146,6 +185,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>testing/static/.env</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1166914292">Open in Code Brain &rarr;</a>

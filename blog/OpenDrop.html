@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,10 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#opendrop-peer-to-peer-file-sharing-with-webrtc">OpenDrop: Peer-to-Peer File Sharing with WebRTC</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="opendrop-peer-to-peer-file-sharing-with-webrtc">OpenDrop: Peer-to-Peer File Sharing with WebRTC</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Ever been stuck trying to share a file between devices on the same network without messing around with email, USB drives, or some sketchy third-party service? Sure, services like AirDrop exist, but that&#39;s locked to Apple devices. And cloud storage? Great until you realize you&#39;re uploading a 2GB file just to download it again—on the same Wi-Fi. We can do better.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OpenDrop is a simple, no-frills file-sharing tool that uses WebRTC for peer-to-peer (P2P) transfers on the same local network. The project is split into two parts:
-Frontend (client/): A static site (index.html, main.js, style.css) that handles the UI and opens WebRTC connections. It’s deployed via GitHub Pages, so you don’t even need to host it yourself. 
-Backend (server/): A tiny Node.js WebSocket signaling server (server/index.js) to match devices on the same local network. For good measure, it also lets you upload files for temporary shareable links if P2P isn’t an option.</p><p>For P2P transfers, your files never leave the network—no cloud uploads, no middleman. For the shareable links, the backend is lightweight and can run for free on services like Koyeb or Render. Configuration is minimal—update the SIGNALING_URL in client/main.js with your server’s WebSocket URL and you’re good to go.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re sitting in a meeting (ugh) and need to send a 500MB video to a coworker across the table. Open http://your-opendrop-instance on both devices (make sure they’re on the same Wi-Fi). They’ll auto-discover each other—no IP addresses, no nonsense. Click their name and send your file. Done.</p><p>Or maybe the Wi-Fi sucks (shocker), and P2P isn’t an option. Upload the file via the &quot;Share via Link&quot; option and send them the auto-generated URL. The link expires in 24 hours, so your files aren’t floating around forever—nice touch.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OpenDrop is great for quick, local file transfers without relying on bloated services or proprietary ecosystems. It’s not revolutionary, but it’s reliable and easy to set up. That said, the lack of stars (0, ouch) and the &quot;not open-source&quot; license might be deal-breakers for some devs. If you’re okay with that, it’s a solid tool for personal or small-team use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Transferring files between devices on a local network without a central server is technically demanding: it requires WebRTC signaling, ICE candidate negotiation, data-channel setup, and NAT traversal. Most consumers lack the infrastructure to wire these pieces together, and existing solutions either rely on cloud relays (incurring bandwidth costs) or demand manual configuration of ports, certificates, and tunnel endpoints. OpenDrop attempts to automate this with a minimal signaling server and peer-to-peer data channels.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OpenDrop is a two-part system totaling 12 files. The <strong>client</strong> (<code>client/index.html</code>, <code>client/main.js</code>, <code>client/style.css</code>, <code>client/.gitignore</code>) is a static ES-Modal app that manages the UI, PeerConnection setup, and DataChannel file transfer. The <strong>server</strong> (<code>server/index.js</code>, <code>server/package.json</code>, <code>server/package-lock.json</code>, <code>server/.gitignore</code>) is a lightweight Node.js WebSocket signaling service that matches devices with matching public IPs and handles file-upload links that expire in 24 hours.</p>
+<p>Key entry points trace as follows:</p>
+<ul><li><code>startConnection</code> (<code>client/main.js:196</code>) reaches 3 functions and is the primary execution start.</li><li><code>handleOffer</code> (<code>client/main.js:212</code>), <code>handleAnswer</code> (<code>client/main.js:222</code>), and <code>startSendingFile</code> (<code>client/main.js:294</code>) follow from connection setup.</li><li>The server’s <code>generateName</code>, <code>getClientIp</code>, <code>getPeers</code>, <code>sendToClient</code>, and <code>broadcastToNetwork</code> (<code>server/index.js</code>) handle signaling message routing and CORS.</li></ul>
+<p>The internal call graph contains 46 resolved call edges. <code>showToast</code> is the most widely called function (10 call sites), followed by <code>getOrCreateConnection</code> (4), <code>updateStatus</code> (3), <code>sendSignaling</code> (3), and <code>readSlice</code> (3). <code>ws.onmessage</code> fans into <code>addPeer</code>, <code>removePeer</code>, <code>handleOffer</code>, <code>handleAnswer</code>, <code>handleCandidate</code>, and <code>handleIncomingFileRequest</code>, creating a fan-out pattern that fans into the highest blast-radius functions. The import graph has 2 internal modules with 0 edges and 0 circular dependencies, keeping the dependency graph flat but the runtime call graph dense.</p>
+<p>File-transfer paths are peer-to-peer for same-network peers; files never touch the signaling server. For link-based sharing, the file uploads through the server and a download link is generated with a 24-hour TTL.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>startConnection</code> in <code>client/main.js:196</code>, which invokes <code>connectSignaling</code> to open a WebSocket to the signaling server. <code>ws.onopen</code> triggers <code>updateStatus</code>. Incoming messages on <code>ws.onmessage</code> fan into <code>showToast</code> (x2), <code>addPeer</code>, <code>removePeer</code>, <code>handleOffer</code>, <code>handleAnswer</code>, <code>handleCandidate</code>, or <code>handleIncomingFileRequest</code>. Peer connection establishment flows through <code>pc.onicecandidate -&gt; sendSignaling</code> and <code>pc.ondatachannel -&gt; setupDataChannel</code>. File chunks are read via <code>readSlice</code> and sent over the DataChannel. The server’s CORS configuration uses a wildcard (<code>cors()</code> in <code>server/index.js</code>), which combined with credential-inclusive requests creates a browser-enforced security risk.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Same-network transfer:</strong> Open OpenDrop on two devices on the same Wi-Fi. They auto-discover via the signaling server. Click a peer to initiate a direct WebRTC DataChannel transfer; files never pass through the server.</p>
+<p><strong>Share via Link:</strong> Click “Share via Link,” select a file, and a download link is generated. The file uploads through the signaling server; the link expires in 24 hours.</p>
+<p><strong>Hosting:</strong></p>
+<ul><li>Frontend: This repo includes a GitHub Action that deploys <code>client/</code> to GitHub Pages. Set the source to GitHub Actions in repository Settings &gt; Pages.</li><li>Backend: Deploy to Koyeb or Render. Root Directory: <code>server</code>; Build Command: <code>npm install</code>; Start Command: <code>node index.js</code>. After deployment, replace <code>SIGNALING_URL</code> in <code>client/main.js</code> and push to <code>main</code>.</li></ul>
+<p><strong>Local development:</strong></p>
+<pre data-lang="bash"><code>cd server
+npm install
+node index.js</code></pre>
+<pre data-lang="bash"><code>cd client
+python3 -m http.server 8080</code></pre>
+<p>Navigate to <code>http://localhost:8080</code>.</p>
+<p>Configuration: the only required config is <code>SIGNALING_URL</code> in <code>client/main.js</code>, set to the deployed or local signaling server URL.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>Two developers on a coffee-shop Wi-Fi need to share a 200 MB design mockup. They open OpenDrop on their laptops; the peers auto-detect, establish a WebRTC DataChannel, and the file transfers directly at LAN speeds without touching any external server. Later, one sends a contract to a client via the “Share via Link” flow: the file uploads to the hosted signaling server, and the client receives a time-limited download link, eliminating the need for a separate file-hosting service.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis produced the following measured findings:</p>
+<ul><li><strong>[MEDIUM/cognitive_load]</strong> Deep nesting in <code>server/index.js</code> – max indentation depth 6; control flow is hard to follow. Fix: flatten with early returns/guard clauses.</li><li><strong>[HIGH]</strong> Wildcard CORS origin in <code>server/index.js</code> – <code>cors()</code> allows any origin. Combined with credentials, any page can make authenticated requests without user consent, a configuration browsers explicitly reject. Fix: replace wildcard with an explicit allow list of served origins.</li><li><strong>[MEDIUM]</strong> No Dependabot or Renovate configured – 1 manifest present, no update bot. Without automated dependency updates, known vulnerabilities remain unpatched until manual audit.</li><li><strong>[MEDIUM]</strong> No dependency vulnerability scan gates pull requests – CI (GitHub Actions) runs but lacks <code>dependency-review-action</code> or <code>osv-scanner</code>. A known-vulnerable package could reach production without detection.</li><li><strong>[LOW]</strong> Workflow job timeouts absent in <code>.github/workflows/deploy.yml</code> – the six-hour platform default means wedged steps can overlap behind a two-hourly schedule.</li><li><strong>No test files detected</strong> repository-wide – untested code paths, including the WebRTC signaling and file-transfer logic.</li><li><strong>CI present</strong> (GitHub Actions), <strong>license present</strong> (proprietary per <code>LICENSE</code>), <strong>lockfile present</strong> (<code>server/package-lock.json</code>), <strong>no committed secrets</strong> found.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>OpenDrop delivers a functional, zero-dependency P2P file-transfer experience for local networks with a simple link-sharing fallback. The vanilla JS/ESM client and lightweight Node signaling server are easy to deploy and require no build pipeline. However, the wildcard CORS policy is a real security misconfiguration, the codebase has zero test coverage, and the CI pipeline offers no dependency-vulnerability gate. It’s well-suited for individuals, teams, or short-term workflows where quick, free P2P transfer outweighs the need for hardened operations, but the CORS fix, test additions, and CI dependency scanning should be prioritized before any deployment beyond a trusted local network.</p>
             </div>
 
             
@@ -93,9 +120,9 @@ Backend (server/): A tiny Node.js WebSocket signaling server (server/index.js) t
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -115,6 +142,12 @@ Backend (server/): A tiny Node.js WebSocket signaling server (server/index.js) t
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176027264">Open in Code Brain &rarr;</a>

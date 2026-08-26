@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Reverse Engineering Android Apps with android-reverse-engineering-skill</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Reverse engineering Android apps sucks. APK files are obfuscated, HTTP APIs are buried under layers of abstraction, and figuring out how an app works without source code feels like deciphering ancient runes. If you&#39;ve ever tried to decompile an APK just to find out what API endpoints it&#39;s hitting, you know the pain.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The android-reverse-engineering-skill is a Claude Code plugin that takes a lot of the grunt work out of Android reverse engineering. It combines tools like jadx and Fernflower to decompile APKs, XAPKs, or JARs and extract useful data, like Retrofit endpoints, OkHttp calls, and even hardcoded auth tokens. It&#39;s like having a coworker who loves staring at decompiled code so you don’t have to.</p><p>The repo is structured around a plugin system (plugins/ directory) with scripts and Markdown files for everything from dependency checks (check-deps.sh) to advanced decompilation workflows (decompile.sh). The SKILL.md file outlines the capabilities, while the setup-guide.md helps you get the tools installed without wanting to throw your laptop out the window.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Here’s a common scenario: You’ve got an APK, and your boss/client/curiosity demands that you figure out what API endpoints it’s hitting. With this plugin, you can:
-Decompile the APK using jadx:
-Extract API calls:
-Follow the call flow from LoginActivity down to the network layer using the generated code.</p><p>It also handles obfuscated code, so you don’t have to guess what a() or b() do. Want to see how Fernflower handles the same code compared to jadx? Use the --engine both option and compare the outputs side-by-side. It’s nerdy, but it works.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is great for anyone who needs to reverse engineer Android apps regularly. It’s not beginner-friendly, and setting up all the dependencies can be a pain, but once it’s running, it’s a lifesaver. If you&#39;re dealing with APKs more than you&#39;d like to admit, give this a shot. If not, well, lucky you.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Android analysts often need to inspect compiled APK/XAPK/JAR/AAR binaries to discover the HTTP APIs an app uses. Without source code, the process requires manual decompilation, dependency management, and pattern‑matching across thousands of generated Java files—an error‑prone, time‑consuming workflow.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo supplies a <strong>Claude Code skill</strong> that automates the end‑to‑end pipeline:</p>
+<ul><li><code>plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/decompile.sh</code> drives the decompilation step. It detects the file type (APK, XAPK, JAR, AAR), ensures required tools are present, and invokes either <strong>jadx</strong> (default) or <strong>Fernflower/Vineflower</strong>.</li><li><code>plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/check-deps.sh</code> and <code>install‑dep.sh</code> verify and install external binaries (e.g., <code>jadx</code>, <code>vineflower</code>) on the host OS.</li><li><code>plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/find-api-calls.sh</code> parses the decompiled source tree, locating Retrofit interfaces, OkHttp calls, hard‑coded URLs, and authentication patterns.</li><li>Documentation files (<code>SKILL.md</code>, <code>references/*.md</code>) describe the expected output and usage patterns, while <code>plugin.json</code> and <code>marketplace.json</code> expose the skill to Claude Code.</li></ul>
+<p>All orchestration is performed via shell scripts; there is no compiled language code or library imports.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – The Claude Code slash command <code>/decompile &lt;path&gt;</code> triggers the skill’s handler (defined in <code>plugin.json</code>). The handler ultimately executes <code>decompile.sh</code> with the supplied path.</li><li><strong>Dependency guard</strong> – <code>decompile.sh</code> first calls <code>check-deps.sh</code>. If a required tool is missing, it optionally runs <code>install-dep.sh &lt;tool&gt;</code> to install it via the detected package manager (brew, apt, choco, etc.).</li><li><strong>Decompilation</strong> – Based on the <code>--engine</code> flag, <code>decompile.sh</code> runs: <em> <code>jadx -d &lt;out&gt; &lt;input&gt;</code> for the default engine, or </em> <code>java -jar fernflower.jar &lt;input&gt; &lt;out&gt;</code> / <code>vineflower.jar</code> for the alternative engines. Output is placed under <code>output/sources/</code>.</li><li><strong>API extraction</strong> – After decompilation, the skill may invoke <code>find-api-calls.sh</code> (either automatically or via a separate slash command). This script walks the source directory, applies a series of <code>grep</code>/<code>awk</code> patterns, and writes findings to a markdown report. The script contains <strong>27 branch points within 91 lines</strong>, a medium‑level cognitive‑load issue that makes future modifications risky.</li><li><strong>Result delivery</strong> – The generated markdown is returned to the Claude session and optionally persisted in the user’s workspace.</li></ol>
+<p>No internal module imports exist; the only external interactions are file system reads/writes and calls to Java tools. Consequently, the blast radius of a change is confined to the invoking script and any downstream scripts it calls.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository (use the original URL)
+git clone https://github.com/moses-y/android-reverse-engineering-skill.git
+cd android-reverse-engineering-skill
+
+# Verify required tools (Java 17+, jadx) – optional, the skill does it automatically
+bash plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/check-deps.sh
+
+# Decompile an APK (default engine = jadx)
+bash plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/decompile.sh path/to/app.apk
+
+# Extract Retrofit endpoints and hard‑coded URLs
+bash plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/find-api-calls.sh output/sources/ --retrofit --urls</code></pre>
+<p>If the skill is installed in Claude Code, the same actions are available via <code>/decompile &lt;path&gt;</code> or natural‑language prompts such as “Extract API endpoints from this app”.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security consulting team can embed this skill in their analysis pipeline: after receiving a client’s APK, they run the <code>/decompile</code> command, automatically receive a markdown report of all discovered HTTP endpoints, and feed that report into a downstream vulnerability scanner. No manual <code>jadx</code> invocations or grep patterns are required.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – High branching density</strong> – <code>plugins/android-reverse-engineering/skills/android-reverse-engineering/scripts/find-api-calls.sh</code> has 27 branch points over 91 lines, increasing maintenance cost.</li><li><strong>Medium – No test suite</strong> – The repository contains no test files; code paths are unverified.</li><li><strong>Medium – No CI/CD</strong> – No <code>.github/workflows</code> or other pipeline definitions; automated verification is absent.</li><li><strong>Repository hygiene</strong> – License present, no committed secrets, but missing Dockerfile and lockfiles.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The skill delivers a functional, end‑to‑end decompilation and API‑extraction workflow with minimal setup, making it useful for analysts who need quick insight into compiled Android binaries. However, the shell scripts are dense and untested; extending or customizing them will require careful review. Teams that can tolerate a manual‑script codebase and are prepared to add their own tests/CI will get immediate value.</p>
             </div>
 
             
@@ -94,9 +119,9 @@ Follow the call flow from LoginActivity down to the network layer using the gene
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -116,6 +141,12 @@ Follow the call flow from LoginActivity down to the network layer using the gene
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176106827">Open in Code Brain &rarr;</a>

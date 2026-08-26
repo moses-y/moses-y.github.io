@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Formula 1 data is a mess to get your hands on. Sure, there are official apps and some paid APIs, but they’re often locked behind paywalls or APIs that feel like they were designed by someone who hates developers. You just want lap times, telemetry, or historical race data—preferably without selling your soul or dealing with a convoluted setup. Enter OpenF1, an open-source API that gives you real-time and historical F1 data, no strings attached.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OpenF1 is a Python-based project that acts as a one-stop-shop for F1 data nerds. In the src/openf1/services/f1scraping/ directory, you’ve got tools to scrape race schedules, session results, and starting grids. For live race updates, dive into src/openf1/services/ingestorlivetiming/realtime/app.py, which pulls live timing data from F1 events. Need to dig into historical data? Check out src/openf1/services/ingestorlivetiming/historical/main.py.</p><p>The project is built with Flask for the API (src/openf1/services/queryapi/app.py), and it uses a Dockerfile and docker-compose.yml to containerize the setup. Configuration happens via a pyproject.toml and requirements.txt, so Python devs will feel right at home. There&#39;s also some MQTT love in src/openf1/util/mqtt.py if you’re into real-time messaging.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you want to analyze George Russell’s lap times from a specific session. You’d call the API like this:</p><p>Alternatively, if you want to self-host, clone the repo, set up MongoDB, and fire up the services. Start by scraping data with f1scraping, then run the ingestorlivetiming service to grab live race data, and finally, query it with the queryapi service. Boom—your own F1 data pipeline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OpenF1 is a solid tool for anyone who wants F1 data without begging FIA for an API key. The project is well-structured, though the lack of tests (2 files?) and no stars on the forked repo is a bit of a red flag. Still, if you’re a developer or data nerd, this is a playground worth exploring. Just don’t expect polished perfection—it’s open-source, not magic.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients that need granular Formula 1 telemetry must stitch together disparate web‑scrapers, live‑timing feeds, and ad‑hoc CSV dumps. Maintaining that pipeline is time‑consuming, error‑prone, and repeats the same parsing logic across projects.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>openf1</code> supplies a single Python‑based service that ingests both historic F1 data (scraped from the official site) and live‑timing streams, normalises them, stores the results in MongoDB, and exposes a Flask API for downstream consumption.</p>
+<ul><li>Historical scraping lives in <code>src/openf1/services/f1_scraping/</code> – functions such as <code>download_page</code> (<code>src/openf1/services/f1_scraping/util.py</code>) fetch HTML, while <code>session_result.py</code> and <code>starting_grid.py</code> parse it into Mongo documents.</li><li>Live‑timing ingestion resides under <code>src/openf1/services/ingestor_livetiming/</code>. The real‑time entry point is <code>src/openf1/services/ingestor_livetiming/real_time/app.py</code> (Flask app that consumes MQTT topics). A historical back‑fill mode is provided by <code>src/openf1/services/ingestor_livetiming/historical/main.py</code>.</li><li>Query access is implemented by <code>src/openf1/services/query_api/app.py</code>, a Flask server that reads from Mongo and returns JSON/CSV.</li></ul>
+<p>All code is pure Python; Docker support (<code>Dockerfile</code>, <code>docker‑compose.yml</code>) enables containerised deployment.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the Flask entry points:</p>
+<ul><li><strong>Real‑time ingest</strong> – <code>app.py</code> creates the MQTT client, registers callbacks, then calls <code>process_message</code>. The call chain is:   <code>process_message → to_datetime</code> (7×), <code>process_message → _update_lap</code> (5×), <code>process_message → _update_stint</code> (4×). Each update eventually calls <code>upsert_data_sync</code> in <code>src/openf1/util/db.py</code>, which writes to Mongo (<code>collection.bulk_write</code>).</li><li><strong>Historical ingest</strong> – <code>src/openf1/services/ingestor_livetiming/historical/main.py</code> runs <code>ingest_season</code>. It fetches schedule data via <code>get_schedule</code> (network call in <code>src/openf1/services/f1_scraping/schedule.py</code>), then iterates topics, calling <code>_get_topic_content</code> → <code>requests.get</code> → <code>insert_data_async</code>.</li><li><strong>API server</strong> – <code>src/openf1/services/query_api/app.py</code> defines <code>endpoint</code>. A request hits <code>_process_request</code>, which parses the path (<code>_parse_path</code>), builds a Mongo query (<code>query_params.py</code>), and finally calls <code>get_documents</code> in <code>src/openf1/util/db.py</code>. The response may also request a favicon via <code>_get_favicon</code> (outbound HTTP).</li></ul>
+<p>Core utilities that see the most traffic are <code>src/openf1/util/db.py</code> (15 functions, DB I/O) and <code>src/openf1/util/misc.py</code> (helpers like <code>join_url</code>). The import graph shows no circular dependencies, so changes to a hub file (e.g., <code>objects.py</code> with 16 functions) have a predictable blast radius.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/openf1.git
+cd openf1
+
+# Install in editable mode
+pip install -e .
+
+# Set Mongo connection (required for all services)
+export MONGO_CONNECTION_STRING="mongodb://localhost:27017"
+
+# Run the historical scraper (example for 2023 season)
+python -m src.openf1.services.ingestor_livetiming.historical.main ingest_season 2023
+
+# Start the live‑timing ingest
+python -m src.openf1.services.ingestor_livetiming.real_time.app
+
+# Launch the query API
+python -m src.openf1.services.query_api.app</code></pre>
+<p>Docker alternative (build and start all three services) is defined in <code>docker-compose.yml</code>; the <code>Dockerfile</code> builds the Python environment.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can schedule <code>ingest_season</code> nightly to back‑fill a MongoDB cache, run the live‑timing ingest continuously during race weekends, and point their analytics notebooks at <code>http://localhost:8000/v1/laps?...</code> to retrieve clean lap‑by‑lap telemetry without writing custom scrapers.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – GitHub Actions pinned to tags only (<code>JamesIves/github-pages-deploy-action@v4</code>). Replace with commit SHA.</li><li><strong>High</strong> – No test suite; repository contains 47 source files but zero tests. Add unit/integration tests for each public entry point.</li><li><strong>High</strong> – No lockfile for Python dependencies (<code>pyproject.toml</code> only). Generate and commit <code>poetry.lock</code> or <code>requirements.txt</code> with hashes.</li><li><strong>High</strong> – Flask CORS is configured with <code>allow_origins=["*"]</code> together with credentials. Restrict to explicit origins.</li><li><strong>Medium</strong> – GitHub token permissions are not declared; add <code>permissions:</code> block.</li><li><strong>Medium</strong> – Dependabot/Renovate not configured; add <code>.github/dependabot.yml</code>.</li><li><strong>Medium</strong> – Docker base image <code>python:3.10-slim</code> is unpinned; use digest.</li><li><strong>Medium</strong> – No CI step for dependency vulnerability scanning; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Outbound <code>requests.get</code> calls lack timeouts; pass <code>timeout=</code>.</li><li><strong>Medium</strong> – <code>actions/checkout</code> keeps credentials; set <code>persist-credentials: false</code>.</li></ul>
+<p>Additional observations: the repository includes a CI workflow (<code>.github/workflows/tests.yml</code>) but no test files, and the license file is present. No secrets are committed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>openf1</code> delivers a functional end‑to‑end pipeline for F1 data ingestion and API delivery, with clear separation between scraping, live‑timing, and query layers. However, the lack of tests, an unlocked dependency set, and several security‑related CI misconfigurations make it unsuitable for production without remediation. It is a solid starting point for internal tooling or research prototypes, provided the team adds test coverage and tightens the CI/CD hygiene.</p>
             </div>
 
             
@@ -91,9 +127,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +149,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176056340">Open in Code Brain &rarr;</a>

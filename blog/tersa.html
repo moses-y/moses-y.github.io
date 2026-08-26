@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 4, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#building-ai-workflows-with-tersa">Building AI Workflows with Tersa</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="building-ai-workflows-with-tersa">Building AI Workflows with Tersa</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>AI workflows are a mess. You’ve got APIs from 25+ providers, each with their own quirks, pricing, and limitations. Want to chain a text model with an image generator and then stream the output? Good luck manually wiring it all up without losing your mind. And even if you do, how do you make it visual, reusable, and not a spaghetti-code dumpster fire?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Tersa is essentially a drag-and-drop playground for AI workflows. Think ReactFlow meets AI models. You build workflows visually by connecting &quot;nodes&quot; on a canvas. Each node represents a model or operation (e.g., components/nodes/image/index.tsx for image-related workflows or components/nodes/text/index.tsx for text).</p><p>The app is built on Next.js (App Router, not the old Pages API) and uses ReactFlow for the canvas. There’s a ton of reusable UI in components/ui, styled with Tailwind and shadcn/ui. Workflow state management is handled using browser local storage (lib/canvas-storage.ts), so no cloud nonsense required to get started.</p><p>Under the hood, it relies on the Vercel AI SDK Gateway to talk to AI providers, which means you get multi-model support out of the box. The app/actions/ folder is basically where the magic happens, with handlers for creating, describing, and editing images or videos.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you want to generate an image based on text, add a caption, and then stream the result back. In Tersa, you can:  
-Drag in a text input node (components/nodes/text/index.tsx).  
-Add an image generation node (components/nodes/image/index.tsx) and connect it.  
-Attach a reasoning node to see the model&#39;s thought process (components/reasoning.tsx).  
-Hit run. Done.</p><p>The workflow persists thanks to lib/canvas-storage.ts, so you can reload the page and pick up where you left off.</p><p>Here’s an example of what it might look like programmatically:</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Tersa is a solid tool if you’re building complex AI workflows and don’t want to deal with constant API management. The visual editor is slick, and the ReactFlow integration feels natural. That said, it’s definitely overkill for basic use cases (like calling GPT-4 and calling it a day). If you’re the type of dev who enjoys tinkering with AI models and needs a visual approach to chaining them, this is worth checking out. For everyone else? Stick to Postman and experiment later.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building AI‑augmented products need a low‑code way to prototype multi‑model pipelines, but wiring HTTP calls, handling streaming responses, and persisting canvas state are repetitive and error‑prone.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>tersa</code> ships a browser‑based visual workflow editor built on <strong>Next.js 15</strong> and <strong>React 19</strong>. The UI lives in <code>components/ai-elements/</code> (canvas, nodes, toolbar) and in the Kibo UI wrapper (<code>components/kibo-ui/editor/index.tsx</code>). Core node types are under <code>components/nodes/</code> – image, text, video – each exposing an <code>index.tsx</code> entry that renders the node UI and hooks into the AI SDK gateway. Server‑side helpers for media handling live in <code>app/api/</code> (<code>chat/route.ts</code>, <code>upload/route.ts</code>) and action files in <code>app/actions/image/</code> for creating, editing, and describing images. The project is managed with <strong>pnpm</strong> and CI runs on GitHub Actions.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when Next.js renders <code>app/page.tsx</code>, which composes the top‑level layout (<code>app/layout.tsx</code>) and injects the canvas component <code>components/ai-elements/canvas.tsx</code>. The canvas uses <strong>ReactFlow</strong> to instantiate node components from <code>components/nodes/</code>. Each node imports its own UI (<code>index.tsx</code>) and shared utilities (<code>primitive.tsx</code>, <code>transform.tsx</code>).</p>
+<p>When a user triggers a model call (e.g., via the toolbar), the UI dispatches an async action defined in <code>app/actions/image/*.ts</code>. These actions call the Vercel AI SDK (<code>@ai-sdk/gateway</code>) and store results in the browser’s local storage (handled by <code>components/ai-elements/connection.tsx</code>).</p>
+<p>API routes in <code>app/api/</code> expose two external endpoints:</p>
+<ul><li><code>chat/route.ts</code> – forwards chat messages to the gateway.</li><li><code>upload/route.ts</code> – stores binary blobs using <strong>Vercel Blob</strong> (<code>@vercel/blob</code>).</li></ul>
+<p>The import graph contains 78 internal modules with 44 edges; nine modules form circular dependencies, notably <code>components/nodes/image/index.tsx</code>, <code>components/nodes/text/index.tsx</code>, and <code>components/nodes/video/index.tsx</code>. These cycles inflate the blast radius of any change to shared types or utilities. The most connected module, <code>components/nodes/model-selector</code>, is imported by three modules and imports three others, giving it an instability score of 0.5. <code>components/canvas</code> has no inbound imports but imports five others, indicating a potential hidden dependency hub.</p>
+<p>The largest file, <code>components/kibo-ui/editor/index.tsx</code> (1,727 lines), aggregates editor state, drag‑and‑drop handling, and model selection, making it a single point of failure for UI changes.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/tersa.git
+cd tersa
+
+# Install with pnpm (as declared in package.json)
+pnpm install
+
+# Create a .env.local with your Vercel AI SDK Gateway token and any provider keys
+# (the README points to this file, but variable names are not hard‑coded)
+
+# Start the dev server
+pnpm dev</code></pre>
+<p>Open <code>http://localhost:3000</code>. The canvas appears; drag nodes from the toolbar, select models, and hit <strong>Run</strong>. API calls are routed through <code>app/api/chat/route.ts</code> and media uploads via <code>app/api/upload/route.ts</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team can prototype a “caption‑then‑generate‑video” pipeline:</p>
+<ol><li>Add an <strong>Image</strong> node (uploads a picture).</li><li>Connect it to a <strong>Text</strong> node (generates a caption using a LLM).</li><li>Feed the caption into a <strong>Video</strong> node (creates a short clip via a diffusion model).</li></ol>
+<p>The flow runs entirely in the browser, with intermediate results streamed back from the AI SDK gateway and persisted locally for quick iteration.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>High – Cognitive load</strong>: Deep nesting (max indent = 8) in <code>components/nodes/model-selector.tsx</code> and <code>components/nodes/text/transform.tsx</code>.</li><li><strong>High – Soundness</strong>: Import cycles involving nine files (e.g., <code>components/nodes/image/index.tsx</code>).</li><li><strong>High – Clarity</strong>: Repeated 6‑line blocks across 21 files (e.g., <code>app/actions/image/*.ts</code>).</li><li><strong>High – Cognitive load</strong>: Oversized editor (<code>components/kibo-ui/editor/index.tsx</code>, 1,727 lines).</li></ul>
+<p><strong>Code‑health audit</strong></p>
+<ul><li><strong>High</strong> – Pin third‑party actions to commit SHAs (<code>.github/workflows/release.yml</code>).</li><li><strong>High</strong> – Dependency <code>next@16.1.6</code> has a published CVE (upgrade required).</li><li><strong>High</strong> – No test suite (78 source files, zero test files).</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>Medium</strong> – Checkout step keeps credentials; set <code>persist-credentials: false</code>.</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li><li><strong>Low</strong> – Missing convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Other hygiene facts: CI is present, a license file exists, lockfile is committed, and no secrets were found.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>tersa</code> delivers a functional, visual AI workflow builder that integrates tightly with Vercel’s AI SDK and Blob storage. It’s usable out‑of‑the‑box for rapid prototyping, but the codebase suffers from deep nesting, import cycles, and a lack of automated testing, which raise maintenance risk. Teams comfortable with refactoring and adding a test harness can extract value quickly; others should weigh the effort required to resolve the identified health issues.</p>
             </div>
 
             
@@ -95,9 +127,9 @@ Hit run. Done.</p><p>The workflow persists thanks to lib/canvas-storage.ts, so y
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -181,6 +213,12 @@ Hit run. Done.</p><p>The workflow persists thanks to lib/canvas-storage.ts, so y
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1172270711">Open in Code Brain &rarr;</a>

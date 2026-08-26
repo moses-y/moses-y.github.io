@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,36 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Working with dbt isn’t exactly a walk in the park for AI agents—or developers, for that matter. Anyone who&#39;s tried automating dbt workflows knows the pain: agents misinterpret commands, fail to account for dbt&#39;s endless quirks, or just outright choke on anything beyond the basics. Add migrations, semantic layers, or troubleshooting into the mix, and you&#39;ve got yourself a recipe for frustration. dbt-agent-skills exists to fix that.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo is a collection of pre-built &quot;Agent Skills&quot; specifically tailored to help AI agents execute dbt workflows without blowing up or making a mess. Think of it as a cheat sheet, but for agents. The skills/ directory contains folders like dbt and dbt-migration, each packed with SKILL.md files, references, and scripts designed to guide agents through tasks like adding unit tests (skills/dbt/skills/adding-dbt-unit-test) or migrating dbt projects (skills/dbt-migration/skills/migrating-dbt-core-to-fusion).</p><p>On top of that, the evals/ folder includes testing tools—like the evals/src/skilleval/cli.py script—to validate these skills in various scenarios. Want to make sure your agent can troubleshoot job errors? Run the tests in evals/scenarios/dbt-job-failure and see if it actually gets the job done instead of throwing cryptic error messages.</p><p>And for those who care about CI/CD (which should be everyone), there’s a codeowners-check.yml workflow in .github/workflows/ to keep your contributors in line. Because who doesn’t love a good pull request template?</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you want your AI assistant to add a unit test for a new dbt model. Without these skills, you’re probably looking at a lot of back-and-forth with your bot as it struggles to understand the difference between an ephemeral model and a regular one. With dbt-agent-skills, you just install the adding-dbt-unit-test skill, and the agent loads the SKILL.md instructions, uses the examples in references/, and generates the right test. Need to verify? Run evals/src/skilleval/cli.py to test its output against predefined scenarios.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you&#39;re working with dbt and have AI agents involved, this repo is worth a look. The skills are well-documented, the structure is logical, and the testing tools are solid. That said, the project is clearly geared towards teams who want to go deep with dbt automation—probably overkill for smaller projects or casual setups. Still, if you’re tired of babysitting your AI, this is a step up.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents need a reliable, structured way to invoke dbt commands, read model metadata, and diagnose job failures. Without a curated set of “Agent Skills” the prompt‑to‑dbt translation is ad‑hoc, leading to brittle automation and excessive manual scripting.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships a library of markdown‑based skill definitions (<code>skills/…/*.md</code>) plus a Python test harness under <code>evals/</code>. The harness validates that each skill can be exercised against realistic dbt scenarios (e.g., <code>evals/scenarios/dbt-job-failure/</code>). Core runtime lives in <code>evals/src/skill_eval/</code>, with the CLI entry point <code>evals/src/skill_eval/cli.py</code>. Functions such as <code>run()</code>, <code>grade()</code>, and <code>report()</code> orchestrate scenario loading (<code>load_scenario</code> in <code>models.py</code>), execution (<code>Runner</code> in <code>runner.py</code>), and result summarisation (<code>Reporter</code> in <code>reporter.py</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>run</code> (line 216 of <code>cli.py</code>). The call chain is:</p>
+<ol><li><strong><code>cli.run</code></strong> → creates an isolated run directory (<code>create_run_dir</code>) – filesystem write.</li><li>Loads the selected scenario via <code>load_scenario</code> (<code>models.py</code>).</li><li>Instantiates <code>Runner</code> (<code>runner.py</code>) which: <em> Calls external commands (<code>subprocess.run</code>) to invoke dbt and makes a single outbound HTTP request (no timeout) – see <code>Runner._get_claude_credentials</code>. </em> Performs file diffs (<code>_compare_dirs</code>) and changed‑file detection (<code>_find_changed_files</code>).</li><li>Results are passed to <code>Reporter.generate_report</code> → <code>Reporter.save_report</code> writes <code>report_file</code>.</li><li>If grading is requested, <code>Grader.build_grading_prompt</code> reads the scenario file, calls <code>call_claude_grader</code> (external network request), and parses the YAML response (<code>parse_grade_response</code>).</li></ol>
+<p>The internal call graph shows <strong>Runner</strong> invoked from 28 distinct locations, making it the highest‑blast‑radius component. <code>SkillSet</code>, <code>Scenario</code>, and <code>parse_grade_response</code> also have wide reach (≥ 7 callers). No circular imports are present, simplifying static analysis, but deep nesting (max indent 9) in <code>runner.py</code>, <code>cli.py</code>, and <code>reporter.py</code> makes the control flow hard to follow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/dbt-agent-skills
+cd dbt-agent-skills
+
+# Install Python dependencies (uses uv if available, else pip)
+uv sync   # reads evals/pyproject.toml
+# or:
+pip install -r &lt;(uv pip compile evals/pyproject.toml)
+
+# Run the CLI against a scenario (example: dbt-job-failure)
+python -m evals.src.skill_eval.cli run --scenario dbt-job-failure</code></pre>
+<p><em>Configuration</em> – the only required external config is the optional <code>.env</code> for the <code>dbt-job-failure</code> scenario (<code>evals/scenarios/dbt-job-failure/.env.example</code>). No secret files are committed.</p>
+<p><em>Grading</em> – to invoke the Claude‑based grader, ensure the environment variable <code>CLAUDE_API_KEY</code> is set; the key is read in <code>Runner._get_claude_credentials</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can call <code>python -m evals.src.skill_eval.cli run --scenario dbt-docs-arguments</code> after a dbt PR to verify that the generated documentation matches expectations and to surface any breaking changes before merge.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – CI never runs tests</strong> – <code>.github/workflows</code> contain no test step despite 9 test files. Add a <code>pytest</code> step.</li><li><strong>Medium – No dependency‑vulnerability scan</strong> – workflow lacks <code>dependency-review-action</code> or similar. Add it to catch known CVEs.</li><li><strong>Medium – Outbound request lacks timeout</strong> – <code>runner.py</code> makes a network call without a timeout, risking hangs. Pass <code>timeout=</code> or use a configured <code>requests.Session</code>.</li><li><strong>Low – Workflow jobs missing <code>timeout-minutes</code></strong> – <code>codeowners-check.yml</code> runs without a bound, allowing six‑hour defaults. Set a realistic limit.</li></ul>
+<p>Additional observations: the repo declares dependencies but provides no lockfile (<code>evals/pyproject.toml</code>), which impacts reproducible builds. The Python modules have zero import edges, indicating a flat architecture but also a lack of shared utilities, contributing to duplicated logic and deep nesting.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo offers a well‑organized collection of dbt Agent Skills and a functional Python harness for scenario testing. Strengths are the clear skill markdown layout and the end‑to‑end CLI flow. Weaknesses are the high cognitive load in core modules, missing CI test execution, and lack of safety guards (lockfile, request timeouts). It is suitable for teams that need a ready‑made skill set for dbt‑enabled agents and are prepared to tighten the CI and refactor the deeply nested runner logic.</p>
             </div>
 
             
@@ -91,9 +119,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -102,7 +130,7 @@
                         <ul class="an-bars">
                             <li><span>Markdown</span><i style="width:100%"></i><b>64</b></li><li><span>YAML</span><i style="width:31%"></i><b>20</b></li><li><span>Python</span><i style="width:25%"></i><b>16</b></li><li><span>JSON</span><i style="width:6%"></i><b>4</b></li><li><span>TOML</span><i style="width:3%"></i><b>2</b></li><li><span>Shell</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Spark</span></p>
                     </div>
                 </div>
 
@@ -123,6 +151,12 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>evals/pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1173350762">Open in Code Brain &rarr;</a>

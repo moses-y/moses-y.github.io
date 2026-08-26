@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#omnimattezero-training-free-video-matting-with-d">OmnimatteZero: Training-Free Video Matting with Diffusion</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="omnimattezero-training-free-video-matting-with-d">OmnimatteZero: Training-Free Video Matting with Diffusion</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Video editing is a pain. You want to remove an object from a video, and suddenly you&#39;re dealing with frame-by-frame rotoscoping, shadow cleanup, and alignment issues. Even if you&#39;re fancy and use machine learning, most tools require you to train a custom model, which is a hard &quot;no&quot; for anyone who doesn&#39;t have a server farm in their garage. OmnimatteZero tries to fix that by using pre-trained video diffusion models to handle object removal, foreground extraction, and layer composition—all without training.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OmnimatteZero is a set of Python scripts built around pre-trained video diffusion models. It works with three core tasks: objectremoval, foregroundcomposition, and generating attention-based masks with selfattentionmap.py. Everything is training-free, so it’s plug-and-play as long as you already have your input videos and masks.</p><p>The repo is simple: input data goes into examplevideos/, results come out in results/. For example, if you want to remove an object from a video, you’d throw the video along with an object mask (objectmask.mp4) and a total mask (totalmask.mp4) into examplevideos/. Then, you run python objectremoval.py. The script uses the diffusion model to inpaint the masked regions, outputs a clean video, and dumps it into results/.</p><p>If you don’t have a totalmask (which includes shadows/reflections), there’s selfattentionmap.py. This script generates it by extracting attention maps from the diffusion model&#39;s transformer layers. It’s not magic, but it’s a solid hack.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re editing a promotional video but your client suddenly hates the swan in the background (creative decisions, am I right?). You’d organize your files like this:</p><p>Run:</p><p>You’ll get results/swanlake.mp4 with the swan and its reflection gone, no training or manual editing. If you only have the objectmask, run:</p><p>It’ll generate the total_mask for you.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OmnimatteZero is great if you want high-quality video matting without the headache of training models. That said, it’s GPU-heavy (32GB VRAM recommended) and not exactly beginner-friendly—this is for people who are already comfortable with Python, video processing, and diffusion models. If that’s you, this repo will save you a lot of time. If not, maybe stick to After Effects.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Video matting and object removal traditionally require task-specific training datasets and model fine-tuning. This repository addresses the gap by enabling training-free video manipulation using pre-trained video diffusion models, leveraging their learned priors for object removal, foreground extraction, and layer composition without any task-specific training.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OmnimatteZero implements three core capabilities using pre-trained video diffusion models:</p>
+<ul><li><strong>Object Removal</strong> (<code>object_removal.py</code>): Removes objects and their effects (shadows, reflections) from videos by inpainting masked regions through the diffusion process. The function <code>round_to_nearest_resolution_acceptable_by_vae</code> ensures latent dimensions align with VAE constraints.</li></ul>
+<ul><li><strong>Foreground Extraction</strong> (<code>self_attention_map.py</code>): Extracts foreground layers with associated effects. Key functions include <code>_find_attention_modules</code> and <code>_create_hook</code> which register hooks to capture attention maps, and <code>pre_hook</code> which processes attention before model forward passes.</li></ul>
+<ul><li><strong>Layer Composition</strong> (<code>foreground_composition.py</code>): Composites extracted foreground layers onto new backgrounds. The <code>MyAutoencoderKLLTXVideo</code> class and <code>forward</code>/<code>forward_encode</code> methods handle video encoding/decoding through the autoencoder.</li></ul>
+<p>The repository requires CUDA-capable GPU (32GB+ VRAM recommended) and PyTorch 2.4+. Dependencies are declared in <code>requirements.txt</code> without a lockfile, meaning builds are not reproducible without manual pinning.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution flows through a structured call graph of 33 internal edges across 5 Python modules. The entry point is <code>OmnimatteZero.py</code>, which defines the <code>OmnimatteZero</code> class and <code>my_call</code> function. Key routing paths:</p>
+<ul><li><code>register_hooks</code> (called from 2 places) → <code>_find_attention_modules</code> → <code>_create_hook</code> → <code>apply_guidance</code> → <code>compute_guidance_matrix</code> → <code>get_guidance_scale_for_step</code></li><li><code>precompute_correspondences</code> → <code>compute_correspondences</code> → <code>_tracks_to_latent_positions</code> (called twice)</li><li><code>remove_hooks</code> is called from 2 places for cleanup</li></ul>
+<p>The module with the widest blast radius is <code>attention_guidance.py</code> (18 functions, 4 classes), which defines <code>load_model</code>, <code>compute_correspondences</code>, <code>_generate_grid_query_points</code>, and <code>_fallback_correspondences</code>. This file is imported by <code>OmnimatteZero.py</code> and serves as the primary guidance computation hub. <code>foreground_composition.py</code> is another high-traffic route with its <code>forward</code> and <code>forward_encode</code> methods handling video tensor transformations through the autoencoder.</p>
+<p>Notably, there are no circular dependencies across the 5 internal modules, and <code>attention_guidance</code> has zero incoming import edges (Ca=0), meaning it is a root module that other components depend on but does not import from them.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone the repository and install dependencies:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/OmnimatteZero.git
+cd OmnimatteZero
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt</code></pre>
+<p><strong>Configuration</strong>: No environment variables are documented. Configuration parameters are embedded directly in the source files — <code>object_removal.py</code> contains <code>base_dir</code>, <code>expected_height</code>, <code>expected_width</code>, and <code>num_inference_steps</code>; <code>self_attention_map.py</code> accepts <code>--video_folder</code> CLI argument.</p>
+<p><strong>Running it</strong>:</p>
+<ul><li><strong>Object removal</strong>: <code>python object_removal.py</code> — processes example videos from <code>example_videos/</code> and saves results to <code>results/</code></li><li><strong>Self-attention map generation</strong>: <code>python self_attention_map.py --video_folder ./example_videos/your_video_name</code> — generates total_mask from object_mask using diffusion model attention patterns</li><li><strong>Full pipeline</strong>: The <code>OmnimatteZero</code> class in <code>OmnimatteZero.py</code> orchestrates the complete matting/compositing workflow</li></ul>
+<p><strong>Data preparation</strong>: Input videos must be organized under <code>example_videos/</code> with <code>video.mp4</code>, <code>object_mask.mp4</code>, and <code>total_mask.mp4</code> per folder. Masks can be generated using SAM2 if not already available.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>In a production pipeline, this repo could serve as a training-free prototype for object removal in video post-production, where quick iteration matters more than perfect consistency. For example, a compositor could remove an unwanted object from footage and composite a replacement layer onto a new background without collecting and training on custom matting data. The training-free approach reduces data collection overhead but inherits whatever biases and artifacts exist in the underlying diffusion model — particularly around temporal coherence in generated inpainting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis identified two substantive findings:</p>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Deep nesting across 3 files (<code>OmnimatteZero.py</code>, <code>attention_guidance.py</code>, <code>foreground_composition.py</code>): Max indentation depth 9 makes control flow hard to follow. Fix: flatten with early returns/guard clauses and extract inner blocks.</li><li><strong>[MEDIUM/resilience]</strong> Broad exception handling in <code>object_removal.py</code>: Bare or Exception-wide <code>except</code> clauses swallow errors indiscriminately. Fix: catch specific exceptions; re-raise or log the rest.</li></ul>
+<p>SDLC observations from the file structure: no test files, no CI/CD pipeline, no lockfile (requirements.txt only), and no Dockerfile. A license file is present but Dependabot/Renovate is not configured, leaving dependency updates manual and advisories unpatched until manual audit.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a well-scoped, technically credible implementation of training-free video matting that leverages existing diffusion model priors effectively. The code is functional but suffers from deep nesting that raises cognitive load when modifying guidance or composition logic, and the absence of a lockfile or CI gate means dependency updates carry regression risk. It's suitable for researchers and prototyping teams that have access to 32GB+ VRAM and need quick video manipulation without training pipelines, but production teams should address the nesting and resilience issues before integrating into broader workflows.</p>
             </div>
 
             
@@ -91,9 +122,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -126,6 +157,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>requirements.txt</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176599007">Open in Code Brain &rarr;</a>

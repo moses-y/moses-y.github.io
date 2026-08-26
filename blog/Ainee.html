@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Python</span>
+                    <span>4 min read</span>
+                    <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>Ainee</h1>
@@ -80,8 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Ainee: AI Notetaking for People Who Actually Need Notes</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Most note-taking tools are either too dumb or too bloated. You want something that can actually process information—audio, PDFs, videos—and turn it into usable insights. Instead, you get an endless pile of plain-text notes that are impossible to search or share effectively. Students, researchers, and professionals waste hours organizing content manually while trying to make sense of it. It’s 2023; why are we still doing this?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Ainee takes all your scattered content—audio files, YouTube links, PDFs, random text—and turns it into something useful. The Python backend (app/) handles core processing tasks like annotation (app/api/content/annotation.py) and AI-enhanced summarization (app/libs/llm/content.py). It also includes a knowledge base module (app/api/knowledgebase/) for organizing your files into a searchable repository.</p><p>The frontend (web/) is built with Next.js and includes components for interacting with your notes and files via a clean interface. If you’re into Docker, you’ll appreciate the docker-compose.yml setup, which spins up PostgreSQL and Redis services without hassle. The backend leans heavily on AI models, with utilities for parsing documents (app/libs/docparser/index.py) and generating flashcards (app/libs/llm/prompts.py).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re a student preparing for finals. You upload a lecture recording and some PDFs into Ainee. The backend processes the audio and extracts key points using the AI-powered annotation tools. You can then generate summaries or study flashcards via app/libs/llm/. Want to share insights with your study group? Use the collaborative sharing feature to export your knowledge base, complete with references.</p><p>Here’s a quick workflow:</p><p>Done. No manual transcription. No formatting headaches. Just usable information.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Ainee is a solid choice if you deal with complex learning materials. The AI tools are genuinely useful, not gimmicky. That said, the setup isn’t beginner-friendly—if Docker scares you, skip this. But for students, researchers, or anyone buried under files they don’t have time to organize, it’s worth a shot.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users need a single place to capture, organise and interrogate learning material from many formats (PDFs, audio, YouTube, etc.).  Without a dedicated pipeline each source must be processed manually, leading to fragmented notes and missed insights.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>app/</code> implements a FastAPI‑style backend that ingests files, calls LLM services, stores results in PostgreSQL and exposes REST endpoints.  The web UI lives in <code>web/</code> (Next.js + React) and consumes those endpoints.  A small Node crawler in <code>web_crawler/</code> provides a public API for fetching remote pages.</p>
+<p>Key files:</p>
+<ul><li><code>main.py</code> – starts the Python service (imports <code>app</code> and mounts the routers).</li><li><code>app/api/content/index.py</code> – core content‑creation routes (<code>create_content</code>, <code>batch_create</code>, <code>process_transcript_task</code>).</li><li><code>app/database/session.py</code> – provides <code>get_async_session</code> used by <strong>119</strong> call sites (the database hub).</li><li><code>web/src/apis/index.ts</code> – the only module that imports 97 other TS files, acting as the front‑end request façade.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <strong><code>main.py</code></strong> which creates a FastAPI app and includes routers from <code>app/api/*</code>.  A typical request flow for uploading a file is:</p>
+<ol><li><strong><code>app/api/content/index.py:create_content</code></strong> receives the HTTP payload.</li><li>It calls <strong><code>app/database/session.get_async_session</code></strong> (hub module – 21 callers, 1 import) to obtain a DB session.</li><li>Business logic in <strong><code>app/services/content_processor.py:process_file</code></strong> runs, which:   <em> Writes the uploaded file to the filesystem (<code>open</code> in <code>app/common.py</code> – flagged for missing context manager). </em> Calls an LLM via <strong><code>app/libs/llm/ainee_web.py:invoke_llm_with_structured_output</code></strong> (network call). * Persists the result through <strong><code>app/database/repositories/content_repository.py:create</code></strong> (DB write).</li><li>Success or error is wrapped by the helpers in <strong><code>app/common.py</code></strong> (<code>success</code>, <code>failed</code>, <code>failed_with_code</code>).  These helpers are the “hub module” with 27 downstream dependencies, giving them a large blast radius.</li></ol>
+<p>The internal call graph shows <strong><code>get_async_session</code></strong> as the most‑referenced function (119 distinct callers) and <strong><code>success</code>/<code>failed</code></strong> as the next‑most‑used (47/39 callers).  Circular imports involve <code>app/__init__.py</code>, <code>app/common.py</code> and <code>app/database/session.py</code> (24 high‑severity cycles), which increase coupling and make refactoring risky.</p>
+<p>External side‑effects traced from entry points:</p>
+<ul><li><strong>Database</strong> – 118 functions issue SQL via the async session.</li><li><strong>Network</strong> – 31 functions perform outbound HTTP (e.g., LLM calls, YouTube transcript fetch).</li><li><strong>Filesystem</strong> – 13 functions read/write files (uploads, temporary audio extraction).</li><li><strong>Crypto</strong> – 8 functions generate hashes or tokens (e.g., <code>hashlib.md5</code> in <code>create_upload_and_pends</code>).</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/Ainee
+cd Ainee
+
+# Install Python deps (Python 3.11 required)
+pip install -r requirements.txt
+
+# Install Node deps (pnpm required)
+pnpm install --filter web...
+
+# Spin up supporting services (Postgres, Redis) via Docker
+docker compose up -d   # uses docker-compose.yml at repo root
+
+# Run the backend
+python main.py          # starts FastAPI on default port 8000
+
+# Run the frontend (development)
+cd web
+pnpm dev               # starts Next.js dev server on http://localhost:3000</code></pre>
+<p>Environment variables are loaded from <code>.env.example</code>; copy it to <code>.env</code> and fill in database URLs, LLM API keys, etc.  The Dockerfiles already pin the Python base image (<code>python:3.11-slim‑bullseye</code>) and the Next.js build environment.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product manager wants to turn a recorded interview into actionable notes.  They upload the audio file via the web UI → <code>create_content</code> stores the file, triggers <code>process_file</code> → the service extracts speech, calls the LLM to generate a summary and flashcards, and writes the results back to the same knowledge base.  The manager can then chat with the generated notes through the <code>/api/rag_chat</code> endpoint.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – No test suite</strong> – 356 source files, no tests (<code>tests/</code> missing).</li><li><strong>HIGH – No CI pipeline</strong> – no <code>.github/workflows/</code> or other build gate.</li><li><strong>HIGH – No Docker build gate</strong> – Dockerfile present but never validated automatically.</li><li><strong>HIGH – Wildcard CORS</strong> – <code>web_crawler/src/app.ts</code> uses <code>cors()</code> with <code>origin: "*"</code> while credentials are enabled.</li><li><strong>MEDIUM – Dependabot missing</strong> – three manifest files (<code>requirements.txt</code>, <code>web/package.json</code>, <code>web_crawler/package.json</code>) lack automated version updates.</li><li><strong>MEDIUM – Unpinned base image</strong> – Dockerfile uses mutable tag <code>python:3.11-slim-bullseye</code>.</li><li><strong>MEDIUM – Large binaries in repo</strong> – <code>web/public/images/ai-apps-coming-soon.svg</code> (4.9 MiB) and <code>data/uszips-new.csv</code> (4.8 MiB) inflate clone size.</li><li><strong>LOW – Missing conventions</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Ainee provides a full‑stack pipeline for AI‑augmented note‑taking, with clear separation between backend ingestion, LLM processing and a Next.js UI.  The codebase is functional but suffers from high coupling (import cycles, hub modules) and a lack of automated testing/CI, which raises maintenance risk.  It is suitable for teams that can invest in adding tests and refactoring the import graph; otherwise, the platform may be fragile in production.</p>
             </div>
 
             
@@ -91,16 +129,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">494<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>122</b></li><li><span>Markdown</span><i style="width:6%"></i><b>7</b></li><li><span>JSON</span><i style="width:3%"></i><b>4</b></li><li><span>YAML</span><i style="width:2%"></i><b>3</b></li><li><span>SQL</span><i style="width:1%"></i><b>1</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>138</b></li><li><span>Python</span><i style="width:88%"></i><b>122</b></li><li><span>TSX</span><i style="width:67%"></i><b>92</b></li><li><span>HTML</span><i style="width:9%"></i><b>12</b></li><li><span>JSON</span><i style="width:7%"></i><b>9</b></li><li><span>Markdown</span><i style="width:5%"></i><b>7</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Next.js</span><span>Docker</span></p>
                     </div>
@@ -142,6 +180,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1174201933">Open in Code Brain &rarr;</a>

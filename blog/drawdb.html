@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Designing databases is often a headache. You’ve got to visualize relationships, write SQL, and if you&#39;re lucky, you can do it all without losing your mind in a sea of complex tools. Most solutions either require a steep learning curve or force you to sign up for accounts you don’t want. Enter drawDB—a straightforward web-based database diagram editor that lets you whip up ER diagrams and generate SQL scripts without the usual fuss.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>drawDB gives you a simple drag-and-drop interface to create database schemas right in your browser. The core files, like src/App.jsx and the various animation components in src/animations/, help ensure a smooth user experience. You can clone the repo, run npm install, and fire it up locally with npm run dev. Want to deploy it? Just build with npm run build or use Docker with the Dockerfile and compose.yml for easy containerization.</p><p>The project is structured to keep things clean. For instance, the src/api/ folder contains essential APIs like email.js for sending notifications or gists.js for handling user-generated content. You can even tweak configurations with .env.sample if you want to set up sharing capabilities.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re tasked with designing a database for a new app. You open drawDB, create your tables with a few clicks, and lay out the relationships visually. Need SQL? Just click a button to export it. No need to write a single line of code by hand. If your team wants to collaborate, set up the server following the instructions in the README, and you&#39;re good to go.</p><p>docker run -p 3000:80 drawdb</p><p>Now your teammates can access the editor from their browsers.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>drawDB is a solid tool for anyone needing to visualize and generate SQL without the typical overhead. It&#39;s perfect for small projects or for developers looking to prototype quickly. Just remember, if your project scales up, you might need something more robust. But for simplicity and ease of use, it&#39;s hard to beat.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Designing and maintaining relational‑database diagrams is tedious when the tooling forces manual layout, copy‑paste SQL, or external installs. Teams that need a quick visual model –‑ for onboarding, documentation, or rapid prototyping –‑ often resort to heavyweight desktop apps or ad‑hoc sketches, which slows iteration and introduces errors.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>drawdb</code> provides a browser‑based editor that lets users drag‑and‑drop tables, define columns, relationships, and export the resulting schema as SQL. The UI lives under <code>src/</code> with React components such as <code>src/components/EditorCanvas/Table.jsx</code> and <code>src/components/EditorHeader/ControlPanel.jsx</code>. Core data definitions are in <code>src/data/constants.js</code>, <code>src/data/datatypes.js</code>, and <code>src/data/db.js</code>. The app is bundled with Vite (<code>vite.config.js</code>) and served either via the built static files (<code>index.html</code>) or a thin Express wrapper defined in <code>src/api/</code> and the Dockerfile.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Startup</strong> – Vite reads <code>src/App.jsx</code> (the root React component) and injects it into <code>index.html</code>. The development server (<code>npm run dev</code>) launches the Vite dev process; the production build (<code>npm run build</code>) outputs static assets consumed by the Docker container.</li><li><strong>State Management</strong> – The most widely referenced hook is <code>src/hooks/useLayout.js</code> (called from 30 other files). It supplies layout‑related state to components like <code>Workspace.jsx</code> and <code>EditorCanvas/Canvas.jsx</code>. <code>useDiagram.js</code>, <code>useUndoRedo.js</code>, and <code>useSelect.js</code> are similarly hot‑spots, each exported from <code>src/hooks/index.js</code> (hub module with 53 inbound imports).</li><li><strong>Diagram Operations</strong> – User actions (add table, move, undo) flow through the custom hooks: e.g., <code>ControlPanel.jsx</code> calls <code>undo</code>/<code>redo</code> from <code>useUndoRedo.js</code>, which ultimately invoke <code>updateTable</code>/<code>updateArea</code> defined in <code>src/context/DiagramContext.jsx</code>. The call graph shows <code>undo</code> → <code>updateTable</code> (8 edges) and <code>redo</code> → <code>updateTable</code> (7 edges).</li><li><strong>SQL Generation</strong> – The export path starts at <code>src/utils/exportSQL/index.js</code> → <code>generateMigrationSQL</code> → helper functions (<code>escapeQuotes</code>, <code>quoteIdentifier</code>, <code>columnDefinition</code>). These helpers are invoked 18–24 times per export, ending in a string written to the browser download API – no external network calls.</li><li><strong>Import Path</strong> – <code>src/utils/importSQL/index.js</code> reads a DBML/SQL blob, parses it via <code>src/utils/importSQL/shared.js</code>, and populates the diagram by calling the same context mutators used by the UI.</li><li><strong>External Touches</strong> – Nine functions perform outbound HTTP (e.g., <code>src/api/email.js</code> for sharing links) and three read/write the file system (Docker build copies static assets). No database server is contacted; the app is purely client‑side unless the optional server is deployed.</li></ol>
+<p><strong>Blast‑radius notes</strong> –</p>
+<ul><li><code>src/data/constants.js</code> is a hub (70 inbound imports); any change ripples through most of the UI.</li><li>Circular imports involve 21 modules, notably <code>src/hooks/index.js</code>, <code>src/data/datatypes.js</code>, and <code>src/utils/utils.js</code>; breaking these cycles reduces coupling.</li><li>Deep nesting (up to 7 levels) appears in <code>Workspace.jsx</code> and several canvas components, making future modifications harder to reason about.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/drawdb
+cd drawdb
+
+# Install dependencies (npm uses the lockfile)
+npm ci
+
+# Development server
+npm run dev          # Vite serves on http://localhost:5173
+
+# Production build
+npm run build        # outputs to ./dist
+docker build -t drawdb .   # builds the container
+docker run -p 3000:80 drawdb   # serves static files</code></pre>
+<p>No environment variables are required for the standalone UI; sharing features need the separate <code>drawdb-server</code> and variables described in <code>.env.sample</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS product can embed <code>drawdb</code> in its admin console to let product managers sketch new data models. The UI stores the diagram in local storage; on “Export”, <code>exportSQL</code> produces a migration script that the CI pipeline applies to the production database, eliminating manual copy‑paste.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions use mutable tags (<code>docker/setup-qemu-action@v3</code> etc.). Pin to commit SHAs.</li><li><strong>HIGH</strong> – Audit flags insufficient test coverage despite three test files; add a comprehensive suite covering public hooks and export/import.</li><li><strong>MEDIUM</strong> – Workflows lack least‑privilege <code>GITHUB_TOKEN</code> permissions.</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate configuration; add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – CI installs with <code>npm install</code>; replace with <code>npm ci</code> to respect the lockfile.</li><li><strong>MEDIUM</strong> – Base images (<code>node:20-alpine</code>, <code>nginx:stable-alpine3.17</code>) are unpinned; use digests.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability gate; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Checkout step keeps credentials; set <code>persist-credentials: false</code>.</li><li><strong>MEDIUM</strong> – Dockerfile runs as root; add a non‑root <code>USER</code>.</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code>; define reasonable limits.</li></ul>
+<p>Additional static findings (import cycles, oversized files, duplicated 6‑line blocks) indicate maintainability pressure and should be addressed in a refactor.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>drawdb</code> delivers a functional, client‑side diagram editor with a clear React architecture, but the codebase suffers from tight coupling, deep nesting, and several production‑grade hygiene gaps. It is suitable for teams that need a quick visual tool and are comfortable adding tests, tightening CI, and refactoring hub modules for long‑term stability.</p>
             </div>
 
             
@@ -91,18 +121,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">255<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>JavaScript</span><i style="width:100%"></i><b>78</b></li><li><span>JSX</span><i style="width:99%"></i><b>77</b></li><li><span>YAML</span><i style="width:5%"></i><b>4</b></li><li><span>Markdown</span><i style="width:5%"></i><b>4</b></li><li><span>JSON</span><i style="width:4%"></i><b>3</b></li><li><span>CSS</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>JavaScript</span><i style="width:100%"></i><b>124</b></li><li><span>JSX</span><i style="width:69%"></i><b>85</b></li><li><span>YAML</span><i style="width:3%"></i><b>4</b></li><li><span>Markdown</span><i style="width:3%"></i><b>4</b></li><li><span>JSON</span><i style="width:3%"></i><b>4</b></li><li><span>CSS</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 

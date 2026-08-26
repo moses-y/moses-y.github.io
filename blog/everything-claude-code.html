@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents are great until you want them to do more than spit out one-off answers. Persistent memory, context switching, security checks, and scaling up workflows? Good luck wiring all that together without creating a spaghetti mess of YAML files and custom scripts. If you’ve tried building or optimizing an agent harness, you’ve probably hit a wall with inconsistent performance, manual skill updates, or flaky evaluations.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>everything-claude-code is the Swiss Army knife for AI agent harnesses. It’s a complete system—not just some configs—with modular tools for skills, memory optimization, and parallelized workflows. The real meat is in .opencode/:  
-Skills: Skills are defined with SKILL.md files (e.g., .agents/skills/security-review/SKILL.md) and paired with YAML configs like agents/openai.yaml. These skills are reusable, so you don’t reinvent the wheel every time you need a new agent behavior.  
-Hooks: Persistent memory? Context switching? The .cursor/hooks/ folder has you covered with pre-built lifecycle hooks like session-start.js and before-submit-prompt.js.  
-Performance Tools: Want to know where your agent’s choking? Check out .opencode/tools/security-audit.ts or run-tests.ts for automated checks and benchmarks.</p><p>The system also includes commands/ for day-to-day operations like checkpoint.md for evaluations or quality-gate.md for ensuring new code doesn’t break the harness.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re building an agent system for automatic code reviews. You’d start by defining the skill in .agents/skills/code-reviewer/SKILL.md and setting up the behavior in .agents/skills/code-reviewer/agents/openai.yaml. Then, hook up .cursor/hooks/after-file-edit.js to ensure the agent reacts in real time to file changes, saving context between sessions. Run npm run security (defined in .opencode/package.json) to make sure your agent isn’t exposing sensitive data.</p><p>Bonus: If you&#39;re scaling this setup, use the cascade method from the Longform Guide to spin up parallel agents across multiple instances.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is a beast. If you’re building production-grade AI agents, it’s a goldmine of tools and patterns. That said, it’s not for the faint of heart—expect to spend time deciphering the structure and documentation. If you’re working on a small project or just need a chatbot, skip this. But if you’re serious about building scalable, smart agent systems, this is worth the effort.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers using Claude‑Code, Codex, or similar AI harnesses spend most of their time stitching together hooks, rules, and custom agents. The glue code proliferates, becomes hard to reason about, and performance degrades as session data grows. Maintaining a coherent, version‑controlled set of skills, instincts, and security checks is therefore a constant source of friction.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements <strong>Everything Claude Code (ECC)</strong> – a self‑contained harness that bundles reusable <em>skills</em>, <em>hooks</em>, and <em>rules</em> for multiple AI agents. Core assets live under <code>.opencode/</code> (TypeScript entry point <code>index.ts</code>) and <code>scripts/</code> (the CLI driver <code>claw.js</code>). Hooks such as <code>.cursor/hooks/adapter.js</code> and <code>.cursor/hooks/before-shell-execution.js</code> intercept editor actions, while rule files in <code>.cursor/rules/</code> encode coding‑style, security, and performance policies. The <code>agents/</code> folder contains ready‑made agent prompts (e.g., <code>agents/code-reviewer.md</code>). Documentation (≈360 Markdown files) and test suites (62 tests) are shipped alongside the code.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <strong><code>scripts/claw.js</code></strong> (function <code>main</code> at line 278). <code>main</code> calls 57 functions across the codebase, most notably <code>readFile</code>, <code>log</code>, and a cascade of utility helpers from <code>scripts/lib/utils.js</code>.</p>
+<ul><li><code>scripts/lib/utils.js</code> is the most‑connected module (27 functions, imported by six other files) and defines path helpers such as <code>getClaudeDir</code> and <code>getSessionsDir</code>. Because it is a hub, any change here can affect the entire CLI flow.</li></ul>
+<ul><li><code>scripts/lib/session-aliases.js</code> and <code>scripts/lib/session-manager.js</code> handle alias resolution and session persistence, each exposing five‑plus functions that read/write files (e.g., <code>loadAliases</code>, <code>saveAliases</code>).</li></ul>
+<ul><li>Hook orchestration lives in <code>.cursor/hooks/</code>. The adapter (<code>.cursor/hooks/adapter.js</code>) is imported by 15 other modules, making it another blast‑radius hotspot. It routes editor events to specific hook implementations (<code>before-shell-execution</code>, <code>after-file-edit</code>, etc.).</li></ul>
+<ul><li>The internal call graph shows <strong>332</strong> resolved function‑to‑function edges. The most frequently invoked internal utilities are <code>readFile</code> (11 callers) and <code>log</code> (11 callers).</li></ul>
+<ul><li>Files that touch the outside world are limited to 31 functions that perform filesystem I/O. The shortest external path is <code>main → readFile → fs.readFileSync</code>. No network calls are evident in the static graph, so the runtime impact is confined to local file operations.</li></ul>
+<p>No circular dependencies appear, reducing the risk of hidden coupling. However, hub modules (<code>utils.js</code>, <code>adapter.js</code>) and several oversized test files (<code>tests/ci/validators.test.js</code>) represent the primary “change‑impact” zones.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/everything-claude-code.git
+cd everything-claude-code
+
+# Install Node dependencies (npm is the lockfile format)
+npm ci   # respects package-lock.json in the repo root and .opencode/
+
+# Optional: install TypeScript for the .opencode package
+npm install -g typescript   # needed only if you modify .opencode sources
+
+# Run the CLI driver (the documented entry point)
+node scripts/claw.js --help</code></pre>
+<p>Configuration files live under <code>.opencode/</code> (<code>opencode.json</code>) and <code>.cursor/</code> (<code>hooks.json</code>). The CLI reads those files to locate skill definitions (<code>.agents/skills/…</code>) and to load hook pipelines. No environment variables are required out‑of‑the‑box; the system operates on the local filesystem.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A development team integrates ECC into their CI pipeline to enforce coding standards on every pull request. The CI workflow invokes <code>node scripts/claw.js run-tests</code> which triggers the hook chain, validates rule compliance, and writes a session report under <code>~/.claude/sessions/</code>. The report can be consumed by a downstream audit service without any network code changes.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Discarded exit codes mask failures (<code>maintenance.yml</code> line 23).</li><li><strong>HIGH</strong> – <code>continue-on-error</code> on correctness steps hides test failures (<code>ci.yml</code> line 195).</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate config (<code>.github/dependabot.yml</code> missing).</li><li><strong>MEDIUM</strong> – Large binary (<code>assets/images/longform/01-header.png</code>, 5.4 MiB) should be moved to Git LFS.</li><li><strong>MEDIUM</strong> – Checkout step keeps token; set <code>persist-credentials: false</code> (<code>ci.yml</code>).</li><li><strong>MEDIUM</strong> – <code>postinstall</code> script fetches remote resources; consider moving to explicit build step (<code>package.json</code>).</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to jobs in <code>maintenance.yml</code> to avoid runaway runs.</li></ul>
+<p>The repository includes a full test suite, CI definitions, a LICENSE, and lockfiles, indicating reasonable hygiene. Duplicate hook implementations and oversized test files (e.g., <code>tests/ci/validators.test.js</code> with 1,669 lines) are flagged by the static analysis and should be refactored for maintainability.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>ECC provides a concrete, file‑based framework for stitching AI‑agent hooks, skills, and rules together, with clear entry points and modest external side effects. Its main drawbacks are a few high‑impact hub modules and some maintenance‑level technical debt (pinned actions, large binaries). Teams needing a configurable, locally‑runnable harness for Claude‑Code or Codex will find a solid foundation, but should allocate effort to reduce hub complexity and clean up duplicated hook logic before extensive customization.</p>
             </div>
 
             
@@ -94,18 +123,18 @@ Performance Tools: Want to know where your agent’s choking? Check out .opencod
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">795<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>116</b></li><li><span>YAML</span><i style="width:22%"></i><b>25</b></li><li><span>JavaScript</span><i style="width:14%"></i><b>16</b></li><li><span>TypeScript</span><i style="width:9%"></i><b>10</b></li><li><span>JSON</span><i style="width:8%"></i><b>9</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>612</b></li><li><span>JavaScript</span><i style="width:12%"></i><b>71</b></li><li><span>YAML</span><i style="width:4%"></i><b>25</b></li><li><span>JSON</span><i style="width:3%"></i><b>19</b></li><li><span>TypeScript</span><i style="width:2%"></i><b>15</b></li><li><span>Shell</span><i style="width:2%"></i><b>12</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Spring</span></p>
                     </div>
                 </div>
 

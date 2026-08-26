@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Ever tried to show a local server to someone on the internet? You know, without the hassle of deploying it somewhere or jumping through hoops? Enter the frustration of needing a public URL for demos or testing webhooks. You want something quick, easy, and with zero config files. That’s where wormhole comes in.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>wormhole is an open-source alternative to ngrok that lets you expose your localhost to the internet with a single command. You just run wormhole http 3000, and voila! You&#39;ve got a public HTTPS URL, thanks to Cloudflare handling the TLS magic. Check out the cmd/wormhole/main.go file if you want to see the entry point where this all kicks off.</p><p>The internal/client directory is where the real action happens. For example, local.go manages the local server traffic, while ws_passthrough.go ensures WebSocket connections work smoothly. It&#39;s all about making your life easier, and it does a decent job at that.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re working on a webhook for a payment processor like Stripe. You fire up your local server on port 3000 and run:</p><p>Now, you can provide the forwarding URL (like https://k7x9m2.wormhole.bar) to your team for testing. The built-in traffic inspector, accessible at http://localhost:4040, gives you live feedback on incoming requests and even lets you replay them with a click. Perfect for debugging!</p><p>Need a custom subdomain? Just run wormhole http 3000 --subdomain myapp after logging in with GitHub. Now, your URL looks a lot more professional.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>wormhole is solid for developers who need to share local servers without the fuss of deployments. The features like request replay and traffic inspection are handy, but if you&#39;re working on small projects that don’t need real-time testing, this might feel like overkill. Still, for anyone juggling multiple local servers or integrating with webhooks, it&#39;s worth a shot.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a quick way to expose a local service to the public internet for demos, webhook testing, or remote debugging. Existing solutions (e.g., ngrok) require sign‑up, proprietary binaries, or per‑tunnel configuration, which adds friction to short‑lived workflows.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>Wormhole</strong> delivers a single‑command, zero‑config tunnel built on Go and Cloudflare Workers. The core CLI lives in <code>cmd/wormhole/main.go</code> and invokes the Go client (<code>internal/client/client.go</code>) to negotiate a tunnel, start a local HTTP inspector (<code>internal/inspect/server.go</code>), and optionally run a TUI (<code>runTUI</code>) or headless logger (<code>runHeadless</code>).</p>
+<p>The Cloudflare edge component (<code>edge/src/*.ts</code>) implements the worker that terminates TLS, forwards traffic, and persists tunnel metadata in SQLite migrations (<code>edge/migrations/*.sql</code>). The <code>pkg/config/config.go</code> supplies a tiny configuration struct used by both the CLI and the worker.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>func main()</code> in <code>cmd/wormhole/main.go</code> (line 27). The command parser routes to <code>httpCmd</code>, which calls <code>runHeadless</code> (or <code>runTUI</code> when a TTY is present). Both functions create a <code>Client</code> via <code>internal/client.New</code> (line 89) – this is the widest‑blast‑radius function, called from five places and reaching 20 distinct functions.</p>
+<p>The <code>Client</code>:</p>
+<ol><li>Opens a WebSocket transport (<code>internal/transport/ws.go → NewWSTransport → Connect</code>).</li><li>Starts a local inspector server (<code>internal/inspect.NewServer</code> → <code>Start</code> → <code>Addr</code>, <code>Close</code>).</li><li>Registers request callbacks (<code>OnRequest</code>, <code>OnStatus</code>) that funnel every inbound request into a <code>Recorder</code> (<code>internal/inspect/recorder.go → NewRecorder → Record</code>).</li></ol>
+<p><code>Record</code> is called 15 times across the codebase and stores entries in an in‑memory ring buffer; the inspector UI reads them via <code>Entries</code>. The HAR exporter (<code>internal/inspect/har.go → BuildHAR</code>) pulls from the same recorder, providing standardized logs.</p>
+<p>The edge worker (<code>edge/src/index.ts</code>) imports <code>tunnel.ts</code>; these two files form a measured import cycle (high soundness risk). The worker reads tunnel metadata from the SQLite DB (via migrations) and forwards HTTP/WebSocket traffic back to the Go client over the established WebSocket.</p>
+<p>Key hub functions:</p>
+<div class="table-scroll"><table><thead><tr><th>Function</th><th>Defined in</th><th>Callers</th><th>Calls</th></tr></thead><tbody><tr><td><code>Close</code></td><td><code>internal/inspect/server.go</code></td><td>23 places</td><td>–</td></tr><tr><td><code>NewRecorder</code></td><td><code>internal/inspect/recorder.go</code></td><td>19 places</td><td><code>Record</code>, <code>makeEntry</code></td></tr><tr><td><code>NewServer</code></td><td><code>internal/inspect/server.go</code></td><td>16 places</td><td><code>Addr</code>, <code>Close</code></td></tr><tr><td><code>Run</code> (client)</td><td><code>internal/client/client.go</code></td><td>15 places</td><td>transport, recorder, UI</td></tr></tbody></table></div>
+<p>The call graph shows 205 internal edges; the most frequently invoked paths are <code>Close → …</code>, <code>NewRecorder → Record</code>, and <code>NewServer → Addr</code>. No external file effects (e.g., file‑system writes) are evident beyond the SQLite migrations used by the edge worker.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the upstream repository
+git clone https://github.com/moses-y/wormhole
+cd wormhole
+
+# Build the Go binary (Makefile target)
+make build          # produces ./wormhole
+
+# Run a tunnel (exposes local port 3000)
+./wormhole http 3000
+
+# Optional: custom subdomain
+./wormhole http 3000 --subdomain myapp
+
+# Disable the inspector
+./wormhole http 3000 --no-inspect</code></pre>
+<p>The CLI requires no external configuration files; the only runtime dependency is network access to <code>*.wormhole.bar</code> (Cloudflare‑managed DNS). The edge worker is deployed automatically by the project’s release process (not part of the local build).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline that validates incoming webhooks can start a temporary tunnel before running integration tests:</p>
+<pre data-lang="bash"><code>./wormhole http 8080 --headless &amp;
+TUNNEL_URL=$(./wormhole status | grep URL | awk '{print $2}')
+curl -X POST "$TUNNEL_URL/webhook" -d '{"event":"test"}'</code></pre>
+<p>The inspector (<code>http://localhost:4040</code>) shows the request in real time and allows replay if the test needs to be rerun.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing CI</strong> – No <code>.github/workflows</code> or other CI config; 25 source files are never built/tested automatically.</li><li><strong>Medium – No Dependabot</strong> – <code>go.mod</code> and <code>edge/package.json</code> lack an automated dependency‑update bot.</li><li><strong>High – Import cycle</strong> – <code>edge/src/index.ts</code> ↔ <code>edge/src/tunnel.ts</code> create a circular import, increasing maintenance risk.</li><li><strong>High – Duplicated install scripts</strong> – Nearly identical 6‑line blocks appear in <code>deployments/install.sh</code>, <code>docs/install.sh</code>, <code>install.sh</code>, and <code>internal/client/client.go</code>.</li><li><strong>Medium – Deep nesting</strong> – <code>cmd/wormhole/main.go</code> reaches an indentation depth of 7, making the control flow hard to follow.</li></ul>
+<p>All findings are derived from deterministic static analysis; no additional issues were inferred.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Wormhole provides a functional, Go‑centric alternative to commercial tunneling services with a minimal CLI and a Cloudflare‑based edge worker. The core architecture is clear and testable, but the repository suffers from maintainability concerns (import cycle, duplicated scripts) and lacks CI automation. Teams comfortable with Go and willing to add a CI pipeline can adopt it quickly for short‑term exposure or webhook development.</p>
             </div>
 
             
@@ -91,9 +132,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -131,6 +172,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1175979729">Open in Code Brain &rarr;</a>

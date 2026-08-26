@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLMs like codex or claude can be super helpful, but here’s the thing: you can’t always trust them with full access to your machine. Maybe they decide they need to install a random tool, or worse, they start reading files they’ve got no business touching. Sure, you could run in a container, but on MacOS, that’s just a VM in a trench coat. So why not skip the middleman and run a real VM built for the job?</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>vibe spins up a lightweight, fully sandboxed Linux virtual machine on your Mac with almost zero setup. It’s a single Rust binary that uses MacOS’s native virtualization framework (via Objc2) to create a Debian-based VM. You get fine-grained control over what gets mounted from your host machine into the VM, so you can sandbox your LLM agent properly.</p><p>The main magic happens in src/main.rs. That’s where the VM configuration and mounts get set up. Default mounts include handy paths like .cargo, .m2, and .git, but you can override these with the --no-default-mounts flag or add custom mounts with --mount.</p><p>The whole thing is packaged with cargo, and there’s even a build.rs script to handle some custom build-time configuration. No bloated dependencies, no unnecessary abstractions—just ~1200 lines of Rust doing its job.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Let’s say you’re testing out a sketchy LLM agent that wants to install Python packages, run git, and maybe download the entire internet. Instead of giving it free rein on your laptop, you run:</p><p>Now the agent has its own little Linux playground. It can’t touch anything you didn’t explicitly share, and if it breaks something, you just nuke the VM and start fresh. Bonus: because the VM boots in ~10 seconds, it’s faster than setting up a Docker image with the same level of isolation.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>vibe is simple, fast, and effective. If you’re running LLM agents or any untrusted code, this is a no-brainer. It’s not a replacement for production-grade security, but for devs who just want a safer sandbox, it’s perfect. Plus, no emoji in the codebase—thank God.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#repo-summary">REPO SUMMARY</a><a href="#the-problem">THE PROBLEM</a><a href="#what-this-does">WHAT THIS DOES</a><a href="#how-it-is-wired">HOW IT IS WIRED</a><a href="#how-to-use-it">HOW TO USE IT</a><a href="#real-world-use">REAL-WORLD USE</a><a href="#code-health-issues">CODE HEALTH &amp; ISSUES</a><a href="#the-bottom-line">THE BOTTOM LINE</a></nav>
+                <h2>Technical Briefing: vibe</h2>
+<h3 id="repo-summary">REPO SUMMARY</h3>
+<p><strong>vibe</strong> (<a href="https://github.com/moses-y/vibe" rel="noopener">https://github.com/moses-y/vibe</a>) is a single-binary tool that spawns a Linux virtual machine on macOS to sandbox LLM agents. The repository contains 10 files: 6 at root, 3 in <code>src/</code>, and 1 in <code>.github/</code>. Primary build system is Cargo (Rust). CI runs via GitHub Actions. No Dockerfile; license file present; lockfile committed; no detected secrets.</p>
+<h3 id="the-problem">THE PROBLEM</h3>
+<p>LLM agents operating without sandboxing can read and modify files outside the intended project directory, creating security and compliance risks. The author experienced this firsthand when running <code>codex</code> without <code>--yolo</code> and observing it accessing files beyond the title directory. Virtualization offers stronger isolation than containers or the macOS sandbox framework, but existing solutions require significant configuration.</p>
+<h3 id="what-this-does">WHAT THIS DOES</h3>
+<p>vibe spins up a minimal Debian Linux VM on ARM-based Macs (macOS 13+). On first run it downloads a base image; subsequent starts boot in approximately 10 seconds on M1 hardware. The VM mounts project directories and common developer tooling (<code>.cargo/registry</code>, <code>.m2</code>, <code>.codex</code>, <code>.claude</code>, etc.) as read-write volumes. A help-text example shows mounts for <code>/Users/dev/work/my-project</code> → <code>/root/my-project</code> and similar paths for caches and registries. The binary is under 1 MB; the entire implementation resides in a single ~1200-line Rust file with only <code>objc2</code> and <code>lexopt</code> as dependencies.</p>
+<h3 id="how-it-is-wired">HOW IT IS WIRED</h3>
+<p>Execution starts at <code>main</code> in <code>src/main.rs:118</code>, which reaches 18 functions and is called from 1 place. The internal call graph contains 28 resolved call edges between self-functions. Key entry points and their reach:</p>
+<ul><li><code>parse_cli</code> (<code>src/main.rs:291</code>) — reaches 1 function</li><li><code>ensure_default_image</code> (<code>src/main.rs:580</code>) — reaches 18 functions</li><li><code>run_vm</code> (<code>src/main.rs:1037</code>) — reaches 18 functions, called from 2 places</li><li><code>create_vm_configuration</code> (<code>src/main.rs:829</code>) — reaches 3 functions</li></ul>
+<p>Widest blast radius functions: <code>run_vm</code> and <code>ensure_default_image</code> each reach 18 functions; <code>create_vm_configuration</code> reaches only 3. Control flow in <code>src/main.rs</code> exhibits max indentation depth of 15 and 1131 code lines, making it hard to hold in one mind; a change here ripples widely.</p>
+<p>Outside the repository, the tool invokes <code>qemu</code> and <code>debootstrap</code> to provision the VM; it reads/writes host filesystem paths and interacts with macOS window management. No external API calls beyond the initial Debian image download.</p>
+<h3 id="how-to-use-it">HOW TO USE IT</h3>
+<p><strong>Install:</strong> Download the latest macOS ARM64 binary from GitHub Actions releases:</p>
+<pre><code>curl -LO https://github.com/lynaghk/vibe/releases/download/latest/vibe-macos-arm64.zip
+unzip vibe-macos-arm64.zip
+mkdir -p ~/.local/bin
+mv vibe ~/.local/bin
+export PATH="$HOME/.local/bin:$PATH"</code></pre>
+<p>Or via <code>cargo install --locked --git https://github.com/lynaghk/vibe.git</code> (requires Rust).</p>
+<p><strong>Run:</strong> <code>vibe [OPTIONS] [disk-image.raw]</code>. Options include <code>--help</code>, <code>--version</code>, <code>--no-default-mounts</code>, and <code>--mount host-path:guest-path[:read-only | :read-write]</code>. First run requires network access to pull the base image.</p>
+<p><strong>Configuration:</strong> No config files or environment variables are required; mounts are specified inline via <code>--mount</code> flags. Default mounts include <code>.git</code>, <code>.vibe</code> project subfolder, and common developer directories.</p>
+<h3 id="real-world-use">REAL-WORLD USE</h3>
+<p>A developer working with an LLM agent can invoke <code>vibe</code> from their project directory to give the agent a confined environment. With <code>--yolo</code> the agent can install/remove tools without prompting; without it, every command requires approval. The sandbox prevents the agent from accessing host files outside the explicitly mounted paths. Example workflow:</p>
+<pre><code>cd my-project
+vibe --mount ~/.cache:/root/.cache:read-write</code></pre>
+<p>The agent sees only the project directory and explicitly shared paths, not the full host filesystem.</p>
+<h3 id="code-health-issues">CODE HEALTH &amp; ISSUES</h3>
+<p>Five findings from static analysis, ranked by severity:</p>
+<ul><li><strong>[HIGH]</strong> Pin third-party GitHub Actions to a commit SHA — <code>.github/workflows</code> uses <code>dtolnay/rust-toolchain@stable</code>; a tag can move, so the action running with repository secrets executes whatever its owner last pushed.</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate — 1 manifest present, no update bot configured; published advisories go unpatched until manual audit.</li><li><strong>[MEDIUM]</strong> Gate pull requests on a dependency vulnerability scan — no dependency scan in CI; this is the primary gate that would catch a known-vulnerable package before build.</li><li><strong>[MEDIUM]</strong> Set <code>persist-credentials: false</code> on checkout — <code>.github/workflows/release.yml</code> checkout retains the token; later steps (including dependency installation) can read pushable credentials without an explicit token being passed.</li><li><strong>[LOW]</strong> Set <code>timeout-minutes</code> on workflow jobs — 1 workflow declares no job timeout; a wedged step runs to the six-hour platform default.</li></ul>
+<p>Additionally, the codebase has no test files detected; the single <code>src/main.rs</code> file at 1131 lines exhibits deep nesting (max depth 15) and cognitive overhead from oversized file size.</p>
+<h3 id="the-bottom-line">THE BOTTOM LINE</h3>
+<p>vibe delivers a functional, zero-configuration Linux VM for sandboxing LLM agents on ARM Macs, with sub-10-second boot and a sub-1 MB binary. The single-file Rust implementation using only <code>objc2</code> and <code>lexopt</code> keeps dependencies minimal. However, the codebase suffers from an oversized main module with deep nesting, no test coverage, and several SDLC gaps: unpinned GitHub Actions SHAs, missing dependency scanning, and unguarded checkout credentials. Teams seeking a lightweight sandbox for agent workflows will find vibe practical, but should address the hygiene findings before integrating into regulated environments.</p>
             </div>
 
             
@@ -91,9 +123,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +145,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1173804025">Open in Code Brain &rarr;</a>

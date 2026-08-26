@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Managing multiple repos and branches while juggling tools like codex, claude, and pi can be a dumpster fire. Switching contexts between your terminal, chat apps, and project management tools often feels like playing whack-a-mole with your productivity. Need to resume a task you started last week or sync files across projects? Good luck digging through your Git history and chat logs. There&#39;s no clean way to tie it all together—until now.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>takopi acts as a glue layer between tools like Anthropic&#39;s claude, OpenAI&#39;s codex, and the Telegram API. It helps you manage projects, branches, and task queues with minimal friction. The core functionality lives in src/takopi, where modules like runner.py, router.py, and worktrees.py handle things like running commands across multiple agent sessions, mapping group chat topics to repo contexts, and managing Git worktrees.</p><p>The Telegram integration is robust. The src/takopi/telegram folder covers everything from chat sessions (chat_sessions.py) to file transfer (files.py) and voice notes (voice.py). Want to trigger a specific command from a Telegram chat? The /commands directory has handlers for things like /codex or /pi. The docs/how-to folder provides solid setup instructions, breaking down workflows like &quot;assistant mode&quot; (ongoing chats) or &quot;workspace mode&quot; (repo-branch mapping).</p><p>Plugins are supported via entrypoints—extend functionality for engines, transports, or commands by following the guides in docs/how-to/write-a-plugin.md and docs/reference/plugin-api.md.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re managing a project with multiple branches: main, feat/memory-box, and fix/urgent-bug. You want to run a codex engine to freeze the artifacts on feat/memory-box. Fire up your bot and hit it with:</p><p>Want to switch engines mid-task? Just reply /pi. The state resumes like magic. Forget where you left off on fix/urgent-bug? The bot spits out a resume command for your terminal: takopi run --resume.</p><p>Got files to transfer between your local repo and your bot? Use /fetch and /send commands to grab directories or push assets. It&#39;s like having Git and a project manager in your pocket.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>takopi is a lifesaver if you&#39;re deep into multi-engine workflows and Git-heavy projects. The Telegram integration is slick, and the stateless resume feature is genuinely useful. But let’s be real: this isn&#39;t for casual devs or small repos—it’s overkill if all you do is commit and push. If you&#39;re managing multiple branches, tools, or AI agents, though? Worth a shot.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p><strong>Technical Briefing – takopi</strong> <em>Concise, consultant‑grade; all file paths and counts come from the repository’s static analysis.</em></p>
+<hr>
+<h3 id="the-problem">The Problem</h3>
+<p>Engineers who use LLMs (Codex, Claude, OpenAI, Pi) need a single entry point that can run agents across many git worktrees, stream progress back to a Telegram chat, and resume sessions later without losing state.  takopi fills that gap, but its internal structure and CI hygiene need scrutiny before production adoption.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>takopi is a Telegram‑bridged runner that lets you start, monitor, and resume agent sessions from chat.  Key components live under <code>src/takopi/</code>:</p>
+<ul><li><strong><code>src/takopi/telegram/loop.py</code></strong> – 50 functions/10 classes; the main message‑poller and dispatch loop.</li><li><strong><code>src/takopi/config.py</code></strong> – 9 functions/3 classes; reads/writes the persistent config (via <code>read_config</code>, <code>load_or_init_config</code>).</li><li><strong><code>src/takopi/runner.py</code></strong> – 39 functions/7 classes; orchestrates <code>run_with_resume_lock</code> and worktree management.</li><li><strong><code>src/takopi/telegram/bridge.py</code></strong> – 17 importers, 15 exports; bridges Telegram updates to the internal command pipeline.</li></ul>
+<p>The repo also ships <code>scripts/</code> (5 files) for release/onboarding helpers and a <code>pyproject.toml</code> that pins the tool as a <code>uv</code>‑installed package.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry points</strong> (from the internal call graph):</p>
+<div class="table-scroll"><table><thead><tr><th>Entry</th><th>File</th><th>Reaches</th></tr></thead><tbody><tr><td><code>execute</code></td><td><code>src/takopi/telegram/client.py:146</code></td><td>46 functions</td></tr><tr><td><code>handle</code></td><td><code>src/takopi/commands.py:81</code></td><td>166 functions</td></tr><tr><td><code>run</code></td><td><code>src/takopi/runner.py:95</code></td><td>171 functions</td></tr><tr><td><code>init</code></td><td><code>src/takopi/cli/__init__.py:105</code></td><td>25 functions</td></tr></tbody></table></div>
+<p>Control flow typically starts at <code>handle</code> → <code>run_one</code> → <code>_run_engine</code> → <code>resolve_run_cwd</code> → <code>ensure_worktree</code> (filesystem).  The longest shortest path to an out‑of‑process effect is <code>handle → run_one → _run_engine → resolve_run_cwd → ensure_worktree</code> (worktree creation).</p>
+<p><strong>Hub &amp; cycle costs</strong> – <code>src/takopi/logging.py</code> is imported by 33 modules (instability 0), making changes ripple widely.  A 19‑module import cycle involves <code>src/takopi/telegram/bridge.py</code>, <code>topics.py</code>, and <code>commands/reply.py</code>; any modification risks breaking the circular dependency unless shared types are extracted.</p>
+<p><strong>What the code touches outside itself</strong> – 90 functions read/write files; 2 make outbound network calls (Telegram API); 1 performs crypto/secret generation; 1 runs external commands.  The shortest path from <code>handle</code> to a filesystem write goes through <code>ensure_worktree</code> (worktree directory creation).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<ul><li><strong>Setup</strong> – Install with the documented command:   ``<code>sh uv tool install -U takopi </code>`<code> Then run the setup wizard (</code>takopi`) to create a BotFather token, pick a workflow (assistant/workspace/handoff), and connect your chat.</li></ul>
+<ul><li><strong>Configuration</strong> – The wizard writes a config file (see <code>src/takopi/config.py</code>).  Environment variables for engine binaries (<code>codex</code>, <code>claude</code>, <code>opencode</code>, <code>pi</code>) must be on <code>PATH</code>.</li></ul>
+<ul><li><strong>Running it</strong> – After setup, invoke:   ``<code>sh takopi </code>`<code> Send messages to your bot; prefix with </code>/codex<code>, </code>/claude<code>, </code>/opencode<code>, or </code>/pi<code> to select an engine.  Use </code>/&lt;project&gt; &lt;command&gt;<code> to target a registered project (e.g., </code>/happy-gadgets hard reset the timeline`).</li></ul>
+<ul><li><strong>Development</strong> – See <code>docs/developing.md</code> and <code>docs/reference/specification.md</code> for contributor onboarding; the repo uses GitHub Actions CI (<code>.github/workflows/ci.yml</code>).</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A team maintaining several feature branches can <code>takopi init my‑project</code> to register the repo, then from any chat send <code>/my‑project @feat/new‑ui implement the new dashboard</code>.  The agent runs in a dedicated worktree, streams progress (logs, file changes, elapsed time) back to the Telegram topic, and a <code>resume line</code> can be copied to continue the same session from a terminal later.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured analysis (59 findings, 27 high, 32 medium, 0 low)</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Severity</th><th>Issue</th><th>Files (example)</th></tr></thead><tbody><tr><td><strong>HIGH</strong></td><td>Import‑cycle member (19 modules)</td><td><code>src/takopi/telegram/bridge.py</code>, <code>topics.py</code>, <code>commands/reply.py</code></td></tr><tr><td><strong>HIGH</strong></td><td>Broad exception handling (x2)</td><td><code>src/takopi/logging.py</code>, <code>src/takopi/telegram/client_api.py</code></td></tr><tr><td><strong>HIGH</strong></td><td>Deep nesting (x15)</td><td><code>src/takopi/telegram/bridge.py</code>, <code>src/takopi/settings.py</code>, <code>src/takopi/runner_bridge.py</code></td></tr><tr><td><strong>HIGH</strong></td><td>Hub module (33 dependents)</td><td><code>src/takopi/logging.py</code>, <code>src/takopi/config.py</code>, <code>src/takopi/model.py</code></td></tr><tr><td><strong>HIGH</strong></td><td>Oversized files (x6)</td><td><code>src/takopi/runner.py</code>, <code>src/takopi/telegram/loop.py</code>, <code>tests/test_telegram_bridge.py</code></td></tr><tr><td><strong>HIGH</strong></td><td>Duplicated code blocks (346 × 6‑line blocks)</td><td><code>scripts/commit_notify.py</code>, <code>scripts/release_notify.py</code>, <code>scripts/onboarding_preview.py</code>, <code>src/takopi/telegram/onboarding.py</code> …</td></tr><tr><td><strong>MEDIUM</strong></td><td>File opened without context manager</td><td><code>src/takopi/logging.py</code></td></tr><tr><td><strong>MEDIUM</strong></td><td>High branching density (21 branches /69 lines)</td><td><code>src/takopi/runners/tool_actions.py</code>, <code>src/takopi/telegram/render.py</code></td></tr></tbody></table></div>
+<p><strong>SDLC observations</strong> (from structure):</p>
+<ul><li>No lockfile → non‑reproducible builds (<code>pyproject.toml</code> declares deps without a <code>requirements.txt</code>/<code>.txt</code> lock).</li><li>CI declares no dependency‑vulnerability scan; no <code>dependabot.yml</code> configured.</li><li>Secrets not found in the repo, but GitHub Actions pins are not locked to commit SHAs (see health audit below).</li></ul>
+<p><strong>Code Health Audit (6 findings)</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Severity</th><th>Issue</th><th>Evidence</th><th>Fix</th></tr></thead><tbody><tr><td><strong>HIGH</strong></td><td>Pin third‑party GitHub Actions to commit SHAs</td><td><code>astral-sh/setup-uv@v7</code>, <code>pypa/gh-action-pypi-publish@release/v1</code>, <code>softprops/action-gh-release@v2</code></td><td>Replace <code>@vN</code> with 40‑char SHA; let Dependabot bump SHAs.</td></tr><tr><td><strong>HIGH</strong></td><td>Discarding exit code of critical steps</td><td><code>ci.yml</code> line 69 discards failure</td><td>Let the step fail or test the expected condition.</td></tr><tr><td><strong>MEDIUM</strong></td><td>Declare least‑privilege GITHUB_TOKEN permissions</td><td>1 workflow declares no permissions</td><td>Add <code>permissions: contents: read</code> at top, widen per‑job as needed.</td></tr><tr><td><strong>MEDIUM</strong></td><td>Enable Dependabot or Renovate</td><td>Only 1 manifest, no update bot</td><td>Commit <code>.github/dependabot.yml</code> covering <code>python</code> and <code>github-actions</code>.</td></tr><tr><td><strong>MEDIUM</strong></td><td>Gate PRs on dependency vulnerability scan</td><td>No scan in CI</td><td>Add <code>dependency-review-action</code> on <code>pull_request</code> or <code>osv-scanner</code> on push.</td></tr><tr><td><strong>LOW</strong></td><td>Set <code>timeout-minutes</code> on workflow jobs</td><td>2 jobs have no timeout</td><td>Add realistic <code>timeout-minutes</code> per job.</td></tr></tbody></table></div>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>takopi delivers a practical Telegram‑bridged runner for LLM‑driven agents, handling worktrees, progress streaming, and resume lines with a clear feature set.  The codebase is functional but carries several high‑severity maintainability risks—import cycles, oversized files, duplicated logic, and unpinned GitHub Actions—that should be addressed before relying on it in a mission‑critical pipeline.  Teams that need rapid, chat‑driven agent orchestration across multiple repos will find immediate value, provided the listed hygiene items are resolved.</p>
+<hr>
+<p><em>Word count ≈ 480.</em></p>
             </div>
 
             
@@ -91,16 +122,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">259<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>115</b></li><li><span>Markdown</span><i style="width:50%"></i><b>57</b></li><li><span>CSS</span><i style="width:3%"></i><b>3</b></li><li><span>YAML</span><i style="width:2%"></i><b>2</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li><li><span>HTML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>172</b></li><li><span>Markdown</span><i style="width:33%"></i><b>57</b></li><li><span>CSS</span><i style="width:2%"></i><b>3</b></li><li><span>YAML</span><i style="width:1%"></i><b>2</b></li><li><span>TOML</span><i style="width:1%"></i><b>2</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Django</span></p>
                     </div>
@@ -148,6 +179,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1175877232">Open in Code Brain &rarr;</a>

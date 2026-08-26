@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Editing SVG Paths Sucks. Here&#39;s a Tool That Doesn&#39;t.</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Editing SVG paths manually is like trying to write a novel using only emoji. Sure, it’s possible, but it’s tedious, error-prone, and deeply unpleasant. Whether you’re hand-coding paths for a logo or tweaking a shape in a design, the process is a mess of cryptic commands, trial-and-error adjustments, and a lot of Googling &quot;what does M mean in SVG?&quot;</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>svg-path-editor is an online tool that lets you create, edit, and manipulate SVG paths visually, like a normal human being. Under the hood, the app uses Angular for the UI (src/app is where all the components live) and a standalone library (src/lib) for handling the path logic. This separation means you can use the tool out of the box or import the library into your own projects if you’re building something custom.</p><p>The app does everything you’d want: drag-and-drop point manipulation, command conversion (relative to absolute, and vice versa), path optimization, and even subpath reordering. Want to scale, translate, or rotate your path? Buttons for all of that. Need to reverse a path or minimize its length? Covered. The actual logic lives in files like src/lib/optimize-path.ts and src/lib/reverse-path.ts, while the UI for these operations is built out in components like src/app/export/export.component.ts or src/app/path-preview/path-preview.component.ts.</p><p>There’s also a ViewBox editor (drag, zoom, fit to path) and keyboard shortcuts for power users. For example, pressing M, L, or C inserts new commands directly, while Ctrl + Z handles undo (because you will mess up).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re designing a custom icon for a project. Instead of trying to fine-tune SVG commands in a text editor, you can load the path into this tool, drag points around, adjust commands inline, and optimize the output. For example, here’s how you might simplify a path:</p><p>You can run this directly in your app or just use the web editor and copy-paste the final path into your project. Either way, you’re saving time and sanity.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>If you hate dealing with raw SVG path strings, this tool is your friend. The UI is intuitive, the features are practical, and the library is reusable if you want to build something custom. That said, it’s a bit overkill for quick tweaks—use it when you’re working with complex paths or need fine-grained control. It’s a fork of the popular yqnn/svg-path-editor (with 5k+ stars), so you’re in good company. Just don’t expect it to solve all your SVG headaches—it’s a path editor, not a miracle worker.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>The repository lacks an automated CI/CD gate, so every merge lands without a verified build or test run. Across a fleet of 49 source files this means changes can introduce regressions that go undetected until manual inspection, and the Dockerfile can drift from its intended base image without validation.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>svg-path-editor</code> is a browser‑based editor for creating and manipulating SVG path data. The core library lives in <code>src/lib/</code> and exposes types and transformation functions (<code>optimizePath</code>, <code>reversePath</code>, <code>svg.ts</code> — 60 functions, 16 type definitions). The Angular app in <code>src/app/</code> wires the library UI: <code>app.component.ts</code> boots the module, <code>canvas/canvas.component.ts</code> handles pointer events and viewBox movement, <code>export/export.component.ts</code> can download the edited path, and <code>storage.service.ts</code> persists paths in local storage. User actions flow through a small set of shared utilities—<code>refreshAbsolutePositions</code>, <code>targetLocation</code>, <code>getType</code>—that are called from dozens of call sites, making the <code>svg.ts</code> module a high‑blast‑radius hub (15 importers, instability 0.12). Two modules, <code>optimize-path.ts</code> and <code>reverse-path.ts</code>, participate in a circular import dependency that complicates changes.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/main.ts</code> which bootstraps the Angular app defined in <code>src/app/app.module.ts</code>. The component hierarchy then routes events:</p>
+<ul><li><code>app.component.ts</code> (<code>45</code> functions) listens for global shortcuts and forwards them to <code>keyboard-navigable.directive.ts</code>.</li><li><code>canvas/canvas.component.ts</code> (<code>39</code> functions) captures drag events, calls <code>eventToLocation</code> and <code>targetLocation</code> (called from 11 places) to compute snap positions, and invokes <code>refreshAbsolutePositions</code> (14 callers) to recompute the viewBox.</li><li>Path‑editing commands (<code>optimizePath</code>, <code>reversePath</code>, <code>Make</code>) are defined in <code>src/lib/</code> and called from the UI components; <code>optimizePath</code> and <code>reversePath</code> each appear in the circular dependency (<code>optimize-path ↔ reverse-path</code>).</li><li><code>export/export.component.ts</code> (<code>10</code> functions) reads the current path and either copies to clipboard or triggers a file download—this is the sole function that reads/writes files outside the repo.</li></ul>
+<p>The import graph contains 49 modules and 85 edges; the most connected are <code>src/lib/svg</code> (Ca 15, Ce 2, instability 0.12) and <code>src/app/app.module</code> (Ca 2, Ce 13, instability 0.87), indicating that modifications to the SVG module ripple widely, while the module graph shows two cycles that must be broken when adding new logic.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/svg-path-editor
+
+# Install dependencies
+npm install
+
+# Start development server (http://localhost:4200/)
+npm start
+
+# Build production artifacts
+npm run build
+
+# Run unit tests (Karma)
+npm test</code></pre>
+<p>Docker is also supported; <code>docker-compose up</code> builds and runs the container defined in <code>Dockerfile</code> and <code>docker-compose.yml</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A UI designer receives an SVG path string from a design system and needs to trim unnecessary points before publishing. They open the editor, paste the raw path into the <strong>path</strong> field, click <strong>Optimize</strong> (which calls <code>optimizePath</code> from <code>src/lib/optimize-path.ts</code>), review the simplified geometry, and export the cleaned path via the <strong>Download</strong> button (<code>export/export.component.ts</code>). The resulting path can be dropped back into the design system’s component library, preserving the original viewBox settings.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured static‑analysis findings (9 total):</strong></p>
+<ul><li><strong>HIGH / soundness</strong> – Import cycle member: <code>src/lib/optimize-path.ts</code> and <code>src/lib/reverse-path.ts</code> mutually import each other, creating a circular dependency.</li><li><strong>MEDIUM / cognitive_load</strong> – Oversized file: <code>src/lib/svg.ts</code> contains 622 lines, making it hard to hold in one mental model; a change ripples to 15 importers.</li><li><strong>MEDIUM / cognitive_load</strong> – Deep nesting: <code>src/lib/path-parser.ts</code> reaches a maximum indentation depth of 6, obscuring control flow.</li><li><strong>MEDIUM / clarity</strong> – Hub module: <code>src/lib/svg.ts</code> is depended on by 15 other modules; churn here has high‑blast‑radius impact.</li><li><strong>MEDIUM / cognitive_load</strong> – High branching density (58 branch points over 162 lines) in <code>src/lib/optimize-path.ts</code>, <code>src/app/keyboard-navigable/keyboard-navigable.directive.ts</code>, and <code>src/lib/change-path-origin.ts</code>.</li><li><strong>MEDIUM / clarity</strong> – Duplicated code blocks: 4 × 6‑line repeats across <code>src/lib/change-path-origin.ts</code> and <code>src/lib/reverse-path.ts</code>.</li><li><strong>MEDIUM / cognitive_load</strong> – Deep nesting in <code>src/lib/path-parser.ts</code> (already listed).</li></ul>
+<p><strong>SDLC hygiene observations (from file‑structure audit):</strong></p>
+<ul><li>No CI pipeline configured – no automated build/test gate.</li><li>Dockerfile uses mutable base image <code>node:current</code>; no digest pinning.</li><li>No <code>USER</code> directive in the Dockerfile, meaning the container runs as root.</li><li>Dependabot/Renovate not configured; two manifest files (<code>package.json</code>, <code>src/lib/package.json</code>) have no automated update bot.</li><li>License file present, lockfile committed, no committed secrets detected.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The project delivers a functional, client‑side SVG editor with a solid library backbone and a rich feature set for path editing, transformation, and export. However, the absence of CI/CD, circular imports in core utilities, and several high‑impact code‑health smells make ongoing maintenance risky. Teams that need a quick, browser‑based path editor and are willing to address the identified hygiene items will find it usable; others requiring strict test coverage and automated deployment pipelines should plan refactor effort up front.</p>
             </div>
 
             
@@ -91,9 +123,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -145,6 +177,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1174796976">Open in Code Brain &rarr;</a>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 6, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,52 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Landscape2: Building Interactive Landscape Websites with a CLI</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Compiling and maintaining an &quot;interactive landscape&quot; website—think of the CNCF Landscape—can be a monumental headache. You&#39;re dealing with YAML files, logos, external data sources like GitHub and Crunchbase, and the need for a consistent, polished UI. Doing this manually or cobbling together a system with custom scripts is a surefire way to lose your weekends to debugging and data wrangling.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Landscape2 is a CLI tool for generating static websites that look like the CNCF Landscape, but without needing to sell your soul to a SaaS platform. Feed it a handful of YAML files (docs/config/data.yml, settings.yml, games.yml, etc.), and it spits out a fully functional, polished website. The CLI lives in the crates/cli directory, with entry points like crates/cli/src/main.rs.</p><p>The tool isn’t just a glorified YAML parser—it pulls external data from sources like GitHub and Crunchbase if you feed it API tokens via environment variables (GITHUBTOKENS and CRUNCHBASEAPI_KEY). This lets you enrich your landscape with real-time stats (stars, contributors, funding data, etc.). It’s like having a personal assistant that does all the grunt work of gathering and organizing data for you.</p><p>Once the data is compiled and processed, the website is built using React components housed in the ui/ folder. This means your output isn’t just functional but also pretty (see docs/screenshots/). It even includes interactive features like modals (ui/common/src/components/ItemModalContent.tsx), tables, and responsive layouts.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re tasked with creating a landscape website for open-source Kubernetes tools. You’d start by writing a data.yml for your items, a settings.yml to define the branding and layout, and perhaps a games.yml for some playful interaction. Here’s a snippet of a data.yml entry:</p><p>Once your files are ready, run:</p><p>If you&#39;ve set up your GitHub and Crunchbase tokens, the tool will automatically pull in additional metadata about the projects, like contributors and funding rounds. The result? A fully baked, interactive landscape website ready to deploy.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Landscape2 is niche but solid. If you need to build a landscape-style site, it saves you from a mountain of manual work. That said, it’s overkill for smaller projects or those not reliant on complex data integration. For large-scale, data-driven websites, though? It’s a lifesaver. Just be prepared to wrestle with YAML and spend some time tweaking your configs. DevOps folks and open-source maintainers: this one’s for you.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizations that publish an open‑source landscape need a repeatable way to turn structured data (YAML, logos, optional GitHub/Crunchbase enrichment) into a polished, searchable website. Maintaining a custom build pipeline for each iteration quickly becomes a manual, error‑prone effort.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>landscape2</code> is a Rust‑based CLI (<code>crates/cli/src/main.rs</code>) that consumes four YAML sources—*data*, <em>settings</em>, <em>guide</em>, <em>games</em>—and produces a static site under <code>ui/webapp</code>. The core data model lives in <code>crates/core/src/lib.rs</code> and is shared with the WASM overlays in <code>crates/wasm/</code>. The React UI (<code>ui/webapp/src</code>) renders the generated JSON, while the embed packages (<code>ui/embed</code>, <code>ui/embed-item</code>) provide ready‑to‑drop iframe bundles.</p>
+<p>Key files:</p>
+<ul><li><code>crates/cli/src/build/*.rs</code> – fetches extra fields from GitHub (<code>github.rs</code>) and Crunchbase (<code>crunchbase.rs</code>).</li><li><code>crates/cli/src/deploy/s3.rs</code> – optional S3 upload of the final static assets.</li><li><code>ui/webapp/src/index.tsx</code> – bootstraps the React app, pulling in <code>ui/webapp/src/data.ts</code> (the generated payload).</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>crates/cli/src/main.rs</code> parses CLI flags (paths to the four YAML files) and calls <code>cli::run()</code> in <code>crates/cli/src/lib.rs</code>.</li><li><strong>Data ingestion</strong> – <code>cli::run()</code> loads the YAML files via <code>serde_yaml</code> into structs defined in <code>crates/core/src/lib.rs</code>.</li><li><strong>Enrichment</strong> – optional network calls are orchestrated by the <code>build</code> module:   <em> <code>build/github.rs</code> reads <code>GITHUB_TOKENS</code> env var, queries the GitHub API, and augments each item’s repo metadata. </em> <code>build/crunchbase.rs</code> reads <code>CRUNCHBASE_API_KEY</code> and adds funding information.</li><li><strong>Asset handling</strong> – <code>build/logos.rs</code> resolves the <code>logo</code> field against the location supplied in the settings file, downloading SVGs when needed.</li><li><strong>Export</strong> – <code>build/export.rs</code> serialises the fully‑populated data model to JSON under <code>ui/webapp/public/data.json</code>.</li><li><strong>Deploy (optional)</strong> – <code>deploy/s3.rs</code> can push the <code>ui/webapp/dist</code> folder to an S3 bucket; the Dockerfile in <code>crates/cli/Dockerfile</code> builds a minimal Alpine image that runs the CLI as its CMD.</li><li><strong>Runtime</strong> – The React entry (<code>ui/webapp/src/index.tsx</code>) imports the generated JSON, registers the type definitions from <code>ui/webapp/src/types.ts</code> (the highest‑fan‑in module – 57 imports) and renders the UI components in <code>ui/common/src/components/</code>.</li></ol>
+<p><strong>Blast‑radius hotspots</strong></p>
+<ul><li><code>ui/webapp/src/types.ts</code> – any change ripples to 57 downstream modules.</li><li><code>ui/webapp/src/data.ts</code> – participates in a circular import with <code>utils/getFoundationNameLabel.ts</code>; breaking the cycle reduces build‑time coupling.</li><li>Large files such as <code>ui/webapp/src/utils/itemsDataGetter.ts</code> (720 LOC) and <code>crates/core/src/data.rs</code> also have wide impact and are prime candidates for refactoring.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/landscape2
+cd landscape2
+
+# Build the CLI (requires Rust toolchain)
+docker build -f crates/cli/Dockerfile -t landscape2-cli .
+# or locally:
+cargo build --workspace --release
+
+# Prepare the four YAML inputs (see docs/config/*.yml)
+# Example: data.yml, settings.yml, guide.yml, games.yml
+
+# Run the generator
+./target/release/landscape2 \
+  --data docs/config/data.yml \
+  --settings docs/config/settings.yml \
+  --guide docs/config/guide.yml \
+  --games docs/config/games.yml \
+  --output ui/webapp/public
+
+# Build the UI
+cd ui/webapp
+yarn install --immutable   # lockfile enforced
+yarn build                 # produces ./dist</code></pre>
+<p>If you need the embed bundle, run the same CLI but point <code>--output</code> at <code>ui/embed/public</code>. The Docker image can be used in CI to produce artifacts without installing Rust locally.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A cloud‑native conference wants to publish a “Landscape of Tools” page each quarter. They store the master <code>data.yml</code> in a private repo, run the CLI in a GitHub Actions workflow, push the generated <code>dist/</code> folder to an S3 bucket, and embed the site in their conference portal via the iframe bundle from <code>ui/embed</code>. The workflow only touches the CLI binary and the YAML sources – no manual UI work.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>HIGH – Import cycle</strong> – <code>ui/webapp/src/data.ts</code> ↔ <code>ui/webapp/src/utils/getFoundationNameLabel.ts</code>. Break the cycle by extracting shared types.</li><li><strong>HIGH – Hub module</strong> – <code>ui/webapp/src/types.ts</code> imported by 57 modules; keep stable, move volatile logic elsewhere.</li><li><strong>HIGH – Oversized files</strong> – <code>ui/webapp/src/utils/itemsDataGetter.ts</code>, <code>crates/core/src/data.rs</code>, <code>ui/common/src/components/ItemModalContent.tsx</code> (≈720 LOC each). Split by responsibility.</li><li><strong>HIGH – Deep nesting</strong> – 39 files with indentation depth ≥ 7 (e.g., <code>ui/webapp/src/layout/navigation/Footer.tsx</code>). Refactor to early returns or smaller helpers.</li><li><strong>MED – High branching density</strong> – 5 files with &gt; 15 branches in &lt; 60 lines (e.g., <code>ui/webapp/src/utils/normalizeId.ts</code>). Consider strategy tables.</li><li><strong>HIGH – Duplicated code blocks</strong> – 543 identical 6‑line snippets across 57 files (e.g., <code>crates/core/src/games.rs</code>, <code>ui/common/eslint.config.js</code>). Consolidate into shared utilities.</li></ul>
+<p><strong>Repository hygiene (audit)</strong></p>
+<ul><li><strong>HIGH</strong> – Committed <code>.env</code> files in <code>ui/embed-item/.env</code>, <code>ui/embed/.env</code>, <code>ui/webapp/.env</code>. Remove, rotate credentials, add <code>.env.example</code>.</li><li><strong>HIGH</strong> – GitHub Actions use mutable tags (<code>docker/login-action@v3</code>, <code>dtolnay/rust-toolchain@master</code>). Pin to full SHAs.</li><li><strong>HIGH</strong> – CI pushes directly to default branch (<code>.github/workflows/release.yml</code>). Switch to PR‑based flow.</li><li><strong>MEDIUM</strong> – No explicit <code>permissions</code> for <code>GITHUB_TOKEN</code> in CI workflow. Declare least‑privilege.</li><li><strong>MEDIUM</strong> – <code>yarn install</code> runs without <code>--immutable</code>; enforce lockfile.</li><li><strong>MEDIUM</strong> – Dockerfile base images (<code>rust:1-alpine3.23</code>, <code>alpine:3.23.2</code>) unpinned; use digests.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – No pre‑commit secret‑scan hook. Add a secret‑gate.</li><li><strong>MEDIUM</strong> – <code>checkout</code> step retains credentials; set <code>persist-credentials: false</code>.</li><li><strong>MEDIUM</strong> – Test coverage low (1 test file vs 225 source files). Expand tests, starting with high‑fan‑in modules.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>landscape2</code> delivers a functional pipeline for generating static landscape sites, with a clear Rust CLI and a reusable React UI. The core generation flow is well‑defined, but the codebase suffers from high‑fan‑in hubs, import cycles, and oversized files that raise maintenance risk. Security hygiene needs urgent attention (committed <code>.env</code>, mutable action tags). It is suitable for teams comfortable with Rust and Yarn who can invest in refactoring and tightening CI, but not for projects that need an out‑of‑the‑box, low‑maintenance solution.</p>
             </div>
 
             
@@ -91,16 +135,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">380<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TSX</span><i style="width:100%"></i><b>45</b></li><li><span>TypeScript</span><i style="width:73%"></i><b>33</b></li><li><span>Rust</span><i style="width:62%"></i><b>28</b></li><li><span>JSON</span><i style="width:38%"></i><b>17</b></li><li><span>YAML</span><i style="width:36%"></i><b>16</b></li><li><span>JavaScript</span><i style="width:22%"></i><b>10</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>121</b></li><li><span>TypeScript</span><i style="width:62%"></i><b>75</b></li><li><span>CSS</span><i style="width:48%"></i><b>58</b></li><li><span>Rust</span><i style="width:23%"></i><b>28</b></li><li><span>JSON</span><i style="width:17%"></i><b>20</b></li><li><span>YAML</span><i style="width:13%"></i><b>16</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Docker</span></p>
                     </div>
@@ -137,6 +181,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>ui/embed-item/.env, ui/embed/.env, ui/webapp/.env</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1174190487">Open in Code Brain &rarr;</a>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Control OpenClaw on Android via WhatsApp: A Practical Guide</p><h3 class="post-h" id="the-problem">The Problem</h3><p>Managing tasks on an Android device without root access can be a real headache. You need to analyze APKs, handle notifications, and execute commands without any hassle. Enter OpenClaw, which lets you control your Android phone through messaging apps. But getting it to work? That’s the real challenge.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The installopenclawtermux.sh script in this repo is your one-stop solution. It installs Ubuntu inside Termux, which is a terminal emulator for Android. After setting up, it installs Node.js 22 and OpenClaw, then launches everything in just a few minutes. The README does a decent job of summarizing the installation process, but using wget to grab the script and running it with chmod +x makes it straightforward.</p><p>Here&#39;s a quick rundown of the commands you need to run:</p><p>Once this is done, you’re ready to roll with OpenClaw.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you receive an APK via WhatsApp that you want to analyze. You fire up OpenClaw, and within seconds, you can execute commands like taking photos or reading notifications—all without leaving your chat. For example, you could send a command like take_photo through WhatsApp, and OpenClaw takes care of the rest. Pretty slick, right?</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OpenClaw on Termux is a nifty way to control your Android device via messaging apps, especially if you’re a developer or security researcher. The installation script is simple enough for anyone with basic terminal skills. However, if you’re not into tinkering with setups or don’t need such functionality, this might feel like overkill. But for those who need it, this setup can save a lot of time and effort.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running the OpenClaw chatbot gateway on an Android device normally requires a rooted environment, manual Linux installation, and multiple package‑manager steps. Users without root need a repeatable, low‑maintenance way to get a full Ubuntu runtime, Node.js, and the OpenClaw service up and reachable from WhatsApp/Telegram/Discord.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository consists of two files:</p>
+<ul><li><code>README.md</code> – explains the one‑command installer, lists prerequisites, and links to the original tutorial.</li><li><code>install_openclaw_termux.sh</code> – a self‑contained shell script that automates the entire provisioning flow.</li></ul>
+<p>When executed, the script performs the following high‑level actions (as described in the README):</p>
+<ol><li><strong>Installs Ubuntu</strong> inside Termux using <code>proot-distro</code>.</li><li><strong>Enters the Ubuntu chroot</strong> and runs <code>apt</code> to install Node 22 and any required system libraries.</li><li><strong>Clones the OpenClaw source</strong>, runs <code>npm install</code>, and starts the “onboard” OpenClaw process together with the OpenClaw Gateway service.</li></ol>
+<p>The script is the sole entry point; there are no internal modules or import graphs to trace.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when the user runs <code>./install_openclaw_termux.sh</code>. The script issues a linear sequence of shell commands:</p>
+<ul><li>Calls <code>proot-distro install ubuntu</code> → creates a filesystem under Termux’s storage.</li><li>Executes <code>proot-distro login ubuntu --shared-tmp</code> (or similar) to drop into the chroot.</li><li>Inside Ubuntu, runs <code>apt update &amp;&amp; apt install -y nodejs</code> to provide the Node runtime.</li><li>Uses <code>git clone https://github.com/androidmalware/OpenClaw</code> (or the upstream repo) and <code>npm ci</code> / <code>npm install</code> to fetch OpenClaw dependencies.</li><li>Launches <code>node openclaw.js</code> (or the equivalent entry script) and subsequently starts the Gateway process that binds to a public endpoint used by the WhatsApp/Telegram bots.</li></ul>
+<p>All side effects are confined to the Termux file hierarchy and the created Ubuntu rootfs. No external services are contacted beyond the standard package repositories and the OpenClaw Git source. Because the script is a flat sequence, the blast radius of any change is limited to the command it replaces; there are no shared libraries or circular dependencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo (use the exact URL as required)
+git clone https://github.com/moses-y/OpenClaw_Termux
+cd OpenClaw_Termux
+
+# 2. Install prerequisites inside Termux
+pkg install -y wget openssl
+
+# 3. Download and run the installer
+wget https://github.com/androidmalware/OpenClaw_Termux/blob/main/install_openclaw_termux.sh
+chmod +x install_openclaw_termux.sh
+./install_openclaw_termux.sh</code></pre>
+<p>The script will take a few minutes, after which the OpenClaw Gateway will be listening and ready to accept bot connections. No additional configuration files are supplied; any required tokens for WhatsApp/Telegram must be added to the OpenClaw runtime configuration manually (outside this repo).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security researcher can point their Android phone at a suspicious APK, send the file via WhatsApp to the phone, and let the OpenClaw gateway invoke Termux‑API calls (e.g., <code>termux-sms-send</code>, <code>termux-camera-photo</code>) to automate analysis, notification, and result delivery—all without rooting the device.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – No test files</strong> – repository-wide, <code>tests</code> directory absent.</li><li><strong>Medium – No CI/CD pipeline</strong> – no <code>.github/</code>, <code>Jenkinsfile</code>, or other automation config.</li><li><strong>Medium – No LICENSE</strong> – root lacks a license file, so downstream usage rights are unclear.</li><li><strong>Low – No lockfile</strong> – no <code>package-lock.json</code>/<code>yarn.lock</code> to pin Node dependencies.</li><li><strong>Low – No Dockerfile</strong> – container‑based reproducibility not provided.</li></ul>
+<p>Static analysis found no committed secrets and no internal import graph (0 modules, 0 edges).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a single, well‑documented installer that transforms an unrooted Android phone into a functional OpenClaw gateway. Its simplicity is a strength, but the lack of tests, CI, and licensing limits confidence for production or redistribution. Suitable for hobbyists or researchers who accept manual risk assessment and are comfortable extending the script for custom configuration.</p>
             </div>
 
             
@@ -93,7 +124,7 @@
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">2<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -113,6 +144,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176025349">Open in Code Brain &rarr;</a>

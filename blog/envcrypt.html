@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 7, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,24 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#securing-your-env-a-look-at-envcrypt">Securing Your .env: A Look at envcrypt</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="securing-your-env-a-look-at-envcrypt">Securing Your .env: A Look at envcrypt</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>.env files are a developer&#39;s dumping ground for sensitive secrets—API keys, database URLs, tokens, you name it. They&#39;re convenient but dangerous. One accidental git add or an overeager AI tool scanning your project can expose everything. Encrypting these files manually is annoying and error-prone. You need something simple, fast, and reliable to make sure your secrets stay secret.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>envcrypt encrypts your .env file so you can keep it in your project without sweating over accidental leaks. The core is a Rust-based CLI (envcrypt/src/main.rs) for encrypting, decrypting, and managing secrets, paired with a library (envcrypt-lib/src/lib.rs) to seamlessly load encrypted .env files in Rust projects. If you’re working in Python, there’s an experimental loader (envcrypt-py/envcrypt/loader.py) that lets you deal with encrypted .env files too.</p><p>Encryption uses AES-256-GCM, so you get authenticated encryption—no silent data corruption nonsense. Keys are stored in ~/.envcrypt.yaml and can either be randomly generated or provided as a specific 64-character hex value. Encrypted values in .env files are prefixed with encrypted: for easy identification, while plain values are left untouched.</p><p>The CLI is where the real action happens. You can initialize, encrypt, decrypt, and even handle single-value encryption directly. Need to modify a file in-place? There’s a flag for that. Want to check if your .env is encrypted? envcrypt status has your back.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’ve got a Rust app with sensitive configuration values. Here’s the workflow:
-Encrypt your .env file with the CLI:  
-Add the envcrypt-lib dependency to your project via Cargo.toml:  
-Load the encrypted .env at runtime:</p><p>Now your app uses encrypted secrets without needing to rework how you handle environment variables.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>envcrypt is great if you’re paranoid about secret leaks and already working in Rust. The encryption is solid, and the CLI is straightforward. Python support feels half-baked, so keep your expectations low on that front. For huge enterprise setups with proper secret management tools (e.g., Vault), this might be overkill. But for small-to-mid projects or solo devs who want an extra layer of protection, it’s a solid choice. Just don’t forget to back up your key—losing it means you’re screwed.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p><code>.env</code> files in version-controlled projects routinely expose secrets—API keys, database credentials, tokens—in plain text. A single <code>git add .</code>, a misplaced screen share, or an AI coding agent reading project files can leak these values. The repository addresses this by encrypting <code>.env</code> values in place, prefixing encrypted entries with <code>encrypted:</code> so they remain in the project directory without exposing raw secrets.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>envcrypt provides AES-256-GCM authenticated encryption for <code>.env</code> files. The Rust library <code>envcrypt-lib</code> (<code>envcrypt-lib/src/lib.rs</code>) handles the core cryptographic operations, while the Python CLI <code>envcrypt</code> (<code>envcrypt/src/main.rs</code>) provides the command-line tool. The Python loader module (<code>envcrypt-py/envcrypt/loader.py</code>) ties key derivation and file loading together. Encrypted values carry the <code>encrypted:</code> prefix; plain values pass through unchanged. The key resides in <code>~/.envcrypt.yaml</code> as a 64-character hex-encoded 32-byte value. The repository has 3 projects: <code>envcrypt-py</code> (7 files, 5 code), <code>envcrypt-lib</code> (2 files, 1 code), and <code>envcrypt</code> (2 files, 1 code).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the CLI entry point <code>envcrypt/src/main.rs</code>, which dispatches <code>init</code>, <code>encrypt</code>, <code>decrypt</code>, <code>encrypt-value</code>, <code>decrypt-value</code>, and <code>status</code> subcommands. The <code>encrypt</code> and <code>decrypt</code> functions are each called from 14 places across the codebase, making them the widest-blast-radius operations. Key derivation flows through <code>from_key</code> (called from 8 places) and <code>from_config</code> (called from 5 places), both of which can raise <code>EnvcryptError</code> (raised from 6 places). Loading a <code>.env</code> file routes through <code>EnvcryptLoader::from_config</code> or <code>EnvcryptLoader::from_key</code>, then calls <code>load</code>, which invokes <code>load_from_string</code> (called from 4 places), which in turn calls <code>decrypt</code> and may raise <code>EnvcryptError</code>. The test file <code>envcrypt-py/tests/test_loader.py</code> exercises key generation length, uniqueness, hex validity, and invalid-key scenarios, calling <code>generate_key</code> twice. A single encryption hop touches the filesystem (read/write of <code>.env</code> and <code>.env.encrypted</code>); decryption follows the reverse path. No CI/CD pipeline is configured, and no lockfile accompanies the Cargo manifests, meaning transitive dependency versions are not pinned for reproducibility.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install the CLI via <code>cargo install --path envcrypt</code> or add <code>envcrypt-lib</code> as a path dependency in <code>Cargo.toml</code>. For Python usage, the package lives in <code>envcrypt-py</code>; install with <code>pip install -e .</code> from that directory.</p>
+<p><strong>Configuration</strong>: A key must exist at <code>~/.envcrypt.yaml</code> in the format <code>key: "64-character-hex-encoded-key..."</code>. Alternatively, pass a hex key string directly to <code>EnvcryptLoader::from_key</code>.</p>
+<p><strong>Running it</strong>:</p>
+<ul><li>Initialize a key: <code>envcrypt init --generate</code> or <code>envcrypt init --key "your-64-character-hex-key-here..."</code></li><li>Encrypt a <code>.env</code> file: <code>envcrypt encrypt .env --in-place</code> or <code>envcrypt encrypt .env -o .env.encrypted</code></li><li>Decrypt: <code>envcrypt decrypt .env.encrypted --in-place</code> or <code>envcrypt decrypt .env.encrypted -o .env</code></li><li>Single value: <code>envcrypt encrypt-value "my-secret"</code> outputs <code>encrypted:base64...</code>; <code>envcrypt decrypt-value "encrypted:base64..."</code> outputs the secret.</li></ul>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A CI pipeline stores only the encrypted <code>.env.encrypted</code> in version control. On deployment, the Rust service loads the file via <code>envcrypt_lib::EnvcryptLoader::from_config(None)?</code> followed by <code>loader.load(".env"?)</code>; decryption happens at runtime, so raw secrets never touch disk in plain text. The Python CLI can similarly decrypt during local development. Plain, non-sensitive values remain unencrypted and pass through transparently.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[HIGH] Add a LICENSE</strong> - no licence file at the repository root; redistribution rights are undefined, so the code cannot be legally reused in client engagements.</li><li><strong>[HIGH] Commit a lockfile beside the manifest</strong> - Cargo.toml has no lockfile; unlocked ranges allow transitive code to differ between tested and shipped artifacts.</li><li><strong>[MEDIUM] Enable Dependabot or Renovate</strong> - 4 manifest(s) with no update bot configured; published advisories remain unpatched without manual audits.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The code functions as intended—AES-256-GCM encryption, CLI and library interfaces, and <code>.env</code> workflow all work. However, three hygiene gaps limit production readiness: no license blocks reuse, missing lockfile risks supply-chain drift, and no dependency update automation means vulnerabilities go unpatched. Teams that need to ship encrypted <code>.env</code> files and already manage key rotation will find it practical; those requiring legal clearance or strict reproducibility guarantees should address the license and lockfile gaps first.</p>
             </div>
 
             
@@ -94,9 +107,9 @@ Load the encrypted .env at runtime:</p><p>Now your app uses encrypted secrets wi
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -127,6 +140,12 @@ Load the encrypted .env at runtime:</p><p>Now your app uses encrypted secrets wi
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>Cargo.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1175278635">Open in Code Brain &rarr;</a>

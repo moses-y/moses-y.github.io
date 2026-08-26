@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>March 8, 2026</span>
                     <span>3 min read</span>
-                    <span class="post-language">Lua</span>
+                    <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>xournalpp</h1>
@@ -80,8 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Annotating PDFs and taking handwritten notes shouldn’t feel like you’re fighting your software. Tools like Adobe Acrobat are bloated and clunky, while scribbling on a tablet app often lacks precision, features, and cross-platform support. If you’re a student, teacher, or anyone working with PDFs and handwritten notes, you’ve probably been frustrated by the lack of a solid, no-BS solution.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Xournal++ is the &quot;Why isn’t this already a thing?&quot; solution. It’s a lightweight, open-source handwriting and PDF annotation tool built in C++ with GTK3. It works on Linux, Windows 10, and macOS, and even supports pressure-sensitive styluses like Wacom tablets. Think of it as the Swiss Army knife for anyone who needs to take notes, annotate PDFs, or just doodle with precision.</p><p>The project is well-organized. The src/ folder houses the C++ core, including modules for audio recording (src/core/audio/AudioRecorder.cpp) and playback (src/core/audio/AudioPlayer.cpp). The plugins/ folder adds Lua-based scripting to extend functionality (e.g., plugins/Export/main.lua for exporting workflows). For cross-platform builds, there’s a bunch of CMakeLists.txt files littered across the repo, which is nice if you like pain-free builds. CI/CD is handled via GitHub Actions, with workflows like make-installer-windows.yml and make-installer-macos.yml making it easier to ship builds across platforms.</p><p>And yes, it handles PDF annotation like a champ. You can highlight, underline, or strike through text in PDFs, export annotated versions, and even overlay them with handwriting or shapes. All this while offering LaTeX support, customizable toolbars, and a plugin system for nerds who want to extend it further.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re a math teacher prepping lecture notes. You can load your PDF slides into Xournal++, scribble annotations using a Wacom tablet, and even add LaTeX formulas for extra clarity. Need to emphasize a section? Use the highlighter tool or draw shapes to circle key points. Want to share the annotated slides with your students? Export them as a new PDF or even as SVG for further editing. Bonus: if you’re explaining something complicated, the audio recording feature lets you attach voice notes to your annotations for asynchronous learning.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Xournal++ is a powerful, no-frills tool for anyone who needs robust handwriting and PDF annotation capabilities. It’s not flashy, but it works. You’ll love it if you’re on Linux, and it’s solid on macOS and Windows too. The plugin system is a nice touch for tinkerers, but the codebase could use more tests (seriously, one test file?). Overall, it’s a workhorse for anyone tired of bloated alternatives.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users need a native, cross‑platform note‑taking tool that can capture pen pressure, annotate PDFs and embed audio, all without relying on heavyweight office suites. Existing open‑source options often lack stable GTK 3 integration or extensibility via plugins.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Xournal++</code> is a C++/GTK 3 application that renders a canvas for free‑hand strokes, shapes, and text, then layers those on top of PDF pages. Core UI files live in <code>ui/</code> (e.g. <code>ui/MainWindow.cpp</code>), while the drawing engine and audio subsystem are in <code>src/core/</code> (<code>src/core/audio/AudioPlayer.cpp</code>, <code>src/core/audio/AudioRecorder.cpp</code>). Plugin support is provided through the <code>plugins/</code> directory, each plugin exposing a Lua script (e.g. <code>plugins/Export/main.lua</code>). Build configuration is driven by the top‑level <code>CMakeLists.txt</code> and subsidiary CMake files under <code>src/</code> and <code>test/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution for a normal launch starts in the generated binary built from <code>src/main.cpp</code> (the CMake target <code>xournalpp</code>). The <code>main</code> function creates a <code>GtkApplication</code>, registers UI resources, and instantiates <code>MainWindow</code> (<code>ui/MainWindow.cpp</code>). <code>MainWindow</code> loads tool definitions from <code>resources/default_template.tex</code> and populates the toolbar. User actions (pen strokes, shape tools) are dispatched to <code>src/core/Control.cpp</code>, which forwards them to the <code>AudioRecorder</code>/<code>AudioPlayer</code> when audio capture is active.</p>
+<p>The static import graph shows only two internal modules with <strong>no import edges</strong> and <strong>no circular dependencies</strong>, indicating a flat module hierarchy. The most connected files are the standalone scripts <code>scripts/compare_license</code> and <code>scripts/lua_def_file</code>, each with zero inbound/outbound imports, so they do not affect the application runtime.</p>
+<p>Deeply nested control flow appears in three audio files (<code>src/core/audio/DeviceInfo.cpp</code>, <code>PortAudioConsumer.cpp</code>, <code>PortAudioProducer.cpp</code>) where indentation reaches 22 levels, making those paths harder to follow and a likely hotspot for future bugs.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/xournalpp.git
+cd xournalpp
+
+# Build (requires CMake, GTK3, and typical dev packages)
+mkdir build &amp;&amp; cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+
+# Run the GUI
+./src/xournalpp   # binary produced by the build</code></pre>
+<p>Configuration files such as <code>src/config-features.h.in</code> control optional features; they are processed by CMake into <code>config.h</code>. Translation files reside under <code>po/</code> and are compiled into the binary at build time. Plugins are automatically discovered from the <code>plugins/</code> directory at runtime.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research lab can integrate Xournal++ into its digital notebook workflow: a scientist opens a PDF of a paper, annotates with a pressure‑sensitive stylus, records a voice note (<code>AudioRecorder</code>), and later exports the combined page to PDF via the menu command implemented in <code>src/core/Export.cpp</code>. The exported file can be shared without requiring the original application.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – CI does not run the test suite (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Translation workflow pushes directly to the default branch (<code>.github/workflows/download-translations-from-crowdin.yml</code>).</li><li><strong>HIGH</strong> – <code>scripts/compare_license.py</code> builds a shell string with <code>os.popen</code> (risk of injection).</li><li><strong>MEDIUM</strong> – No explicit <code>permissions</code> for <code>GITHUB_TOKEN</code> in <code>continuous-integration.yml</code>.</li><li><strong>MEDIUM</strong> – Large test binaries (<code>test/files/big-test.xoj</code>, <code>big-test.xopp</code>) should be moved to Git LFS.</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout‑minutes</code> (<code>.github/workflows/check-translations-build.yml</code>).</li></ul>
+<p>Static analysis also reports <strong>216 HIGH</strong> cognitive‑load findings, the most common being deep nesting (e.g., the three audio files above).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Xournal++ delivers a fully featured, extensible handwriting and PDF‑annotation suite with a clean CMake build and a modest codebase. The project is functional but suffers from CI gaps, insecure action references, and some overly complex functions that would benefit from refactoring. It is well‑suited for teams needing a customizable on‑premise note‑taking tool and comfortable working in C++/GTK 3 environments.</p>
             </div>
 
             
@@ -91,16 +118,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,436<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>22</b></li><li><span>Markdown</span><i style="width:59%"></i><b>13</b></li><li><span>Lua</span><i style="width:59%"></i><b>13</b></li><li><span>Shell</span><i style="width:32%"></i><b>7</b></li><li><span>C/C++ Header</span><i style="width:14%"></i><b>3</b></li><li><span>Python</span><i style="width:9%"></i><b>2</b></li>
+                            <li><span>C/C++ Header</span><i style="width:100%"></i><b>440</b></li><li><span>C++</span><i style="width:91%"></i><b>402</b></li><li><span>YAML</span><i style="width:5%"></i><b>22</b></li><li><span>Markdown</span><i style="width:3%"></i><b>15</b></li><li><span>Lua</span><i style="width:3%"></i><b>13</b></li><li><span>Shell</span><i style="width:2%"></i><b>9</b></li>
                         </ul>
                         
                     </div>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 5, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers often find themselves juggling multiple tools for coding, debugging, and version control, leading to a disjointed workflow. Visual Studio Code (VS Code) aims to address this mess by integrating essential features into a single, lightweight interface. But, if you&#39;re starting from scratch, setting it up can be a pain without guidance.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The vscode repo serves as the open-source version of Visual Studio Code, where Microsoft and the community collaborate. It&#39;s packed with the tools you need to build, debug, and extend your coding experience. Inside the .devcontainer directory, you’ll find Dockerfile and devcontainer.json, which are essential for setting up a consistent development environment. This makes it easy to run your projects in the cloud or on local machines without the typical dependency hell.</p><p>For linting and enforcing coding standards, check out the .eslint-plugin-local folder. It contains a bunch of custom ESLint rules, like code-no-any-casts.ts, which prevents you from using any in TypeScript, keeping your codebase clean and maintainable.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you&#39;re working on a team project where everyone has different setups. You can clone the repository, use the install-vscode.sh script in .devcontainer to get your environment right, and start coding without worrying about mismatched Node versions or missing dependencies. Want to ensure no one is using any types in TypeScript? Just run ESLint with the custom rules from .eslint-plugin-local, and you&#39;re golden.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This repo is a solid choice for anyone looking to contribute to or customize their VS Code experience. It’s particularly beneficial for teams and open-source contributors who need a uniform environment. However, if you&#39;re just dabbling in coding or working on small projects, the overhead might be overkill. Stick to the standard VS Code for quick setups and save this for when you&#39;re ready to dive deeper.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repository is a loose collection of five independently versioned projects (src, extensions, cli, .eslint-plugin-local, scripts) that share a common Visual Studio Code foundation but have no single coherent architecture. Contributors who need to modify one area often have to grok disparate code‑bases, and the lack of a unified build/gate pipeline means correctness‑critical steps can slip through unnoticed.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo implements a <strong>code editor platform</strong> (VS Code) plus a set of <strong>language‑specific extensions</strong> (git, markdown, html, css, emmet, etc.) and a small CLI tool.</p>
+<ul><li><strong>src/</strong> (6426 files, 5466 code files) contains the core editor: the model, the UI, the extensibility API, and the language client/server protocol.</li><li><strong>extensions/</strong> (2263 files) houses ~953 code files for domain‑specific features: git integration, markdown image copy, task provisioning, and language‑feature servers.</li><li><strong>cli/</strong> (74 files) provides a minimal command‑line harness that exercises the same API surface as the editor.</li><li><strong>.eslint-plugin-local/</strong> (48 files) is a custom ESLint rule set used internally for code‑health enforcement.</li><li><strong>scripts/</strong> (28 files) contains build‑and-release helpers.</li></ul>
+<p>Key functions that dominate the internal call graph (5460 resolved edges) include <code>t</code>, <code>parse</code>, <code>getText</code>, <code>file</code>, <code>from</code>, <code>substring</code>, <code>trim</code>, <code>dispose</code>, <code>startsWith</code>, <code>delete</code>, <code>all</code>, <code>fire</code>. The most‑called symbols are <code>t</code> (237 call sites) and <code>parse</code> (113 call sites). Representative edges such as <code>fromNow → t x108</code> and <code>constructor → _register x48</code> illustrate how central these utilities are to the editor’s operation.</p>
+<p>Execution starts from a handful of entry points:</p>
+<div class="table-scroll"><table><thead><tr><th>Entry point</th><th>File (line)</th><th>Functions reached</th></tr></thead><tbody><tr><td><strong>start</strong></td><td><code>extensions/grunt/src/main.ts:103</code></td><td>365 functions, called once</td></tr><tr><td><strong>execute</strong></td><td><code>extensions/markdown-language-features/src/commands/copyImage.ts:17</code></td><td>399 functions, called by nothing else in the repo</td></tr><tr><td><strong>handle</strong></td><td><code>extensions/git/src/askpass.ts:51</code></td><td>40 functions, called by nothing else</td></tr><tr><td><strong>deactivate</strong></td><td><code>extensions/git/src/main.ts:35</code></td><td>34 functions</td></tr><tr><td><strong>provideTasks</strong></td><td><code>extensions/gulp/src/main.ts:338</code></td><td>161 functions</td></tr><tr><td><strong>resolveTask</strong></td><td><code>extensions/grunt/src/main.ts:300</code></td><td>142 functions</td></tr></tbody></table></div>
+<p>Paths that leave the process are short: <code>start → onDidChangeConfiguration → onDidChangeTextDocument → doAutoInsert → merge → entries</code> (filesystem via <code>vscode.workspace.fs.readFile</code>); <code>execute → copyImage</code> (subprocess via <code>document.execCommand</code>); <code>provideTasks → getTasks → computeTasks → exists → stat → getOrOpenRepository → openRepository</code> (filesystem via <code>this.git.open</code>). Eight functions perform cryptographic or secret‑generating operations, nine make outbound network calls, and one runs an external command.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution funnels through a <strong>core API surface</strong> defined in <code>src/vs/platform/</code> and <code>src/vs/workbench/</code>. The internal call graph shows that most extension code delegates to <code>src/</code> utilities (<code>t</code>, <code>parse</code>, <code>getText</code>) rather than re‑implementing logic. The <code>extensions/git/src/git.ts</code> file is the hub for git‑related work: 162 functions, 27 types, called from 68 other files, and it reads/writes the filesystem. <code>extensions/git/src/commands.ts</code> (345 functions) is the next biggest hub and also performs an outbound network call (e.g., GitHub API).</p>
+<p>The five projects share <strong>no single build entry</strong>; each has its own <code>package.json</code> and <code>tsconfig.json</code>. The root <code>package.json</code> (implied by the presence of <code>npm</code> lockfiles) defines the overall dependency set, but individual extensions may override versions. The <code>.devcontainer/Dockerfile</code> pins a base image (<code>mcr.microsoft.com/devcontainers/typescript-node:22-bookworm</code>) but without a digest, meaning the exact libc and CVE surface can shift between builds.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repository (exact URL as provided)
+git clone https://github.com/moses-y/vscode
+
+# Install the node dependencies (npm is the declared package manager)
+cd vscode
+npm install</code></pre>
+<p><strong>Configuration</strong> The editor’s runtime settings live in <code>src/vs/platform/settings/common/</code>. Environment variables or user‑pref files are not explicitly defined in the repo; the platform reads <code>settings.json</code> from the user data dir at startup.</p>
+<p><strong>Running it</strong> Launch the built editor from the cloned source:</p>
+<pre data-lang="bash"><code># Compile the TypeScript sources
+npm run compile   # inferred from the presence of tsconfig files
+
+# Open the editor (VS Code will load the src/ core and extensions)
+code .</code></pre>
+<p>Alternatively, use the devcontainer:</p>
+<pre data-lang="bash"><code>code --devcontainer .devcontainer/devcontainer.json</code></pre>
+<p>The Dockerfile (<code>.devcontainer/Dockerfile</code>) installs Node 22 and the needed tooling; the <code>devcontainer.json</code> mounts the source tree so changes are reflected instantly.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A typical workflow: a developer fixes a bug in the git extension (<code>extensions/git/src/git.ts</code>). After <code>npm run compile</code>, the change is picked up by the running editor. When the editor starts, the <code>start</code> entry point triggers <code>onDidChangeConfiguration</code>, which routes through <code>onDidChangeTextDocument → doAutoInsert → merge → entries</code>, persisting the new git‑status decorations to the workspace filesystem. If the fix involves an API call to GitHub, the <code>extensions/git/src/commands.ts</code> path performs an outbound network request; the audit notes that no dependency‑vulnerability scan is currently run on pull requests, so a vulnerable <code>axios</code> or <code>node-fetch</code> version could slip in.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Remove <code>continue-on-error</code> from steps that gate correctness in <code>.github/workflows/pr-darwin-test.yml</code> (line 191). A failing test will report green, masking breakage.</li><li><strong>MEDIUM</strong> – Declare least‑privilege permissions for <code>GITHUB_TOKEN</code> in the same workflow; currently three workflows have no <code>permissions</code> block, exposing secrets to any step.</li><li><strong>MEDIUM</strong> – Pin the container base image by digest in <code>.devcontainer/Dockerfile</code>; the current <code>mcr.microsoft.com/devcontainers/typescript-node:22-bookworm</code> is mutable.</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability gate (e.g., <code>dependency-review-action</code>) to pull‑request CI; none exists.</li><li><strong>MEDIUM</strong> – Gitignore the <code>build/</code> output directory; 322 generated files are committed, causing reviewers to see stale bundles.</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout in <code>.github/workflows/pr-darwin-test.yml</code>; the token persists for later steps.</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to workflow jobs in <code>.github/workflows/screenshot-test.yml</code>; the default six‑hour window can cause overlapping runs on a two‑hour schedule.</li></ul>
+<p>The static analysis also flagged <strong>secret‑shaped paths</strong> in <code>src/vs/platform/secrets/common/secrets.ts</code>, <code>src/vs/platform/secrets/test/common/secrets.test.ts</code>, and <code>src/vs/workbench/api/common/extHostSecrets.ts</code>; the code‑health audit confirms or clears them.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This repo is a <strong>portfolio of five loosely‑coupled VS Code projects</strong> rather than a single product. The core editor (<code>src/</code>) is well‑structured and heavily reused by extensions, but the lack of a unified build/gate pipeline, mutable Docker base image, and unguarded CI steps create realistic risk for contributors and maintainers. Teams that need a stable, continuously‑verified editor should add the recommended CI guards and pin the container image; otherwise, the platform is suitable for experienced VS Code hackers who can navigate its modular, extension‑first architecture.</p>
             </div>
 
             
@@ -91,18 +127,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">9,809<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>63</b></li><li><span>Markdown</span><i style="width:62%"></i><b>39</b></li><li><span>YAML</span><i style="width:41%"></i><b>26</b></li><li><span>JSON</span><i style="width:37%"></i><b>23</b></li><li><span>Shell</span><i style="width:5%"></i><b>3</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>6653</b></li><li><span>JSON</span><i style="width:15%"></i><b>1030</b></li><li><span>CSS</span><i style="width:5%"></i><b>342</b></li><li><span>Markdown</span><i style="width:2%"></i><b>138</b></li><li><span>HTML</span><i style="width:1%"></i><b>99</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>97</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Django</span><span>Express</span><span>Docker</span><span>Transformers</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -129,6 +165,12 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>src/vs/platform/secrets/common/secrets.ts, src/vs/platform/secrets/test/common/secrets.test.ts, src/vs/workbench/api/common/extHostSecrets.ts</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1135128731">Open in Code Brain &rarr;</a>

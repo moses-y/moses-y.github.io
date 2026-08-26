@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>In a world drowning in data breaches and privacy violations, trusting your personal AI assistant is a tough sell. Most solutions out there are either locked down by corporate interests or riddled with hidden telemetry that leaves your data exposed. You need an assistant that respects your privacy and doesn’t turn you into a product.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Enter IronClaw. This Rust-based implementation focuses on privacy and security, ensuring your data stays yours. It runs tools in a WASM sandbox, isolating untrusted code to prevent leaks and injections. Check out src/agent/self_repair.rs for how it handles automatic recovery of stuck operations, and src/channels/web/server.rs for the web gateway that streams real-time data while keeping your interactions secure.</p><p>The directory structure is clean, with dedicated folders for each channel (channels-src/discord, channels-src/slack, etc.), allowing you to plug in new capabilities as needed. If you’re looking to build or modify tools on the fly, the src/channels/web/handlers folder has everything from job handlers to static file management neatly organized.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you want to automate daily reminders through Slack using IronClaw. You can set this up in minutes. Write a function in channels-src/slack/src/lib.rs that triggers based on an event, and thanks to the built-in Routines, you can schedule it without a second thought. Plus, everything operates under a Docker sandbox, so you can run multiple instances without worrying about conflicts.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>IronClaw is solid if you prioritize privacy and flexibility in an AI assistant. It’s packed with features like multi-channel support and dynamic tool building, but the learning curve might be steep for those not familiar with Rust or WASM. If you’re a developer looking for a trustworthy AI solution that doesn’t compromise your data, give IronClaw a shot. Just don’t expect it to be as user-friendly as a corporate alternative.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Enterprises that want a locally‑hosted AI assistant often have to choose between feature‑rich but opaque services and brittle home‑grown scripts. The lack of a privacy‑first, extensible runtime forces teams to build their own sandboxing, credential handling, and multi‑channel glue, duplicating effort and exposing secrets.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>ironclaw</code> delivers a self‑contained Rust stack that runs a personal AI agent behind a <strong>WASM sandbox</strong> and a set of <strong>channel adapters</strong> (Discord, Slack, Telegram, WhatsApp, Web). Core logic lives in <code>src/</code> (284 files, 271 code files) while each channel lives under <code>channels‑src/&lt;name&gt;/src/lib.rs</code>. The Dockerfiles (<code>Dockerfile</code>, <code>Dockerfile.test</code>, <code>Dockerfile.worker</code>) pack the whole system for isolated deployment. Configuration lives in <code>.env.example</code> and <code>src/config/secrets.rs</code> (the only file flagged for secret‑shaped paths).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in three top‑level entry points discovered by static analysis:</p>
+<div class="table-scroll"><table><thead><tr><th>Entry</th><th>File &amp; line</th><th>Reach</th></tr></thead><tbody><tr><td><code>main</code></td><td><code>build.rs:16</code></td><td>401 functions</td></tr><tr><td><code>run</code></td><td><code>src/agent/worker.rs:198</code></td><td>408 functions</td></tr><tr><td><code>execute</code></td><td><code>src/agent/worker.rs:1305</code></td><td>232 functions</td></tr></tbody></table></div>
+<p><code>run</code> and <code>execute</code> are invoked only by the worker binary; they bootstrap the <strong>agent scheduler</strong>, <strong>LLM driver</strong>, and <strong>tool manager</strong>. The call graph shows <code>execute → is_authenticated → .exists(user_id, &amp;server_config.token_secret)</code> (crypto), while <code>run → store → tx.execute("DELETE FROM wasm_channels …")</code> writes to PostgreSQL. The <strong>network outbound</strong> path is <code>start → run_checked → command.output().context</code> (subprocess) and <code>src/channels/wasm/wrapper.rs</code> (injects credentials then calls remote services).</p>
+<p>Key hubs:</p>
+<ul><li><code>src/agent/worker.rs</code> – 55 functions, 7 types, called from 17 files, performs model inference.</li><li><code>src/agent/routine.rs</code> – 29 functions, 8 types, called from 67 files, handles routine parsing and config conversion.</li><li><code>src/context/memory.rs</code> – 43 functions, 3 types, called from 64 files, manages in‑memory and persistent context.</li></ul>
+<p>The <strong>internal call graph</strong> contains 6 000 resolved edges, but no circular imports. The most widely used utilities are <code>Err</code> (231 call sites) and <code>is_empty</code> (223). Because these utilities are pure Rust <code>Result</code> helpers, changing them has a large blast radius.</p>
+<p>External side‑effects are limited to:</p>
+<ul><li><strong>Crypto/secret ops</strong> – 89 functions (e.g., token secret lookup, credential injection).</li><li><strong>Database I/O</strong> – 49 functions (SQL via <code>tx.execute</code>).</li><li><strong>Network I/O</strong> – 16 functions (HTTP client, subprocess).</li></ul>
+<p>No framework callbacks appear in the resolved graph, so the exact wiring of HTTP routes (<code>src/channels/web/server.rs</code>) is not captured, but the file is listed under “most connected” for its SSE/WebSocket handlers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ironclaw.git
+cd ironclaw
+
+# Build the worker binary (requires Rust 1.85+)
+cargo build --release
+
+# Run the container (Dockerfile builds the full stack)
+docker build -t ironclaw:latest .
+docker run -d \
+  -e DATABASE_URL=postgres://user:pass@db/ironclaw \
+  -e TOKEN_SECRET=$(openssl rand -hex 32) \
+  -p 8080:8080 ironclaw:latest</code></pre>
+<p><em>Configuration</em> – copy <code>.env.example</code> to <code>.env</code> and fill <code>DATABASE_URL</code>, <code>TOKEN_SECRET</code>, and any channel‑specific tokens (Discord, Slack, etc.). The secret handling code lives in <code>src/config/secrets.rs</code>.</p>
+<p><em>Running the service</em> – the binary produced by <code>cargo build</code> launches the worker (<code>src/agent/worker.rs</code>). The web UI is served from <code>src/channels/web/static/app.js</code> via the HTTP server in <code>src/channels/web/server.rs</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A security‑conscious team can deploy the Docker image behind their internal network, point the Telegram channel adapter at their bot token, and store all conversation logs in an encrypted PostgreSQL instance. Custom tools are compiled to WASM, dropped into <code>tools-src/</code>, and automatically loaded by the plugin manager (<code>src/extensions/manager.rs</code>) without restarting the service.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>High</em> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>). <em>High</em> – Do not discard exit codes of critical steps (<code>.github/workflows/release.yml</code>). <em>High</em> – Pushes should target a PR branch, not the default (<code>release.yml</code>). <em>Medium</em> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>regression-test-check.yml</code>). <em>Medium</em> – Enable Dependabot or Renovate for 15 manifests. <em>Medium</em> – Pin Docker base images by digest (<code>Dockerfile</code>). <em>Medium</em> – Add a dependency‑vulnerability scan to CI. <em>Low</em> – Set <code>timeout‑minutes</code> on workflow jobs (<code>regression-test-check.yml</code>).</p>
+<p>Static analysis also reports <strong>high cognitive load</strong>: deep nesting (max depth 8) and duplicated 6‑line blocks across the channel adapters, plus oversized files (<code>src/agent/dispatcher.rs</code>, <code>src/agent/thread_ops.rs</code>, <code>channels-src/telegram/src/lib.rs</code>) exceeding 1 800 lines each. Refactoring these hotspots will improve maintainability.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>ironclaw</code> provides a well‑structured, privacy‑first AI assistant platform with solid Rust foundations and Docker portability. The codebase is functional but suffers from deep nesting, duplicated channel logic, and large monolithic files that increase change risk. It is suitable for teams that need an on‑premise AI runtime and are prepared to invest in refactoring and CI hardening.</p>
             </div>
 
             
@@ -91,16 +127,16 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">585<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>76</b></li><li><span>Markdown</span><i style="width:41%"></i><b>31</b></li><li><span>JSON</span><i style="width:26%"></i><b>20</b></li><li><span>Shell</span><i style="width:22%"></i><b>17</b></li><li><span>YAML</span><i style="width:16%"></i><b>12</b></li><li><span>SQL</span><i style="width:14%"></i><b>11</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>343</b></li><li><span>JSON</span><i style="width:27%"></i><b>92</b></li><li><span>Markdown</span><i style="width:13%"></i><b>45</b></li><li><span>TOML</span><i style="width:5%"></i><b>18</b></li><li><span>Shell</span><i style="width:5%"></i><b>17</b></li><li><span>YAML</span><i style="width:3%"></i><b>12</b></li>
                         </ul>
                         <p class="an-fw"><span>Express</span><span>Docker</span></p>
                     </div>
@@ -113,6 +149,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>src/config/secrets.rs</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1175873588">Open in Code Brain &rarr;</a>

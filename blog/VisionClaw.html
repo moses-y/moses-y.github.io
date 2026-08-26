@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Swift</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,9 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Voice assistants suck at context. Siri or Alexa can&#39;t see what you&#39;re looking at, can&#39;t handle your shopping list, and definitely can&#39;t send a WhatsApp message while you&#39;re walking around. If you&#39;ve ever wished your smart glasses could actually act smart, VisionClaw is the fix.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>VisionClaw wires Meta Ray-Ban smart glasses to real-time AI via the Gemini Live API. The samples/CameraAccess/CameraAccess.xcodeproj is the iOS app—think camera stream + mic audio piped straight to Gemini, so the assistant knows what you see and hear. If you want actual actions (not just talking), plug in OpenClaw. That’s a local gateway (openclaw.json config) that exposes 56+ tools: messaging, web search, smart home, reminders.</p><p>Setup is dead simple: clone, drop your Gemini API key into GeminiConfig.swift, and run. Want to test? Use your iPhone camera instead (no glasses needed). The pipeline is all here—audio, video, WebSocket to Gemini, and optional tool calls routed through OpenClaw.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re in the kitchen, wearing your Ray-Bans. You tap the AI button and mumble, “Add milk to my shopping list.” The camera snaps a frame, the mic grabs your voice, everything zips to Gemini Live. Gemini figures out you want to update your shopping list, triggers OpenClaw, which then hits your app (maybe Todoist or Apple Reminders). You get confirmation spoken back—no hands, no phone, just glasses.</p><p>Here&#39;s the setup in code:</p><p>// samples/CameraAccess/CameraAccess/Gemini/GeminiConfig.swift
-static let apiKey = &quot;YOURGEMINIAPI_KEY&quot;</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>VisionClaw finally makes smart glasses actually useful, as long as you’re comfortable fiddling with API keys and local gateways. The iOS app is straightforward, the OpenClaw integration is powerful but a bit much if you only want basic voice/vision. If you want real agentic AI—actions, not just answers—this is worth your time. If you’re just after “describe what I’m seeing,” stick with Gemini alone.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>VisionClaw is a prototype real‑time AI assistant for Meta Ray‑Ban smart glasses that couples voice, vision and agentic actions via Gemini Live and OpenClaw. The codebase has no automated test or CI gate, duplicated logic in view files, and several decision‑heavy Swift files with high branching density, making future changes risky without a safety net.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>VisionClaw lets a user tap an AI button and ask “What am I looking at?” – Gemini’s Live API streams video frames and audio, returns a description, and can invoke OpenClaw‑backed actions such as adding items to a shopping list or sending a message. The iPhone‑mode branch uses the device’s back camera instead of the glasses.</p>
+<p>Key files and their responsibilities:</p>
+<ul><li><strong><code>samples/CameraAccess/CameraAccess/Gemini/GeminiLiveService.swift</code></strong> – orchestrates the WebSocket connection to Gemini, forwards JPEG frames (~1 fps) and PCM audio, and handles tool‑call execution.</li><li><strong><code>samples/CameraAccess/CameraAccess/Gemini/GeminiConfig.swift</code></strong> – stores the Gemini API key; the placeholder <code>static let apiKey = "YOUR_GEMINI_API_KEY"</code> must be replaced.</li><li><strong><code>samples/CameraAccess/CameraAccess/OpenClaw/OpenClawBridge.swift</code></strong> – thin bridge that forwards Gemini tool calls to the OpenClaw gateway (runs locally or on a LAN‑bound host).</li><li><strong><code>samples/CameraAccess/CameraAccess/OpenClaw/ToolCallModels.swift</code></strong> – defines the Swift structs that map Gemini’s tool‑call payloads; contains 98 branch points over 321 lines, indicating dense conditional logic.</li><li><strong><code>samples/CameraAccess/CameraAccess/OpenClaw/ToolCallRouter.swift</code></strong> – dispatches a parsed tool call to the appropriate OpenClaw skill (e.g., web search, messaging).</li><li><strong>View models</strong> – <code>StreamSessionViewModel.swift</code>, <code>WearablesViewModel.swift</code>, <code>DebugMenuViewModel.swift</code> manage UI state and session lifecycle.</li><li><strong>Views</strong> – <code>HomeScreenView.swift</code> and <code>NonStreamView.swift</code> each contain a repeated 6‑line block (duplicate code).</li><li><strong><code>samples/CameraAccess/CameraAccess/Gemini/AudioManager.swift</code></strong> – manages the bidirectional audio pipeline (16 kHz capture, 24 kHz playback).</li></ul>
+<p>Outside the repo, Gemini Live contacts Google’s API; OpenClaw contacts a local gateway that may call web services, messaging apps, or smart‑home controllers.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>CameraAccessApp.swift</code> (the Xcode entry point). Tapping the <strong>AI button</strong> triggers <code>GeminiLiveService.startSession()</code>, which opens a WebSocket to Gemini. Video frames are captured by <code>IPhoneCameraManager.swift</code> (or the glasses DAT SDK), encoded as JPEGs, and sent alongside audio from <code>AudioManager.swift</code>. Gemini replies with either an audio PCM stream (played through the iOS speaker) or a tool‑call payload.</p>
+<p>The tool‑call payload flows:</p>
+<ol><li><code>GeminiLiveService.swift</code> parses the JSON → <code>ToolCallModels.swift</code> structs.</li><li><code>ToolCallRouter.swift</code> matches the action name and calls <code>OpenClawBridge.swift</code>.</li><li><code>OpenClawBridge.swift</code> POSTs to the gateway (<code>http://&lt;host&gt;:18789/…</code>) and returns a text response.</li><li>The response is fed back into the Gemini conversation, and Gemini speaks the result.</li></ol>
+<p>A hub exists at <code>GeminiLiveService.swift</code>: it simultaneously manages network I/O, audio buffering, and tool‑call routing, giving it a wide blast radius. The high branching density (98 branches over 321 lines) in <code>ToolCallModels.swift</code> similarly means many conditional paths can be triggered by tool names or payload shapes.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Clone &amp; open</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/VisionClaw.git
+cd VisionClaw/samples/CameraAccess
+open CameraAccess.xcodeproj</code></pre>
+<p><strong>Add Gemini key</strong> – edit <code>samples/CameraAccess/CameraAccess/Gemini/GeminiConfig.swift</code> and replace the placeholder with your key from Google AI Studio.</p>
+<p><strong>Build &amp; run</strong> – select an iPhone target and press Cmd+R.</p>
+<p><strong>iPhone mode</strong> – tap “Start on iPhone” to use the device camera; then tap the AI button to start a Gemini Live session.</p>
+<p><strong>With glasses</strong> – pair the Ray‑Ban glasses via the Meta AI app (enable Developer Mode), tap “Start Streaming”, then the AI button.</p>
+<p><strong>Optional OpenClaw</strong> – follow the OpenClaw setup guide; ensure <code>~/.openclaw/openclaw.json</code> contains a gateway with <code>bind: "lan"</code> and a token, enabling the <code>chatCompletions</code> endpoint. Once running, the iPhone can reach the gateway on the local network and Gemini will be able to invoke the 56+ skills (web search, messaging, smart‑home, etc.).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A user puts on the glasses, taps the AI button, and says, “Add milk to my shopping list.” <code>GeminiLiveService.swift</code> forwards the request to the OpenClaw gateway, which contacts the Notes app on the phone and adds “milk”. The AI then confirms, “Milk added to your list.” If the user instead asks “What’s the weather forecast for tomorrow?” Gemini’s visual description of the scene is combined with a web‑search skill via OpenClaw, and the spoken answer references the current location.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Duplicated code</strong> – 6‑line blocks appear in <code>samples/CameraAccess/CameraAccess/Views/HomeScreenView.swift</code> and <code>samples/CameraAccess/CameraAccess/Views/NonStreamView.swift</code>. Extract a shared helper to DRY the logic.</li><li><strong>High branching density</strong> – <code>samples/CameraAccess/CameraAccess/Gemini/GeminiLiveService.swift</code> and <code>samples/CameraAccess/CameraAccess/OpenClaw/ToolCallModels.swift</code> each contain ~98 branch points over ~321 lines; decompose decision logic into a strategy or table‑driven dispatch.</li><li><strong>Missing test suite</strong> – 32 source files, zero test files. Any change ships without signal that existing behaviour is preserved.</li><li><strong>Missing CI workflow</strong> – no <code>.github/</code> or CI configuration; every merge runs untested.</li><li><strong>Repo hygiene</strong> – licence present; no Dockerfile, no lockfile, no committed secrets.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>VisionClaw is a functional prototype that demonstrates voice‑plus‑vision AI on smart glasses and OpenClaw‑enabled actions. It lacks automated tests, CI, and has duplicated/over‑complex logic that raises maintenance risk. It is suitable for experimentation and quick demos, but should not be merged into a production codebase until a test suite and CI pipeline are added and the duplicated/high‑branching code is refactored.</p>
             </div>
 
             
@@ -92,9 +118,9 @@ static let apiKey = &quot;YOURGEMINIAPI_KEY&quot;</p><h3 class="post-h" id="the-
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
@@ -114,6 +140,12 @@ static let apiKey = &quot;YOURGEMINIAPI_KEY&quot;</p><h3 class="post-h" id="the-
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1152043556">Open in Code Brain &rarr;</a>

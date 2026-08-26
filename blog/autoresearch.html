@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 8, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Manual experimentation in AI research is tedious and time-consuming. Researchers spend countless hours tweaking hyperparameters, testing different architectures, and running experiments. The process often involves a lot of guesswork, and even then, results can be underwhelming. Enter autoresearch, which aims to automate this entire grind using AI agents.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>At its core, autoresearch is about letting an AI agent handle the nitty-gritty of training a language model. You set up your training environment using the program.md file, which gives the agent the context it needs. From there, the agent takes over, making changes to train.py, which contains the model architecture and training loop. This isn&#39;t just a simple script; the agent can modify anything in this file, from hyperparameters to optimizer configurations.</p><p>The prepare.py file is responsible for one-time data preparation tasks like downloading datasets and initializing a Byte Pair Encoding (BPE) tokenizer. The agent doesn’t touch this file; it’s fixed. The real action happens in train.py, which is where the agent experiments autonomously for 5-minute intervals, continually optimizing based on the val_bpb metric.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you&#39;re working on a new language model and want to quickly explore different training settings. You&#39;d start by running the commands in the README to set things up: installing dependencies with uv sync, prepping your data with uv run prepare.py, and kicking off a training run with uv run train.py. Once you&#39;re set up, you can leave the agent to experiment overnight. In the morning, you’ll find a log detailing all the modifications made during training and the corresponding results, letting you evaluate what worked and what didn’t.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>autoresearch is a nifty tool for those diving deep into language model training on a single NVIDIA GPU. If you&#39;re looking to automate the repetitive aspects of your research without getting bogged down in the details, give this a shot. Just know that it’s tailored for a specific setup, so if you’re not on an NVIDIA GPU, you might want to look elsewhere. Overall, it’s a neat proof of concept, but don’t expect it to solve every problem in AI research—yet.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Researchers who want to experiment with LLM training often spend hours tweaking data pipelines, model code, and hyper‑parameters manually. The effort required to set up reproducible runs on a single GPU and iterate quickly becomes a bottleneck, especially when the goal is rapid, autonomous exploration.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>autoresearch</code> supplies a minimal, single‑GPU training stack derived from Karpathy’s <strong>nanochat</strong> implementation. The repository consists of only ten files; the core logic lives in <code>train.py</code>, while <code>prepare.py</code> handles one‑time data download, BPE tokenizer training, and utility helpers such as <code>list_parquet_files</code> and <code>make_dataloader</code>. A human edits <code>program.md</code> to give high‑level instructions to an AI agent; the agent repeatedly mutates <code>train.py</code>, runs a 5‑minute training job, and evaluates <strong>validation bits‑per‑byte (val_bpb)</strong>. The workflow is deliberately bounded: fixed wall‑clock budget, single GPU, and a single entry point (<code>train.py</code>) that the agent may modify without touching the surrounding infrastructure.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts with the <strong>CLI command</strong> <code>uv run train.py</code>. <code>train.py</code> defines the GPT model (classes for <code>CausalSelfAttention</code>, <code>Block</code>, etc.) and the training loop. The most connected functions are:</p>
+<ul><li><code>forward</code> → <code>norm</code> (called 6 times) – core model forward pass.</li><li><code>__init__</code> → <code>has_ve</code> (called 2 times) – model initialization.</li></ul>
+<p><code>train.py</code> imports <code>prepare.py</code> only for data utilities; the import graph shows a single edge from <code>train</code> to <code>prepare</code>.</p>
+<p><code>prepare.py</code> owns all filesystem interaction:</p>
+<ul><li><code>download_data</code> / <code>download_single_shard</code> – network fetches (the only outbound network call).</li><li><code>list_parquet_files</code>, <code>text_iterator</code>, <code>train_tokenizer</code> – read/write of local parquet files and tokenizers.</li></ul>
+<p>The internal call graph contains 42 intra‑repo edges. Functions with the widest blast radius are:</p>
+<ul><li><code>list_parquet_files</code> – called from three places (<code>text_iterator</code>, <code>train_tokenizer</code>, <code>_document_batches</code>).</li><li><code>norm</code> – invoked six times per forward pass, affecting every training step.</li></ul>
+<p>No circular dependencies exist, so changes in <code>prepare.py</code> do not cascade back into <code>train.py</code>. However, deep nesting (max indentation depth 8) in both <code>train.py</code> and <code>prepare.py</code> makes the control flow harder to follow, increasing cognitive load for any modification.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/autoresearch
+cd autoresearch
+
+# 2. Install uv (if not already present)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 3. Install dependencies as defined in pyproject.toml
+uv sync
+
+# 4. One‑time data download and tokenizer training (≈2 min)
+uv run prepare.py
+
+# 5. Run a single 5‑minute training experiment
+uv run train.py</code></pre>
+<p>The repository does not define additional configuration files or environment variables; all required settings are hard‑coded in <code>prepare.py</code> (e.g., data URLs) and <code>train.py</code> (model hyper‑parameters).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research team could wrap the above steps in a scheduler that repeatedly launches <code>uv run train.py</code> under different <code>program.md</code> prompts. After each run, the agent reads the generated <code>val_bpb</code> from the console output, decides whether to keep the mutation, and writes a new version of <code>train.py</code>. The human operator only needs to adjust <code>program.md</code> to steer the agent’s exploration strategy.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Unsafe deserializer</strong> – <code>prepare.py</code> uses <code>pickle.load()</code> (and <code>yaml.load()</code>), which can execute arbitrary code if the data source is compromised. Replace with <code>pickle.safe_load</code>‑compatible formats (e.g., JSON or a pure‑data serialization).</li><li><strong>Medium – Missing automated dependency updates</strong> – Only <code>pyproject.toml</code> is present; no Dependabot or Renovate configuration. Add <code>.github/dependabot.yml</code> to keep libraries patched.</li><li><strong>Medium – No test suite</strong> – No <code>tests/</code> directory; code paths are unverified by automated tests.</li><li><strong>Medium – No CI pipeline</strong> – No <code>.github/workflows/</code> or other CI config, so builds are not automatically validated.</li><li><strong>Medium – No license file</strong> – Usage and redistribution rights are unclear.</li><li><strong>Low – No lockfile</strong> – <code>pyproject.toml</code> alone makes reproducible installs harder; consider committing <code>uv.lock</code>.</li><li><strong>High – Deep nesting</strong> – Both <code>train.py</code> and <code>prepare.py</code> reach 8 levels of indentation, reducing readability and increasing risk of bugs. Refactor with early returns or helper functions.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>autoresearch</code> delivers a compact, reproducible single‑GPU training loop that can be autonomously mutated by an AI agent, making it useful for rapid prototyping of LLM experiments. The codebase is small and well‑isolated, but it lacks test coverage, CI, a license, and safe serialization practices, and its deep nesting hampers maintainability. Teams comfortable adding their own testing and CI scaffolding can adopt it for controlled autonomous research; otherwise, the repository needs hardening before production use.</p>
             </div>
 
             
@@ -93,14 +128,14 @@
                         <span class="an-lab">Deployment readiness</span>
                         <div class="an-score">2<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
                         <div class="an-score">10<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>2</b></li><li><span>Python</span><i style="width:100%"></i><b>2</b></li><li><span>TOML</span><i style="width:50%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>2</b></li><li><span>Python</span><i style="width:100%"></i><b>2</b></li><li><span>Jupyter Notebook</span><i style="width:50%"></i><b>1</b></li><li><span>TOML</span><i style="width:50%"></i><b>1</b></li>
                         </ul>
                         
                     </div>
@@ -113,6 +148,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1176030836">Open in Code Brain &rarr;</a>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 9, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,8 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Algorithmic trading is a jungle, and navigating it without proper tools can feel like using a flip phone in a smartphone world. Traders need a way to analyze market behaviors and sentiment without getting bogged down in the math. Enter smart money concepts, which can help decipher when to enter or exit trades based on market structure.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The smart-money-concepts Python package brings ICT&#39;s smart money concepts straight to your codebase. The core logic lives in the smartmoneyconcepts/smc.py file, where you’ll find functions for indicators like Fair Value Gaps (FVG) and Swing Highs/Lows.</p><p>Installation is as simple as running pip install smartmoneyconcepts. You’ll want to prepare your data in a well-structured pandas DataFrame, specifically formatted with lowercase column names: [&quot;open&quot;, &quot;high&quot;, &quot;low&quot;, &quot;close&quot;, &quot;volume&quot;]. The README does a decent job of laying out how to use functions like smc.fvg() and smc.swinghighslows() for analyzing your OHLC data.</p><p>The tests are comprehensive, with 16 files in the tests/ directory ensuring your indicators behave as expected. You can even peek at sample data like tests/testdata/EURUSD/boschochresultdata.csv to see how the output should look.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’ve got a DataFrame of EUR/USD price data and want to identify potential entry points. You could do something like this:</p><p>By leveraging these functions, you could automate your trading strategy based on market conditions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This package has potential but is still in its infancy—no stars yet, which means you&#39;re likely venturing into uncharted waters. If you’re serious about algorithmic trading and want to explore smart money concepts, this could be worth your time, but be prepared for the rough edges. If you enjoy DIY, dive in and contribute; just don’t expect a polished gem right out of the box.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Algorithmic traders need programmatic access to ICT‑style “smart‑money” indicators (fair‑value gaps, order blocks, etc.). Existing Python libraries rarely implement the full ICT suite, forcing developers to recreate logic from scattered blog posts, which is error‑prone and hard to validate.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository ships a single package <strong><code>smartmoneyconcepts</code></strong> that exposes the ICT indicator set through functions in <code>smartmoneyconcepts/smc.py</code>. Importing <code>smc</code> gives access to <code>fvg</code>, <code>swing_highs_lows</code>, <code>bos_choch</code>, <code>ob</code>, <code>liquidity</code>, <code>previous_high_low</code>, <code>sessions</code>, and <code>retracements</code>. Test helpers in <code>tests/generate_gif.py</code> illustrate how to overlay these signals on candlestick plots.</p>
+<p>The package is built with the classic <code>setup.py</code> installer, so <code>pip install .</code> or the published PyPI wheel installs the <code>smc</code> module and its public API.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>entry point</strong> <code>setup.py</code> (install time) which registers the <code>smartmoneyconcepts</code> distribution. At runtime a user imports <code>smartmoneyconcepts.smc</code> and calls one of the indicator functions.</p>
+<ul><li><strong>Core hub</strong> – <code>smartmoneyconcepts/smc.py</code> defines 13 public functions and one class. It is the sole internal provider; every test and helper imports from it.</li><li><strong>Primary call flow</strong> –</li><li><code>swing_highs_lows</code> is invoked from 7 places (most often by the higher‑level indicators).</li><li><code>fvg</code>, <code>ob</code>, <code>bos_choch</code>, <code>liquidity</code>, <code>previous_high_low</code>, <code>sessions</code>, and <code>retracements</code> each call <code>swing_highs_lows</code> or share its output, forming a thin dependency tree.</li><li><strong>Tests</strong> – <code>tests/unit_tests.py</code> imports <code>smartmoneyconcepts.smc</code> and exercises each indicator against CSV fixtures under <code>tests/test_data</code>.</li><li><strong>Visualization helper</strong> – <code>tests/generate_gif.py</code> reads the same CSVs, calls the indicator functions, and writes a GIF (<code>tests/test.gif</code>). It opens the output file without a context manager, which could leak a file handle on error.</li></ul>
+<p>No circular imports appear; the internal import graph consists of 5 modules with 3 edges, giving a stable, low‑instability architecture. The only external I/O is reading CSV fixtures and writing the GIF in the test helper.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone and install the package
+git clone https://github.com/moses-y/smart-money-concepts
+cd smart-money-concepts
+pip install .</code></pre>
+<pre data-lang="python"><code># Example usage in a trading script
+import pandas as pd
+from smartmoneyconcepts import smc
+
+ohlc = pd.read_csv('path/to/EURUSD_15M.csv')
+fvg_res = smc.fvg(ohlc, join_consecutive=False)
+swing = smc.swing_highs_lows(ohlc, swing_length=50)
+bos, choch = smc.bos_choch(ohlc, swing, close_break=True)</code></pre>
+<p>No additional configuration files or environment variables are required; the functions operate on a pandas DataFrame with columns <code>['open','high','low','close','volume']</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team can embed <code>smc</code> into a back‑testing pipeline: load historical OHLC data, compute <code>fvg</code> and <code>ob</code>, feed the binary signals into a machine‑learning model, and generate trade‑execution rules that react to detected order‑block breakouts. The library’s pure‑Python design keeps the stack simple and portable across Linux, macOS, and Windows.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – CI never runs the test suite (<code>.github/workflows/unittest.yaml</code> lacks a test step). Add a <code>pytest</code> step to the existing workflow.</li><li><strong>MEDIUM</strong> – GITHUB_TOKEN permissions are not scoped; declare <code>permissions: contents: read</code> to enforce least‑privilege.</li><li><strong>MEDIUM</strong> – Large binary <code>tests/test.gif</code> (7.3 MiB) should be moved to Git LFS or external storage.</li><li><strong>MEDIUM</strong> – Checkout retains the token; set <code>persist-credentials: false</code> and supply a token only where needed.</li><li><strong>LOW</strong> – No job timeout is set; add <code>timeout-minutes</code> to prevent runaway runs.</li><li><strong>HIGH (cognitive load)</strong> – <code>smartmoneyconcepts/smc.py</code> and <code>tests/generate_gif.py</code> contain nesting depth 8, making control flow hard to follow. Refactor with early returns or guard clauses.</li><li><strong>MEDIUM (oversized file)</strong> – <code>smc.py</code> spans 798 lines; consider splitting into modules by logical group (e.g., <code>fvg.py</code>, <code>swing.py</code>, <code>structure.py</code>).</li><li><strong>MEDIUM (resource safety)</strong> – <code>tests/generate_gif.py</code> opens files without a context manager; wrap with <code>with open(...) as f:</code>.</li></ul>
+<p>No missing license (present) and no committed secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>smartmoneyconcepts</code> delivers a functional, single‑file implementation of ICT indicators that can be dropped into Python trading pipelines with minimal setup. The codebase is small but suffers from deep nesting, an oversized core module, and incomplete CI configuration. Teams comfortable refactoring for readability and tightening the CI pipeline will find the indicator set useful; otherwise the library may require additional engineering effort before production use.</p>
             </div>
 
             
@@ -91,9 +120,9 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">

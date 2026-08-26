@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 9, 2026</span>
-                    <span>2 min read</span>
-                    <span class="post-language">Shell</span>
+                    <span>4 min read</span>
+                    <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>MemMachine</h1>
@@ -80,8 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#memmachine-persistent-memory-for-ai-agents">MemMachine: Persistent Memory for AI Agents</a><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="memmachine-persistent-memory-for-ai-agents">MemMachine: Persistent Memory for AI Agents</h3><h3 class="post-h" id="the-problem">The Problem</h3><p>Most AI agents are dumb as rocks when it comes to memory. They can answer questions, but they forget everything the moment you close the app or restart the server. Want your travel bot to remember that you prefer aisle seats? Too bad—next session, it’s back to square one.</p><p>MemMachine fixes this by giving AI agents actual memory. Not the &quot;store everything in a text file and pray it works&quot; kind of memory, but structured, persistent, and queryable memory. It’s a must-have for building AI systems that don’t feel like goldfish with a five-second attention span.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MemMachine is a memory layer that lets AI agents store and retrieve long-term, short-term, and user-specific memories. It splits memory into categories like Episodic Memory (session-level context stored as graphs) and Profile Memory (user preferences stored in SQL).</p><p>The repo is packed with files, but the action starts with the memmachine-client library. Check out the example in the README.md: initialize a memory instance, add some data, and query it. The heavy lifting happens on the server (shoutout to the deployments/helm directory for managing Kubernetes charts).</p><p>If you&#39;re self-hosting, the Dockerfile and docker-compose.yml are your new best friends. Spin up the MemMachine backend, and you’ve got a server that can persist memory across restarts. For documentation, the docs/ folder has your back—150+ files covering everything from quickstart guides to API references.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Imagine you’re building a travel assistant. You’ve got an AI agent powered by LangChain, and it needs to remember things about each customer—flight preferences, past trips, favorite destinations. With MemMachine, you’d do something like this:</p><p>The memory isn&#39;t just dumped into a database; it’s categorized and queryable. You can pull context without manually parsing blobs of text—they’ve done the hard work for you.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MemMachine is solid for anyone building AI agents that need to not suck at remembering things. The Kubernetes deployment might scare off small teams, and the repo feels a bit bloated (200 files is a lot for an initial dive). But if you&#39;re building next-gen agents or LLM apps, this is worth it. Don’t use it for toy projects—it’s overkill. For serious systems, though? It’s a lifesaver.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Stateless LLM‑driven agents lose context after each request, forcing developers to re‑implement ad‑hoc persistence layers. The result is duplicated code, fragile serialisation, and limited ability to build truly personalised assistants.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><em>MemMachine</em> delivers a reusable memory service that stores three tiers of data – working, episodic (graph‑based), and profile (SQL) – and exposes them via a RESTful MCP server and language‑specific client libraries. The core server lives under <code>packages/server/</code> (e.g., <code>memmachine_server/episodic_memory/</code> and <code>memmachine_server/common/embedder/</code>). Client SDKs are in <code>packages/client/</code>, with the Python entry point <code>memmachine_client/client.py</code>. Example applications (e.g., <code>examples/simple_chatbot/app.py</code>) show a five‑line integration pattern that creates a <code>MemMachineClient</code>, obtains a project, and calls <code>memory.add()</code> / <code>memory.search()</code>.</p>
+<p>Integrations for LangChain, CrewAI, LlamaIndex, etc., are under <code>integrations/</code> and each provides a thin wrapper that imports the client and registers a memory backend.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the chosen entry point, for instance <code>examples/simple_chatbot/app.py</code>:</p>
+<ol><li><strong><code>app.py</code></strong> creates a <code>MemMachineClient</code> (class defined in <code>packages/client/src/memmachine_client/client.py</code>).</li><li>The client reads configuration from <code>packages/client/src/memmachine_client/config.py</code> and builds a <code>Project</code> object (<code>packages/client/src/memmachine_client/project.py</code>).</li><li>Calling <code>project.memory(...)</code> returns a <code>Memory</code> instance (<code>packages/client/src/memmachine_client/memory.py</code>).</li><li><code>Memory.add()</code> packages the payload and issues an HTTP POST to the server (<code>memmachine_server/episodic_memory/service_locator.py</code> routes the request).</li><li>The server’s <strong>service locator</strong> forwards to the appropriate service (<code>memmachine_server/episodic_memory/long_term_memory/long_term_memory.py</code>) which persists data via the embedder (<code>memmachine_server/common/embedder/embedder.py</code>) and the Neo4j driver (configured in <code>deployments/helm/templates/neo4j-deployment.yaml</code>).</li></ol>
+<p>The most connected module is <code>packages/server/src/memmachine_server/common/reranker/reranker</code> (imported by eight other modules). The client side shows a small cycle among <code>client.py</code>, <code>memory.py</code>, and <code>config.py</code> (four modules in a circular import) that inflates the blast radius for any change to shared types. The longest nesting depth reaches eight levels in <code>long_term_memory.py</code>, making the control flow hard to follow.</p>
+<p>All network I/O passes through the thin HTTP client in <code>client.py</code>; the server’s public API is defined in <code>packages/server/src/memmachine_server/api/</code>. No file currently maps a direct file‑system write outside the database layers, so the persistence side‑effects are confined to the Neo4j and PostgreSQL Helm charts (<code>deployments/helm/templates/*.yaml</code>).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/MemMachine
+cd MemMachine
+
+# Build the server container (Dockerfile at repo root)
+docker build -t memmachine/server:dev .
+
+# Start dependencies (Neo4j, PostgreSQL) and the server
+docker-compose up -d   # uses docker-compose.yml
+
+# Install the Python client in a virtualenv
+python -m venv .venv
+source .venv/bin/activate
+pip install -r examples/simple_chatbot/requirements.txt</code></pre>
+<p>Configuration files:</p>
+<ul><li><code>deployments/helm/values.yaml</code> – overrides for Neo4j/Postgres credentials.</li><li><code>.env.example</code> in <code>integrations/dify/plugin/</code> – shows required env vars for that plugin.</li></ul>
+<p>Run the demo chatbot:</p>
+<pre data-lang="bash"><code>python examples/simple_chatbot/app.py</code></pre>
+<p>The script prints a prompt, stores user utterances via the client, and retrieves them on subsequent turns.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS product that offers travel planning can embed <code>memmachine_client</code> in its backend service. Each user session creates a <code>Memory</code> tied to a <code>user_id</code>. The episodic graph records prior itinerary discussions, while profile memory keeps static preferences (seat type, airline loyalty). When the user returns weeks later, a single <code>memory.search("flight preferences")</code> call restores context without rebuilding a custom DB layer.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong> – 27 high, 116 medium:</p>
+<ul><li><strong>High – Cognitive load</strong>: deep nesting (24 files, e.g., <code>long_term_memory.py</code>).</li><li><strong>High – Soundness</strong>: import cycles (4 files, e.g., <code>client.py</code>).</li><li><strong>High – Clarity</strong>: duplicated 6‑line blocks across 147 files.</li><li><strong>Medium – Resilience</strong>: broad <code>except:</code> handling (22 files).</li><li><strong>High – Oversized files</strong>: &gt;1500 lines in <code>memory.py</code> and related modules.</li></ul>
+<p><strong>Code‑Health audit (CI‑visible)</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Severity</th><th>Issue</th><th>Location</th></tr></thead><tbody><tr><td>High</td><td>Pin GitHub Actions to commit SHAs</td><td><code>.github/workflows/*.yml</code></td></tr><tr><td>Medium</td><td>Use lockfile in CI (<code>npm ci</code>/<code>pip install -r lock</code>)</td><td><code>.github/workflows/*.yml</code></td></tr><tr><td>Medium</td><td>Pin Docker base image by digest</td><td><code>Dockerfile</code></td></tr><tr><td>Medium</td><td>Add dependency‑vulnerability scan step</td><td><code>.github/workflows/*.yml</code></td></tr><tr><td>Medium</td><td>Move large dataset (<code>wikimultihop.json</code>) to LFS</td><td><code>evaluation/data/</code></td></tr><tr><td>Medium</td><td>Disable credential persistence on checkout</td><td><code>.github/workflows/installation-test.yml</code></td></tr><tr><td>Medium</td><td>Add non‑root USER to container</td><td><code>Dockerfile</code></td></tr><tr><td>Low</td><td>Set <code>timeout-minutes</code> on workflow jobs</td><td><code>.github/workflows/docker-image.yml</code></td></tr><tr><td>Low</td><td>Add <code>.editorconfig</code> / formatter config</td><td>repository root</td></tr></tbody></table></div>
+<p>The repo includes a full test suite (140 test files) and CI pipelines for linting, SBOM generation, and package publishing. A Helm chart (<code>deployments/helm/</code>) provides production‑grade deployment, but the chart contains a committed <code>secrets.yaml</code> template that may expose placeholder values.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><em>MemMachine</em> offers a coherent, multi‑tier memory service with ready‑made client SDKs and a breadth of integrations. The architecture is functional but hampered by deep nesting, import cycles, and duplicated logic that raise maintenance costs. Teams that need a plug‑and‑play memory layer and can allocate effort to refactor the client/server cores will find it valuable; projects with strict code‑quality mandates should address the highlighted health issues first.</p>
             </div>
 
             
@@ -91,18 +130,18 @@
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">706<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>34</b></li><li><span>Markdown</span><i style="width:38%"></i><b>13</b></li><li><span>JSON</span><i style="width:9%"></i><b>3</b></li><li><span>Shell</span><i style="width:3%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>369</b></li><li><span>Markdown</span><i style="width:13%"></i><b>49</b></li><li><span>YAML</span><i style="width:10%"></i><b>38</b></li><li><span>TypeScript</span><i style="width:7%"></i><b>25</b></li><li><span>JSON</span><i style="width:5%"></i><b>17</b></li><li><span>TOML</span><i style="width:1%"></i><b>5</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span><span>Kubernetes</span></p>
+                        <p class="an-fw"><span>React</span><span>Flask</span><span>Docker</span><span>Kubernetes</span><span>LangChain</span><span>Vector store</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -131,6 +170,12 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>deployments/helm/templates/secrets.yaml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1177041656">Open in Code Brain &rarr;</a>
