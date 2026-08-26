@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 24, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#optional-ui-build-docs-site">Optional UI build (docs site)</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Production‑grade autonomous agents need reliable state handling: crashes, long‑running pauses, and versioned deployments currently require custom scaffolding. Without a dedicated runtime, teams repeatedly re‑implement checkpointing, replay, and isolated execution, leading to brittle pipelines and costly token waste.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>kitaru supplies a self‑hosted, framework‑agnostic execution layer that sits between an agent harness (e.g., LangGraph, Pydantic‑AI) and the platform that governs it. The core Python package lives in the repository root (pyproject.toml, kitaru/init.py — not listed but implied) and provides decorators such as @flow, @checkpoint, and utilities like kitaru.wait() and kitaru.memory.</p><p>The UI and docs are a separate Next.js site in docs/ (see docs/next.config.mjs, docs/package.json). Docker support is provided via docker/Dockerfile*, enabling isolated pod execution (@checkpoint(runtime=&quot;isolated&quot;)). Example flows illustrate usage (examples/basicflow/firstworkingflow.py, examples/codingagent/agent.py).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the Python runtime
-pip install kitaru          # from PyPI
-or develop locally
-git clone https://github.com/zenml-io/kitaru.git
-cd kitaru
-pip install -e .           # editable install per pyproject.toml</p><h3 class="post-h" id="optional-ui-build-docs-site">Optional UI build (docs site)</h3><p>cd docs
-pnpm install               # pnpm lockfile present
-pnpm run build             # builds the Next.js site</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy the template and fill in production values:</p><p>cp .env.example .env
-edit .env – variables such as KITARUDBURL, KITARUOBJECTSTORE, etc.</p><p>Sensitive secrets are documented in docs/content/docs/guides/secrets.mdx; ensure real values are stored securely (e.g., vault) and never committed.</p><h3 class="post-h" id="running-it">Running it</h3><p>A flow is a plain Python module. After installing the package, execute an example with:</p><p>python -m kitaru run examples/basicflow/firstworkingflow.py</p><p>(If the CLI entry point differs, the kitaru module’s main provides the run command.) For isolated steps, the Dockerfile can be built and pushed:</p><p>docker build -f docker/Dockerfile -t kitaru:latest .</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A financial services team integrates a compliance‑review agent (examples/compliancereview/claudeagent.py). The agent is packaged as a @flow and deployed with:</p><p>from kitaru import flow, checkpoint</p><p>@flow
-def review(doc):
-    result = claudeagent.analyze(doc)
-    return result</p><p>flow.deploy(name=&quot;compliance_review&quot;, version=&quot;v1.2&quot;)</p><p>When a new regulation arrives, the team updates the prompt, redeploys a new version, and any in‑flight runs continue from the previous checkpoint without re‑processing earlier steps.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Secrets exposure – docs/content/docs/guides/secrets.mdx contains placeholder credential patterns; risk if real keys are ever committed.  
-Medium – Lack of automated tests – No tests/ directory and CI workflow (.github/workflows/ci.yml) runs linting only; untested code paths increase regression risk.  
-Medium – Incomplete type safety – Python code lacks explicit type annotations; static analysis may miss bugs.  
-Low – Documentation depth – Docs are extensive, but some API reference pages are missing; developers may need to read source to discover all decorator options.</p><p>No license issues (LICENSE present) and CI pipelines are configured, indicating basic SDLC hygiene.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>kitaru delivers a solid, production‑ready runtime for autonomous agents, handling durability, replay, and isolated execution out of the box. It’s best suited for teams already using a Python‑based agent harness and needing a self‑hosted, version‑controlled execution environment. The main gaps are the absence of automated tests and the need for careful secret management before production rollout.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams building production agents quickly discover their harness (LangChain, Pydantic AI, etc.) handles the model loop but not durability. A crash mid-run loses progress; a long-running task can't pause for human input; deploying a new version breaks in-flight invocations. Kitaru is the runtime layer underneath: checkpoints, replay, <code>wait()</code>, versioned deployments, and isolated execution, self-hosted.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Kitaru is a Python library (<code>src/kitaru/</code>) with a CLI (<code>src/kitaru/cli.py</code>) and an MCP server (<code>src/kitaru/mcp/server.py</code>). It wraps your agent code with <code>@flow</code> and <code>@checkpoint</code> decorators to add durable execution. The repo is a portfolio of four projects: the core <code>src/</code>, a <code>site/</code> (94 files, Next.js marketing/docs), a <code>docs/</code> (83 files, Next.js), and <code>examples/</code> (71 files, 45 code files showing usage).</p>
+<p>The README positions Kitaru as the "runtime layer" between the harness and your platform. It's framework-agnostic: you keep your SDK, prompts, and tools. Kitaru adds the execution layer, with artifact lineage to your object store and isolated step execution on Kubernetes/AWS/GCP/Azure.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/kitaru/cli.py:320</code> (<code>cli</code> function) or <code>src/kitaru/mcp/server.py:842</code> (<code>main</code>). The MCP server is the deeper entry point, reaching 391 functions; the CLI reaches only 10. The MCP server exposes operations like <code>_deploy</code> (reaches 201 functions) and <code>_get_logs</code> (167 functions).</p>
+<p>The call graph shows <code>KitaruClient</code> is the hub, called from 140 places. <code>KitaruUsageError</code> (97 call sites) and <code>_DummyRun</code> (80) are next. The <code>_stack_component_details_from_model</code> function calls <code>_normalize_stack_detail_value</code> 22 times—the hottest edge.</p>
+<p>The module graph shows a cycle in <code>src/kitaru/adapters/pydantic_ai/</code>: <code>_toolset.py</code>, <code>_function_toolset.py</code>, and <code>_mcp_server.py</code> are mutually reachable. Changing one risks breaking the others. The <code>_toolset.py</code> module has instability 0.73 (in cycle), meaning it's both depended-upon and dependent.</p>
+<p>External effects: 92 functions read/write files, 10 call a model for inference, 5 run external commands, 6 do crypto/secret operations, 3 make outbound network calls. A traced path: <code>main</code> → <code>_clean_output</code> → <code>shutil.rmtree</code> (filesystem).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install from <code>pyproject.toml</code> with <code>uv pip install -e .</code> or <code>pip install -e .</code>. The README shows <code>pip install kitaru</code>. Docker images build from <code>docker/Dockerfile</code>.</p>
+<p><strong>Configuration</strong>: Copy <code>.env.example</code> to <code>.env</code> and set backend/object store credentials. The CLI manages stacks via <code>kitaru stack</code> commands.</p>
+<p><strong>Running</strong>: The README's quick start:</p>
+<pre data-lang="bash"><code>pip install kitaru
+export KITARU_SERVER_URL="http://localhost:8000"
+kitaru server start</code></pre>
+<p>Then decorate a flow:</p>
+<pre data-lang="python"><code>from kitaru import flow, checkpoint, wait
+
+@flow
+def my_agent(input: str):
+    result = my_llm_call(input)
+    checkpoint(result)
+    wait()  # pause for human input
+    return result</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A support agent that needs human approval before a refund. The flow runs, checkpoints the analysis, calls <code>wait()</code>, releases compute. A human reviews via the dashboard, triggers resume, and the flow continues from the checkpoint without re-running the LLM call. A crash mid-run replays from the last checkpoint, returning cached output instead of re-burning tokens.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 72 findings (15 high, 57 medium) across 5 kinds:</p>
+<ul><li><strong>High - Import cycle</strong> - <code>src/kitaru/adapters/pydantic_ai/_toolset.py</code>, <code>_function_toolset.py</code>, <code>_mcp_server.py</code> are mutually reachable. Break the cycle by extracting shared types.</li><li><strong>High - Deep nesting</strong> - 21 files with max indentation depth 6, including <code>_toolset.py</code>, <code>_model.py</code>, <code>client.py</code>. Flatten with guard clauses.</li><li><strong>High - Duplicated code</strong> - 512 repeated 6-line blocks across 74 files. Extract shared helpers.</li><li><strong>High - Oversized files</strong> - 17 files over 1000 lines, including <code>_stacks.py</code> (2264 lines) and <code>client.py</code>. Split by responsibility.</li><li><strong>Medium - Broad exception handling</strong> - 18 instances of bare <code>except</code> swallowing errors, in <code>_tracking.py</code>, <code>_otel.py</code>, and examples.</li></ul>
+<p>The code health audit adds a <strong>Critical</strong> finding: <code>.github/workflows/site.yml</code> exposes <code>CLOUDFLARE_API_TOKEN</code> and <code>CLOUDFLARE_ACCOUNT_ID</code> to a workflow a fork can trigger. Move secret-using steps into a <code>workflow_run</code> job that never checks out PR code.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Kitaru solves a real problem—durable agent execution—and the core library is substantial. The Pydantic AI adapter cycle and oversized files will cost you during maintenance. The critical CI secret exposure must be fixed before accepting external contributions. This is for teams building agent platforms who need the runtime layer, not for those buying an off-the-shelf solution.</p>
             </div>
 
             

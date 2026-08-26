@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 24, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,37 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#real-world-use">Real-World Use</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents and applications are memory hogs. They need to recall context, user preferences, and past interactions, but most solutions either force you into a walled garden or don’t scale. You’re left staring at a mess of disconnected memory stores, half-baked APIs, and an overworked SQLite database. If you’ve tried cobbling together something yourself, you know it’s like duct-taping a leaky boat. Enter PowerMem.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PowerMem is a long-term memory system for AI applications. It handles multimodal signals (text, images, audio), supports multi-agent isolation, and uses retrieval methods that mix vectors, full-text search, and graph-based queries. It even incorporates &quot;Ebbinghaus-style time decay&quot; to handle memory aging, which is nerdy but useful.</p><p>The repo is sprawling but breaks into logical pieces:  
-Dashboard (dashboard/): A React-based UI for managing the memory system. Think of it as /dashboard for your memory server. Files like dashboard/src/routes/memories.tsx handle memory views, while dashboard/src/components/memory-quality-card.tsx shows how well your memory system is doing.  
-SDK &amp; CLI (apps/claude-code-plugin): The Python SDK (Memory) and CLI (pmem) let you add and search memory, either programmatically or from your terminal. Code like apps/claude-code-plugin/cmd/powermem-hook/main.go ties it all together.  
-Server (docker/): The actual HTTP API server runs on Docker or Compose. Fire up docker-compose.yml, map your .env, and you’re good to go.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Say you’re building a chatbot or an AI assistant that needs persistent context. After setting up your .env (see docs/guides/0003-configuration.md), install the SDK:</p><p>Add memory:</p><p>Need a dashboard for non-devs? Use Docker. Run docker-compose up -d and point your browser to /dashboard. Done.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PowerMem is packed with features but feels like overkill for smaller projects. It’s best suited for teams building advanced AI systems or apps with complex memory needs. If you’re just storing user preferences, stick to SQLite and save yourself the headache. If you’re building the next ChatGPT, give this a shot—but expect some setup pain before the magic happens.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents and applications lack persistent, structured memory. Session context is lost between runs, and existing memory solutions are either too simplistic (key-value stores) or too rigid (fixed schemas). PowerMem addresses this by providing a memory layer that combines multiple retrieval strategies—vector, full-text, and graph—with LLM-driven extraction and time-based decay, so agents can recall relevant information without rebuilding context every session.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>PowerMem is a persistent memory system for AI agents, exposed through a Python SDK (<code>src/powermem/</code>), a CLI (<code>pmem</code>), an HTTP API server with a React dashboard (<code>src/server/</code>, <code>dashboard/</code>), and an MCP server. The core <code>memory.py</code> module handles the orchestration: it auto-configures providers, manages the underlying store, and exposes <code>add</code>, <code>search</code>, <code>delete</code>, and <code>list</code> operations.</p>
+<p>The repository also contains a set of self-contained projects beyond the core library: a Go-based Claude Code plugin (<code>apps/claude-code-plugin/</code>), a TypeScript VS Code extension (<code>apps/vscode-extension/</code>), a LOCOMO benchmark suite (<code>benchmark/locomo/</code>), and a benchmark server (<code>benchmark/server/main.py</code>). These are independent projects sharing the core memory design, not one monolith.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/powermem/cli/main.py</code> at the <code>memory</code> function. From there, the shortest path to an external effect is <code>memory -&gt; delete_all</code>, which makes a network call via <code>self.client.get</code>—three hops from entry to leaving the process. The benchmark server (<code>benchmark/server/main.py</code>) starts at <code>reset</code> and reaches <code>delete_col</code>, hitting the database via <code>self.connection.execute</code> in two hops. The CLI's <code>cli</code> function reaches <code>_install_shell_completion</code>, which writes to the filesystem via <code>os.makedirs</code>.</p>
+<p>The call graph shows clear hot spots. <code>search</code> is called from 132 distinct places, <code>delete_all</code> from 57, and <code>PGVectorStore</code> from 50—these are the functions with the widest blast radius. The module graph confirms this: <code>src/powermem/core/memory.py</code> has 18 imports and is depended on by 4 modules, with an instability score of 0.82. The <code>src/server/models/errors.py</code> module is a hub with 15 dependents and zero imports—stable but high-churn risk. The CLI modules (<code>main.py</code>, <code>commands/config.py</code>, <code>commands/interactive.py</code>) participate in a circular import cycle, which will complicate any refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/powermem
+cd powermem
+pip install -e .</code></pre>
+<p><strong>Configuration:</strong> Copy <code>.env.example</code> to <code>.env</code> and set LLM and embedding credentials. The default database is SQLite. Run <code>pmem config init</code> for interactive setup.</p>
+<p><strong>Running it:</strong></p>
+<pre data-lang="bash"><code>pmem memory add "User prefers dark mode" --user-id user123
+pmem memory search "preferences" --user-id user123
+powermem-server --host 0.0.0.0 --port 8000</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A customer-support agent that needs to remember user preferences across sessions:</p>
+<pre data-lang="python"><code>from powermem import Memory, auto_config
+
+memory = Memory(config=auto_config())
+memory.add("User prefers dark mode and dislikes phone calls", user_id="user123")
+results = memory.search("communication preferences", user_id="user123")</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 168 findings (40 high, 128 medium). The most significant:</p>
+<ul><li><strong>High - Deep nesting (33 occurrences)</strong> - <code>src/server/utils/metrics.py</code>, <code>src/powermem/core/memory.py</code> (indentation depth 8); fix with early returns/guard clauses.</li><li><strong>High - Oversized files (8)</strong> - <code>src/powermem/core/memory.py</code> at 1662 lines; split by responsibility.</li><li><strong>High - Duplicated code blocks</strong> - 1885 repeated 6-line blocks across 165 files, notably in <code>apps/vscode-extension/src/writers/</code> (claude.ts, cursor.ts, codex.ts); extract shared helpers.</li><li><strong>High - Import cycle members (6)</strong> - <code>src/powermem/cli/main.py</code> and its commands; break the cycle.</li><li><strong>Medium - Broad exception handling (10)</strong> - <code>src/powermem/utils/utils.py</code>, <code>config_loader.py</code>; catch specific exceptions.</li><li><strong>High - Unsafe CI/CD practices</strong> - Third-party GitHub Actions pinned to tags (<code>docker/setup-qemu-action@v3</code>), no lockfile for <code>pyproject.toml</code>, no least-privilege token permissions, no dependency scan.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>PowerMem is a functional, multi-faceted memory system with solid test coverage (47 test files) and good documentation (171 doc files). The core library is the strongest part; the plugins and benchmark are useful but contribute to the code duplication and complexity. The CI/CD security gaps and deep nesting in core files are the main concerns for anyone planning to extend it. Suitable for teams building AI agents that need persistent, queryable memory with minimal setup.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,52 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Large codebases present a context problem for AI-assisted development. Teams struggle to maintain consistent understanding across thousands of files, and AI agents typically lack structural knowledge of code relationships, class hierarchies, and function dependencies beyond superficial pattern matching.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Potpie constructs a knowledge graph from your codebase, indexing every file, class, and function with their relationships. The app/modules/intelligence/ directory contains the agent framework - over 100 agent-related files covering chat agents, system agents (codegenagent, debugagent, specgen/), and custom agents. The app/modules/codeprovider/ module handles repository integration with providers for GitHub, GitLab, and local repos. The graph structure enables agents to reason about code context rather than operating on isolated snippets. Database migrations in app/alembic/versions/ track schema evolution through 30+ migrations, supporting features like project ID support, search indexing, and citation tracking.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone with submodules required: git clone --recurse-submodules https://github.com/potpie-ai/potpie.git. Environment configuration lives in .env.template - copy to .env and set LLMPROVIDER, OPENAIAPIKEY, CHATMODEL, INFERENCEMODEL, and database/Redis values. Dependencies install via uv sync (.python-version file present).</p><p>Configuration: Required env vars are documented in .env.template. The app uses Flask (per tech stack analysis) with FastAPI based on the health check endpoint structure. AI provider selection is configured via LLMPROVIDER (openai | ollama | anthropic | openrouter).</p><p>Running it: Start all services with ./scripts/start.sh. This initiates Docker services, applies alembic migrations, starts the FastAPI app, and launches the Celery worker. Health check: curl -X GET &#39;http://localhost:8001/health&#39;. Parsing status: curl -X GET &#39;http://localhost:8001/api/v1/parsing-status/your-project-id&#39;.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team onboarding new engineers can use Potpie to generate context-aware code suggestions. For example, importing the knowledge graph allows an agent to answer &quot;Where is the user authentication logic handled?&quot; by traversing the graph rather than searching file contents. The app/modules/auth/ module provides API key and SSO provider infrastructure that agents can reference. Integration points exist through the API router (app/api/router.py) and event bus (app/modules/eventbus/) for real-time updates.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests: 14 test files present; CI configured via .github/workflows/test.yml
-License: Apache 2.0 present in repo root
-Secrets: .env.template included but no actual secrets in repo
-Dependency hygiene: .python-version file specifies Python 3.11+; uv used for dependency management
-Structural organization: Clear module separation under app/modules/ (auth, codeprovider, conversations, intelligence, integrations, billing)
-Missing: No obvious code health red flags; tests/CI/license/lockfile all present where expected</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Potpie delivers a functional knowledge graph implementation with sensible module organization and operational infrastructure (Docker, migrations, CI). It&#39;s well-suited for teams needing AI agents to reason across large codebases, particularly where spec-driven development or complex legacy systems require consistent code context. The learning curve involves configuring the knowledge graph and agent pipelines, but the existing agent framework under app/modules/intelligence/ provides substantial scaffolding. Teams already invested in AI tooling around code understanding will find the most value here.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Large monolithic codebases are hard to navigate, test, and evolve. Teams waste time locating definitions, understanding cross‑module effects, and keeping the knowledge graph of the system up‑to‑date. Without a disciplined architecture the blast radius of a change can be unpredictable, leading to fragile deployments.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>potpie</code> bundles a <strong>spec‑driven development platform</strong> that builds a knowledge graph of every file, class, and function. The core FastAPI service lives in <code>app/</code>, while the Rust‑based parser (<code>app/src/parsing/</code>) extracts structural metadata. Helper scripts (<code>scripts/</code>) and a seed CLI (<code>seed/</code>) bootstrap and manage projects.</p>
+<p>Key files:</p>
+<ul><li><code>app/main.py</code> – FastAPI entry point, creates the app, registers routes, and starts the lifespan event.</li><li><code>app/modules/utils/logger.py</code> – the most‑imported hub (164 inbound imports).</li><li><code>app/modules/intelligence/provider/provider_service.py</code> – high‑impact service (41 inbound imports, part of an import cycle).</li><li><code>app/src/parsing/src/lib.rs</code> – Rust parser compiled via <code>Cargo.toml</code>.</li></ul>
+<p>The Dockerfile and <code>docker-compose.yml</code> (under <code>deployment/</code>) ship the whole stack, including Postgres, Neo4j, and Redis, so the system can be run locally with a single command.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>app/main.py:274</code> in the <code>run</code> function. <code>run</code> traverses ~399 functions, ultimately invoking:</p>
+<ul><li><strong>Database</strong> – <code>get_project_repo_details_from_db</code> → <code>self.db.query(Project)</code> (see <code>app/core/database.py</code>).</li><li><strong>Network</strong> – <code>run_pytest</code> (via <code>subprocess.run</code>) and numerous outbound calls from <code>app/api/router.py</code> (e.g., <code>create_conversation</code>).</li><li><strong>File system / Crypto</strong> – <code>app/modules/repo_manager/repo_manager.py</code> validates repo names, sanitises errors, and generates secrets via <code>secrets.choice</code>.</li></ul>
+<p>The most‑used internal symbols are <code>query</code> (called from 159 places) and <code>getenv</code> (99 places). The hub logger (<code>app/modules/utils/logger.py</code>) has <em>zero</em> outgoing imports, making it a stable anchor; any change here ripples to 164 modules.</p>
+<p>Import cycles involve <code>provider_service.py</code>, <code>code_provider_service.py</code>, and <code>tunnel_utils.py</code>. These cycles increase cognitive load and risk of circular import errors; breaking them by extracting shared types or deferring imports would reduce instability (currently 0.56 for <code>tool_service</code>).</p>
+<p>The call graph shows that <code>UserLocalTunnelProvider</code> is referenced from 59 locations, highlighting it as another high‑impact component.</p>
+<p>External effects:</p>
+<ul><li>191 functions read/write the database.</li><li>141 functions perform outbound HTTP calls (e.g., to OpenAI, Neo4j).</li><li>22 functions generate cryptographic material.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone with submodules
+git clone --recurse-submodules https://github.com/moses-y/potpie
+cd potpie
+
+# Install UV (Python package manager) and sync deps
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+
+# Copy environment template and set required vars
+cp .env.template .env
+# Edit .env to provide:
+#   LLM_PROVIDER, OPENAI_API_KEY, POSTGRES_SERVER, NEO4J_URI, REDISHOST, etc.
+
+# Build and start all services (Docker, DB migrations, FastAPI, Celery)
+chmod +x scripts/start.sh
+./scripts/start.sh</code></pre>
+<p>The API is reachable at <code>http://localhost:8001</code>. Health can be verified with:</p>
+<pre data-lang="bash"><code>curl http://localhost:8001/health</code></pre>
+<p>To stop everything:</p>
+<pre data-lang="bash"><code>./scripts/stop.sh</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A development team can point <code>potpie</code> at a new microservice repository. The parser (<code>lib.rs</code>) generates a graph that powers an AI assistant capable of answering “Which function updates the <code>User</code> table?” or “What code paths are affected by changing <code>logger.py</code>?”. The assistant queries Neo4j (via <code>app/core/database.py</code>) and returns precise, context‑aware suggestions, reducing onboarding time.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHA (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Replace wildcard CORS origin with an explicit allow list (<code>app/main.py</code>).</li><li><strong>HIGH</strong> – CI does not run the test suite (<code>.github/workflows/*</code>).</li><li><strong>MEDIUM</strong> – No least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/test.yml</code>).</li><li><strong>MEDIUM</strong> – Dependabot / Renovate not configured (4 manifests present).</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI (<code>.github/workflows/*</code>).</li><li><strong>LOW</strong> – Workflow jobs lack <code>timeout-minutes</code> (<code>.github/workflows/test.yml</code>).</li></ul>
+<p>Static analysis also flagged:</p>
+<ul><li>Hub module (<code>logger.py</code>) – 164 dependents, keep stable.</li><li>Deep nesting (max depth 10) in several services – flatten for readability.</li><li>Oversized files (&gt;1 200 lines) – split into cohesive units.</li><li>Broad exception handling – replace bare <code>except</code> with specific catches.</li><li>Import cycles – break by extracting shared types or inverting dependencies.</li></ul>
+<p>Dependencies: 103 packages, with 14 behind the latest major version (e.g., <code>cryptography</code> ≥ 46.0.7 vs 50.0.0).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>potpie</code> provides a concrete pipeline for turning a codebase into an actionable knowledge graph, backed by a FastAPI service and a Rust parser. The architecture is functional but suffers from several high‑impact health issues (unlocked CORS, missing test execution, import cycles) that should be addressed before production use. Teams comfortable fixing these concerns will gain a powerful, query‑able view of their code.</p>
             </div>
 
             

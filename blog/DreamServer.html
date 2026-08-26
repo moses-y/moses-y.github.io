@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>April 22, 2026</span>
                     <span>4 min read</span>
-                    <span class="post-language">Python</span>
+                    <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>DreamServer</h1>
@@ -80,24 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Enterprises and power users that want to run LLM inference, voice agents, RAG pipelines, and image generation locally must stitch together dozens of independent projects, manage GPU drivers, and keep the stack synchronized. The result is a fragile, high‑maintenance environment that leaks data to cloud providers and incurs unpredictable subscription costs.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>DreamServer delivers a turnkey, self‑hosted AI stack. The repository ships a collection of Docker‑based services (LLM back‑ends, voice transcription, workflow engine, etc.) and a thin host‑agent that orchestrates them.</p><p>The service catalog lives under dream-server/extensions/services/ – each service includes a Dockerfile, compose.yaml, and a small Python entry point such as dream-server/extensions/services/ape/main.py.  
- Core configuration files (dream-server/.env.example, dream-server/config/.json|yaml) define GPU detection, port assignments, and credential generation.  
- The top‑level Makefile and a set of Docker‑Compose overrides (docker‑compose..yml) provide the build and launch pipelines, while dream-server/dream-cli offers a convenient command‑line wrapper for common actions (install, update, enable extensions).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Pull the installer (the README points to this script)
-curl -fsSL https://raw.githubusercontent.com/Light-Heart-Labs/DreamServer/v2.3.2/dream-server/get-dream-server.sh | bash
-Follow the script prompts – it creates a .env from .env.example
-and runs make targets that build the Docker images.
-make -C dream-server build          # uses Dockerfiles in extensions/services/
-Start the stack (default uses the base compose file)
-docker compose -f dream-server/docker-compose.base.yml up -d
-Verify that the host‑agent is running
-./dream-server/dream-cli status</p><p>Setup – The Makefile defines build, up, down, and clean targets that invoke the Dockerfiles under each extension. No Python virtual‑env is required because the services are containerised.  
- Configuration – Populate dream-server/.env (copy from .env.example). Key variables include HOSTPORT, GPUTYPE, and API keys for optional cloud fallback; the schema is described in .env.schema.json.  
-Running – The primary entry point for the “APE” service is dream-server/extensions/services/ape/main.py, but end‑users normally interact via the web UI on http://localhost:3000 or through dream-server/dream-cli commands such as dream enable &lt;extension&gt;.</p><p>If any of the expected scripts (e.g., get-dream-server.sh) are missing from the checkout, the README’s one‑liner still points to the remote location, so the installer can be fetched directly.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can spin up a private RAG pipeline on an on‑prem Nvidia RTX 4090 by enabling the ape service, loading a local Llama 3 model via dream enable ape, and then invoking the UI to upload documents. The workflow engine (n8n JSON configs under dream-server/config/n8n/) can trigger downstream image generation (dream-server/config/n8n/image-gen-webhook.json) without ever leaving the corporate network.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – dream-server/extensions/services/ape/requirements.txt is not version‑pinned with a requirements.lock or pipfile.lock, risking non‑reproducible builds.  
-Medium – Incomplete CI coverage – GitHub Actions include linting, type‑checking, and smoke tests, but there is no explicit workflow that builds and pushes the Docker images; a failure in a Dockerfile may go unnoticed until manual deployment.  
-Low – Documentation‑code mismatch – The README references dream-server/get-dream-server.sh and .env.example, both present, but several docs (e.g., docs/INSTALLER-ARCHITECTURE.md) reference files not in the tree (installer scripts). This could confuse new users.  
-Low – Test scope – Only 7 test files exist for a codebase of &gt;200 files; coverage likely low, especially for critical GPU‑initialisation paths.  
-Low – License – Apache 2.0 is declared, satisfying most compliance requirements.</p><p>Overall the repository follows a clear modular layout, uses explicit Docker composability, and ships CI linting. The main risk is the lack of deterministic Python dependency resolution and limited automated integration testing of the Docker images.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>DreamServer offers a practical, container‑first solution for organizations that need a self‑hosted AI stack with minimal manual wiring. It is well‑structured and documented enough for rapid onboarding, but teams should add their own lockfile strategy and expand integration tests before relying on it in production. Suitable for technically proficient teams that can manage Docker and GPU drivers; less ideal for solo developers seeking a fully‑tested, out‑of‑the‑box binary release.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>DreamServer Technical Briefing</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>Setting up local AI infrastructure requires stitching together a dozen projects, writing Docker configurations from scratch, and debugging CUDA driver compatibility. Most users abandon self-hosting and return to paid cloud APIs, surrendering data ownership and control over costs and uptime.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Dream Server is a fully local AI stack delivering LLM inference, chat UI, voice, agents, workflows, RAG, and image generation without cloud dependencies. The codebase comprises 1376 files across three projects: <code>dream-server/</code> (754 files), <code>resources/</code> (518 files), and <code>installer/</code> (48 files). Key architecture lives in <code>dream-server/extensions/services/</code> providing 13 pre-wired services (chat, agents, voice, workflows, search, RAG, image generation). Deployment configuration uses six docker-compose variants targeting different hardware: <code>docker-compose.base.yml</code>, <code>docker-compose.cpu.yml</code>, <code>docker-compose.intel.yml</code>, <code>docker-compose.arc.yml</code>, <code>docker-compose.amd.yml</code>, and <code>docker-compose.apple.yml</code>. GPU backends are configured via JSON files in <code>dream-server/config/backends/</code> (nvidia, amd, apple, cpu). The <code>.env.schema.json</code> file manages environment credentials, though it is tracked despite being excluded by <code>.gitignore</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <code>bootstrap</code> entry point in <code>dream-server/extensions/services/dashboard-api/main.py:1054</code>, which reaches 1 function and is called by no other repo module. The primary runtime flow originates from <code>proxy_chat_completions</code> at <code>dream-server/extensions/services/token-spy/main.py:815</code>, reaching 61 functions. Internal call graph analysis shows 2905 resolved call edges between 562 code files (Python 154, JavaScript 68, Shell 197, Rust 104, TypeScript 38, Ruby 1) with 260 internal modules and 171 import edges and zero circular dependencies.</p>
+<p>Traced paths from entry points to external effects:</p>
+<ul><li><code>proxy_chat_completions</code> → <code>_handle_openai_non_streaming</code> [network via client.request]</li><li><code>proxy_messages</code> → <code>_handle_non_streaming</code> [network via client.request]</li><li><code>api_session_status</code> → <code>_get_remote_session_status</code> [subprocess via subprocess.run]</li><li><code>api_summary</code> → <code>query_summary</code> [db via conn.execute]</li><li><code>_prepare_env_save</code> → <code>_render_env_from_values</code> [filesystem via <code>example_path.read_text(encoding="utf-8").splitlines</code>]</li></ul>
+<p>The most connected modules include <code>resources/frameworks/voice-agent/prompts/shared</code> (Ca 9, Ce 0, instability 0) and <code>installer/src/components/Button</code> (Ca 7, Ce 0, instability 0). Five files carry the widest blast radius: <code>dream-server/extensions/services/dashboard-api/main.py</code> (66 functions, called from 3 other files), <code>resources/products/token-spy/sidecar/db_backend.py</code> (52 functions, called from 15 files), <code>dream-server/extensions/services/dashboard-api/tests/test_extensions.py</code> (128 functions, called from 2 files), <code>dream-server/bin/dream-host-agent.py</code> (57 functions, called from 6 files), and <code>resources/products/token-spy/sidecar/api.py</code> (59 functions, called from 3 files).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong> Install via the provided script:</p>
+<pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/moses-y/DreamServer/v2.3.2/dream-server/get-dream-server.sh | bash</code></pre>
+<p>Alternatively, run <code>./install.sh --cloud</code> for cloud-backed mode using OpenAI/Anthropic/Together APIs.</p>
+<p><strong>Configuration:</strong> Required environment variables are defined in <code>dream-server/.env.example</code>. The <code>dream-server/.env.schema.json</code> file contains credentials but should not be committed. GPU selection is controlled via backend config files in <code>dream-server/config/backends/</code> and hardware class definitions in <code>dream-server/config/hardware-classes.json</code>.</p>
+<p><strong>Running it:</strong> After installation, the dashboard UI starts at <code>http://localhost:3000</code>. The bootstrap mode instantly provides a working model while full models download in the background.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A user runs <code>dream-server</code> on a Linux machine with an NVIDIA GPU. The bootstrap sequence in <code>dream-server/extensions/services/dashboard-api/main.py:1054</code> detects the GPU, selects an appropriate model, generates credentials stored in <code>.env.schema.json</code>, and launches the full stack via docker-compose. The chat UI becomes available at localhost:3000 within two minutes. Voice interactions flow through <code>resources/frameworks/voice-agent/core/hvac_agent.py</code>, which defines <code>add_transcript_line</code>, <code>switch_department</code>, and <code>get_caller_context</code> for department routing. RAG workflows query the vector store configured in <code>resources/products/token-spy/sidecar/api.py</code>. Image generation services integrate with ComfyUI via extension directories.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Code health analysis of 234 findings (40 high, 194 medium, 0 low) identified 10 items requiring attention:</p>
+<ul><li><strong>[HIGH]</strong> Untrack the file your own <code>.gitignore</code> says to ignore - <code>dream-server/.env.schema.json</code> is tracked although excluded</li><li><strong>[HIGH]</strong> Pin third-party GitHub Actions to commit SHA - <code>docker/login-action@v4</code>, <code>docker/build-push-action@v7</code> use mutable tags</li><li><strong>[HIGH]</strong> Commit a lockfile beside the manifest - <code>installer/package.json</code> has manifest with no lockfile in scope</li><li><strong>[HIGH]</strong> Remove the committed <code>.env</code> and rotate what it holds - <code>dream-server/.env.schema.json</code> contains live credentials</li><li><strong>[MEDIUM]</strong> Declare least-privilege permissions for GITHUB_TOKEN - <code>.github/workflows/lint-powershell.yml</code> declares no permissions</li><li><strong>[MEDIUM]</strong> Pin the container base image by digest - <code>dream-server/extensions/services/ape/Dockerfile</code> uses <code>python:3.12-slim</code> without digest</li><li><strong>[MEDIUM]</strong> Give the outbound request a timeout - <code>dream-server/extensions/services/ape/Dockerfile</code> has 1 outbound call with no timeout</li><li><strong>[MEDIUM]</strong> Set persist-credentials: false on checkout - <code>.github/workflows/autonomous-code-scanner.yml</code> keeps token for all later steps</li><li><strong>[LOW]</strong> Set timeout-minutes on the workflow jobs - <code>.github/workflows/build-dreamforge.yml</code> declares no job timeout</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Dream Server delivers a compelling one-command local AI stack with 13 pre-wired services, making self-hosting accessible without CUDA expertise. The codebase shows solid structure with 2905 resolved call edges and no circular dependencies, but critical hygiene issues exist: a tracked <code>.env.schema.json</code> with live credentials, mutable GitHub Action tags, and missing lockfiles create avoidable risk. Teams needing sovereign AI control with moderate engineering effort will find the most value here; organizations requiring enterprise-grade supply-chain guarantees should address the identified hygiene findings before production deployment.</p>
             </div>
 
             
@@ -107,18 +113,18 @@ Low – License – Apache 2.0 is declared, satisfying most compliance require
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">7<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,376<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>75</b></li><li><span>YAML</span><i style="width:64%"></i><b>48</b></li><li><span>JSON</span><i style="width:53%"></i><b>40</b></li><li><span>Python</span><i style="width:11%"></i><b>8</b></li><li><span>Shell</span><i style="width:8%"></i><b>6</b></li><li><span>TOML</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Markdown</span><i style="width:100%"></i><b>335</b></li><li><span>YAML</span><i style="width:61%"></i><b>203</b></li><li><span>Shell</span><i style="width:59%"></i><b>199</b></li><li><span>Python</span><i style="width:46%"></i><b>155</b></li><li><span>Rust</span><i style="width:31%"></i><b>104</b></li><li><span>JSON</span><i style="width:28%"></i><b>93</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span><span>Kubernetes</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span><span>Docker</span><span>Kubernetes</span><span>Vector store</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -146,12 +152,6 @@ Low – License – Apache 2.0 is declared, satisfying most compliance require
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>dream-server/extensions/services/ape/requirements.txt</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1218436779">Open in Code Brain &rarr;</a>

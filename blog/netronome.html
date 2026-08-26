@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 22, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Home and small-office network monitoring is fragmented. Speed tests tell you current throughput but not packet loss trends. Monitoring tools like Prometheus require heavy infrastructure. Distributed agents typically need complex setup. Netronome packages these capabilities into a single binary with a web UI, targeting users who want network visibility without a monitoring stack.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Netronome is a Go backend with a React frontend, compiled into a single binary. The internal/ directory contains the core: internal/speedtest/ handles Speedtest.net, iperf3, and LibreSpeed tests; internal/speedtest/mtrunix.go and mtrwindows.go handle packet loss monitoring; internal/agent/ provides distributed server monitoring; internal/notifications/ntfy.go handles alerting. The web/ directory holds the React dashboard with API clients in web/src/api/.</p><p>The database layer supports both SQLite and PostgreSQL, with 21 migrations for each in internal/database/migrations/. The scheduler in internal/scheduler/scheduler.go handles automated test runs. Tailscale integration lives in internal/tailscale/ and internal/monitor/tailscalediscovery.go. Auth supports local accounts and OIDC via internal/auth/oidc.go.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The README documents two install paths: download a prebuilt binary, or use the one-liner that fetches the latest release and extracts it to /usr/local/bin. Docker users have distrib/docker/docker-compose.yml and a postgres variant.</p><p>wget $(curl -s https://api.github.com/repos/autobrr/netronome/releases/latest | grep download | grep linuxx8664 | cut -d\&quot; -f4)
-tar -C /usr/local/bin -xzf netronome*.tar.gz
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Tracking network health across multiple sites means juggling speed tests, packet loss, and server metrics from different tools that don't share data. Netronome consolidates these into one Go binary with a web UI, targeting homelab and multi-site infrastructure operators who want a single pane of glass without heavy setup.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Netronome is a network monitoring platform with a Go backend (<code>internal/</code>) and React frontend (<code>web/</code>). Core features: speed testing via multiple providers, continuous packet loss monitoring with MTR, distributed agents for remote server metrics, and notification alerts. The <code>cmd/netronome/main.go</code> entry point exposes CLI commands for serving, agent mode, and config generation.</p>
+<p>The frontend (<code>web/src/components/</code>) is organized by feature: speedtest, packetloss, monitor, settings, and notifications. The backend splits cleanly into <code>internal/agent</code> (remote monitoring), <code>internal/speedtest</code> (test runners), <code>internal/database</code> (persistence), and <code>internal/notifications</code> (alerting). Configuration lives in <code>config/config.toml</code> with environment variable overrides handled by <code>internal/config/config.go</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>cmd/netronome/main.go:139</code>. The <code>runServer</code> path (line 202) reaches 143 functions—the widest reach of any entry point. From there, <code>internal/config/config.go</code>'s <code>Load</code> function calls <code>New</code>, which immediately hits the filesystem via <code>sql.Open</code> to open the database. That's two hops from entry to a side effect.</p>
+<p>The call graph shows clear hubs. <code>RunTestWithBothDatabases</code> is called from 65 places—changing its signature breaks a third of the codebase. <code>Close</code> (54 callers) and <code>New</code> (34 callers) carry similar blast radius. The <code>getEnv</code> function is called 13 times from config loading paths, making it the de facto configuration accessor.</p>
+<p>File responsibilities are well-separated: <code>internal/database/database.go</code> owns all SQL operations, <code>internal/agent/agent.go</code> handles remote monitoring with file I/O, <code>internal/monitor/client.go</code> manages broadcast and notification logic, and <code>internal/notifications/notifications.go</code> handles alert routing. The <code>pkg/migrator/migrator.go</code> manages schema migrations with both embedded and file-based sources.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/netronome
+cd netronome
+# Generate default config
 netronome generate-config
-netronome serve</p><p>Configuration lives in config/config.toml (generated via generate-config). The server listens on port 7575 by default. First-run setup creates an admin account through the web UI. The Makefile provides build targets for source builds. The repo includes a Dockerfile for container builds and scripts/install-agent.sh for agent deployment.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A homelab operator with multiple sites deploys Netronome at each location. The main instance runs in Docker with PostgreSQL for history retention; agents run on remote servers via scripts/install-agent.sh. The scheduler runs an iperf3 test every 6 hours against a local server, continuous MTR packet loss monitoring against the gateway, and ntfy notifications when latency exceeds a threshold. The Tailscale integration discovers other nodes on the tailnet automatically, eliminating manual agent registration.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Dual database migration drift risk - SQLite and PostgreSQL migrations are maintained separately (21 files each). Schema divergence is possible over time; the internal/database/migrationspostgrestest.go and migrationsintegrationtest.go provide some coverage but not parity guarantees.
-Med - Windows-specific code is stubbed - internal/speedtest/mtrwindows.go exists but internal/agent/smart_stub.go suggests SMART disk monitoring may be stubbed on some platforms. Verify platform coverage before deploying agents on mixed OS fleets.
-Low - Frontend test coverage is thin - 42 test files exist but are concentrated in internal/ (Go). The web/ directory has no test files listed, only linting via eslint.config.js and knip.json.
-Low - CI is release-focused - .github/workflows/release.yml handles releases; .github/workflows/claude.yml appears to be an AI-assist workflow. No explicit test workflow is visible, though the Makefile likely includes test targets.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Netronome is a well-structured, genuinely useful tool for network monitoring. The single-binary deployment model and low memory footprint make it practical for homelabs and small offices. The dual-database approach adds maintenance burden, and Windows agent support may be incomplete. Best for users who want network monitoring with minimal infrastructure overhead and are comfortable running a self-hosted service.</p>
+# Start the server
+netronome serve</code></pre>
+<p>Open <code>http://localhost:7575</code>, register an account, and configure providers. Docker users can use <code>distrib/docker/docker-compose.yml</code> for a standard setup or the <code>.postgres.yml</code> variant for PostgreSQL instead of the default SQLite. The <code>Makefile</code> provides build targets for source compilation.</p>
+<p><strong>Configuration:</strong> Edit <code>config/config.toml</code> for database, speed test providers, notification channels (ntfy, Discord, etc.), and agent settings. Environment variables override config values—the <code>loadFromEnv</code> → <code>getEnv</code> pattern in <code>internal/config/config.go</code> handles this.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A homelab operator with three sites deploys Netronome on a central server, runs <code>netronome agent</code> on each remote machine. The central server schedules speed tests every 6 hours, agents stream CPU/disk metrics back, and packet loss monitors run MTR continuously. When latency exceeds thresholds, <code>internal/notifications/notifications.go</code> fires a Discord webhook. Historical data accumulates in SQLite or PostgreSQL, viewable through the React dashboard's time-series charts.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 55 findings (11 high, 44 medium). The most concerning:</p>
+<ul><li><strong>Critical - Secrets in fork-triggerable workflow</strong> - <code>.github/workflows/claude.yml</code> has <code>ANTHROPIC_API_KEY</code> exposed to contributor-controlled PRs. Move secret-using steps to <code>workflow_run</code> jobs.</li><li><strong>High - Unpinned GitHub Actions</strong> - <code>.github/workflows</code> uses <code>@beta</code> and <code>@vN</code> tags for <code>anthropics/claude-code-action</code>, <code>goreleaser</code>, and Docker actions. Pin to commit SHAs.</li><li><strong>High - Deep nesting</strong> - 34 instances, worst in <code>web/src/components/monitor/MonitorHardwareStats.tsx</code> (depth 10). Use guard clauses.</li><li><strong>High - Duplicated code</strong> - 234 repeated 6-line blocks across 86 files, concentrated in <code>cmd/</code> and <code>internal/config/</code>. Extract shared helpers.</li><li><strong>Medium - Oversized files</strong> - <code>NotificationSettings.tsx</code> and <code>ScheduleManager.tsx</code> exceed 670 lines each.</li></ul>
+<p>The repo has tests (81 files), CI, Dockerfile, and license. No secrets committed. The <code>claude.yml</code> workflow is the immediate security concern.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A practical, well-structured network monitoring tool that delivers on its promise of single-binary deployment. The Go/React split is clean, and the call graph shows sensible separation of concerns. The workflow secret exposure is a real risk that needs fixing before accepting PRs from strangers. Worth using for homelab or small multi-site setups where lightweight deployment matters more than enterprise features.</p>
             </div>
 
             
@@ -104,11 +124,11 @@ Low - CI is release-focused - .github/workflows/release.yml handles releases; .g
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">326<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>94</b></li><li><span>SQL</span><i style="width:45%"></i><b>42</b></li><li><span>YAML</span><i style="width:11%"></i><b>10</b></li><li><span>Markdown</span><i style="width:7%"></i><b>7</b></li><li><span>TypeScript</span><i style="width:7%"></i><b>7</b></li><li><span>JSON</span><i style="width:3%"></i><b>3</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>94</b></li><li><span>TSX</span><i style="width:97%"></i><b>91</b></li><li><span>SQL</span><i style="width:45%"></i><b>42</b></li><li><span>TypeScript</span><i style="width:39%"></i><b>37</b></li><li><span>YAML</span><i style="width:11%"></i><b>10</b></li><li><span>Markdown</span><i style="width:7%"></i><b>7</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 
