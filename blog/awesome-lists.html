@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 19, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,20 +79,47 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Security operations teams need current, machine-readable lists of suspicious infrastructure—ASNs, IP ranges, domains, TLDs, proxy lists, and VPN endpoints—to feed into SIEM detections, firewall rules, and threat hunting queries. Maintaining these lists manually is error-prone and quickly becomes stale. This repository aggregates dozens of such lists into one place, with automated updates.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>awesome-lists is a large collection of security indicator lists organized under Lists/. The bulk of the content is data files—over 16,000 JSON and CSV files covering ASN IP ranges, dynamic DNS providers, proxy lists, VPN IPs, and YARA rules. The Lists/ folder also contains the scripts that generate and update these lists, most notably the DYNDNS scraper suite under Lists/DYNDNS/dyn-dns-list-mthchtcorrected/scripts/ with its main.js entry point.</p><p>The operational core is the CI/CD pipeline. There are 58 GitHub Actions workflows in .github/workflows/ that refresh lists on schedules—for example, BadTLDs.yml, Proxy list main creation.yml, updatespamhausbadasrange.yml, and vpnnordvpn.yml. Many of these call Python scripts like Lists/ASNs/resolvespamhausranges.py and Lists/VPN/NordVPN/getnordvpnipslist.py.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repository. Python scripts have no declared dependency file (requirements.txt is not present), so you&#39;ll need to install dependencies manually based on what each script imports. The JavaScript scraper has a package.json in Lists/DYNDNS/dyn-dns-list-mthchtcorrected/scripts/.</p><p>git clone https://github.com/moses-y/awesome-lists
+            <div class="post-content" id="post-content">
+                
+                <p><strong>Technical Briefing – awesome‑lists</strong> <em>Repository:</em> <code>https://github.com/moses-y/awesome-lists.git</code></p>
+<hr>
+<h4 id="the-problem">The Problem</h4>
+<p>SOC/DFIR teams need a single source of truth for constantly changing threat‑intel artefacts (malicious IP/ASN ranges, YARA rules, compromised domains, etc.). Maintaining these lists manually is error‑prone and creates gaps in detection coverage.</p>
+<h4 id="what-this-does">What This Does</h4>
+<p>The repo ships &gt;34 k data files (CSV, JSON, YARA) under <code>Lists/</code>. Small helper scripts in <code>Lists/DYNDNS/.../scripts</code> and a handful of Python utilities transform the raw feeds into consumable CSV/JSON outputs. For example, <code>Lists/DYNDNS/dyn‑dns‑list‑mthcht_corrected/scripts/main.js</code> orchestrates the download, parsing, and CSV export of dynamic‑DNS blocklists. Python entry points such as <code>Lists/ASNs/resolve_spamhaus_ranges.py</code> and <code>Lists/Domains/C2IntelFeed/fetch_feeds.py</code> fetch remote feeds, normalise fields, and write the results to the repository‑wide data folders.</p>
+<h4 id="how-it-is-wired">How It Is Wired</h4>
+<div class="table-scroll"><table><thead><tr><th>Entry point</th><th>File &amp; line</th><th>Core flow (shortest resolved path)</th></tr></thead><tbody><tr><td><strong>Dynamic‑DNS list build</strong></td><td><code>Lists/DYNDNS/dyn‑dns‑list‑mthcht_corrected/scripts/main.js:94</code></td><td><code>main → log (x18) → write_csv (x10) → fetch_json (x3)</code> – writes a CSV under <code>Lists/DYNDNS/.../output</code>.</td></tr><tr><td><strong>Spamhaus ASN range resolver</strong></td><td><code>Lists/ASNs/resolve_spamhaus_ranges.py:94</code></td><td><code>main → read_csv → detect_asn_column / detect_ip_column → extract_asn → build_asn_file_map → write_csv</code> – reads CSVs, builds a map, writes a new CSV.</td></tr><tr><td><strong>C2 Intel feed fetcher</strong></td><td><code>Lists/Domains/C2IntelFeed/fetch_feeds.py</code></td><td><code>main → http_download → safe_output_path → write_csv</code> – performs an outbound HTTP GET, writes the payload to <code>Lists/Domains/C2IntelFeed/</code>.</td></tr></tbody></table></div>
+<p><strong>Key shared modules</strong></p>
+<ul><li><code>Lists/DYNDNS/dyn‑dns‑list‑mthcht_corrected/scripts/scraperUtils.js</code> – imported by 14 other scraper modules; it contains URL construction and CSV helper functions. Its high fan‑in makes it a stability hotspot.</li><li><code>log</code> – invoked from 8 locations, providing timestamped console output.</li></ul>
+<p><strong>External interactions</strong></p>
+<ul><li>Filesystem writes: 19 functions create or modify CSV/JSON files (e.g., <code>write_csv</code>, <code>atomic_write_text</code>).</li><li>Network calls: 24 functions use <code>fetch</code>/<code>http_download</code> to pull remote lists (e.g., <code>fetch_url</code>, <code>http_get_text</code>).</li><li>External commands: 4 functions invoke shell tools (e.g., <code>git</code> in <code>Lists/TOR/build_tor_history.py</code>).</li><li>One cryptographic helper (<code>download_file</code> in <code>Lists/CERTS/download_certcentral_suspicious_signers_list.py</code>) generates a SHA‑256 hash for integrity checks.</li></ul>
+<p>The module graph contains <strong>no cycles</strong> and <strong>15 import edges</strong> across 79 code files, indicating a shallow dependency tree. The most‑connected hub (<code>scraperUtils.js</code>) is pure‑utility code; changes here propagate to every DYNDNS scraper.</p>
+<h4 id="how-to-use-it">How To Use It</h4>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/awesome-lists.git
 cd awesome-lists
-For the JS scraper:
-cd Lists/DYNDNS/dyn-dns-list-mthchtcorrected/scripts
-npm install</p><p>Configuration: The scraper uses dotenv (declared in package.json), so environment variables go in a .env file in that scripts directory. The exact variable names are not documented in the README.</p><p>Running it: There is no single top-level command. Each workflow is self-contained. To reproduce a list update manually, invoke the relevant script—for example, python Lists/ASNs/resolvespamhausranges.py for the Spamhaus ASN ranges. The README does not document per-script usage, so you&#39;ll need to read each script to understand its arguments and output paths.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A SOC analyst could use this repository as a feed source. For example, a scheduled job could pull Lists/ASNs/ASNIPRanges/ CSVs into a firewall or SIEM lookup table to block traffic from known-bad ASNs. The GitHub Actions workflows demonstrate the intended pattern: fetch from upstream sources, transform into CSV, and commit the result back to the repo. You could fork this and modify the workflows to push the generated lists to your own SIEM or threat intel platform instead.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Static analysis of the codebase found 22 issues (1 high, 21 medium) across 7 categories. Key findings:
-High - Duplicated code blocks: 62 repeated 6-line blocks across 18 files, including Lists/DYNDNS/createdyndnslist.py and Lists/DYNDNS/dyn-dns-list-mthchtcorrected/scripts/scrapers/dnsexit.js. Shared logic should be extracted.
-Medium - Hub module: scraperUtils.js has 14 dependents; changes there have a wide blast radius.
-Medium - Oversized file: Lists/Others/splunk/splunkvulncheck.py is 842 lines.
-Medium - Deep nesting: 12 files exceed indentation depth 6, including Lists/Domains/DNSDB/TOP1MDNSDB.py.
-Medium - Broad exception handling: 3 files catch exceptions too widely.
-Medium - Resource safety: Lists/RangesIPAddressCompanyList/IPINFO/getiprangelist.py opens files without a context manager.
-Medium - High branching density: 3 files, notably Lists/ASNs/resolvespamhaus_ranges.py.</p><p>The repo has tests (431 files), CI, and a license. Dependency hygiene is a concern: puppeteer is 3 major versions behind, dotenv and node-fetch are 1 major behind. The analysis flagged secret-shaped paths in YARA rule filenames (e.g., HFLSASecrets.yara); these appear to be rule names, not committed credentials.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a useful data repository for SOC teams that want pre-assembled indicator lists without building their own collection pipeline. The code quality is mixed—the Python and JavaScript are functional but not polished, and the lack of a top-level dependency manifest makes setup manual. It&#39;s best treated as a data source to consume rather than a codebase to extend.</p>
+
+# Install Node‑based DYNDNS tooling
+cd Lists/DYNDNS/dyn-dns-list-mthcht_corrected/scripts
+npm ci                     # uses package-lock.json
+node main.js               # runs the full list build
+
+# Run a Python helper (example: Spamhaus ASN range builder)
+cd ../../../../ASNs
+python3 resolve_spamhaus_ranges.py</code></pre>
+<p><em>No additional configuration files are referenced in the code; the scripts read remote URLs directly from hard‑coded constants.</em> If you need to adjust a source URL or output path, edit the corresponding constant in the target script (e.g., <code>scrapers/duiadns.js</code>).</p>
+<h4 id="real-world-use">Real‑World Use</h4>
+<p>A SOC can schedule the two entry points above via cron or GitHub Actions. The generated CSVs are then dropped into a SIEM ingestion folder, enabling automated enrichment of alerts with the latest malicious IP/ASN data.</p>
+<pre data-lang="yaml"><code># Example GitHub Action snippet (already present in the repo)
+- name: Build DYNDNS lists
+  run: |
+    cd Lists/DYNDNS/dyn-dns-list-mthcht_corrected/scripts
+    npm ci &amp;&amp; node main.js</code></pre>
+<h4 id="code-health-issues">Code Health &amp; Issues</h4>
+<ul><li><strong>High – Add a test suite</strong> – 79 source files have no associated tests.</li><li><strong>High – Remove committed database dump</strong> – <code>Lists/AV signatures/ClamAV/daily.mdb</code> leaks data.</li><li><strong>High – Push to default branch</strong> – Workflow <code>.github/workflows/Mullvad VPN IPs and domains update.yml</code> pushes directly without PR review.</li><li><strong>Medium – GITHUB_TOKEN permissions</strong> – No explicit <code>permissions:</code> block in the same workflow.</li><li><strong>Medium – Dependabot missing</strong> – No automated dependency updates for npm or GitHub Actions.</li><li><strong>Medium – Dependency‑vulnerability gate</strong> – No scan step in CI.</li><li><strong>Medium – Pre‑commit secret scan</strong> – Secret‑shaped YARA files are tracked without a guard.</li><li><strong>Medium – Large binaries</strong> – Files &gt;5 MiB (e.g., <code>Lists/ASNs/get_ip_range_debug.log</code> 99.9 MiB) should be moved to Git LFS or external storage.</li><li><strong>Medium – Checkout persist‑credentials</strong> – Workflow keeps the token in <code>.git/config</code>.</li><li><strong>Low – Job timeout</strong> – No <code>timeout-minutes</code> set on the Mullvad workflow.</li></ul>
+<p>Additional observations from the static audit: duplicated 6‑line code blocks across 18 files, file handles opened without <code>with</code> statements, broad <code>except:</code> clauses, deep nesting (max indentation depth 6), and oversized modules (e.g., <code>splunk_vuln_check.py</code> at 842 lines). These increase maintenance risk.</p>
+<h4 id="the-bottom-line">The Bottom Line</h4>
+<p><code>awesome-lists</code> provides a massive, ready‑to‑use collection of threat‑intel artefacts with straightforward scripts to refresh them. The data is valuable, but the codebase suffers from low test coverage, several hygiene lapses (large binaries, committed secrets), and a few maintainability hotspots (the <code>scraperUtils.js</code> hub and duplicated logic). Teams that need raw list data can adopt it quickly, but should first add tests, clean up large assets, and tighten CI security before relying on it in production pipelines.</p>
             </div>
 
             
