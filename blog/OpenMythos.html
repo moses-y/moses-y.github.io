@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 20, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,73 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Training models that can dynamically allocate compute across tokens and reasoning depth is an open research problem. Standard transformers use a fixed number of layers per forward pass, which wastes compute on easy tokens and under-serves hard ones. Recurrent-depth transformers address this by looping a block of layers a variable number of times, but no open-source implementation existed to experiment with the architecture. OpenMythos fills that gap with a research-grade, configurable reference implementation.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>OpenMythos implements a Recurrent-Depth Transformer (RDT) with three stages: Prelude transformer blocks, a looped Recurrent Block, and a Coda. The core logic lives in openmythos/main.py, with modular components in openmythos/moda.py (attention, MoE, and recurrent injection) and openmythos/tokenizer.py. Attention is switchable between Multi-head Latent Attention (MLA) and Grouped Query Attention (GQA), configurable via MythosConfig.</p><p>The feed-forward network uses a sparse Mixture-of-Experts with routed and shared experts, controlled through config fields like nexperts, nsharedexperts, and nexpertspertok. Pre-configured model scales from 1B to 1T parameters are defined in openmythos/variants.py. The recurrent.injection.getA() method exposes the spectral radius of the recurrent weight matrix, which must stay below 1 for stability.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pip, as documented in the README:</p><p>pip install open-mythos</p><p>Configuration: All configuration is done through MythosConfig in openmythos/main.py. The README shows a full config with attention-type-specific parameters. No environment variables or external config files are required.</p><p>Running it: Instantiate the model and pass token IDs directly. The README example in example.py shows the full workflow: create a config, build OpenMythos(cfg), run a forward pass with model(ids, nloops=4), and generate with model.generate(ids, maxnewtokens=8, nloops=8).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A research team exploring compute-adaptive inference could use this to test whether looping a recurrent block improves accuracy on hard tokens without retraining. The config-driven design makes ablation studies straightforward: compare MLA vs. GQA, vary maxloopiters from 1 to 8, and measure the parameter/compute trade-off. The training/3bfinewebedu.py script provides a starting point for fine-tuning a 3B variant on educational web data.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD pipeline - no .github/ or CI config exists, so there is no automated gate for tests or linting. The 4 test files in tests/ will only run if someone invokes them manually.
-Low - No dependency lockfile - pyproject.toml and requirements.txt declare dependencies but no lockfile pins exact versions, so builds are not reproducible.
-Low - Sparse test coverage - testmain.py, tests/testropedebug.py, and tests/testtokenizer.py exist, but the README&#39;s spectral radius check is not covered in the test suite. The testrope_debug.py filename suggests a debug-oriented test rather than a systematic suite.
-Low - Single maintainer risk - this is a fork of kyegomez/OpenMythos (14.8k stars), but this repo has 0 stars and no contributor activity visible. It is a snapshot, not a maintained project.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>OpenMythos is a solid, well-structured reference implementation of an interesting architecture, with clean modularity and sensible configuration. It is suitable for researchers who want to experiment with recurrent-depth transformers and have the patience to run tests manually. Production teams should wait for CI and lockfile hygiene before building on it.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>OpenMythos is a theoretical reconstruction of the Claude Mythos architecture with a Recurrent-Depth Transformer (RDT) design featuring Prelude, looped Recurrent Block, and Coda stages. The codebase has no CI/CD pipeline, no dependency lockfile, and lacks update bots — meaning changes merge without automated verification, and dependency security gaps persist until manual audit. The measured code health audit found two HIGH-severity issues (missing lockfile, no CI) and one MEDIUM issue (no Dependabot/Renovate configuration) that directly affect production readiness and maintenance velocity.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OpenMythos implements a Recurrent-Depth Transformer (RDT) architecture with three stages: Prelude (transformer blocks), a looped Recurrent Block (up to <code>max_loop_iters</code>), and a final Coda. Attention is switchable between MLA and GQA, and the feed-forward uses a sparse MoE with routed and shared experts. The repository has 20 files across <code>open_mythos/</code> (5 code files), <code>training/</code> (2 files), <code>tests/</code> (3 files), <code>docs/</code> (2 files), and root-level configs.</p>
+<p>Key entry points and their reach:</p>
+<ul><li><strong>main</strong> (<code>open_mythos/main.py:311</code>) reaches 9 function(s), called from 1 place</li><li><strong>generate</strong> (<code>open_mythos/main.py:1000</code>) reaches 10 function(s), called from 2 place(s)</li><li><strong>forward</strong> (<code>open_mythos/main.py:101</code>) reaches 9 function(s), called from 1 place</li></ul>
+<p>The internal call graph has 138 resolved call edges. <code>precompute_rope_freqs</code> is called from 24 places (highest connectivity), <code>apply_rope</code> from 14, and <code>MythosConfig</code> from 9. <code>open_mythos/main.py</code> (29 functions, 12 classes) and <code>open_mythos/moda.py</code> (26 functions, 10 classes) are the most widely routing modules — changes here ripple widely.</p>
+<p>Code health findings (static analysis, 6 total: 2 high, 4 medium):</p>
+<ul><li><strong>[HIGH/cognitive_load]</strong> Deep nesting x3 in <code>open_mythos/main.py</code>, <code>training/3b_fine_web_edu.py</code>, <code>open_mythos/moda.py</code> — max indentation depth 8 makes control flow hard to follow</li><li><strong>[MEDIUM/clarity]</strong> Duplicated code blocks in <code>open_mythos/__init__.py</code> and <code>test_main.py</code> — 5 repeated 6-line blocks</li><li><strong>[MEDIUM/oversized]</strong> <code>open_mythos/main.py</code> (794 lines) and <code>open_mythos/moda.py</code> are hard to hold in one head; a change ripples widely</li></ul>
+<p>WHAT THIS CODE TOUCHES OUTSIDE ITSELF: 3 function(s) call a model for inference; 2 function(s) read or write files. The traced path from entry: <code>main -&gt; save_checkpoint</code> [filesystem via <code>os.makedirs</code>]. This is 1 hop from execution to filesystem effect.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>open_mythos/main.py</code>. The call graph shows <code>precompute_rope_freqs</code> (24 call sites) and <code>apply_rope</code> (14 call sites) as the most widely connected functions — these are the rotary position embedding computation and application that feed into every TransformerBlock forward pass. <code>MythosConfig</code> (9 call sites) is the configuration dataclass that gets passed through <code>__init__</code> and forward throughout the model. <code>open_mythos/moda.py</code> defines the Recurrent Block's <code>_build_cache</code> and forward, which contains the looped recurrence mechanism. <code>training/3b_fine_web_edu.py</code> defines <code>save_checkpoint</code> which writes to filesystem via <code>os.makedirs</code> — the only path from execution outside the process. <code>open_mythos/variants.py</code> (7 functions) provides pre-configured scales from 1B to 100B parameters via <code>mythos_1b()</code>, <code>mythos_3b()</code>, etc.</p>
+<p>The module connectivity shows <code>open_mythos/__init__</code> receives imports from 2 places and exports to 3 — it's a thin but non-trivial integration layer. <code>test_main.py</code> (80 functions, 16 classes) is the test entry point that calls into models for inference, defining <code>gqa_cfg</code>, <code>mla_cfg</code>, and test utilities.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup:</strong> Install via pip from the cloned repository:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/OpenMythos
+cd OpenMythos
+pip install -e ".[dev]"</code></pre>
+<p>Or using uv (inferred from pyproject.toml):</p>
+<pre data-lang="bash"><code>uv pip install -e .</code></pre>
+<p><strong>Configuration:</strong> No environment variables or external config files are required — all parameters are passed as a dict to <code>MythosConfig</code> or the variant factory functions. The <code>attn_type</code> field (<code>"mla"</code> or <code>"gqa"</code>) routes to different attention implementations. For MLA: <code>n_kv_heads=1</code> with <code>kv_lora_rank</code> and <code>q_lora_rank</code>. For GQA: <code>n_kv_heads=2</code>.</p>
+<p><strong>Running it:</strong> Instantiate and run from Python:</p>
+<pre data-lang="python"><code>import torch
+from open_mythos.main import OpenMythos, MythosConfig
+
+base = {
+    "vocab_size": 1000,
+    "dim": 256,
+    "n_heads": 8,
+    "max_seq_len": 128,
+    "max_loop_iters": 4,
+    "prelude_layers": 1,
+    "coda_layers": 1,
+    "n_experts": 8,
+    "n_shared_experts": 1,
+    "n_experts_per_tok": 2,
+    "expert_dim": 64,
+    "lora_rank": 8,
+    "attn_type": "mla",
+}
+
+if attn_type == "gqa":
+    cfg = MythosConfig(**base, n_kv_heads=2)
+else:
+    cfg = MythosConfig(
+        **base,
+        n_kv_heads=8,
+        kv_lora_rank=32,
+        q_lora_rank=64,
+        qk_rope_head_dim=16,
+        qk_nope_head_dim=16,
+        v_head_dim=16,
+    )
+
+model = OpenMythos(cfg)
+ids = torch.randint(0, cfg.vocab_size, (2, 16))
+logits = model(ids, n_loops=4)
+out = model.generate(ids, max_new_tokens=8, n_loops=8)</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>This architecture is suited for research on compute-adaptive, depth-variable reasoning. The recurrent loop (<code>max_loop_iters</code>) allows dynamic reasoning depth — each token can trigger multiple recurrence steps before the Coda produces an output. The MoE sparsity with routed+shared experts enables scaling parameter count without proportional compute cost. The MLA/GQA attention switchability lets you trade off KV cache efficiency against attention granularity. A practical workflow: train on a text corpus with <code>training/3b_fine_web_edu.py</code>, then generate with <code>model.generate()</code> at varying <code>n_loops</code> values to explore how recurrence depth affects output quality for tasks like theorem proving or multi-step QA.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>The measured analysis found these issues from static analysis of 12 Python files:</p>
+<ul><li><strong>[HIGH]</strong> Commit a lockfile beside the manifest — <code>pyproject.toml</code> has no lockfile. Unlocked ranges mean the artifact tested and the artifact shipped can contain different transitive code.</li><li><strong>[HIGH]</strong> Add a workflow that builds and tests this repository — no CI configuration exists across 12 source files. Every change merges with nobody having run the build.</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate — 3 manifest files with no update bot configured. Without a bot, a published advisory sits unpatched until manual audit.</li></ul>
+<p>Beyond the measured findings: no CI/CD pipeline (<code>.github/</code> absent), no Dockerfile, licence file present but SPDX identifier unverified, no lockfile for reproducible builds.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>OpenMythos is a well-structured theoretical implementation of a Recurrent-Depth Transformer with clean architecture choices (MLA/GQA switching, MoE FFN, looped recurrence). The codebase is functional and the entry points are clear. However, the absence of a lockfile and CI/CD means it's not production-ready without those gates being added. The cognitive load from deep nesting and oversized files (794/26 lines) is the main maintainability risk — these are addressable with guard-clause flattening and file splitting. Use this for research prototyping or architecture exploration, not production serving until the SDLC gaps are closed.</p>
             </div>
 
             
@@ -105,7 +167,7 @@ Low - Single maintainer risk - this is a fork of kyegomez/OpenMythos (14.8k star
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>12</b></li><li><span>Markdown</span><i style="width:25%"></i><b>3</b></li><li><span>TOML</span><i style="width:8%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 

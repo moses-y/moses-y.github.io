@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 24, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,37 +80,35 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#extract-a-pdf-and-emit-json">Extract a PDF and emit JSON</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Enterprises that need to ingest heterogeneous documents (PDFs, Office files, scanned images, source code) must stitch together a patchwork of parsers, OCR engines, and language‑specific extractors. Maintaining that stack is costly, slows onboarding, and introduces inconsistent output formats.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Kreuzberg is a polyglot document‑intelligence framework built around a Rust core that normalises extraction across &gt;97 file types and 305 programming languages.</p><p>The core lives in crates/kreuzberg-cli/src/main.rs (CLI) and crates/kreuzberg-ffi/src/lib.rs (C‑FFI).  
- Language bindings are generated from the FFI layer and shipped in dedicated crates (kreuzberg-node, kreuzberg-paddle-ocr, etc.).  
- Extraction results are modelled by ExtractionResult structs that include text, metadata, and a codeintelligence field populated via Tree‑sitter parsers (crates/kreuzberg-cli/src/commands/extract.rs).  
- Plugins (OCR back‑ends, post‑processors) are defined under .ai-rulez/domains/plugin-system/, with contracts enforced in crates/kreuzberg-ffi/src/config/.rs.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Build the Rust core (requires a recent Rust toolchain)
-cargo build --release               # builds all crates, including CLI and FFI</p><p>Install the Node binding (requires the compiled .node module)
-cd crates/kreuzberg-node
-npm install                         # reads package.json
-npm run build                       # runs cargo build --release via the npm script</p><p>Docker users can pull the pre‑built image defined in charts/kreuzberg/templates/deployment.yaml:</p><p>docker pull ghcr.io/kreuzberg-dev/kreuzberg:latest
-docker run --rm -p 8000:8000 ghcr.io/kreuzberg-dev/kreuzberg</p><h3 class="post-h" id="configuration">Configuration</h3><p>Runtime configuration is loaded from the hierarchy described in .ai-rulez/config.yaml and crates/kreuzberg-cli/src/commands/config.rs. Typical keys include:</p><p>.ai-rulez/config.yaml
-extraction:
-  maxfilesizemb: 100
-ocr:
-  backend: &quot;tesseract&quot;   # or &quot;paddle&quot;
-  language: &quot;eng&quot;</p><p>The CLI respects KREUZBERGCONFIG environment variable to point at an alternate file.</p><h3 class="post-h" id="running">Running</h3><p>CLI:</p><h3 class="post-h" id="extract-a-pdf-and-emit-json">Extract a PDF and emit JSON</h3><p>cargo run -p kreuzberg-cli -- extract --input sample.pdf --output result.json</p><p>Server (REST API):</p><p>cargo run -p kreuzberg-cli -- server --bind 0.0.0.0:8080
-POST /extract with multipart file in the body</p><p>Node:</p><p>import { extract } from &#39;@kreuzberg/node&#39;;
-const result = await extract(&#39;sample.docx&#39;);
-console.log(result.text);</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑pipeline for contract analysis can invoke the REST server from a Kubernetes pod (see charts/kreuzberg/values.yaml). The pod streams incoming PDFs to POST /extract, receives ExtractionResult with structured code symbols for embedded contract clauses, and forwards the JSON to an indexing service such as ElasticSearch.</p><p>apiVersion: v1
-kind: Pod
-metadata:
-  name: contract-ingestor
-spec:
-  containers:
-name: ingestor
-    image: my/ingestor:latest
-    env:
-name: KREUZBERGENDPOINT
-      value: http://kreuzberg:8080</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Comprehensive test suite – 13 unit tests (crates/kreuzberg-cli/tests/.rs) and CI workflows (.github/workflows/ci-rust.yaml) run on each PR.  
-Medium – Native dependency complexity – PDFium (crates/kreuzberg-pdfium-render/) and Paddle‑OCR require external binaries; build failures on CI are mitigated by cached actions but may surface on custom platforms.  
-Low – Limited documentation for non‑Rust bindings – README lists all language bindings, but the docs/ directory only contains Rust‑centric guides; users of Go, PHP, or R may need to infer usage from the FFI crate.  
-Low – No explicit secret scanning – No .env or secret files are present, but the repository does not include a secret‑scan step in CI; adding github/codeql or detect-secrets would improve hygiene.</p><p>Overall the repository follows standard Rust conventions, includes a lockfile, CI linting, and a Helm chart for production deployment.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Kreuzberg delivers a single, high‑performance extraction engine with a well‑defined plugin model and language bindings for the major ecosystems. It is ready for enterprise integration where uniform document processing and code‑intelligence are required, but teams should budget for native‑dependency setup and may need to supplement documentation for non‑Rust languages.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams extracting text from documents face a fragmented toolchain: separate libraries for PDFs, Office files, and images, each with its own API and output format. Kreuzberg consolidates this into a single extraction pipeline with one interface across 97+ formats, plus code intelligence for 305 programming languages.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The Rust core (in <code>crates/kreuzberg/</code>) handles extraction, OCR, layout analysis, and chunking. It exposes bindings for 14 languages, a CLI (<code>crates/kreuzberg-cli/src/main.rs</code>), a REST API, and an MCP server. The <code>packages/</code> directory contains the language-specific wrappers, <code>e2e/</code> holds cross-language integration tests, and <code>test_documents/</code> provides 2,405 sample files.</p>
+<p>A plugin system (<code>crates/kreuzberg/src/plugins/registry/processor.rs</code>) supports custom OCR backends and post-processors. The <code>.ai-rulez/</code> directory documents architecture decisions and domain-specific rules for extraction, OCR, and plugin development.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>crates/kreuzberg-cli/src/main.rs</code>, which reaches 262 functions. The shortest path to external effect is <code>main -&gt; parse</code> with a filesystem read via <code>reader.read_bytes</code>. For server mode, <code>serve_command</code> in <code>crates/kreuzberg-cli/src/commands/server.rs</code> starts a REST API that reaches 120 functions.</p>
+<p>The call graph shows 4,799 resolved edges. <code>extract_file_sync</code> (called 124 times) and <code>extract_bytes</code> (119 times) are the primary public APIs. <code>is_empty</code> is called from 207 places—the hottest function in the codebase. Key routing hubs:</p>
+<ul><li><code>crates/kreuzberg/src/core/extractor/bytes.rs</code> — single function <code>extract_bytes</code>, called from 28 files, calls into 19 others</li><li><code>crates/kreuzberg/src/core/extractor/sync.rs</code> — sync wrappers, called from 22 files</li><li><code>crates/kreuzberg/src/core/config/formats.rs</code> — format dispatch, called from 84 files</li><li><code>crates/kreuzberg/src/utils/string_utils.rs</code> — string helpers, called from 42 files</li></ul>
+<p>The <code>counter.rs</code> in <code>keywords/yake/</code> is the most connected module (called from 109 files) despite being small—changing it has wide blast radius. The <code>pool.rs</code> utility manages resource pools with hit-rate tracking.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install the Rust core and bindings via your package manager. The repo uses <code>pnpm</code> for Node packages. For Python:</p>
+<pre data-lang="bash"><code>pip install kreuzberg</code></pre>
+<p><strong>Configuration</strong>: No mandatory environment variables. Settings live in <code>.ai-rulez/config.yaml</code> for development. OCR backends (PaddleOCR, PDFium) are optional plugins.</p>
+<p><strong>Running it</strong>: The CLI is the simplest entry point:</p>
+<pre data-lang="bash"><code>cargo run --bin kreuzberg -- --input document.pdf --output extracted.txt</code></pre>
+<p>Or use the REST API via <code>serve_command</code>, or the Python API:</p>
+<pre data-lang="python"><code>from kreuzberg import extract_file
+result = extract_file("document.pdf")</code></pre>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A document processing pipeline for a legal firm: ingest PDFs, scanned images, and DOCX files, extract text and metadata, run OCR on scanned pages, then chunk results for embedding into a vector database. The unified API means one code path handles all formats, with language bindings for the team's stack.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 45 findings (1 high, 17 medium, 27 low). The high-severity issue is duplicated code blocks across 171 files (44 repeated 6-line blocks), particularly in <code>scripts/</code> and <code>docs/snippets/</code>. Medium issues include deep nesting in stopword language files and high branching density in <code>check-release-assets.sh</code> and <code>hwp/mod.rs</code>.</p>
+<p>Security audit flagged 3 high-severity issues in CI/CD:</p>
+<ul><li><strong>High</strong> — GitHub Actions unpinned (<code>@v1</code>, <code>@v4</code> tags) in <code>.github/workflows/</code>; tags can be moved</li><li><strong>High</strong> — <code>publish.yaml</code> discards exit codes at lines 1949-1950, masking failures</li><li><strong>High</strong> — automated push to default branch in <code>publish.yaml</code>, bypassing PR review</li></ul>
+<p>Medium issues: mutable Docker base images (<code>alpine:3.21</code>), no dependency vulnerability scan in CI, 13 blobs over 5MB in <code>test_documents/</code> (largest 59.2MB), <code>persist-credentials</code> not disabled on checkout, and no non-root user in the Dockerfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Kreuzberg is a serious, well-engineered document extraction framework with exceptional language coverage and a clean plugin architecture. The CI/CD security issues are fixable but should be addressed before production use. This is a strong choice for teams needing one extraction API across many formats and languages, though the 7,803-file repository is substantial to navigate.</p>
             </div>
 
             

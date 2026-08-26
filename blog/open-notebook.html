@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>April 22, 2026</span>
                     <span>3 min read</span>
-                    <span class="post-language">Python</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>open notebook</h1>
@@ -80,12 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations need Notebook LM-style AI research workflows—chat over documents, podcast generation, source-grounded Q&amp;A—but cannot send proprietary data to Google&#39;s cloud. open-notebook addresses this with a self-hosted alternative that keeps data local and lets teams choose their own AI providers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>open-notebook is a full-stack application with a Django REST API (api/main.py) and React/Next.js frontend (frontend/src/app/). The backend exposes routers for core features: notebooks, sources, chat, transformations, and podcasts under api/routers/. Service layers (api/chatservice.py, api/sourcesservice.py, api/podcastservice.py) handle business logic, with api/embeddingservice.py managing vector search.</p><p>The frontend is organized by feature area: notebooks/, sources/, transformations/, podcasts/, and settings/. A command palette (frontend/src/components/common/CommandPalette.tsx) provides keyboard-driven navigation. The system supports 18+ AI providers, multi-speaker podcast generation, and full-text plus vector search.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Docker is the primary path. Use docker-compose.yml with the Dockerfile (full build) or Dockerfile.single (single container). The Makefile provides common targets. For source installs, api/ uses Python and frontend/ uses npm (frontend/package.json).</p><p>Configuration: Copy .env.example to .env and set API keys. AI provider configuration lives in docs/5-CONFIGURATION/ai-providers.md; Ollama and OpenAI-compatible endpoints are covered in dedicated docs. Database setup is in docs/5-CONFIGURATION/database.md.</p><p>Running it: With Docker Compose:</p><p>docker-compose up -d</p><p>For development, examples/docker-compose-dev.yml mounts source code with hot reload. The API entry point is api/main.py; the frontend runs as a standard Next.js dev server (npm run dev in frontend/).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A legal research team needs to analyze case files without external data exposure. They deploy open-notebook on internal infrastructure with Ollama for embeddings and a local LLM. Users upload PDFs via the sources interface, ask questions in chat with source citations, and generate internal briefing podcasts with custom speaker profiles (api/routers/speakerprofiles.py). The REST API allows automation—e.g., a script that ingests new court rulings into a notebook and triggers a transformation.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Test coverage is thin: Only 4 test files exist (ChatColumn.test.tsx, ConfirmDialog.test.tsx, plus API tests). Core services like chatservice.py and podcastservice.py lack direct tests.
-Med - CI is limited: GitHub Actions runs a test.yml workflow, but build-and-release.yml and build-dev.yml focus on container builds, not comprehensive validation.
-Low - API surface is large: 20+ routers in api/routers/ with overlapping concerns (e.g., chat.py vs sourcechat.py). This may create maintenance burden as the project grows.
-Low - Frontend structure is clean: Route groups and component separation follow Next.js conventions. No obvious code smells in the file layout.
-Positive signals: MIT license present, .env.example keeps secrets out of the repo, documentation is extensive (63 files), and CHANGELOG.md tracks releases.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>open-notebook is a capable self-hosted alternative to Notebook LM with strong provider flexibility and a clean architecture. The thin test suite and broad API surface are the main risks for long-term maintenance. Best suited for teams that need data sovereignty and are willing to invest in their own testing and operational hardening.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Google's Notebook LM locks research into a single provider with no API access, limited podcast controls, and no self-hosting option. Teams that need data sovereignty, model flexibility, or automation have no equivalent.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>open-notebook</code> is a self-hosted, multi-model alternative to Notebook LM. The Python backend (<code>api/</code>, <code>open_notebook/</code>) handles notebooks, sources, embeddings, chat, and podcast generation. The React/Next.js frontend (<code>frontend/</code>) provides the UI. Docker deployment is supported via <code>docker-compose.yml</code> and two Dockerfiles.</p>
+<p>The system supports 18+ AI providers, multi-speaker podcasts, full-text and vector search, and a REST API for automation. It's forked from <code>lfnovo/open-notebook</code> (37k+ stars).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>api/main.py</code> at the <code>lifespan</code> function, which reaches 27 functions. The API layer (<code>api/routers/</code>) exposes endpoints that delegate to service files like <code>api/notebook_service.py</code> and <code>api/chat_service.py</code>. The core domain logic sits in <code>open_notebook/domain/</code> with <code>notebook.py</code> as the central hub (25 modules import it, 7 import cycles).</p>
+<p>The highest-blast-radius functions are <code>repo_query</code> (called from 58 places) and <code>_make_request</code> (53 places). <code>open_notebook/database/repository.py</code> owns database effects; <code>open_notebook/utils/encryption.py</code> handles secrets and file I/O; <code>api/client.py</code> makes outbound network calls. A typical flow: API request → <code>repo_query</code> → database connection, in 2-3 hops.</p>
+<p>The module graph shows a cycle involving <code>open_notebook/ai/models.py</code> and <code>open_notebook/domain/credential.py</code> — changing either risks breaking the other. <code>open_notebook/exceptions.py</code> is a stable hub (26 dependents) with zero instability.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone and run with Docker:</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/open-notebook
+cd open-notebook
+cp .env.example .env
+docker compose up -d</code></pre>
+<p><strong>Configuration</strong>: Set provider API keys in <code>.env</code> (e.g., <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>). The <code>.env.example</code> file documents available variables.</p>
+<p><strong>Running it</strong>: For local dev, the <code>Makefile</code> has targets; the API entry point is <code>api/main.py</code> (FastAPI). Frontend runs via npm from <code>frontend/</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A research team self-hosts this to process internal PDFs and web pages. They configure Ollama for local embeddings and OpenAI for chat. Analysts upload sources, generate two-speaker podcast summaries, and query via the REST API to automate weekly briefings. All data stays on their infrastructure.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 107 findings (23 high, 84 medium) across 7 categories:</p>
+<ul><li><strong>High</strong> – Deep nesting (33 occurrences) in <code>open_notebook/domain/notebook.py</code>, <code>base.py</code>, <code>credential.py</code>; max indentation depth 9.</li><li><strong>High</strong> – Import cycle members (7) including <code>open_notebook/ai/models.py</code> and <code>domain/credential.py</code>.</li><li><strong>High</strong> – Hub modules (7) with high blast radius: <code>exceptions.py</code> (26 dependents), <code>notebook.py</code> (25).</li><li><strong>High</strong> – Duplicated code: 282 repeated 6-line blocks across 90 files.</li><li><strong>Medium</strong> – Broad exception handling (8), high branching in <code>frontend/src/lib/api/client.ts</code>, oversized files (3).</li></ul>
+<p>Security audit: <strong>2 critical</strong> findings in <code>.github/workflows/claude-code-review.yml</code> — the workflow checks out untrusted PR code with a privileged token (<code>CLAUDE_CODE_OAUTH_TOKEN</code>) exposed to fork-triggered jobs. <strong>2 high</strong>: unpinned GitHub Actions (tag-based, not SHA) and a secret baked into the Dockerfile as <code>ENV</code>. <strong>5 medium</strong>: no Dependabot, unpinned base image, no dependency scan, <code>persist-credentials</code> not disabled, no non-root user.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Functionally strong: a complete Notebook LM alternative with real model flexibility and a working API. The CI/CD security posture is not production-safe — the PR review workflow is a credential exfiltration risk and must be fixed before public contribution. Worth deploying for internal use after addressing the workflow issues.</p>
             </div>
 
             
@@ -102,11 +122,11 @@ Positive signals: MIT license present, .env.example keeps secrets out of the rep
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">465<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>66</b></li><li><span>Python</span><i style="width:73%"></i><b>48</b></li><li><span>TSX</span><i style="width:64%"></i><b>42</b></li><li><span>YAML</span><i style="width:23%"></i><b>15</b></li><li><span>JSON</span><i style="width:5%"></i><b>3</b></li><li><span>TypeScript</span><i style="width:3%"></i><b>2</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>116</b></li><li><span>Python</span><i style="width:87%"></i><b>101</b></li><li><span>Markdown</span><i style="width:72%"></i><b>83</b></li><li><span>TypeScript</span><i style="width:68%"></i><b>79</b></li><li><span>YAML</span><i style="width:13%"></i><b>15</b></li><li><span>JSON</span><i style="width:3%"></i><b>4</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Django</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Django</span><span>Express</span><span>Tailwind</span><span>Docker</span></p>
                     </div>
                 </div>
 

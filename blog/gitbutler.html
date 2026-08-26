@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 22, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#install-node-used-by-the-front-end">Install Node (used by the front‑end)</a><a href="#install-desktop-dependencies">Install desktop dependencies</a><a href="#configuration">Configuration</a><a href="#running-it">Running It</a><a href="#real-world-use">Real‑World Use</a><a href="#in-a-ci-job">In a CI job</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers using plain Git must repeatedly run low‑level commands (rebase -i, cherry‑pick, etc.) to manage stacked or parallel work streams. The workflow is error‑prone and hard to automate, especially for AI‑assisted coding assistants that need a predictable, manipulable branch structure.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>GitButler replaces the native Git CLI with a GUI and a dedicated but CLI that expose stacked and parallel branches as first‑class objects. The desktop client lives under apps/desktop/ and is built with Tauri (Rust backend) and Svelte front‑end components. Core Rust code is declared in Cargo.toml and compiled into the Tauri runtime, while UI logic resides in files such as apps/desktop/src/components/branch/BranchCard.svelte and apps/desktop/src/components/commit/CommitMessageEditor.svelte. The CLI wrapper is defined in apps/desktop/src/lib.ts, exposing commands that invoke the same Rust services.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Rust toolchain (required by Cargo)
-rustup toolchain install stable</p><h3 class="post-h" id="install-node-used-by-the-front-end">Install Node (used by the front‑end)</h3><p>nvm install 20 &amp;&amp; nvm use 20</p><h3 class="post-h" id="install-desktop-dependencies">Install desktop dependencies</h3><p>cd apps/desktop
-npm ci          # reads apps/desktop/package.json
-Build the Rust backend
-cargo build --release   # uses Cargo.toml at repo root
-Run the Tauri dev server (GUI)
-npm run tauri dev
-Install the CLI globally (optional)
-cargo install --path .   # installs the but binary</p><p>The Makefile defines a make dev target that runs the above steps; consult it for exact command names.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Environment files are present in apps/desktop/ (.env.development, .env.production, .env.testing). They contain API keys for forge integrations (GitHub, GitLab, Gerrit). These files must be removed from version control and replaced with a local, secure method (e.g., .envrc or a secrets manager). The application reads them via dotenv at startup.</p><h3 class="post-h" id="running-it">Running It</h3><p>GUI: after npm run tauri dev, the desktop window launches automatically. Main entry point is apps/desktop/src/app.html, which loads the Svelte root component.
-CLI: the installed but binary provides sub‑commands such as but branch create, but commit amend, and but undo. Run but --help for the full list.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI pipeline can invoke the CLI to generate a stacked branch for an automated refactor:</p><h3 class="post-h" id="in-a-ci-job">In a CI job</h3><p>git checkout main
-but branch create feature/refactor-xyz --stack base
-but commit amend -m &quot;Apply AI‑generated refactor&quot;
-but push origin feature/refactor-xyz</p><p>The resulting branch appears in the GitButler UI as a stacked node, ready for review.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High – Secrets in repo – .env.development and .env.production contain credentials (apps/desktop/.env.). Must be scrubbed and added to .gitignore.  
-Medium – Missing license file – No LICENSE present; repository only includes LICENSE.md which may not be recognized by tooling.  
-Medium – Incomplete test coverage – Only 4 test files detected; core Rust logic and many Svelte components lack unit tests.  
-Low – CI configuration gaps – GitHub Actions exist (.github/workflows/.yaml) but no explicit job for running Rust tests; only web/E2E tests are defined.  
-Low – Dependency hygiene – Cargo.lock is committed (good for reproducibility), but no automated Dependabot updates for Rust crates; only dependabot.yml targets npm.</p><p>Overall, the repo compiles cleanly and the CI pipeline builds the desktop app, indicating a functional baseline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GitButler delivers a practical UI/CLI layer that simplifies branch stacking and commit manipulation, useful for teams integrating AI tools into their Git workflow. The codebase is functional but requires cleanup of exposed secrets, a proper license, and broader test coverage before production adoption. Suitable for organizations comfortable managing Rust/Tauri builds and willing to address the identified security hygiene gaps.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who rely on raw Git must juggle rebases, cherry‑picks, and manual branch tracking to keep parallel workstreams tidy. The cognitive load of stitching together stacked or parallel branches in the command line leads to errors and lost productivity, especially when AI‑assisted tools need a stable, scriptable view of the repository state.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>GitButler</code> delivers a GUI and a dedicated CLI (<code>but</code>) that replace the classic Git workflow with <strong>stacked</strong> and <strong>parallel</strong> branch concepts. The desktop client lives under <code>apps/desktop/</code> and is built with Tauri, pulling core logic from the Rust crates in <code>crates/</code>. UI components such as <code>BranchCard.svelte</code> and <code>TabList.svelte</code> render branch graphs, while the CLI entry point <code>apps/desktop/src/lib/config/cli.ts</code> parses commands and forwards them to the same backend library. The lightweight Electron variant (<code>apps/lite/</code>) runs a minimal Node/Electron shell (<code>apps/lite/electron/src/main.ts</code>) that loads the Svelte UI from <code>apps/lite/ui/src/</code>. Both front‑ends ultimately call the same Rust core (e.g., <code>crates/but-core/src/lib.rs</code>) that manipulates the underlying Git repository via <code>git2</code> bindings.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Startup</strong> – Execution begins at <code>apps/desktop/src/lib/backend/index.ts</code> (desktop) or <code>apps/lite/electron/src/main.ts</code> (lite). Both import the Tauri/Electron bridge and instantiate the Rust backend through the generated bindings.</li><li><strong>Command Routing</strong> – The CLI (<code>apps/desktop/src/lib/config/cli.ts</code>) uses <code>commander</code>‑style parsing to map sub‑commands (<code>but branch create</code>, <code>but commit amend</code>, …) to functions exported from <code>apps/desktop/src/lib/backend/index.ts</code>.</li><li><strong>Backend Core</strong> – Calls land in <code>crates/but-core/src/lib.rs</code>, which owns all Git interactions: creating virtual branches, rewriting commits, and persisting the operation log. This crate is the only module that touches the filesystem (<code>.git</code> directory) and therefore has the widest blast radius.</li><li><strong>UI Layer</strong> – Svelte components in <code>apps/desktop/src/components/</code> and <code>apps/lite/ui/src/</code> subscribe to a reactive store that reflects the state returned by the Rust core. The most connected UI module is <code>apps/lite/ui/src/routes/project/$id/workspace/Item.svelte</code> (imported by 8 other modules).</li><li><strong>Testing &amp; CI</strong> – End‑to‑end tests in <code>e2e/playwright/</code> drive the compiled desktop binary via the Docker image defined in <code>e2e/blackbox/Dockerfile</code>. GitHub Actions (<code>.github/workflows/*.yaml</code>) orchestrate lint, unit, and e2e runs.</li></ol>
+<p>No circular import cycles were detected; the import graph contains 526 internal modules with only 57 edges, indicating a shallow dependency surface.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/gitbutler
+cd gitbutler
+
+# Install JavaScript dependencies (pnpm is declared in package.json)
+pnpm install
+
+# Build Rust crates (requires a recent Rust toolchain)
+cargo build --workspace
+
+# Run the desktop client (development mode)
+pnpm run dev:desktop   # defined in apps/desktop/package.json scripts
+
+# Or launch the lightweight Electron version
+pnpm run dev:lite      # defined in apps/lite/package.json scripts</code></pre>
+<p><strong>Configuration</strong> – The applications read environment files under <code>apps/desktop/</code> (<code>.env.development</code>, <code>.env.production</code>, etc.). These files are currently tracked and contain live keys (e.g., <code>PUBLIC_POSTHOG_API_KEY</code>). Replace them with a <code>.env.example</code> and set real values locally before running.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can invoke the <code>but</code> CLI to create a virtual branch for each feature branch, run automated tests, and then squash the branch into the mainline without a manual rebase:</p>
+<pre data-lang="bash"><code>but branch create feature/foo --stack-on main
+but commit amend -m "Add foo"
+but push virtual</code></pre>
+<p>The operation log records each step, enabling an automated rollback if a downstream test fails.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><em>Measured findings (static analysis)</em></p>
+<ul><li><strong>42 HIGH</strong> – deep nesting (max depth 8) in files such as <code>packages/no-relative-imports/src/noRelativeImportPaths.ts</code>.</li><li><strong>42 HIGH</strong> – duplicated 6‑line blocks across 80 Svelte components (e.g., markdown renderers).</li></ul>
+<p><em>Code‑health audit</em> (8 findings)</p>
+<ul><li><strong>CRITICAL</strong> – rotate credentials in <code>apps/desktop/.env.development</code>.</li><li><strong>HIGH</strong> – file is tracked despite <code>.gitignore</code>; remove with <code>git rm --cached</code> and rotate.</li><li><strong>HIGH</strong> – remove all committed <code>.env*</code> files, add <code>.env.example</code>, and ignore them.</li><li><strong>HIGH</strong> – eliminate <code>continue-on-error</code> in <code>.github/workflows/osv-scanner.yml</code>.</li><li><strong>MEDIUM</strong> – pin Docker base image in <code>e2e/blackbox/Dockerfile</code> by digest.</li><li><strong>MEDIUM</strong> – set <code>persist-credentials: false</code> in <code>.github/workflows/publish.yaml</code>.</li><li><strong>MEDIUM</strong> – add a non‑root <code>USER</code> in the same Dockerfile.</li><li><strong>LOW</strong> – add <code>timeout-minutes</code> to jobs in <code>.github/workflows/check-e2e-changes.yml</code>.</li></ul>
+<p>Repository hygiene: tests present, CI configured, Dockerfile exists, license file present, lockfile (<code>Cargo.lock</code>, <code>pnpm-lock.yaml</code>) present, but several secret files are committed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>GitButler</code> provides a coherent, Rust‑backed abstraction over Git that simplifies stacked and parallel workflows, and its modular split into desktop, lite, and core crates makes targeted contributions feasible. However, the repo ships with committed environment secrets and notable code‑duplication, which must be remedied before production use. Teams comfortable with Rust/Tauri and needing a programmable Git UI will find it immediately valuable, provided they address the highlighted health issues.</p>
             </div>
 
             

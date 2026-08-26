@@ -80,22 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#openaiapikey-sk">OPENAIAPIKEY=sk-…</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations that need to coordinate multiple autonomous AI agents for complex, multi‑step work often lack a lightweight framework that balances simplicity with the ability to define agent roles, task flows, and observability without heavyweight dependencies.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>CrewAI provides a Python‑only orchestration layer (no LangChain coupling) that lets you declare crews of agents and flows of tasks. The source lives in the root directory alongside configuration files; the bulk of the repository is documentation (docs/ar/) covering concepts, guides, and integrations. Key structural pieces include:
-docs/ar/concepts/agents.mdx, docs/ar/concepts/crews.mdx, and docs/ar/concepts/flows.mdx – definitions of the core abstractions.  
-.github/workflows/tests.yml, .github/workflows/linter.yml, and .github/workflows/type-checker.yml – CI pipelines that run on every PR.  
-conftest.py and the seven test files under tests/ – the project’s test harness.  
-LICENSE (MIT) and .python-version – project metadata.</p><p>Crews are defined by listing agents and tasks; flows extend this with event‑driven control and HITL hooks, as shown in docs/ar/guides/flows/first-flow.mdx.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install from PyPI (the project declares crewai on PyPI)
-uv pip install crewai   # or: pip install crewai</p><p>The .python-version file pins the runtime version used by the CI.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create a .env file (or use the existing .env.test) and set the required API keys, e.g.:</p><h3 class="post-h" id="openaiapikey-sk">OPENAIAPIKEY=sk-…</h3><p>ANTHROPICAPIKEY=…</p><p>The .github/workflows/publish.yml and other workflows reference these variables when running the test suite in CI.</p><h3 class="post-h" id="running-it">Running it</h3><p>A minimal crew can be launched from a Python script or the CLI:</p><p>example.py (illustrative, not a shipped file)
-from crewai import Crew, Agent, Task</p><p>researcher = Agent(role=&quot;Researcher&quot;, goal=&quot;Find latest AI trends&quot;)
-writer   = Agent(role=&quot;Writer&quot;, goal=&quot;Summarize findings&quot;)</p><p>crew = Crew(
-    agents=[researcher, writer],
-    tasks=[Task(description=&quot;Summarize AI trends&quot;, agent=writer)]
-)</p><p>result = crew.kickoff()
-print(result)</p><p>Execute with python example.py or via the crewAI CLI (if installed) using crewai run.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A marketing team could build a “content crew”: a researcher agent pulls the latest industry reports (using the tools/ integration for Google Sheets), a writer agent drafts a blog post, and a reviewer agent checks compliance. The flow is defined in a YAML‑style task list and executed via crew.kickoff(). Observability hooks (tracing, logs) are wired through the observability integrations listed in docs/ar/observability/, allowing the team to monitor LLM call counts and latency without adding custom code.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests &amp; CI – Seven test files exist under tests/, and GitHub Actions workflows (tests.yml, linter.yml, type-checker.yml) run on every PR, providing basic quality gates.  
-License &amp; Metadata – LICENSE (MIT) and .python-version are present; no lockfile is listed, but the project pins dependencies via PyPI, which is sufficient for most installs.  
-Source‑code visibility – The analysis surface shows only one Python file in the language breakdown, yet the repo is a full framework; the core package code is likely under crewai/ (not captured in the high‑level file count). This limited visibility makes it hard to assess internal modularity without digging into the package directory.  
-Documentation‑driven – 173 doc files dominate the repository, indicating a strong focus on guides and references; the actual source‑code comments are sparse, which can make onboarding slower for developers who prefer inline docs.</p><p>No critical bugs or security red flags were inferred from the surface structure, but the paucity of source‑code visibility warrants a deeper code‑review once the package layout is examined.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>CrewAI delivers a pragmatic, LangChain‑free way to orchestrate autonomous agents and define production‑ready flows, backed by solid CI and extensive documentation. It suits teams that need quick prototyping of multi‑agent workflows and already have an LLM provider key. The main trade‑off is the heavy documentation footprint versus relatively opaque source‑code layout; developers comfortable reading guides will get up to speed fastest, while those who prefer exhaustive inline code comments may need to explore the package internals directly.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need multiple LLM‑driven agents to cooperate often stitch together ad‑hoc scripts, end up with tangled exception handling, and lack a reproducible deployment pipeline. The result is fragile orchestration code that is hard to test, audit, or scale.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>CrewAI supplies a Python‑first framework for defining <strong>Crews</strong> (collections of agents) and <strong>Flows</strong> (event‑driven pipelines). Core logic lives under <code>lib/crewai/src/crewai/</code>, e.g.:</p>
+<ul><li><code>cli/cli.py</code> – the main command‑line dispatcher.</li><li><code>a2a/extensions/server.py</code> – HTTP server that exposes crew execution.</li><li><code>agents/crew_agent_executor.py</code> – runs a crew, handling task routing and result aggregation.</li></ul>
+<p>The repository also ships extensive documentation (<code>docs/</code>), a set of ready‑made CLI templates (<code>cli/templates/crew/</code>, <code>cli/templates/flow/</code>), and a test suite (<code>lib/crewai/tests/</code>). Dependency metadata is in several <code>pyproject.toml</code> files, indicating a UV‑based build (<code>.python-version</code> and <code>uv</code> pre‑commit config).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the CLI entry point <code>lib/crewai/src/crewai/cli/cli.py</code>. The <code>run</code> command (defined in <code>cli/templates/crew/main.py</code>) invokes <code>CrewExecutor._run</code>, which:</p>
+<ol><li>Calls <code>CrewExecutor._set_agent_params</code> and <code>_set_task_params</code> (7 callers each) to materialise agents from the crew definition.</li><li>Triggers <code>_execute</code>, which calls <code>sanitize_agent_name</code> (6 callers) and then streams results via <code>agents/crew_agent_executor.py</code>.</li><li>Within the executor, <code>SourceContent</code> is accessed from 37 distinct locations, pulling data loaders like <code>CSVLoader</code> and <code>DOCXLoader</code> (each called 10×).</li></ol>
+<p>Network I/O occurs early: <code>cli/enterprise/main.py → _fetch_oauth_config</code> performs an <code>httpx.get</code>. Subprocess execution appears in <code>cli/triggers/main.py → _run_crew_with_payload</code> via <code>subprocess.run</code>. File I/O is concentrated in <code>utilities/task_output_storage_handler.py</code> (reads/writes files and a database) and <code>cli/settings/main.py</code> (persists user settings).</p>
+<p>The most connected module is <code>cli/templates/tool/src/{{folder_name}}/tool</code>, imported by 1 other module and importing 0, indicating a leaf helper. Conversely, <code>agents/crew_agent_executor.py</code> is an oversized file (≈1,500 lines) with deep nesting (max depth 9) and is a hotspot for change impact.</p>
+<p>No circular import cycles were detected, but the high‑degree functions (<code>_run</code>, <code>print</code>, <code>SourceContent</code>) have the widest blast radius: a change to any of them propagates to dozens of callers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/crewAI
+cd crewAI
+
+# Install with UV (recommended by the pyproject config)
+uv sync   # creates a virtualenv and installs all dependencies
+
+# Set required secrets – remove the committed .env.test first
+git rm --cached .env.test
+echo "API_KEY=" &gt; .env.example   # fill in real values locally
+source .env.example
+
+# Create a crew definition (YAML) and run it
+python -m crewai.cli.cli run path/to/crew.yaml</code></pre>
+<p>The <code>run</code> command maps to <code>lib/crewai/src/crewai/cli/templates/crew/main.py:run</code>. For Flow execution, use <code>python -m crewai.cli.cli flow path/to/flow.yaml</code>. Configuration files live under <code>lib/crewai/pyproject.toml</code> (project metadata) and the per‑template <code>pyproject.toml</code>s.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS product can embed CrewAI to orchestrate a “customer‑onboarding” crew: an LLM drafts a welcome email, another validates address data via an external API, and a third updates the CRM. The orchestration runs in a Docker container (built from the same source tree) and reports telemetry through the <code>observability/</code> modules (e.g., <code>langtrace</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses tag refs (<code>@v6</code>). Replace with commit SHA to avoid supply‑chain drift.</li><li><strong>High – Remove committed .env</strong> – <code>.env.test</code> contains live credentials; delete, add to <code>.gitignore</code>, rotate keys, and provide an empty <code>.env.example</code>.</li><li><strong>Medium – Add vulnerability scan</strong> – No dependency‑review step in CI; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Move large binaries</strong> – <code>docs/images/mlflow-tracing.gif</code> (16 MB) and similar assets should be stored in Git LFS or external storage.</li><li><strong>Low – Set workflow timeouts</strong> – <code>build-uv-cache.yml</code> lacks <code>timeout-minutes</code>; add reasonable limits.</li></ul>
+<p>Additional measured findings: 1151 duplicated 6‑line blocks across 217 files, broad <code>except:</code> clauses in <code>tests/utils.py</code>, and five files exceeding 1,500 lines with deep nesting. These increase maintenance cost and cognitive load.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>CrewAI delivers a mature, extensible multi‑agent orchestration layer with solid documentation and a growing test base, but the codebase suffers from large, deeply nested files and some hygiene lapses (committed secrets, unpinned CI actions). It is suitable for teams comfortable with Python and willing to invest in refactoring the core executors; enterprises should address the high‑severity health items before production deployment.</p>
             </div>
 
             
@@ -105,18 +125,18 @@ Documentation‑driven – 173 doc files dominate the repository, indicating a s
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">3,039<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>YAML</span><i style="width:100%"></i><b>21</b></li><li><span>Markdown</span><i style="width:14%"></i><b>3</b></li><li><span>Python</span><i style="width:5%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>1094</b></li><li><span>YAML</span><i style="width:57%"></i><b>625</b></li><li><span>Markdown</span><i style="width:8%"></i><b>92</b></li><li><span>JSON</span><i style="width:1%"></i><b>16</b></li><li><span>TOML</span><i style="width:1%"></i><b>8</b></li><li><span>JavaScript</span><i style="width:0%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Transformers</span><span>LangChain</span><span>Vector store</span><span>MLflow</span></p>
                     </div>
                 </div>
 
@@ -144,6 +164,12 @@ Documentation‑driven – 173 doc files dominate the repository, indicating a s
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>lib/crewai-files/pyproject.toml</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>docs/images/enterprise/crew-secrets.png</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1217859101">Open in Code Brain &rarr;</a>

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 22, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,23 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Taskmaster is an AI-powered task-management system designed to integrate with Claude and other AI coding assistants, but the repository lacks a lockfile for its declared dependencies, creating non-reproducible builds risk. The system comprises 200 files across React-based CLI, configuration, and editor integrations, but the dependency hygiene issue undermines build reliability from the start.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Taskmaster provides a task-management framework for AI-driven development workflows. The apps/cli/src/ directory contains the command-layer implementation with 27+ command files including autopilot/ (start, status, complete, resume, next, abort, finalize), models/ (fetchers, custom-providers, prompts, setup), and export/ (task-mapper, task-selector, validator). The .taskmaster/ directory houses the core configuration (config.json), state management (state.json), task definitions (tasks/), and research documentation. Editor integrations live in .cursor/rules/, .kiro/hooks/, and .claude/ with over 30 rule files configuring provider behavior, workflows, and task templates. CI/CD is fully automated via GitHub Actions workflows in .github/workflows/, with 16 workflow files handling everything from release management to Claude-specific issue triage.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pnpm install (inferred from the apps/cli/package.json workspace configuration). The root package.json references task-master-ai npm package. No lockfile is present, so dependency versions may drift.</p><p>Configuration: Create an .env file based on .env.example. Required environment variables and API keys must be configured for the selected AI provider. The .taskmaster/config.json file manages task-tracking state and settings.</p><p>Running it: Invoke the CLI via pnpm cli or node apps/cli/src/index.ts. Entry point is apps/cli/src/index.ts which registers all commands. The autopilot workflow can be initiated with pnpm cli autopilot start.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>In a development workflow, a team defines tasks in .taskmaster/tasks/ with associated PRDs in .taskmaster/templates/. The autopilot system in apps/cli/src/commands/autopilot/ orchestrates multi-step development cycles: starting a task, tracking progress through commits, and completing with finalization. The export system (apps/cli/src/export/) transforms task data into consumable formats for CI or documentation. Teams can configure AI providers via the models system in apps/cli/src/commands/models/ to switch between OpenAI, Anthropic, or custom providers. The loop command automates repetitive development cycles through the task queue.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low/Risk: Dependencies declared without a lockfile in apps/cli/package.json - non-reproducible builds. This is the only heuristic issue detected from the structure.
-The repository has 11 test files and 28 doc files present, indicating some test coverage and documentation effort.
-CI/CD is well-established with 16 GitHub Actions workflows configured.
-The project has a MIT with Commons Clause license and active maintenance history.
-No lockfile means pnpm install or npm install may produce different dependency trees across environments.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Taskmaster is a well-structured task-management system for AI development with solid CLI tooling, editor integrations, and automation workflows. The lockfile absence is a moderate risk for team adoption since dependency versions won&#39;t be pinned, but otherwise the codebase is clean and functional. Best suited for teams already committed to the Hamster/Taskmaster ecosystem rather than solo developers evaluating options.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI-driven development workflows need structured task management that persists across sessions and editors. Existing solutions either lack integration points for tooling or impose heavy framework constraints. This repo addresses that gap by providing a task-management system designed to work with any AI chat interface, but the codebase shows signs of architectural debt that affect maintainability.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a collection of 6 self-contained projects (packages, apps, mcp-server, src, scripts, bin) totaling 1253 files. Core functionality lives in <code>packages/tm-core/src</code> and is consumed by 372 package files and 262 app files. Entry point <code>run</code> at <code>packages/tm-core/src/modules/loop/loop-domain.ts:60</code> reaches 191 functions, while <code>start</code> at <code>apps/cli/src/utils/auth-ui.ts:50</code> reaches 225 functions. The system touches filesystem via 40 functions (reads/writes) and makes outbound network calls through 1 function. Key data flows include <code>execute -&gt; handleApiResult</code> (43 times), <code>register -&gt; addCommand</code> (16 times), and <code>getContext</code> called from 44 places. Hub module <code>scripts/modules/utils.js</code> has 117 dependents and 1340 lines across 7 high cognitive-load findings.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Control flows through established entry points: <code>run</code> initiates the main loop, <code>start</code> handles CLI authentication, <code>execute</code> in <code>apps/cli/src/commands/autopilot/abort.command.ts:29</code> reaches 242 functions and is the primary command execution path. Import cycles affect 38 modules across <code>scripts/modules/utils.js</code>, <code>scripts/modules/config-manager.js</code>, and <code>scripts/modules/task-manager.js</code> — these cycles increase blast radius when modifying shared logic. The most connected module <code>scripts/modules/utils.js</code> has Ca=117, Ce=3 and participates in a cycle, meaning changes ripple widely. <code>packages/tm-core/src/index</code> has instability 0.95 (Ca=2, Ce=41), making it a high-risk consolidation point. Paths from entry to filesystem: <code>run -&gt; finalize -&gt; finalizeWorkflow -&gt; getContext</code> [fs.readFileSync]; <code>start -&gt; doGenerate -&gt; getApiKey</code> [fs.readFile].</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: No Dockerfile present. Project uses npm as package manager (4 package.json files in apps/cli, apps/docs, apps/extension, apps/mcp). Install with <code>npm install</code> at repo root.</p>
+<p><strong>Configuration</strong>: Required environment variables defined in <code>.env.example</code>. No committed secrets found, but configure API keys per editor integration guide.</p>
+<p><strong>Running it</strong>: CLI entry via <code>npm run</code> scripts defined in <code>apps/cli/package.json</code>. For Cursor integration, add Taskmaster MCP server using the Claude Code deeplink. For CLI use: <code>npx task-master</code> after installation.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>In a typical AI development workflow, a user runs <code>task-master create --title "Implement auth"</code> to persist a task. The <code>execute</code> command routes through <code>handleApiResult</code> to update storage via <code>api-storage.ts</code> constructor functions (<code>validateConfig</code>, <code>initialize</code>, <code>getStorageType</code>). Tags and workstreams are managed through <code>packages/tm-core/src/modules/tags</code> and <code>workstreams</code> domains. The system writes task state to <code>.taskmaster/</code> directory, preserving context across editor restarts. Team collaboration uses the shared brief infrastructure in <code>packages/tm-core/src/modules/briefs/</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong>: Pin third-party GitHub Actions to commit SHA — <code>.github/workflows</code> uses <code>dorny/paths-filter@v3</code>, <code>changesets/action@v1</code>, <code>stefanzweifel/git-auto-commit-action@v5</code> without SHAs; tags can move and leak secrets.</li><li><strong>MEDIUM</strong>: Declare least-privilege permissions for GITHUB_TOKEN — 1 workflow declares no permissions, inheriting repository defaults.</li><li><strong>MEDIUM</strong>: Enable Dependabot or Renovate — 11 manifest(s) with no update bot configured; advisories remain unpatched.</li><li><strong>MEDIUM</strong>: Gate pull requests on dependency vulnerability scan — no dependency scan in CI; vulnerable packages can reach build.</li><li><strong>MEDIUM</strong>: Set <code>persist-credentials: false</code> on checkout — checkout keeps token in <code>.git/config</code>, enabling malicious postinstall scripts to read pushable credentials.</li><li><strong>LOW</strong>: Set <code>timeout-minutes</code> on workflow jobs — 1 workflow has no job timeout, risking overlap on two-hourly schedule.</li><li><strong>LOW</strong>: Missing convention files — absent <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This repo delivers a functional task-management system that integrates with multiple AI editors and provides genuine cross-session persistence. The architecture spans 6 semi-independent projects, which offers flexibility but creates integration surface area. High-priority code health items center on CI/CD hardening (pinning action SHAs, adding dependency scanning, tightening token permissions). Teams already invested in the Taskmaster ecosystem will find immediate value; others should weigh the integration overhead against the benefit of editor-agnostic task tracking. The cognitive-load findings (oversized files, import cycles, deep nesting) suggest refactoring effort if long-term maintenance is a priority.</p>
             </div>
 
             
@@ -95,18 +106,18 @@ No lockfile means pnpm install or npm install may produce different dependency t
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,253<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>55</b></li><li><span>Markdown</span><i style="width:80%"></i><b>44</b></li><li><span>JSON</span><i style="width:38%"></i><b>21</b></li><li><span>YAML</span><i style="width:33%"></i><b>18</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>451</b></li><li><span>JavaScript</span><i style="width:81%"></i><b>367</b></li><li><span>Markdown</span><i style="width:33%"></i><b>149</b></li><li><span>JSON</span><i style="width:15%"></i><b>67</b></li><li><span>TSX</span><i style="width:8%"></i><b>37</b></li><li><span>YAML</span><i style="width:4%"></i><b>18</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Transformers</span></p>
                     </div>
                 </div>
 
@@ -165,12 +176,6 @@ No lockfile means pnpm install or npm install may produce different dependency t
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>apps/cli/package.json</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1217858830">Open in Code Brain &rarr;</a>

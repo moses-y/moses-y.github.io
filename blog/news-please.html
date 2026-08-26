@@ -80,31 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Collecting and normalising news articles from heterogeneous sites is labor‑intensive. Each outlet uses a different HTML layout, RSS format, or sitemap structure, and most open‑source crawlers handle only a subset of these patterns. Teams that need a reliable, repeatable feed of headline, body, author, date, language and image must either write site‑specific scrapers or stitch together multiple tools.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>news-please bundles a Scrapy‑based crawler with a set of extractors that wrap newspaper4k, readability, and custom heuristics. The core entry point is newsplease/main.py, which parses CLI arguments and builds a Scrapy CrawlerProcess.</p><p>Key modules:  
-newsplease/crawler/spiders/ – concrete spiders (newspleasespider.py, rsscrawler.py, sitemapcrawler.py) that drive URL discovery.  
-newsplease/pipeline/extractor/ – extractor classes (newspaperextractor.py, readabilityextractor.py, langdetectextractor.py) that populate a NewsArticle object (newsplease/NewsArticle.py).  
-newsplease/config/ – default configuration files (config.cfg, configlib.cfg, sitelist.hjson) loaded by newsplease/config.py.</p><p>The library mode is exposed via newsplease/init.py where NewsPlease.fromurl() returns a fully populated NewsArticle instance.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install from PyPI (recommended)
-pip install news-please</p><p>Or build the Docker image provided in the repo
-docker build -t news-please .</p><p>Both paths rely on requirements.txt for Python dependencies; the Dockerfile copies the source and runs pip install -r requirements.txt.</p><h3 class="post-h" id="configuration">Configuration</h3><p>The default behaviour reads newsplease/config/config.cfg. Users can supply an alternative config file with the --config CLI flag (see newsplease/main.py argument parser). No secret keys are required for the core crawler; optional storage back‑ends (PostgreSQL, Elasticsearch, Redis) are configured in the same file.</p><h3 class="post-h" id="running">Running</h3><p>CLI mode (crawl a site recursively):  
-  python -m newsplease -u https://example.com --output json</p><p>The -u/--url flag is defined in newsplease/main.py; --output selects the writer (JSON, PostgreSQL, etc.).
-Library mode (single URL extraction):  
-  from newsplease import NewsPlease
-  article = NewsPlease.fromurl(&#39;https://www.nytimes.com/2023/01/01/world/europe/article.html&#39;)
-  print(article.title, article.publish_date)
-CommonCrawl archive (bulk download):  
-  python -m newsplease.examples.commoncrawl \
-      --output-dir ./cc-data \
-      --date-from 2022-01-01 --date-to 2022-12-31</p><p>Parameters are parsed in newsplease/examples/commoncrawl.py.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A media‑monitoring service can schedule nightly runs of news-please against a list of publisher roots, store the JSON output in an S3 bucket, and ingest the data into a downstream analytics pipeline. Example workflow:</p><p>import json, pathlib, subprocess</p><p>publishers = [&#39;https://www.bbc.com&#39;, &#39;https://www.cnn.com&#39;]
-for p in publishers:
-    subprocess.run([&#39;python&#39;, &#39;-m&#39;, &#39;newsplease&#39;,
-                    &#39;-u&#39;, p,
-                    &#39;--output&#39;, &#39;json&#39;,
-                    &#39;--out-dir&#39;, f&#39;./out/{pathlib.Path(p).netloc}&#39;])</p><p>The resulting files contain a uniform schema ready for indexing in Elasticsearch or for sentiment analysis.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No test suite – No tests/ directory or pytest files; core paths are unverified.  
-Med – Missing CI/CD – .github contains issue templates and funding config but no workflow YAML; builds are not automatically validated.  
-Low – No lockfile – Dependencies are listed only in requirements.txt; reproducible installs depend on external package versions.  
-Low – Config files in source – config.cfg and sitelist.hjson are committed with default values; users must edit them for production storage credentials.  
-Low – Limited documentation – README covers basic CLI usage; advanced storage options lack examples.</p><p>No obvious security secrets are present, and the Dockerfile follows standard best practices (non‑root user, explicit COPY).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>news-please delivers a functional, out‑of‑the‑box solution for crawling and extracting structured news content, with both CLI and library interfaces. It is suitable for prototypes, research projects, or small‑to‑medium pipelines where rapid setup outweighs the need for a comprehensive test suite or CI pipeline. For production‑grade deployments, teams should add automated tests, lock dependencies, and integrate CI to mitigate the current gaps.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Extracting structured data from news websites is a fragmented problem: crawling, HTML parsing, boilerplate removal, and date/author extraction each need different tools, and gluing them together is most of the work. <code>news-please</code> packages that pipeline into one installable Python package, so a developer can go from a URL to a structured article record without assembling five libraries.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>news-please</code> is a news crawler and extractor with two modes. The library mode (<code>newsplease/NewsArticle.py</code>) exposes <code>from_url</code>, <code>from_urls</code>, and <code>from_file</code> for one-off extraction. The CLI mode (<code>newsplease/__main__.py</code>) runs continuous crawling via RSS, sitemaps, or recursive link-following, and writes results to JSON, PostgreSQL, ElasticSearch, or Redis.</p>
+<p>The extraction pipeline lives in <code>newsplease/pipeline/</code>. It runs multiple extractors (<code>newspaper_extractor.py</code>, <code>readability_extractor.py</code>, <code>date_extractor.py</code>, <code>lang_detect_extractor.py</code>) and a <code>comparer/</code> module that merges their outputs by field—title, author, date, text—into a single <code>NewsArticle</code>. A <code>commoncrawl_crawler.py</code> module pulls from Common Crawl's WARC archives.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>newsplease/__main__.py:754</code>, which reaches 84 functions—the widest blast radius in the repo. It parses CLI args, sets up logging, and dispatches to crawler management functions. The shortest path to an external effect is <code>main -&gt; __setup__</code>, which calls <code>os.makedirs</code> on the filesystem.</p>
+<p>Two files carry most of the weight:</p>
+<ul><li><code>newsplease/__main__.py</code> — 30 functions, 3 classes, called from 12 files. Handles CLI, daemon mode, and crawler lifecycle.</li><li><code>newsplease/pipeline/pipelines.py</code> — 41 functions, 16 classes. The Scrapy item pipeline: <code>process_item</code> calls <code>extract_relevant_info</code>, which is the hub for extraction.</li></ul>
+<p>Key routing functions: <code>get_allowed_domain</code> (called from 9 places) and <code>extract</code> (8 places) in <code>url_extractor.py</code> and <code>article_extractor.py</code> respectively. <code>__init__</code> calls <code>section</code> 33 times—a sign of heavy configuration-driven branching.</p>
+<p>The repo touches the outside world in 4 places: 4 functions do database I/O, 12 read/write files, 8 make network calls, 4 do crypto (likely MD5 for filename hashing in <code>savepath_parser.py</code>). The module graph has no cycles, which keeps changes contained; the most unstable module is <code>comparer.py</code> (instability 0.89), meaning it depends on many things but few depend on it—safe to refactor.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>pip install news-please</code></pre>
+<p><strong>Library mode</strong>:</p>
+<pre data-lang="python"><code>from newsplease import NewsPlease
+article = NewsPlease.from_url('https://example.com/article')
+print(article.title)</code></pre>
+<p><strong>CLI mode</strong>: run <code>python -m newsplease</code> (the <code>__main__.py</code> entry point). Configuration lives in <code>newsplease/config/config.cfg</code> and <code>sitelist.hjson</code>. The <code>Dockerfile</code> builds a container image; <code>docker.sh</code> wraps the build/run.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A media-monitoring service that ingests articles from a publisher list: a scheduler calls <code>NewsPlease.from_urls([...])</code> daily, stores results in PostgreSQL via the pipeline's storage backends, and the <code>commoncrawl.py</code> example pulls historical archives for backfill.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 34 issues (18 high, 16 medium). The dominant problem is <strong>deep nesting</strong> (22 instances, max depth 9) in <code>url_extractor.py</code>, <code>config.py</code>, and <code>savepath_parser.py</code>—control flow is hard to follow. <strong>Duplicated code</strong> appears as 41 repeated 6-line blocks across 10 files, mostly in the crawler modules. <strong>Broad exception handling</strong> in <code>__init__.py</code> and the commoncrawl modules swallows errors. <code>pipelines.py</code> and <code>__main__.py</code> are oversized (848 lines combined) with high branching density.</p>
+<p>SDLC gaps: <strong>no test suite</strong>, <strong>no CI/CD</strong>, and <strong>no dependency lockfile</strong>. The <code>Dockerfile</code> uses <code>python:3.6.5-alpine3.7</code>—an old, unpinned base image, with no non-root <code>USER</code> directive. The README claims Python 3.8+ support, which contradicts the Dockerfile's 3.6 image.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A genuinely useful tool with solid architecture (clean module graph, no cycles) but aging code quality and zero automated verification. The extraction pipeline is the valuable part; the CLI and crawler layers show their age. Use it as a library and add your own tests before depending on it for production.</p>
             </div>
 
             
