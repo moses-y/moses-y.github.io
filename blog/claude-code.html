@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 2, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,14 +79,36 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>This repository functions as a research archive of leaked Claude Code source material. The original Anthropic CLI source became publicly accessible on March 31, 2026, through a .map file exposed in the npm registry, as noted by Chaofan Shou on X. The maintainer—a university student—documents this exposure to study software supply-chain vulnerabilities, secure engineering practices, and agentic tooling architecture. The archive makes no claim about legality or legitimacy; its frame is explicitly educational and research-oriented, accompanied by the essay &quot;Is legal the same as legitimate: AI reimplementation and the erosion of copyleft.&quot;</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This is a mirrored src/ snapshot of the original Claude Code TypeScript codebase, totaling approximately 1,900 files and 512,000+ lines. The directory structure organizes code into src/bridge/ (session management and API routing), src/commands/ (individual CLI subcommands like add-dir, agents, bridge, config), src/cli/transports/ (SSE, WebSocket, Serial batch upload), src/buddy/ (companion UI components using React + Ink), and src/QueryEngine.ts/src/Task.ts/src/Tool.ts as core types. The original runs on Bun with React + Ink for the terminal UI; this archive preserves the TypeScript source for analysis, not execution.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>No setup command or runtime invocation is provided, because the repository&#39;s purpose is source analysis, not deployment. The README documents that the original project uses npm/pnpm and Bun, but this archive includes no package.json, build scripts, or entry point for running the code. The only explicitly documented usage is reviewing the mirrored source and accompanying essay. The oh-my-codex (OmX) workflow noted in the README was used for documentation contextualization, not for operating the codebase itself.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>This repo serves as a concrete case study in source-exposure risk: how a source map in a published npm package can unobfuscate and distribute TypeScript sources hosted in a cloud storage bucket (Anthropic&#39;s R2). Security researchers examining build-artifact leakage, supply-chain hardening, or large-scale CLI architecture patterns can reference the bridge layer (src/bridge/), transport implementations (src/cli/transports/), and command wiring (src/commands/) as illustrative material. The oh-my-codex orchestration pattern ($team and $ralph modes) is also documented as a workflow example, though it applies to the documentation process, not the code.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No test files detected - untested code paths repository-wide
-No CI/CD pipeline detected - no automated build/test gate (no .github/ CI config)
-No LICENSE file - unclear usage/redistribution rights from the root
-The README explicitly states this is not an official Anthropic repository and does not claim ownership of the original code
-No build configuration is present for reproducing the original Bun runtime
-Source code derives from a leaked snapshot, so original quality guarantees do not apply</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a credible research archive for supply-chain security analysis and CLI architecture review, not a deployable codebase. The absence of a license, test suite, and CI/CD pipeline means there are no operational guarantees. Researchers studying source-exposure scenarios or large TypeScript CLI frameworks will find the most value; anyone needing functional Claude Code functionality should use the official Anthropic distribution.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>Technical Briefing – claude-code</strong> Repository: <code>https://github.com/moses-y/claude-code</code> (clone with <code>git clone https://github.com/moses-y/claude-code</code>)</p>
+<hr>
+<h4 id="the-problem">The Problem</h4>
+<p>Developers need a locally‑runnable snapshot of Anthropic’s Claude CLI to study its agent workflow, security posture, and integration points. The original source was unintentionally exposed through a source‑map, leaving only an un‑packaged TypeScript dump.</p>
+<h4 id="what-this-does">What This Does</h4>
+<p>The repo mirrors the full <code>src/</code> tree (≈1,900 files, &gt;512 k LOC) of the Claude CLI written for the Bun runtime and a React‑Ink terminal UI. Core responsibilities are split across a handful of high‑impact modules:</p>
+<ul><li><strong><code>src/bootstrap/state.ts</code></strong> – session handling, state bootstrapping (212 functions, 6 exported types).</li><li><strong><code>src/components/design-system/ThemeProvider.tsx</code></strong> – UI theme plumbing (used by 39 callers).</li><li><strong><code>src/bridge/bridgeUI.ts</code></strong> – bridge‑side UI helpers (QR generation, status rendering).</li><li><strong><code>src/commands/remote-setup/remote-setup.tsx</code></strong> – remote‑auth flow (network calls via <code>axios</code>).</li><li><strong><code>src/cli/print.ts</code></strong> – CLI entry point; <code>run</code> (line 1865) drives the command loop and eventually triggers the only outbound network request (<code>axios.post</code>).</li></ul>
+<p>The most fan‑in utilities are under <code>src/utils/</code> – <code>debug</code>, <code>errors</code>, and <code>log</code> are each imported by &gt;120 other modules, making them “hub” modules whose change propagates widely.</p>
+<h4 id="how-it-is-wired">How It Is Wired</h4>
+<ol><li><strong>Execution start</strong> – <code>run</code> in <code>src/cli/print.ts</code> is the primary entry point; it reaches 66 internal functions and is invoked from four locations.</li><li><strong>Command dispatch</strong> – <code>run</code> calls <code>submitMessage</code> (via <code>QueryEngine.submitMessage</code>) which obtains a session ID (<code>getSessionId</code> in <code>bootstrap/state.ts</code>).</li><li><strong>Bridge loop</strong> – <code>runBridgeLoop</code> (found in bridge code) repeatedly calls <code>sleep</code>, <code>logError</code>, and <code>logVerbose</code>; <code>logError</code> eventually reaches <code>printLog</code> → <code>write</code>, which performs the only outbound HTTP POST (Axios).</li><li><strong>UI rendering</strong> – <code>ThemeProvider</code> and Ink components consume <code>useTheme</code> (called 41 times) to style the terminal UI.</li><li><strong>Network &amp; side‑effects</strong> – Apart from the Axios call, a single file (<code>src/cli/transports/ccrClient.ts</code>) writes to the filesystem; three functions perform JWT handling or token generation.</li></ol>
+<p><strong>Import graph</strong> shows 1,500 internal modules with 3,100 edges and 45 circular dependencies. The biggest cycle involves <code>src/utils/debug.ts</code>, <code>src/utils/slowOperations.ts</code>, and <code>src/types/command.ts</code>. The hub modules (<code>debug</code>, <code>errors</code>, <code>log</code>) have instability ≈ 0 and attract &gt;200 inbound imports each.</p>
+<h4 id="how-to-use-it">How To Use It</h4>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/claude-code
+cd claude-code
+
+# No explicit build or run script is provided.
+# The project appears to target the Bun runtime and TypeScript.
+# To compile you would typically run:
+#   bun install   # (requires a package.json, which is missing)
+#   bun build     # placeholder – actual command not defined in repo</code></pre>
+<p><em>Missing pieces</em>: No <code>package.json</code>, lockfile, or documented build command. A CI workflow that runs the TypeScript compiler and test suite is also absent, so the exact build steps must be inferred or added.</p>
+<h4 id="real-world-use">Real‑World Use</h4>
+<p>A security researcher could launch the CLI locally, trigger <code>src/commands/remote-setup/remote-setup.tsx</code> to perform the OAuth flow, and observe the single HTTP POST that contacts Anthropic’s backend. Modifying <code>src/utils/debug.ts</code> would immediately affect &gt;200 dependent modules, illustrating the blast radius of hub utilities.</p>
+<h4 id="code-health-issues">Code Health &amp; Issues</h4>
+<ul><li><strong>HIGH – License missing</strong> – No <code>LICENSE</code> file; reuse is legally uncertain.</li><li><strong>HIGH – CI missing</strong> – No <code>.github/</code> workflow or other CI config; changes are untested before merge.</li><li><strong>MEDIUM – Test coverage</strong> – Only 16 test files for 1,902 source files (≈0.5 % coverage).</li><li><strong>LOW – Repository conventions</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li><li><strong>HIGH – Import cycles</strong> – 23 files participate in circular imports (e.g., <code>debug.ts</code>, <code>slowOperations.ts</code>). Break cycles by extracting shared types or inverting dependencies.</li><li><strong>HIGH – Hub modules</strong> – <code>src/utils/debug.ts</code> and friends are imported by &gt;200 files; keep them stable or refactor volatile logic out.</li><li><strong>MEDIUM – Cognitive load</strong> – Files like <code>src/utils/errors.ts</code> contain &gt;44 branch points in 145 lines; consider simplifying with strategy tables.</li></ul>
+<h4 id="the-bottom-line">The Bottom Line</h4>
+<p>The repository provides a near‑complete TypeScript snapshot of Claude’s CLI, valuable for architectural and security analysis. However, the lack of licensing, CI, and clear build instructions makes it unsuitable for production use without substantial scaffolding. Engineers should treat it as a research artifact and prioritize adding a license, test harness, and build workflow before any integration work.</p>
             </div>
 
             
@@ -96,18 +118,18 @@ Source code derives from a leaked snapshot, so original quality guarantees do no
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">2<span>/7</span></div>
+                        <div class="an-score">3<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,906<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>125</b></li><li><span>TSX</span><i style="width:46%"></i><b>57</b></li><li><span>JavaScript</span><i style="width:11%"></i><b>14</b></li><li><span>Markdown</span><i style="width:2%"></i><b>2</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>1332</b></li><li><span>TSX</span><i style="width:41%"></i><b>552</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>18</b></li><li><span>Markdown</span><i style="width:0%"></i><b>2</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>YOLO</span></p>
                     </div>
                 </div>
 
@@ -146,7 +168,7 @@ Source code derives from a leaked snapshot, so original quality guarantees do no
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
                     </ul>
                 </div>
 

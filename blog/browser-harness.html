@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 20, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLM-based browser agents typically rely on rigid frameworks with pre-built actions and workflows. When an agent encounters an unfamiliar task—uploading a file, handling a cross-origin iframe, or scraping a site with unusual selectors—it either fails or requires human intervention to extend the framework. The browser-harness repo takes the opposite approach: a deliberately thin CDP (Chrome DevTools Protocol) bridge that lets the agent write its own missing functionality mid-task.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The harness is a minimal Python layer (~592 lines total) between an LLM and a Chrome browser. run.py (~36 lines) executes plain Python with helpers.py (~195 lines) preloaded; helpers.py contains the starting tool calls the agent can extend. admin.py and daemon.py (~361 lines) handle the daemon bootstrap and the CDP websocket/socket bridge.</p><p>The repo&#39;s real substance is two directories of Markdown skill files. interaction-skills/ (17 files) covers browser mechanics—downloads.md, shadow-dom.md, uploads.md, cross-origin-iframes.md. domain-skills/ (68 files) documents site-specific scraping or task flows: amazon/product-search.md, sec-edgar/scraping.md, linkedin/, salesforce/, tiktok/upload.md. The README explicitly states these skills are agent-generated, not hand-authored—the agent files what it learns during real tasks.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: The repo is Python-based (pyproject.toml present). The README&#39;s setup prompt tells the agent to read install.md first, then SKILL.md. No lockfile exists, so install with pip install -e . or uv sync from the repo root—exact commands aren&#39;t documented in the README.</p><p>Configuration: .env.example defines required environment variables. The setup requires Chrome to run with remote debugging enabled; docs/setup-remote-debugging.png shows the browser flag to enable.</p><p>Running it: There is no documented CLI entry point. The workflow is conversational: paste the setup prompt into Claude Code or Codex, and the agent handles installation, browser connection, and task execution. run.py is the underlying execution path but isn&#39;t invoked directly.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical session: an agent needs to scrape Glassdoor job postings. It connects via the daemon&#39;s CDP websocket, reads domain-skills/glassdoor/scraping.md for known selectors and anti-bot patterns, executes the flow through helpers.py functions. If it hits an unexpected pagination pattern, it writes a new helper, updates the skill file, and continues—no human coding required.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No test files - The entire codebase has zero tests despite containing a websocket bridge and daemon process. Network-heavy code paths are untested.
-Med - No CI/CD pipeline - No .github/ or CI config detected. No automated gate for regressions.
-Low - No dependency lockfile - pyproject.toml declares dependencies without a lockfile, so builds aren&#39;t reproducible.
-Low - Thin Python core - 4 Python files total (~592 lines) means the actual code surface is small; most value lives in Markdown skill files, which are unvalidated prose.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a pragmatic, philosophy-driven tool for teams already using Claude Code or Codex for browser automation. The agent-generated skill library is a clever way to accumulate hard-won scraping knowledge. The absence of tests and CI is a real concern for production use, but for an exploratory tool where the agent is the test harness, it&#39;s a defensible trade-off. Best suited to teams experimenting with agentic browser workflows, not as a drop-in automation platform.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want an LLM to drive a browser must stitch together a Chrome DevTools Protocol (CDP) client, a long‑running daemon, and a set of ad‑hoc helper functions. Maintaining that glue code is tedious, error‑prone, and hard to reuse across projects.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>browser-harness</code> provides a minimal, self‑healing harness that exposes a handful of Python helpers (<code>helpers.py</code>) and a daemon (<code>daemon.py</code>) over a single CDP websocket. The LLM can edit the helpers on‑the‑fly, add missing steps, and continue without a heavyweight framework.</p>
+<ul><li><strong>Core files</strong> – <code>run.py</code> launches the environment, <code>helpers.py</code> (~195 LOC) implements actions like <code>upload_file</code>, <code>click</code>, and <code>js</code>. <code>admin.py</code> and <code>daemon.py</code> (~361 LOC total) bootstrap the daemon, manage the CDP connection, and handle remote‑debugging.</li><li><strong>Skills</strong> – over 60 markdown skill files under <code>domain-skills/</code> and interaction guides under <code>interaction-skills/</code> describe selectors and flows for specific sites (e.g., <code>domain-skills/amazon/product-search.md</code>). The LLM writes new skill files automatically; the repo does not ship executable code for each site.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>daemon.py:134</code> in the <code>start</code> function. <code>start</code> reads the Chrome DevTools port file (<code>DevToolsActivePort</code>) and calls <code>get_ws_url</code>, which builds the CDP websocket URL (filesystem read).</p>
+<p><code>main</code> (<code>daemon.py:218</code>) invokes <code>serve</code>, which creates the daemon socket, then calls <code>attach_first_page</code> (line 111). <code>attach_first_page</code> calls <code>log</code> (via <code>helpers.py</code>) and <code>cdp</code> to send CDP commands.</p>
+<p>Key internal call hubs (from the measured call graph):</p>
+<ul><li><code>cdp</code> – invoked 15 times from helpers (<code>press_key</code>, <code>switch_tab</code>, <code>click</code>, <code>js</code>, <code>upload_file</code>).</li><li><code>log</code> – invoked 7 times, central for diagnostics.</li><li><code>_send</code> – low‑level wrapper used 4 times for outbound HTTP calls.</li></ul>
+<p>External effects:</p>
+<ul><li>Filesystem – <code>start</code> reads <code>DevToolsActivePort</code>; <code>main</code> deletes the socket file with <code>os.unlink</code>.</li><li>Network – <code>_send</code> in <code>helpers.py</code> performs HTTP requests (no timeout).</li><li>Subprocess – <code>admin.py</code> runs external commands (e.g., launching Chrome).</li></ul>
+<p>The import graph is flat (4 modules, 2 import edges) with no circular dependencies, making the codebase easy to navigate but also indicating a single point of failure around <code>daemon.py</code> and <code>helpers.py</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/browser-harness
+cd browser-harness
+
+# Install Python dependencies (pyproject.toml)
+pip install .
+# Or, with uv for reproducibility (once a lockfile exists)
+# uv pip install --frozen-lockfile .
+
+# Copy example environment
+cp .env.example .env   # adjust values as needed (e.g., CHROME_PATH)
+
+# Start the daemon (runs Chrome in remote‑debug mode)
+python -m daemon start
+
+# Run a one‑off script with helpers pre‑loaded
+python run.py          # entry point that loads helpers into the REPL</code></pre>
+<p>The README’s “Setup prompt” (install.md &amp; SKILL.md) should be read for detailed browser‑connection steps. No CI, Dockerfile, or test suite is present, so manual validation is required before production use.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform that needs to scrape product listings can spin up the harness, invoke <code>helpers.upload_file</code> or <code>helpers.click</code> from an LLM‑generated script, and let the agent auto‑generate a new <code>domain-skills/</code> markdown file when it encounters a novel page layout. The platform only needs to maintain the Python daemon and ensure Chrome is reachable on the configured port.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – missing lockfile</strong> – <code>pyproject.toml</code> declares dependencies but no <code>poetry.lock</code>/<code>requirements.txt</code>.</li><li><strong>Medium – no Dependabot</strong> – repository lacks <code>.github/dependabot.yml</code>; advisory updates are manual.</li><li><strong>Medium – outbound request timeout</strong> – <code>helpers.py</code> calls <code>requests</code> without <code>timeout=</code> (admin.py also).</li><li><strong>Medium – file opened without context manager</strong> – <code>admin.py</code>, <code>helpers.py</code>, <code>daemon.py</code> use <code>open(...)</code> directly.</li><li><strong>Medium – broad exception handling</strong> – same three files catch generic <code>Exception</code>.</li><li><strong>Medium – deep nesting &amp; duplicated blocks</strong> – <code>admin.py</code> and <code>daemon.py</code> contain 6‑level indentation and repeated 6‑line code fragments.</li><li><strong>SDLC gaps</strong> – no tests, no CI pipeline, no Dockerfile. License is present.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>browser-harness</code> delivers a lean, editable CDP bridge that lets an LLM control a browser with minimal scaffolding. Its simplicity and flat module graph are strengths for rapid prototyping, but the lack of tests, CI, a lockfile, and robust error handling make it unsuitable for production without additional engineering effort. Teams comfortable adding their own test suite, CI, and hardening the helpers can extract considerable value from the core harness.</p>
             </div>
 
             

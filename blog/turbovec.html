@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 18, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,21 +79,43 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Vector indexes typically require a training step that consumes compute time and becomes stale as data evolves. Trained quantization methods like FAISS PQ demand codebook retraining when the dataset changes, and adding new vectors often requires index rebuilds. This creates operational overhead for dynamic workloads where data arrives continuously or dimensions shift between deployments.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>turbovec implements TurboQuant, a data-oblivious vector compression approach that avoids training entirely. The Rust core lives in turbovec/src/ with nine source files: lib.rs, codebook.rs, encode.rs, pack.rs, rotation.rs, search.rs, and io.rs handle the index logic, compression, and persistence. Python bindings are in turbovec-python/src/lib.rs, exposing TurboQuantIndex via pyproject.toml and Cargo.toml. Compression operates at 2-4 bits per dimension, and benchmarks across benchmarks/suite/ show recall converging to 1.0 by k=4–8 at 4-bit, with results published in JSON files like recalld15364bit.json. Speed benchmarks in benchmarks/suite/ compare against FAISS FastScan on both ARM (Apple M3 Max) and x86 (Sapphire Rapids) configurations, with results visualized in docs/ SVGs.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup:  
-pip install turbovec
-or from source
-cd turbovec &amp;&amp; cargo build --release
-cd turbovec-python &amp;&amp; pip install -e .</p><p>Configuration: No environment variables or keys are required. The index is configured at construction via dim and bitwidth parameters, as documented in the Python and Rust examples in the README.</p><p>Running it:  
-from turbovec import TurboQuantIndex</p><p>index = TurboQuantIndex(dim=1536, bitwidth=4)
-index.add(vectors)
-scores, indices = index.search(query, k=10)
-index.write(&quot;myindex.tq&quot;)
-loaded = TurboQuantIndex.load(&quot;myindex.tq&quot;)</p><p>The entry point turbovec-python/src/lib.rs binds the Rust TurboQuantIndex struct, and Cargo.toml files manage the Rust/Python dependency chain.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A search-as-a-service platform ingesting new user embeddings hourly can use turbovec without retraining codebooks. When a batch of new vectors arrives, they&#39;re added directly via index.add(), and search latency remains stable. The data-oblivious property means the same index serves both historical and incoming data without rebuilds—a meaningful reduction in deployment pipeline complexity for rapidly changing datasets.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests: One test file exists (turbovec/tests/concurrent_search.rs); CI is configured via .github/workflows/release.yml with a CI/CD pipeline.
-License: LICENSE file present (MIT).
-Lockfile: Cargo.lock is committed, ensuring reproducible builds.
-No structural red flags were detected: CI runs on every release, a license is included, and the dependency graph is explicit in the three Cargo.toml files.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>turbovec delivers a practical middle ground for vector search: no training step, competitive recall at 2–4 bits, and search speeds that match or exceed FAISS FastScan on both ARM and x86. The codebase is clean, well-structured, and immediately usable via pip install turbovec or cargo add turbovec. It&#39;s worth evaluating for workloads with dynamic data or where minimizing pipeline overhead is a priority, though teams already invested in trained codebook pipelines may see limited incremental benefit.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>Clone &amp; Build</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/turbovec
+cd turbovec
+# Rust library
+cargo build --release
+# Python bindings (requires maturin)
+pip install -e turbovec-python</code></pre>
+<h4 id="the-problem">The Problem</h4>
+<p>Applications that need fast nearest‑neighbor search on very large vector collections often rely on trained quantizers (e.g., FAISS PQ). Training adds latency, requires re‑training when data changes, and increases operational complexity.</p>
+<h4 id="what-this-does">What This Does</h4>
+<p><code>turbovec</code> implements <strong>TurboQuant</strong>, a data‑oblivious quantizer that compresses each vector to 2–4 bits per dimension without a training phase. The core Rust code lives in <code>turbovec/src/</code> (<code>codebook.rs</code>, <code>encode.rs</code>, <code>io.rs</code>, <code>pack.rs</code>, <code>rotation.rs</code>, <code>search.rs</code>). Python users access the same logic through the binding in <code>turbovec-python/src/lib.rs</code>, exposing <code>TurboQuantIndex</code>. Benchmarks and result visualisations are under <code>benchmarks/</code> and <code>docs/</code>.</p>
+<h4 id="how-it-is-wired">How It Is Wired</h4>
+<p><strong>Entry point</strong> – the benchmark driver <code>benchmarks/suite/compression.py</code> defines <code>main</code> (line 50) which calls <code>load_openai</code>, <code>load_glove</code>, <code>measure_index_size</code>, then creates a <code>TurboQuantIndex</code> via the Python binding.</p>
+<p><strong>Control flow</strong> – <code>main</code> → <code>TurboQuantIndex.add</code> (binding → Rust <code>turbovec/src/encode.rs</code>) → <code>TurboQuantIndex.search</code> (binding → Rust <code>turbovec/src/search.rs</code>).</p>
+<p><strong>External effects</strong> – only two kinds appear: file I/O (<code>os.remove</code> in <code>measure_index_size</code>) and external command execution in <code>benchmarks/download_data.py</code> (uses <code>os.system</code> to fetch datasets).</p>
+<p><strong>Responsibility map</strong> (high‑fan‑in files first):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th></tr></thead><tbody><tr><td><code>benchmarks/download_data.py</code></td><td>Reads/writes files, runs <code>wget</code>/<code>curl</code> to fetch GloVe and OpenAI datasets.</td></tr><tr><td><code>benchmarks/create_diagrams.py</code></td><td>Generates SVG panels (<code>xe</code>, <code>nice_ceil</code>, <code>style_block</code>, <code>grid_lines</code>, <code>paired_panel</code>).</td></tr><tr><td><code>benchmarks/suite/compression.py</code></td><td>Loads data, measures index size, invokes the Python API.</td></tr><tr><td><code>benchmarks/suite/recall_*.py</code> &amp; <code>benchmarks/suite/speed_*.py</code></td><td>Load vectors, call <code>recall_at_1_at_k</code>, report timings.</td></tr><tr><td><code>turbovec/src/search.rs</code></td><td>Implements the nearest‑neighbor search loop (largest file, 940 LOC).</td></tr><tr><td><code>turbovec/src/io.rs</code></td><td>Handles serialization/deserialization of the index file.</td></tr><tr><td><code>turbovec/src/codebook.rs</code>, <code>turbovec/src/pack.rs</code></td><td>Encode/decode logic, rotation handling.</td></tr></tbody></table></div>
+<p>The internal call graph shows a few hot spots: the function <code>xe</code> (used in 7 places) and <code>grid_lines</code> (3 places) are visualisation helpers; <code>load_openai</code> and <code>load_json</code> are each called twice from benchmark scripts. No circular imports were detected.</p>
+<h4 id="how-to-use-it">How To Use It</h4>
+<ol><li><strong>Install</strong> – <code>pip install turbovec</code> (pre‑built wheels) or use the local source as shown above.</li><li><strong>Create an index</strong> – in Python:   ``<code>python from turbovec import TurboQuantIndex idx = TurboQuantIndex(dim=1536, bit_width=4) idx.add(vectors)          # </code>vectors<code> is a NumPy array scores, ids = idx.search(query, k=10) idx.write("my_index.tq") </code>``</li><li><strong>Rust usage</strong> – after <code>cargo add turbovec</code>:   ``<code>rust use turbovec::TurboQuantIndex; let mut idx = TurboQuantIndex::new(1536, 4); idx.add(&amp;vectors); let results = idx.search(&amp;queries, 10); idx.write("my_index.tq")?; </code>``</li></ol>
+<p>No additional configuration files or environment variables are required.</p>
+<h4 id="real-world-use">Real‑World Use</h4>
+<p>A recommendation engine can store user‑item embeddings in a TurboQuant index, update it continuously (no retraining), and serve top‑k recommendations with sub‑millisecond latency. Example workflow:</p>
+<pre data-lang="python"><code># daily pipeline
+idx = TurboQuantIndex(dim=200, bit_width=2)
+idx.add(new_user_vectors)          # incremental add
+idx.write("daily.tq")
+# serving layer
+idx = TurboQuantIndex.load("daily.tq")
+scores, ids = idx.search(current_query, k=5)</code></pre>
+<h4 id="code-health-issues">Code Health &amp; Issues</h4>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/release.yml</code>).</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (<code>.github/dependabot.yml</code> missing).</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan to CI (<code>dependency-review-action</code> or <code>osv-scanner</code>).</li><li><strong>MEDIUM</strong> – Expand test suite (1 test file vs 34 source files).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs (<code>release.yml</code> lacks explicit timeout).</li></ul>
+<p>Additional observations: deep nesting (max depth 11) in <code>turbovec/src/search.rs</code>, <code>codebook.rs</code>, <code>pack.rs</code>; duplicated 6‑line blocks across many benchmark scripts; oversized <code>search.rs</code> (940 lines) and high branching density in <code>io.rs</code>. These increase cognitive load and risk when modifying the core search logic.</p>
+<h4 id="the-bottom-line">The Bottom Line</h4>
+<p><code>turbovec</code> delivers a fast, training‑free vector index with a clean Rust core and ready‑to‑use Python bindings. It is production‑ready for static‑embedding workloads but would benefit from a richer test suite, tighter CI security controls, and refactoring of the most complex Rust modules before extensive custom development. Suitable for teams that prioritize low‑latency search and minimal data‑pipeline overhead.</p>
             </div>
 
             

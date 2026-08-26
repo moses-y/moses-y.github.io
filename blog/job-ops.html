@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 18, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,34 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#example-workflow-pseudo-code">Example workflow (pseudo‑code)</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Job seekers spend hours manually searching multiple boards, tailoring resumes, and tracking application status across email and spreadsheets. The process is repetitive, error‑prone, and slows the feedback loop with recruiters.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>JobOps provides a self‑hosted pipeline that aggregates listings from &gt;10 boards, scores fit with an LLM, rewrites each CV, and watches Gmail for status updates. The UI lives in the docs-site/ folder (a Docusaurus site) and is built with React/TypeScript (docs-site/src/components/HomepageFeatures/index.tsx). Backend orchestration, extractor definitions, and AI provider integration are defined in the root Dockerfile and supporting config files (.env.example, .codex/environment.toml). Extractors are modular TypeScript files under docs-site/docs/extractors/ (e.g., adzuna.md, golang-jobs.md).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone the repo
-git clone https://github.com/DaKheera47/job-ops.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Job seekers waste hours aggregating listings, tailoring resumes, and manually tracking responses. The lack of a unified, automatable pipeline forces repetitive copy‑paste and makes it easy to miss interview invitations or visa‑related constraints.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>job-ops</code> is a self‑hosted suite of six loosely coupled projects that together provide:</p>
+<ul><li><strong>Orchestrator</strong> – a React front‑end (<code>orchestrator/src/client/**</code>) and Express API (<code>orchestrator/src/server/**</code>) that surface search results, score fits, and store application state.</li><li><strong>Extractors</strong> – TypeScript scrapers for individual boards (<code>extractors/adzuna/src/main.ts</code>, <code>extractors/gradcracker/src/main.ts</code>, etc.). Each exporter implements a <code>main()</code> entry point that returns normalized job objects.</li><li><strong>Shared</strong> – type definitions and small utilities (<code>shared/src/types/**</code>, <code>shared/src/location-support.ts</code>).</li><li><strong>Docs‑site</strong> – a static Docusaurus site (<code>docs-site/src/components/HomepageFeatures/index.tsx</code>) that ships the user guide.</li><li><strong>Docker</strong> – <code>Dockerfile</code> and <code>docker‑compose.yml</code> wrap the whole stack, exposing the UI on port 3005 and the API on 3000.</li></ul>
+<p>Key files: <code>orchestrator/src/client/api/client.ts</code> (central API wrapper), <code>orchestrator/src/server/services/llm/codex/client.ts</code> (LLM calls), <code>shared/src/types/design-resume.ts</code> (resume schema), and the extractor <code>manifest.ts</code> files (common CLI flags).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>orchestrator</strong> UI (<code>orchestrator/src/client/App.tsx</code>) which imports the API client (<code>orchestrator/src/client/api/client.ts</code>). That client is the hub: 126 functions, 7 classes, and 41 downstream calls, including a model inference (<code>codex/client.ts</code>) and file I/O (<code>readMetadata</code>).</p>
+<ul><li><strong>API flow</strong> – UI actions invoke <code>cn</code> (a utility in <code>orchestrator/src/lib/utils.ts</code>) which builds request payloads and calls <code>fetchApi</code>. <code>fetchApi</code> is referenced 82 times across the code base, making it the next‑largest blast radius.</li><li><strong>Server side</strong> – Express routes (<code>orchestrator/src/server/api/routes/**</code>) forward to service modules. The most connected service is <code>orchestrator/src/server/services/llm/types</code> (17 inbound, 0 outbound imports).</li><li><strong>Extractor pipeline</strong> – each extractor’s <code>main()</code> (e.g., <code>extractors/ukvisajobs/src/main.ts</code>) is invoked by the orchestrator’s job‑search scheduler (not fully mapped in the static analysis). The <code>run</code> function in <code>extractors/adzuna/src/main.ts</code> reaches 91 internal functions before returning a list of jobs.</li><li><strong>External effects</strong> –</li><li>Filesystem: <code>initialize → readMetadata</code> reads <code>metadata.json</code>.</li><li>Network: <code>start</code> (test) performs a <code>session.request</code>.</li><li>LLM inference: <code>orchestrator/src/server/services/llm/codex/client.ts</code> calls the configured model endpoint.</li></ul>
+<p>Circular imports involve <code>orchestrator/src/client/components/index.ts</code>, <code>shared/src/location-support.ts</code>, and <code>shared/src/types/settings.ts</code>; breaking this cycle would reduce coupling. Deeply nested components (<code>ConversionAnalytics.tsx</code>, <code>SettingsPage.tsx</code>) exhibit indentation depth 8, indicating complex render logic.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the upstream repo
+git clone https://github.com/moses-y/job-ops.git
 cd job-ops
-Install env variables (copy template and edit)
-cp .env.example .env
-edit .env – set CODex login, OPENAIAPIKEY, GMAILOAUTHCLIENT_ID, etc.
-Build and start containers
-docker compose up -d        # uses Dockerfile and docker-compose.yml</p><p>The compose file maps the web UI to http://localhost:3005 as described in README.md.</p><h3 class="post-h" id="configuration">Configuration</h3><p>.env – required keys are documented in .env.example.  
-docs-site/package.json – defines the React build (npm run build) and dev server (npm start).  
-docs-site/tsconfig.json – TypeScript compiler settings for custom extractors.</p><h3 class="post-h" id="running">Running</h3><p>The UI is served by the container built from Dockerfile. No separate CLI is exposed; interaction occurs through the browser wizard (onboarding flow). For a local dev loop:</p><p>cd docs-site
-npm install               # installs React deps
-npm start                 # runs Docusaurus dev server on localhost:3005</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A recruiting team can spin up JobOps on an internal server, configure a shared Gmail account, and let each recruiter log in via the web UI. When a candidate applies to a new role, the system auto‑generates a tailored PDF (via Reactive Resume integration) and records the interview status as emails arrive, eliminating manual spreadsheet updates.</p><h3 class="post-h" id="example-workflow-pseudo-code">Example workflow (pseudo‑code)</h3><p>name: Search &amp; Score
-  uses: job-ops/extractor@v0.1
-  with:
-    board: &quot;LinkedIn&quot;
-    query: &quot;senior backend engineer&quot;
-name: Generate CV
-  run: npm run generate-cv -- --job-id ${{ steps.search.outputs.id }}</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Limited test coverage – only one test file (docs-site/src/lib/umami.test.ts) covers analytics, not core pipeline logic.  
-Medium – Backend entry point unclear – Dockerfile builds an image but no explicit CMD or ENTRYPOINT is visible from the file list; documentation assumes the UI is the primary interface.  
-Low – Secrets in repo – .env.example is present, but no .env is committed; users must supply API keys manually, which is appropriate.  
-Low – License present – LICENSE file included, satisfying legal requirements.  
-Low – CI configured – GitHub Actions workflows (.github/workflows/ci.yml, release.yml) run lint and build steps, indicating a basic CI pipeline.</p><p>Overall the repository follows standard Node/Docker conventions, and the documentation (docs-site/docs/) is extensive and versioned.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>JobOps delivers a usable self‑hosted stack for aggregating job listings, AI‑driven resume tailoring, and email‑based status tracking, with a polished React front‑end and Dockerized deployment. The core backend logic is not directly exposed in the source tree, and test coverage is minimal, so teams should audit the extractor code before production use. It is best suited for small‑to‑medium recruiting groups that can manage their own Docker host and provide required API credentials.</p>
+
+# Build and start all services (Docker Compose uses the provided Dockerfile)
+docker compose up -d</code></pre>
+<ul><li><strong>Configuration</strong> – copy <code>.env.example</code> to <code>.env</code> and fill in required keys (<code>CODex_API_KEY</code>, <code>OPENAI_API_KEY</code>, etc.) as documented in the README.</li><li><strong>Running the UI</strong> – open <code>http://localhost:3005</code> in a browser; the React app will load the Express API at <code>http://localhost:3000</code>.</li><li><strong>Running an extractor manually</strong> – from the repo root:   ``<code>bash npx ts-node extractors/adzuna/src/main.ts </code>`<code> (or compile with </code>npm run build` in the extractor folder and execute the generated JS.)</li></ul>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A recruiter‑tracking service can embed JobOps by calling the API endpoint <code>POST /api/jobs/search</code> (implemented in <code>orchestrator/src/server/api/routes/search.ts</code>). The response includes a scored list of jobs and a generated resume PDF URL, which the service can forward to candidates automatically.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Static analysis summary</strong> – 98 measured findings: 24 high, 74 medium, 0 low. Notable categories: oversized files, deep nesting, hub modules, import cycles, and duplicated manifest code.</p>
+<p><strong>Audit findings</strong> – 10 items (2 high, 6 medium, 2 low):</p>
+<ul><li><strong>HIGH</strong> – Pin GitHub Action versions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – Replace wildcard CORS (<code>cors()</code>) with an explicit allow‑list (<code>orchestrator/src/server/app.ts</code>).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/ci.yml</code>).</li><li><strong>MEDIUM</strong> – Add Dependabot/Renovate (<code>.github/dependabot.yml</code>).</li><li><strong>MEDIUM</strong> – Pin Docker base image by digest (<code>Dockerfile</code>).</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan step to CI.</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout.</li><li><strong>MEDIUM</strong> – Run container as non‑root (<code>USER</code> directive).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs.</li><li><strong>LOW</strong> – Add convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>All tests, CI, licence, and lockfile are present; no committed secrets were detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>JobOps delivers a functional, containerized job‑search pipeline with a polished UI and extensible scrapers. The codebase works but suffers from large, tightly coupled modules, deep nesting, and several high‑severity security hygiene gaps. It is suitable for teams comfortable refactoring TypeScript and adding CI hardening, but requires immediate fixes to CORS, action pinning, and Docker user handling before production use.</p>
             </div>
 
             

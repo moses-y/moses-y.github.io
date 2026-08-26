@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 7, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,19 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#validate-prerequisites">Validate prerequisites</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Job seekers face manual, time-consuming evaluation of offers, CV tailoring, and application tracking. Spreadsheets become unwieldy, and keyword-matching tools produce generic results that don&#39;t reflect actual fit or career positioning. The volume of modern postings makes systematic evaluation impractical without dedicated infrastructure.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Career-ops is an AI-powered job search pipeline built on Claude Code that transforms the process into a structured command center. The modes/ directory contains 14 skill modes (apply.md, pipeline.md, batch.md, deep.md) that encapsulate distinct workflows—from single-offer evaluation to batch processing of 10+ offers in parallel using claude -p workers. The dashboard/ directory provides a Go-based TUI for browsing, filtering, and sorting the pipeline, with dashboard/main.go as the entry point. PDF generation leverages templates/cv-template.html and fonts in fonts/, injecting job-specific keywords for ATS optimization. A portal scanner (batch/batch-runner.sh) automates applications across 45+ pre-configured companies including Greenhouse, Ashby, and Lever. The batch/ directory enables parallel evaluation with sub-agents, while dashboard/internal/ui/screens/pipeline.go and dashboard/internal/ui/screens/viewer.go handle the terminal UI state. An integrity layer in modes/_shared.md and tracking files ensures merge safety, dedup, and status normalization across the pipeline.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup:
-git clone https://github.com/santifer/career-ops.git
-cd career-ops &amp;&amp; npm install
-npx playwright install chromium</p><h3 class="post-h" id="validate-prerequisites">Validate prerequisites</h3><p>npm run doctor</p><p>Configure:
-cp config/profile.example.yml config/profile.yml  # Edit with CV details, preferences, proof points
-cp templates/cv-template.html ./  # Optional: customize PDF output</p><p>Running:
-The entry point is dashboard/main.go — start the Go dashboard server. For immediate evaluation, paste a job URL into the auto-pipeline mode, or use modes/auto-pipeline.md for URL-to-evaluation+PDF+tracker-entry workflow. Feed the system context: your CV, career story, preferences, and proof points in config/profile.yml. The system evaluates using a 6-block framework (role summary, CV match, level strategy, comp research, personalization, interview prep) and generates tailored PDFs. Review recommendations; the system never submits applications without your final call.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A senior AI engineer evaluating 50+ offers uses the batch mode: claude -p --mode batch --input offers.yaml triggers parallel evaluation across sub-agents, producing scored entries (A-F across 10 weighted dimensions) and tailored PDFs in parallel. The interview story bank (interview-prep/story-bank.md) accumulates STAR+Reflection stories across evaluations, creating 5-10 master stories that answer any behavioral question. The negotiation scripts module provides salary frameworks and competing offer leverage. The dashboard TUI allows filtering by score, status, and company, with integrity checks ensuring no duplicate entries and normalized statuses across the pipeline.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>SDLC gap: No CI/CD pipeline detected—/.github/ contains only funding, issue templates, and a gitignore. No automated build/test gate exists.
-Test coverage: Only 2 test files found; no evidence of automated test execution in the workflow.
-Dependency hygiene: dashboard/go.mod and package.json are present, but no lockfile audit or vulnerability scanning configured.
-Configuration risk: config/profile.example.yml is committed as a template; users must copy and edit, but no .env or secrets management pattern is evident.
-Documentation strength: 10 doc files present, including docs/ARCHITECTURE.md, docs/CUSTOMIZATION.md, and docs/SETUP.md—well-maintained for onboarding.
-Structural organization: Clear separation between modes/ (skill definitions), dashboard/ (Go UI), batch/ (processing), and examples/ (worked cases).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a capable, well-structured AI job search system that excels as a filter and evaluator rather than a spray tool. The Go dashboard, batch processing, and PDF generation are functional and thoughtfully implemented. It&#39;s best suited for individual job seekers or small teams willing to invest time in onboarding the system with their specific context—CV, preferences, proof points. Organizations requiring out-of-the-box enterprise readiness will need to address the missing CI/CD and test infrastructure.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Job‑searchers spend hours maintaining spreadsheets, copying CVs, and manually scoring offers. The lack of a single source of truth makes it easy to miss deadlines, duplicate applications, or overlook high‑value opportunities.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>career‑ops</code> stitches Claude Code agents, Playwright‑driven scraping, and a terminal UI into a unified pipeline. The Go entry point <code>dashboard/main.go</code> launches a TUI that lists applications, filters, and sorts them. Core data handling lives in <code>dashboard/internal/data/career.go</code> (parsing JSON job data, loading batch inputs, normalising company names). UI rendering and interaction are in <code>dashboard/internal/ui/screens/*.go</code>, with the most complex screen in <code>pipeline.go</code> (713 lines, 30 functions). PDF generation and theme handling are in the <code>templates/</code> and <code>dashboard/internal/theme/</code> packages.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>func main()</code> in <strong>dashboard/main.go</strong> (line 118). <code>main</code> calls <code>Init</code>, <code>Update</code>, and <code>View</code>, which together reach 15‑30 functions each.</p>
+<ul><li><code>Update</code> → <code>LoadReportSummary</code> → <code>cleanTableCell</code> (filesystem read via <code>os.ReadFile</code>).</li><li><code>View</code> → <code>renderHeader</code> → <code>Width</code> (called from nine places, the widest internal hub).</li></ul>
+<p>The data path begins with <code>ParseApplications</code> in <strong>career.go</strong>, which reads the applications file, then feeds structures to the UI screens. UI screens call helper functions such as <code>NormalizeStatus</code> (used by eight callers) and <code>applyFilterAndSort</code> (used by three callers). The most‑impactful functions—<code>Width</code>, <code>NormalizeStatus</code>, <code>CurrentApp</code>—are invoked from multiple locations, so changes there propagate broadly. No circular imports were detected; the import graph consists of ten isolated internal modules.</p>
+<p>File responsibilities (ranked by call‑graph reach):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core duties</th><th>Reach</th></tr></thead><tbody><tr><td><code>pipeline.go</code></td><td>Defines <code>NewPipelineModel</code>, UI layout, resize, width/height calculations</td><td>30 functions, 8 types</td></tr><tr><td><code>career.go</code></td><td>Parses applications, loads batch URLs, normalises company data, reads files</td><td>13 functions, 3 types</td></tr><tr><td><code>viewer.go</code></td><td>Viewer model, init, resize, update, body height (reads files)</td><td>10 functions, 2 types</td></tr><tr><td><code>theme.go</code> / <code>catppuccin.go</code></td><td>Theme construction (<code>NewTheme</code>)</td><td>2 functions</td></tr><tr><td><code>main.go</code></td><td>TUI bootstrap (<code>Init</code>, <code>Update</code>, <code>View</code>)</td><td>4 functions</td></tr></tbody></table></div>
+<p>All external effects are file reads (<code>os.ReadFile</code>) performed in <code>ParseApplications</code> and <code>LoadReportSummary</code>. No network calls are visible in the static analysis; the Playwright agents are invoked from the Claude Code side, not from the Go code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/career-ops
+cd career-ops
+
+# Install Node dependencies (Playwright for PDF generation)
+npm install
+npx playwright install chromium
+
+# Validate the environment
+npm run doctor          # defined in package.json, checks Go, Playwright, etc.
+
+# Configure your profile (required fields in config/profile.yml)
+cp config/profile.example.yml config/profile.yml
+# Edit config/profile.yml with your CV, preferences, API keys, etc.
+
+# Run the terminal UI
+go run ./dashboard/main.go</code></pre>
+<p>The UI lets you press <strong>a</strong> to add a URL, <strong>e</strong> to evaluate, <strong>p</strong> to generate a PDF, and arrow keys to navigate. Batch mode can be driven via the <code>.opencode/commands/</code> scripts (e.g., <code>career-ops-batch</code>) which ultimately invoke the same Go functions.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A hiring engineer can point the UI at a list of Greenhouse URLs, let Claude evaluate each against a stored CV, and export a tailored PDF for any offer scoring above 4.0/5. The generated PDF and the normalized status are then committed to the local <code>reports/</code> folder, providing an audit trail that can be version‑controlled alongside source code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 17 source files, 0 test files. Add unit tests for each public entry point and gate them with CI.</li><li><strong>High – Missing lockfile</strong> – <code>package.json</code> present without <code>package-lock.json</code>/<code>yarn.lock</code>. Run <code>npm install</code> and commit the generated lockfile.</li><li><strong>High – No CI workflow</strong> – No GitHub Actions or other CI config. Add a workflow that runs <code>go build</code> and <code>npm test</code>.</li><li><strong>Medium – Dependabot disabled</strong> – No <code>.github/dependabot.yml</code>. Add one covering Go, Node, and GitHub Actions.</li><li><strong>Medium – Large binary in repo</strong> – <code>docs/demo.gif</code> (8.3 MiB). Move to Git LFS or external storage.</li><li><strong>Medium – Deep nesting</strong> – <code>career.go</code> and <code>viewer.go</code> have indentation depth 6, making control flow hard to follow. Refactor with early returns or helper functions.</li><li><strong>Medium – Duplicated code</strong> – Repeated 6‑line blocks across several UI screens and JS helpers. Extract shared helpers.</li><li><strong>Medium – Oversized file</strong> – <code>pipeline.go</code> contains 713 lines; split by responsibility (e.g., layout vs. data handling).</li><li><strong>Medium – High branching density</strong> – 171 branch points across 487 lines in several files; consider strategy tables or polymorphic dispatch.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>career‑ops</code> delivers a functional, AI‑augmented job‑search workflow with a usable TUI and PDF output, but the codebase suffers from maintainability issues (large files, duplicated logic) and a weak production pipeline (no tests, CI, or lockfile). It is suitable for teams comfortable extending Go/Node code and willing to invest in test and CI scaffolding.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 4, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C/C++ Header</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,28 +80,25 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#clone-without-pulling-large-lfs-blobs">Clone without pulling large LFS blobs</a><a href="#install-os-level-dependencies-ubuntu-example">Install OS‑level dependencies (Ubuntu example)</a><a href="#configure-the-build-example-for-a-release-build">Configure the build (example for a Release build)</a><a href="#real-world-use">Real‑World Use</a><a href="#example-github-actions-snippet">Example GitHub Actions snippet</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Clients needing the full Blender source for custom engine integration or automated builds often encounter incomplete mirrors that lack the core C/C++ code, making the repository unusable for compilation or feature work.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository is a mirror of the official Blender project that only contains the top‑level build scaffolding, asset bundles, and a large collection of CMake helper modules under buildfiles/. Core source directories such as source/, intern/, and release/ are absent, so the repo cannot produce a working binary on its own.</p><p>Key files:  
-CMakeLists.txt – top‑level CMake entry point that pulls in the missing source tree.  
-GNUmakefile – legacy make wrapper that expects the full source layout.  
-buildfiles/buildenvironment/ – &gt;150 CMake scripts (*.cmake) that locate and configure third‑party libraries (e.g., ffmpeg.cmake, openvdb.cmake).  
-assets/ – pre‑packaged .blend files used for testing or demo scenes.</p><p>The README warns that cloning from the GitHub mirror may trigger Git‑LFS errors and recommends GITLFSSKIPSMUDGE=1.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup (only possible after obtaining the missing source):</p><h3 class="post-h" id="clone-without-pulling-large-lfs-blobs">Clone without pulling large LFS blobs</h3><p>GITLFSSKIPSMUDGE=1 git clone https://github.com/your‑org/blender.git
-cd blender</p><h3 class="post-h" id="install-os-level-dependencies-ubuntu-example">Install OS‑level dependencies (Ubuntu example)</h3><p>python3 buildfiles/buildenvironment/installlinuxpackages.py</p><h3 class="post-h" id="configure-the-build-example-for-a-release-build">Configure the build (example for a Release build)</h3><p>cmake -S . -B buildrelease -DCMAKEBUILDTYPE=Release</p><p>Configuration – No project‑specific config files are present. Build options are controlled via standard CMake variables (e.g., WITHCYCLES, WITHOPENCOLORIO). The buildfiles/buildenvironment/cmake/options.cmake file lists supported toggles.</p><p>Running – After a successful CMake configuration, compile with:</p><p>cmake --build buildrelease -- -j$(nproc)
-Executable will appear as buildrelease/bin/blender</p><p>If the missing source is added (e.g., by syncing with the upstream blender/blender repository), the above steps will produce a functional Blender binary.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A VFX studio that maintains a custom fork of Blender can point its CI pipeline to this mirror for dependency management only. The pipeline would first sync the full source from the upstream repo, then invoke the buildfiles/ scripts to lock third‑party versions, guaranteeing reproducible builds across Linux, Windows, and macOS.</p><h3 class="post-h" id="example-github-actions-snippet">Example GitHub Actions snippet</h3><p>steps:
-uses: actions/checkout@v4
-    with:
-      repository: blender/blender
-      path: src
-run: |
-      cp -r src/. .
-      GITLFSSKIPSMUDGE=1 git submodule update --init
-      python3 buildfiles/buildenvironment/installlinuxpackages.py
-      cmake -S . -B build -DCMAKEBUILDTYPE=Release
-      cmake --build build -j$(nproc)</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Missing core source – source/, intern/ directories absent; repository cannot be built standalone. (CMakeLists.txt expects them).  
-Med – No automated tests – No tests/ folder, no ctest configuration; untested code paths for many third‑party wrappers.  
-Med – No CI/CD – .github/ contains only funding and PR templates; no workflow files to run builds or linting.  
-Low – Large dependency surface – &gt;70 external libraries defined in buildfiles/buildenvironment/cmake/; each brings its own security update cadence.  
-Low – Git‑LFS handling – README notes LFS issues but provides no script to automate smudge/skip toggling.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The mirror supplies the build‑system glue and asset packs but omits the actual Blender source, limiting its usefulness to dependency management or as a scaffold for a full upstream sync. Teams that already pull the complete upstream repository can benefit from the curated CMake modules; otherwise, the repo is not a viable standalone source for development or production builds.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repository is a collection of 7 self-contained projects without a unifying architecture, and no CI/CD pipeline gates commits. Across 20,185 files and 7542 tests, changes merge without automated build or test execution, and dependency declarations in <code>pyproject.toml</code> lack a lockfile, making builds non-reproducible and ship artifacts potentially different from tested ones.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository spans 7 distinct projects: <code>source</code> (7110 files, 255 C/C++ code), <code>scripts</code> (826 files, 803 Python), <code>extern</code> (1660 files, 445 C/C++/other), <code>intern</code> (1529 files, 322 code + 2 data), <code>tools</code> (116 files, 96 code), <code>build_files</code> (336 files, 10 CMake), and <code>release</code> (1292 files, 9 code + 3 data). The substantial ones are <code>source</code> (core 3D pipeline—modeling, rigging, simulation, rendering), <code>scripts</code> (Python <code>bpy</code> API and add-on development), and <code>extern</code> (third-party libraries bundled under CMake). Entry points include <code>extern/quadriflow/src/main.cpp</code>, <code>scripts/modules/_bpy_internal/addons/cli.py</code>, and <code>scripts/modules/_bpy_internal/assets/remote_library_listing/cli.py</code>. <code>source/</code> implements the C++ core; <code>scripts/</code> exposes the Python automation layer via <code>bpy</code>; <code>extern/</code> manages external deps like Bullet and Audaspace through <code>build_files/build_environment/CMakeLists.txt</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the compiled binary built from <code>CMakeLists.txt</code> roots, which orchestrates <code>source/</code> C++ code and links <code>extern/</code> libraries. The <code>scripts/modules/_bpy_internal/</code> Python module exposes the <code>bpy</code> API; <code>cli.py</code> files handle command-line add-on operations. <code>extern/quadriflow/src/main.cpp</code> is a standalone compute pipeline entry. The Python <code>pyproject.toml</code> declares 9 dependencies including <code>sphinx==8.2.3</code>. No centralized call graph is mapped by this analysis; the <code>source/</code> to <code>scripts/</code> boundary is mediated by the <code>bpy</code> C/Python bridge, and changes to <code>extern/</code> CMake configs affect the full build. The widest blast radius is through <code>source/CMakeLists.txt</code> and <code>pyproject.toml</code>, each touched by every build or dependency update.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Clone with <code>GIT_LFS_SKIP_SMUDGE=1</code> as the README warns (<code>https://github.com/moses-y/blender</code>). <strong>Build</strong>: <code>cd blender &amp;&amp; cmake -S source -B build &amp;&amp; cmake --build build</code> (inferred from <code>CMakeLists.txt</code> presence). <strong>Python API</strong>: <code>pip install -r doc/python_api/requirements.conf</code> or use the <code>pyproject.toml</code> manifest; <code>sphinx==8.2.3</code> is pinned but current is 9.1.0. <strong>Running it</strong>: <code>blender --background --python scripts/modules/_bpy_internal/addons/cli.py</code> or invoke the built binary. No Dockerfile or committed Makefile targets beyond CMake are present.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A technical artist writes a Python script using <code>bpy.ops.mesh.primitive_cube_add()</code> from <code>scripts/modules/_bpy_internal/</code> to batch-generate assets. The script runs via <code>blender --python script.py</code>, touching the <code>bpy</code> bridge into <code>source/</code> C++ core for mesh data. Alternatively, a compile job targeting <code>extern/quadriflow/src/main.cpp</code> paths can produce headless physics previews without the full UI build.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>[MEASURED ANALYSIS] This repository is a collection of 7 self-contained projects, not one codebase.</p>
+<ul><li><code>scripts</code> - 826 files, 803 code files</li><li><code>extern</code> - 1660 files, 445 code files</li><li><code>intern</code> - 1529 files, 322 code files, 2 data files</li><li><code>source</code> - 7110 files, 255 code files</li><li><code>tools</code> - 116 files, 96 code files</li><li><code>build_files</code> - 336 files, 10 code files</li><li><code>release</code> - 1292 files, 9 code files, 3 data files</li></ul>
+<p>Repository hygiene: tests present: yes | CI: no | Dockerfile: no | licence: yes | lockfile: no | committed secrets: none found.</p>
+<p>[Code Health Audit]</p>
+<ul><li><strong>HIGH</strong> - Commit a lockfile beside the manifest - <code>pyproject.toml</code>: manifest with no lockfile in scope; unlocked range means the artifact tested and shipped can contain different transitive code.</li><li><strong>HIGH</strong> - Add a workflow that builds and tests this repository: 2262+ source files, no CI configuration; every change merges with nobody having run the build.</li><li><strong>MEDIUM</strong> - Enable Dependabot or Renovate: 3 manifest(s), no update bot configured; published advisories sit unpatched until manual audit.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a massive, well-organized 3D suite split across 7 independently versioned projects with solid C/C++ and Python foundations, but it ships without CI, lockfiles, or automated dependency updates, making every merge a manual build risk. Teams needing stable, reproducible pipelines should add a CI workflow and lockfile immediately; others can use it for source inspection or custom Python pipeline building with the <code>bpy</code> API, provided they manage builds and deps manually.</p>
             </div>
 
             
@@ -131,6 +128,16 @@ Low – Git‑LFS handling – README notes LFS issues but provides no script to
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>1</strong> of 9 declared dependencies are a major version behind. Resolved 9 of 9 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>sphinx</code></td>
+                            <td>==8.2.3</td><td>9.1.0</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">

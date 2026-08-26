@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 31, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Organizations that need detailed, semantic 3‑D scene understanding (e.g., indoor mapping, robotics navigation, AR content creation) must currently stitch together separate point‑cloud processing pipelines, custom geometry parsers, and language models. The lack of a single model that consumes raw point clouds and directly emits structured scene descriptions forces engineers to maintain fragile glue code and duplicate data‑preparation logic.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SpatialLM bundles a large language model with a point‑cloud encoder (the Sonata encoder in spatiallm/model/sonataencoder.py) and a series of serialization utilities (spatiallm/model/serialization/*.py). The core model classes—spatiallm/model/spatiallmllama.py and spatiallm/model/spatiallmqwen.py—extend LLaMA/Qwen back‑ends to accept a token stream that interleaves geometry tokens (produced by spatiallm/pcd/pcdloader.py) with textual prompts.</p><p>The repository also supplies a full finetuning stack under spatiallm/tuner/. Data handling lives in spatiallm/tuner/data/ (loader, collator, formatter) and the training loop is in spatiallm/tuner/trainer.py. Example scripts (train.py, eval.py, inference.py) demonstrate end‑to‑end training, evaluation, and inference on the released SpatialLM‑Dataset.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the package and its dependencies from pyproject.toml
-pip install .
-Or, for an editable dev environment
-pip install -e .</p><p>The pyproject.toml lists torch, transformers, datasets, and open3d among required libraries.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Finetuning expects a YAML config; a template is provided at configs/spatiallmsft.yaml. Populate the fields (model checkpoint path, dataset name, training hyper‑parameters) before launching training.</p><h3 class="post-h" id="running">Running</h3><p>Training:  
-  python train.py --config configs/spatiallmsft.yaml
-Evaluation:  
-  python eval.py --config configs/spatiallmsft.yaml
-Inference (single point‑cloud file):  
-  python inference.py \
-      --modelpath path/to/checkpoint \
-      --pcd path/to/pointcloud.pcd \
-      --output out.json</p><p>The scripts read the configuration file directly; no additional environment variables are required.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A robotics team can integrate SpatialLM into a perception node:</p><p>from spatiallm.inference import runinference
-scenedesc = runinference(
-    modelpath=&quot;models/spatiallmllama1b.pt&quot;,
-    pcdpath=&quot;/tmp/currentscan.pcd&quot;
-)
-scenedesc now contains walls, doors, and object boxes ready for downstream planning.</p><p>The JSON output can be fed to a navigation stack that reasons about traversable space and object interactions without writing custom geometry parsers.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No test suite – No tests/ directory or pytest files; untested code paths increase regression risk.  
-Medium – No CI/CD – Repository lacks .github/workflows/ or other pipeline definitions; build and quality gates are manual.  
-Low – Missing lockfile – Dependencies are declared only in pyproject.toml; reproducible builds rely on external PyPI snapshots.  
-Low – Sparse documentation – README covers high‑level usage; detailed API docs for modules such as spatiallm/layout/ are absent.  
-Low – License present but minimal – LICENSE.txt is included, but no explicit citation guidance for model weights.  
-Low – Potential runtime errors – Point‑cloud loading (spatiallm/pcd/pcdloader.py) assumes Open3D availability but does not validate file existence before processing.</p><p>Overall, the code follows a clear package layout and uses standard PyTorch/Transformers patterns, but the lack of automated testing and CI means stability depends on manual verification.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SpatialLM delivers a ready‑to‑use 3‑D LLM that bridges raw point clouds and structured scene descriptions, with a complete training pipeline. It is suitable for teams that can allocate resources for manual testing and integration, especially when working with indoor mapping or robotics workloads. Smaller or production‑critical deployments should first add a test suite and CI to mitigate the current quality gaps.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>SpatialLM aims to train large language models that can ingest 3‑D point‑cloud data (from monocular video, RGBD, or LiDAR) and output structured scene understanding – walls, doors, windows, and oriented object bounding boxes with semantic labels. The pain point is that most existing 3D‑LLM pipelines either require specialized collection hardware or produce unstructured outputs, forcing downstream users to do costly manual annotation.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SpatialLM provides a multimodal architecture that bridges unstructured 3‑D geometry and high‑level semantic representation. Key components include:</p>
+<ul><li><strong>Point‑cloud encoding</strong> – <code>spatiallm/model/sonata_encoder.py</code> (772 loc, defines <code>offset2bincount</code>, <code>batch2offset</code>, and serialization logic) and <code>spatiallm/pcd/transform.py</code> (29 functions, point‑cloud preprocessing).</li><li><strong>Layout &amp; entity modeling</strong> – <code>spatiallm/layout/layout.py</code> defines grid generation and entity extraction; <code>spatiallm/layout/entity.py</code> holds <code>rotate</code>, <code>translate</code>, <code>scale</code>, and <code>normalize_and_discretize</code>.</li><li><strong>Tuning &amp; training pipeline</strong> – <code>train.py:29</code> is the entry point; it calls <code>main</code> which reaches 68 functions, ultimately invoking <code>spatiallm/tuner/trainer.py</code> and <code>spatiallm/tuner/framework/loader.py</code> for data loading and model inference.</li><li><strong>Configuration &amp; hparams</strong> – <code>configs/spatiallm_sft.yaml</code> and the hparams modules under <code>spatiallm/tuner/hparams/</code> (<code>model_args.py</code>, <code>training_args.py</code>, etc.) supply training arguments; <code>spatiallm/tuner/hparams/parser.py</code> parses CLI args via <code>read_args</code>.</li></ul>
+<p>The repo ships 46 Python source files, 22 declared dependencies (e.g., <code>transformers&gt;=4.41.2,&lt;=4.46.1</code>, <code>pandas^2.2.3</code>, <code>numpy^1.26</code>), and a <code>pyproject.toml</code> manifest with no lockfile.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>train.py:29</code> → <code>main</code> (the sole entry point). From there the call graph fans out:</p>
+<div class="table-scroll"><table><thead><tr><th>Function</th><th>Callers</th><th>Notes</th></tr></thead><tbody><tr><td><code>info_rank0</code></td><td>14 places</td><td>logging utility, used throughout training loop</td></tr><tr><td><code>warning_rank0</code></td><td>10 places</td><td>emits warnings, often caught by broad <code>except</code> blocks</td></tr><tr><td><code>get_entities</code></td><td>6 places</td><td>extracts structured entities from layouts</td></tr><tr><td><code>is_env_enabled</code></td><td>6 places</td><td>environment‑variable checks</td></tr><tr><td><code>Layout</code> (class)</td><td>3 places</td><td>core scene representation</td></tr><tr><td><code>apply</code> (in <code>sonata_encoder</code>)</td><td>4 calls</td><td>core encoding routine</td></tr></tbody></table></div>
+<p>The most connected hub is <code>spatiallm/tuner/framework/__init__.py</code> (Ca = 14, Ce = 0, instability 0) – 14 modules import from it, making it a blast‑radius point; any change ripples widely.</p>
+<p>Circular imports affect <code>spatiallm/tuner/hparams/__init__.py</code>, <code>spatiallm/tuner/data/loader.py</code>, and <code>spatiallm/tuner/hparams/model_args.py</code> (import‑cycle member x8).</p>
+<p>Paths that leave the process: <code>main → run_exp → read_args</code> reads <code>sys.argv[1]</code> via <code>Path(...).absolute().read_text</code>; <code>spatiallm/tuner/framework/loader.py</code> calls a model for inference; a few functions read/write files (e.g., <code>logging.py</code> <code>_write_log</code>).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/SpatialLM
+cd SpatialLM
+
+# Create a virtual environment and install dependencies
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .   # installs from pyproject.toml</code></pre>
+<p>No lockfile is committed; after install, generate one:</p>
+<pre data-lang="bash"><code>pip freeze &gt; requirements.txt   # or use `pip install --dry-run` then lock</code></pre>
+<p><strong>Configuration</strong> Edit <code>configs/spatiallm_sft.yaml</code> for run‑time settings (data paths, model name, output directory). Environment variables referenced in <code>spatiallm/tuner/hparams/parser.py</code> (<code>_set_env_vars</code>) control logging verbosity and CUDA devices.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code>python train.py --config configs/spatiallm_sft.yaml</code></pre>
+<p>The <code>train.py</code> entry point triggers the full training pipeline, including data loading (<code>spatiallm/tuner/data/loader.py</code>), model instantiation (<code>spatiallm/model/spatiallm_llama.py</code> or <code>spatiallm/model/spatiallm_qwen.py</code>), and checkpointing (<code>spatiallm/tuner/framework/loader.py</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A typical workflow: a field team captures a point‑cloud scan via a handheld LiDAR. The scan is pre‑processed with <code>spatiallm/pcd/transform.py</code> (e.g., <code>_preprocess_point_cloud</code>, <code>_regularize_point_clouds</code>). The resulting tensor is fed to <code>sonata_encoder.py</code>, which outputs a hierarchical graph. SpatialLM’s LLM head then generates a JSON description containing wall locations, door coordinates, and object categories. This output can be consumed by a building‑information‑modeling (BIM) tool for as‑built documentation, bypassing manual floor‑plan tracing.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (Measured Analysis) reports the following findings:</p>
+<ul><li><strong>[HIGH/soundness]</strong> Import cycle member x8 – files <code>spatiallm/tuner/hparams/__init__.py</code>, <code>spatiallm/tuner/data/loader.py</code>, <code>spatiallm/tuner/hparams/model_args.py</code> mutually import, risking runtime failures.</li><li><strong>[HIGH]</strong> No test suite – 50 source files, zero test files; any change ships without regression signal.</li><li><strong>[HIGH]</strong> No lockfile beside <code>pyproject.toml</code> – dependencies are unpinned, making builds non‑reproducible and vulnerable versions possible.</li><li><strong>[HIGH]</strong> No CI/CD pipeline – no automated build/test gate; every PR merges without having been exercised.</li><li><strong>[MEDIUM]</strong> Broad exception handling x4 – <code>spatiallm/tuner/framework/utils.py</code>, <code>callbacks.py</code>, <code>patcher.py</code> catch <code>Exception</code> indiscriminately, swallowing errors.</li><li><strong>[MEDIUM]</strong> Deep nesting x11 – <code>spatiallm/layout/layout.py</code>, <code>spatiallm/tuner/data/converter.py</code>, <code>spatiallm/tuner/data/template.py</code> max indentation depth 6, control flow hard to follow.</li><li><strong>[MEDIUM]</strong> Oversized file – <code>spatiallm/model/sonata_encoder.py</code> 772 loc, a single change ripples widely.</li><li><strong>[MEDIUM]</strong> Duplicated code blocks – 281 repeated 6‑line blocks across 21 files (collator, converter, formatter, etc.).</li><li><strong>[MEDIUM]</strong> Hub module – <code>spatiallm/tuner/framework/__init__.py</code> depends on 14 other modules; churn is high‑blast‑radius.</li><li><strong>[MEDIUM]</strong> No Dependabot/Renovate config – vulnerable dependencies may go unpatched.</li></ul>
+<p>SDLC observations (beyond the measured block): missing licence file in the root, no Dockerfile, no committed secrets, but licence text is present (<code>LICENSE.txt</code>).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>SpatialLM delivers a functional pipeline for turning raw point clouds into structured 3‑D scene descriptions, which is valuable for indoor‑modeling use‑cases. However, the codebase suffers from import cycles, missing reproducibility tooling (lockfile, CI), and structural debt (oversized files, duplicated logic, deep nesting) that increase the risk of regressions and make future changes costly. Teams that can tolerate early‑stage software quality and have capacity to address the highlighted health items will find the model useful; others should treat it as prototype material until the SDLC gaps are closed.</p>
             </div>
 
             

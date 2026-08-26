@@ -79,26 +79,33 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#1-install-the-required-python-version-3-9-recomm">1️⃣ Install the required Python version (3.9+ recommended)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Gate‑remotes that use the PT2260‑based protocol (e.g., UNILARM, SMC5326, PT2260) have a 16‑bit DIP‑switch address plus an 8‑ or 9‑bit command. Determining the correct address manually requires trial‑and‑error with a physical remote or a logic analyser, which is time‑consuming and error‑prone.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository supplies a complete set of pre‑generated Flipper Zero .sub files that enumerate every possible DIP‑switch combination for the supported remotes.  
-The folder PT2260315/6561/00.sub contains a single file that transmits all 6 561 address combinations.  
-Sub‑folders such as 2187, 729, 243, and 27 break the same space into smaller batches (2 187, 729, 243, 27 files respectively) to enable a binary‑search style brute‑force.  
-The Python script generate.py (present in the repo root) can recreate these files for other frequencies or custom bit‑lengths, though the existing files already cover the common 433 MHz/315 MHz bands.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="1-install-the-required-python-version-3-9-recomm">1️⃣ Install the required Python version (3.9+ recommended)</h3><p>python -m pip install -r requirements.txt   # if a requirements.txt exists; otherwise the script uses only the stdlib</p><p>2️⃣ Generate the .sub files for a specific remote/frequency (optional)
-Example: generate files for SMC5326 at 330 MHz, 9‑bit instruction
-python generate.py --remote SMC5326 --freq 330 --bits 9</p><p>3️⃣ Copy the generated hierarchy to the Flipper’s SD card
-e.g. copy PT2260315/ to /media/&lt;flipper&gt;/subghz/
-cp -r PT2260315 /media/$USER/Flipper/subghz/</p><p>4️⃣ On the Flipper Zero, navigate to Sub‑GHz → Load → select the desired folder
-• To brute‑force all addresses, run 6561/00.sub.
-• To narrow the search, start with 2187/00.sub, observe the gate response,
-then continue in the appropriate sub‑folder (e.g., 729/10.sub).</p><p>5️⃣ Iterate until the gate opens; the filename pattern encodes the address range
-(e.g., 311.sub = batch 3, file 11 within that batch).</p><p>If the repository does not include requirements.txt or command‑line options, the script can still be inspected directly (generate.py) to adapt parameters.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A security‑audit team needs to verify that a warehouse gate uses a static DIP‑switch address. They load the PT2260_315/2187 batch onto a Flipper Zero, trigger each file, and log the gate’s response. Within three iterations (2187 → 729 → 243) they isolate the exact 16‑bit address in under ten minutes, confirming that the remote is vulnerable to replay without needing the original key fob.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>License – Low – No LICENSE file; redistribution rights are unclear.  
-Documentation – Low – Root README exists and describes usage, but there is no detailed developer guide or API reference for generate.py.  
-Testing – Low – No unit or integration tests; any change to the generation logic is unverified.  
-CI/CD – Low – No GitHub Actions or other CI pipelines; code quality and security regressions are not automatically checked.  
-Dependency Hygiene – Low – The repo does not declare external dependencies; if generate.py imports third‑party modules, they are undocumented.  
-Error Handling – Medium – The script likely assumes a writable output directory and valid arguments; missing validation could cause silent failures on the Flipper.  
-File Organization – Medium – The .sub files dominate the repo (≈200 files) and provide little value in source control; they could be generated on demand to reduce repo size.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The project delivers a ready‑to‑use brute‑force dataset for PT2260‑type gate remotes, enabling rapid on‑device testing with a Flipper Zero. It is functional but minimal: missing license, tests, and CI make it risky for production or redistribution. Suitable for hobbyists or auditors who need a quick proof‑of‑concept, but teams requiring maintainable, auditable tooling should add proper licensing, testing, and documentation before wider adoption.</p>
+            <div class="post-content" id="post-content">
+                
+                <p><strong>The Problem</strong> Gate remotes that use the PT2260, SMC5326, or UNILARM protocols require a large set of raw Sub‑GHz payload files to brute‑force the DIP‑switch configuration. Manually creating or cataloguing those payloads is tedious and error‑prone, especially when the number of combinations reaches 6 561.</p>
+<p><strong>What This Does</strong> The repository supplies pre‑generated <code>.sub</code> files for every possible DIP‑switch setting, organized by protocol and carrier frequency (e.g., <code>PT2260_315/</code>, <code>SMC5326_330/</code>). The single Python utility <code>generate.py</code> can recreate the entire hierarchy from the raw binary samples in <code>raw_sample/</code>. The README walks a user through copying the appropriate folder to a Flipper Zero SD card (<code>/subghz</code>) and playing the desired <code>.sub</code> file to trigger the gate.</p>
+<p><strong>How It Is Wired</strong></p>
+<p><em>Entry point</em> – <code>generate.py</code> is the only executable Python module. <em>File I/O</em> – The script opens the raw sample files (e.g., <code>raw_sample/SMC5326_330.sub</code>) with a plain <code>open(...)</code> call, writes transformed payloads into the protocol‑specific directories, and creates the nested folder structure (<code>6561/</code>, <code>2187/</code>, <code>729/</code>, …). No other modules are imported, so the internal call graph consists of a single node with zero inbound or outbound edges.</p>
+<p><em>Effect scope</em> – The script touches the filesystem only: it reads binary samples and writes thousands of <code>.sub</code> files. No network, hardware, or external services are involved. Because the module graph has no hubs or cycles, the codebase is straightforward to modify, but the lack of abstraction means any change to the payload format must be made directly in <code>generate.py</code>.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># 1. Clone the repository
+git clone https://github.com/moses-y/flipperzero-gate-bruteforce
+cd flipperzero-gate-bruteforce
+
+# 2. (Optional) Regenerate the .sub payloads
+python generate.py   # creates/overwrites the protocol folders
+
+# 3. Transfer the needed folder to the Flipper Zero
+#    Example for a SMC5326 remote at 330 MHz:
+#    Copy the whole SMC5326_330 directory onto the Flipper’s SD card under /subghz
+
+# 4. On the Flipper Zero, navigate to /subghz/SMC5326_330/6561/
+#    Play 0_0.sub to send all 6 561 combinations at once, or use the
+#    smaller sub‑folders (2187, 729, …) to perform a binary‑search style narrowing.</code></pre>
+<p>No additional build steps, package managers, or Docker images are present. The repository contains only the Python script and the binary payloads.</p>
+<p><strong>Real‑World Use</strong> A security‑testing team can mount a Flipper Zero on a vehicle’s gate controller, copy the appropriate <code>SMC5326_330</code> folder, and run the <code>0_0.sub</code> file to attempt an immediate unlock. If the gate opens, they can then switch to the <code>2187</code> or <code>729</code> sub‑folders to isolate the exact DIP‑switch setting, reducing the time needed for a full exhaustive search.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>Medium – File opened without context manager</strong> – <code>generate.py</code> uses <code>open(...)</code> without a <code>with</code> block, risking a descriptor leak on error. <em>Fix: wrap file operations in <code>with open(...) as f:</code>.</em></li><li><strong>Medium – Large binary blobs</strong> – Several <code>.sub</code> files exceed 5 MiB (e.g., <code>SMC5326_330/6561/0_0.sub</code> ≈ 7 MiB). Storing them directly inflates clone size and slows CI. <em>Fix: move these files to Git LFS or an external storage bucket and fetch them as part of a setup step.</em></li><li>No test suite, CI pipeline, or LICENSE file. This limits confidence in future changes and leaves redistribution rights ambiguous. Adding a minimal <code>pytest</code> harness and a permissive license (e.g., MIT) would improve maintainability.</li></ul>
+<p><strong>The Bottom Line</strong> The repo delivers a ready‑to‑use payload library and a simple generator for brute‑forcing PT2260‑family gate remotes with a Flipper Zero. It is functionally complete but lacks testing, CI, and proper binary handling. Engineers can adopt it quickly for penetration‑testing or research, but should address the noted resource‑safety and licensing gaps before integrating it into production‑grade tooling.</p>
             </div>
 
             

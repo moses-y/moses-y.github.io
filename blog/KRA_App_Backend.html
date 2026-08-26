@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 14, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Java</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,32 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tax practitioners must manually log into the Kenya Revenue Authority (KRA) portal to file NIL (zero‑income) returns for each individual taxpayer. The web UI is slow, error‑prone, and does not expose an easy programmatic interface, leading to duplicated effort and delayed compliance.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>KRAAppBackend is a Spring Boot service that wraps the KRA API and exposes a single REST endpoint for filing NIL returns.</p><p>Controller – FileNillReturnController.java receives a JSON payload (FileReturnsDto.java) and forwards it to the service layer.  
- Service – FileNillReturnsService.java builds the request body required by KRA and calls KraAuthService to obtain a valid bearer token.  
- Auth – KraAuthService.java generates a Base64‑encoded consumer key:secret string, posts to the KRA token endpoint using OkHttp, caches the token in memory, and refreshes it on expiration.</p><p>The application starts from KraAppBackendApplication.java and reads credentials from src/main/resources/application.properties (kra.consumer.key / kra.consumer.secret).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Clone and enter the project
-git clone https://github.com/DunstanKiiru/KRAAppBackend.git
-cd KRAAppBackend
-Add KRA credentials (do NOT commit this file)
-src/main/resources/application.properties
-kra.consumer.key=YOURKEY
-kra.consumer.secret=YOURSECRET
-Build the jar (the wrapper script ensures the correct Maven version)
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Individual taxpayers in Kenya must file a “NIL” return each tax period, even when they have no taxable income. Manually logging into the Kenya Revenue Authority (KRA) portal, generating an OAuth token, and posting the required JSON payload is repetitive and error‑prone, especially for SaaS platforms that need to automate the step for many users.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>KRA_App_Backend</code> is a Spring Boot service that abstracts the KRA NIL‑return workflow behind a REST API. The core files are:</p>
+<ul><li><code>src/main/java/com/starnoh/kraAppBackend/KraAppBackendApplication.java</code> – Spring Boot entry point.</li><li><code>src/main/java/com/starnoh/kraAppBackend/controller/FileNillReturnController.java</code> – Exposes <code>/file-nil</code> (POST) to external clients.</li><li><code>src/main/java/com/starnoh/kraAppBackend/service/FileNillReturnsService.java</code> – Builds the NIL‑return JSON and delegates to <code>KraAuthService</code>.</li><li><code>src/main/java/com/starnoh/kraAppBackend/service/KraAuthService.java</code> – Handles consumer‑key/secret encoding, token request to KRA, in‑memory caching, and expiration checks.</li><li><code>src/main/java/com/starnoh/kraAppBackend/config/KraConfig.java</code> – Loads <code>kra.consumer.key</code> and <code>kra.consumer.secret</code> from <code>application.properties</code>.</li></ul>
+<p>The service reads the credentials from <code>src/main/resources/application.properties</code>, requests an access token from KRA, caches it, and then forwards the NIL‑return payload. Errors from the external API are wrapped and returned as HTTP 4xx/5xx responses.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Application start</strong> – <code>KraAppBackendApplication.main()</code> boots Spring, scans <code>com.starnoh.kraAppBackend</code> and registers beans.</li><li><strong>HTTP request</strong> – A client POSTs JSON to <code>/file-nil</code>. Spring routes it to <code>FileNillReturnController.fileNillReturn(@RequestBody FileReturnsDto dto)</code>.</li><li><strong>Service call</strong> – The controller injects <code>FileNillReturnsService</code> and calls <code>processNillReturn(dto)</code>.</li><li><strong>Token acquisition</strong> – <code>FileNillReturnsService</code> calls <code>kraAuthService.getAccessToken()</code>.   * <code>KraAuthService</code> checks an in‑memory <code>accessToken</code> field. If missing or expired, it builds a Base64‑encoded <code>Authorization: Basic …</code> header using <code>KraConfig</code> values, sends a POST via <code>OkHttpClient</code> to the KRA token endpoint, parses the JSON response, stores the token and its expiry.</li><li><strong>NIL filing</strong> – With a valid token, <code>FileNillReturnsService</code> creates the request body (using <code>org.json</code>), sets <code>Authorization: Bearer &lt;token&gt;</code> on a <code>RestTemplate</code>, and POSTs to the KRA filing endpoint.</li><li><strong>Response handling</strong> – The external response is returned to the controller, which maps it to the HTTP response sent back to the caller.</li></ol>
+<p>The only external side‑effects are network calls to KRA; there is no database or file I/O. The token cache is a simple field, so the blast radius of a change is limited to <code>KraAuthService</code> and any code that depends on its <code>getAccessToken()</code> contract.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (exact URL required)
+git clone https://github.com/moses-y/KRA_App_Backend
+cd KRA_App_Backend
+
+# Add KRA credentials (do NOT commit this file)
+cat &gt; src/main/resources/application.properties &lt;&lt;EOF
+kra.consumer.key=YOUR_CONSUMER_KEY
+kra.consumer.secret=YOUR_CONSUMER_SECRET
+# optional: server.port=8080
+EOF
+
+# Build with the Maven wrapper
 ./mvnw clean package
-Run the service
-java -jar target/kra-app-backend-0.0.1-SNAPSHOT.jar</p><p>The service listens on the default Spring Boot port (8080).  
-To file a NIL return:</p><p>curl -X POST http://localhost:8080/api/v1/file-nil-return \
-  -H &quot;Content-Type: application/json&quot; \
-  -d &#39;{
-        &quot;tin&quot;: &quot;A123456789&quot;,
-        &quot;taxPeriod&quot;: &quot;2024&quot;,
-        &quot;returnType&quot;: &quot;NIL&quot;
-      }&#39;</p><p>The controller forwards the payload to FileNillReturnsService, which contacts KRA using the cached token.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A tax advisory firm can deploy this jar behind an internal API gateway. Their client‑facing portal collects taxpayer details, then calls the /api/v1/file-nil-return endpoint. The backend handles token rotation automatically, eliminating manual logins and reducing filing time from minutes per client to seconds.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No CI/CD pipeline – No .github/workflows or similar; builds and tests must be run manually (KraAppBackendApplicationTests.java exists but is not gated).  
- Medium – Missing LICENSE – Repository root lacks a license file; downstream users have unclear redistribution rights.  
- Low – Dependency reproducibility – Maven pom.xml pins versions but does not use a lockfile (dependencyManagement is present, but no versions.lock).  
- Low – In‑memory token cache – KraAuthService stores the token in a simple field; in a multi‑instance deployment this leads to each instance fetching its own token, increasing load on KRA.  
- Low – No input validation – FileNillReturnController passes the DTO directly to the service; malformed tin or taxPeriod values could cause KRA rejections without a clear error response.  
-Low – Limited test coverage – Only the Spring Boot context test (KraAppBackendApplicationTests) is present; business logic in FileNillReturnsService and KraAuthService lacks unit tests.</p><p>Overall the code follows standard Spring conventions, uses explicit configuration (application.properties), and compiles cleanly with Maven. No obvious security flaws beyond the mentioned in‑memory token storage.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repository provides a functional, well‑structured Spring Boot wrapper for KRA NIL filing, suitable for internal use or as a prototype integration layer. It is ready to run with minimal setup, but production deployment should add CI pipelines, a proper license, stronger input validation, and a distributed token cache or external secret store.</p>
+
+# Run the Spring Boot app
+./mvnw spring-boot:run
+# or java -jar target/kra-app-backend-0.0.1-SNAPSHOT.jar</code></pre>
+<p>The service will listen on port 8080 (default). Submit a NIL return with:</p>
+<pre data-lang="bash"><code>curl -X POST http://localhost:8080/file-nil \
+  -H "Content-Type: application/json" \
+  -d '{"tin":"A123456789","taxPeriod":"2023","amount":0}'</code></pre>
+<p>Replace the JSON fields with the taxpayer’s TIN and period as required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A payroll SaaS can embed this service as a micro‑service. When a payroll run finishes with zero taxable income, the SaaS calls the <code>/file-nil</code> endpoint on behalf of the employee, letting the backend handle token renewal and KRA communication without exposing the consumer key to the front‑end.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing LICENSE</strong> – No file at repository root defines reuse rights. Without a license the default is “all rights reserved,” preventing legal reuse.</li><li><strong>Medium – No CI/CD pipeline</strong> – No <code>.github/</code>, <code>Jenkinsfile</code>, or similar; builds and tests are not gated automatically.</li><li><strong>Low – No lockfile</strong> – Maven’s <code>pom.xml</code> declares dependencies but there is no <code>pom.xml.lock</code> or similar, which can lead to non‑reproducible builds across environments.</li><li><strong>Info – Tests present</strong> – One test class <code>KraAppBackendApplicationTests.java</code> exists, but coverage is minimal.</li><li><strong>Info – No Dockerfile</strong> – Containerization must be added manually if deployment requires it.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers a focused Spring Boot wrapper around the KRA NIL‑return API, with clear separation between token management and filing logic. It builds and runs with the Maven wrapper and requires only two credential properties. However, the lack of a license, CI automation, and a lockfile limits safe reuse and continuous delivery. It is suitable for teams comfortable adding their own CI pipeline and licensing, and who need a quick Java‑based integration point to KRA’s NIL‑return service.</p>
             </div>
 
             

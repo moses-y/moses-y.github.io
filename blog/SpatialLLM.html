@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 31, 2026</span>
-                    <span>4 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,37 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#data-preparation">Data preparation</a><a href="#run-the-pipeline">Run the pipeline</a><a href="#step-1-osm-json">Step 1: OSM → JSON</a><a href="#step-2-point-cloud-annotation">Step 2: Point‑cloud annotation</a><a href="#step-3-build-scene-graph">Step 3: Build scene graph</a><a href="#inference">Inference</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Urban planners and GIS analysts need a way to turn raw spatial data—point clouds, OpenStreetMap (OSM) layers, and multi‑view imagery—into textual representations that large language models (LLMs) can reason over. Existing pipelines are fragmented, requiring separate tools for annotation, graph construction, and prompt engineering.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SpatialLLM implements a three‑stage pipeline that converts heterogeneous city‑scale data into a structured “scene graph” (JSON) that can be fed directly to an LLM.</p><p>OSM ingestion – process/osmprocess.py reads shapefiles (--shppath) and outputs a JSON dump of building, road, and parcel attributes.  
- Automatic point‑cloud annotation – process/autoannotate.py aligns a raw point cloud (.ply/.txt) with the OSM geometry, using a control‑text file (x y z lon lat per line) to generate an enriched point cloud and a mapping file.  
-Scene‑graph generation – process/generatescenegraph.py merges the annotated cloud, OSM mapping, and original OSM JSON into a final graph (outputjson).</p><p>The resulting JSON can be used as context for any LLM (e.g., ChatGPT, Claude) to answer spatial queries such as navigation, site selection, or hazard analysis. Example PDFs in examples/ illustrate the downstream reasoning outcomes.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Create a clean Python 3.8 environment
-conda create -n spatialllm python=3.8
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>SpatialLLM attempts to bridge Large Language Models with urban spatial intelligence through point cloud processing, OSM data integration, and scene graph generation. However, the codebase shows significant structural fragility: no test coverage, no CI/CD gate, and critical/high severity vulnerabilities in pinned dependencies that are reachable without credentials or user interaction. A consultant would flag the dependency hygiene issues as the highest priority remediation, as they represent immediate exploitable risk.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SpatialLLM is a 24-file framework (Python/pip) that processes urban spatial data through a three-step pipeline: OSM extraction (<code>process/osm_process.py</code>), point cloud annotation (<code>process/auto_annotate.py</code>), and scene graph generation (<code>process/generate_scene_graph.py</code>). The inference layer (<code>infer/inference.py</code>) then exposes a chat interface over a model client. The repository contains no test files, no CI configuration, and a 10.8MB <code>overview.png</code> checked into version control — each clone and CI checkout incurs that data transfer cost. Four internal modules exist with zero import edges between them, and the two entry points (<code>run</code> and <code>main</code>) each reach 11-12 functions but are called from only a single place in the repo, indicating low internal connectivity and high external dependency.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at two entry points:</p>
+<ul><li><strong><code>run</code></strong> in <code>process/generate_scene_graph.py:188</code> — reaches 11 function(s), called by nothing else in the repo. This is the primary end-to-end orchestrator.</li><li><strong><code>main</code></strong> in <code>infer/inference.py:146</code> — reaches 12 function(s), itself called from 1 place(s). This is the CLI/chat entry point.</li></ul>
+<p>The internal call graph has 28 resolved call edges. Key hubs:</p>
+<ul><li><code>register_pc</code> (in <code>process/auto_annotate.py</code>) is called from 5 places: <code>load_pc</code>, <code>grid_pc</code>, <code>load_control_points</code>, <code>calculate_height_scale</code>. It chains to <code>haversine</code>, <code>load_pc</code>, and <code>grid_pc</code>.</li><li><code>_simplify_coords</code> is called from 2 places (in <code>process/osm_process.py</code> and <code>process/generate_scene_graph.py</code>).</li><li><code>grid_pc</code> is called from 2 places.</li></ul>
+<p>Paths leaving the process:</p>
+<ul><li><code>run</code> → filesystem via <code>self.output_path.parent.mkdir</code></li><li><code>main → chat</code> → model via <code>self.client.chat.completions.create</code></li></ul>
+<p><code>process/generate_scene_graph.py</code> defines 9 functions/1 class including <code>__init__</code>, <code>load_shapefiles</code>, <code>points_to_polygon</code>, <code>get_height</code>, <code>query_nearby_features</code>. It reads/writes files and is the only file called from <code>run</code>.</p>
+<p><code>process/auto_annotate.py</code> defines 9 functions/1 class including <code>__init__</code>, <code>load_pc</code>, <code>load_control_points</code>, <code>grid_pc</code>, <code>calculate_height_scale</code>. It reads/writes files and carries the medium-severity findings of broad exception handling and x4 deep nesting.</p>
+<p><code>infer/inference.py</code> defines 5 functions/1 class including <code>json_to_compact_text</code>, <code>__init__</code>, <code>_init_client</code>, <code>chat</code>, <code>main</code>. It calls into 2 modules and a model for inference (<code>self.client.chat.completions.create</code>).</p>
+<p><code>process/osm_process.py</code> defines 8 functions/1 class including <code>__init__</code>, <code>_get_geometry_type</code>, <code>_simplify_coords</code>, <code>load_shapefiles</code>, <code>process_polygons</code>. It is the entry point for OSM data extraction.</p>
+<p>The module graph shows four isolated components with no import edges between them — each runs in isolation without shared abstractions. This means changes to one pipeline step (e.g., switching the point cloud format) require coordination across all files rather than a single fix.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Create a conda environment and install dependencies as documented in <code>README.md</code>:</p>
+<pre data-lang="bash"><code>conda create -n spatialllm python=3.8
 conda activate spatialllm
-Install geospatial stack (conda) and Python deps (pip)
-conda install -c conda-forge geopandas geopy gdal
-pip install -r requirements.txt</p><h3 class="post-h" id="data-preparation">Data preparation</h3><p>Place OSM shapefiles in a folder (e.g., data/WHU/) and point‑cloud files in a working directory.</p><h3 class="post-h" id="run-the-pipeline">Run the pipeline</h3><h3 class="post-h" id="step-1-osm-json">Step 1: OSM → JSON</h3><p>python process/osmprocess.py \
-    --shppath data/WHU/ \
-    --output data/WHU/WHU.json</p><h3 class="post-h" id="step-2-point-cloud-annotation">Step 2: Point‑cloud annotation</h3><p>python process/autoannotate.py \
-    --workdir work/ \
-    --shpdir data/WHU/ \
-    --pcfile city.ply \
-    --controltxt control.txt \
-    --res 0.5</p><h3 class="post-h" id="step-3-build-scene-graph">Step 3: Build scene graph</h3><p>python process/generatescenegraph.py \
-    --pcfile work/annotatedcity.ply \
-    --shpdir data/WHU/ \
-    --osmmapfile work/osmmap.json \
-    --osmjsonfile data/WHU/WHU.json \
-    --outputjson work/scenegraph.json</p><h3 class="post-h" id="inference">Inference</h3><p>The repository ships a minimal inference script:</p><p>python infer/inference.py   # reads infer/config.yaml</p><p>infer/config.yaml holds model identifiers, temperature, and the path to the generated scenegraph.json. Adjust it before running.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A city‑level decision support system can call generatescenegraph.py nightly on newly acquired LiDAR scans. The produced scenegraph.json is then passed to an LLM via the inference.py wrapper, enabling natural‑language queries like “Which parcels within a 500 m radius of the new subway station have excess flood risk?” The response can be fed back into a GIS dashboard for visual verification.</p><p>import json, requests</p><p>with open(&quot;work/scenegraph.json&quot;) as f:
-    ctx = json.load(f)</p><p>payload = {&quot;model&quot;: &quot;gpt-4o&quot;, &quot;messages&quot;: [{&quot;role&quot;:&quot;system&quot;,&quot;content&quot;:&quot;You are a spatial analyst.&quot;},
-                                          {&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:f&quot;Answer: {ctx}&quot;}]}
-resp = requests.post(&quot;https://api.openai.com/v1/chat/completions&quot;, json=payload,
-                     headers={&quot;Authorization&quot;: f&quot;Bearer {API_KEY}&quot;})
-print(resp.json()[&quot;choices&quot;][0][&quot;message&quot;][&quot;content&quot;])</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No test suite – repository lacks any tests/ directory or pytest configuration.  
-Medium – No CI/CD – no .github/workflows, Makefile, or similar automation; changes are not automatically validated.  
-Low – Unpinned dependencies – requirements.txt lists packages without version pins; reproducibility depends on the current PyPI state.  
-Low – Minimal documentation – README covers install and pipeline steps, but function‑level docstrings are sparse; users must read source to understand arguments.  
-Low – No lockfile – absence of pipfile.lock or conda environment file makes exact environment recreation difficult.  
-Low – License present – LICENSE file exists, mitigating legal risk.</p><p>No obvious security secrets are stored in the repo. Error handling in the three pipeline scripts is minimal; they assume well‑formed inputs and will raise uncaught exceptions on missing files or malformed control texts.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SpatialLLM provides a concrete end‑to‑end conversion from raw urban spatial data to LLM‑ready text, with clear scripts for each stage. It is usable for research prototypes or small‑scale municipal pilots, but the lack of tests, CI, and pinned dependencies means production deployments will require additional engineering effort to harden the pipeline and ensure repeatable builds.</p>
+conda install -c conda-forge geopandas
+conda install -c conda-forge geopy
+conda install -c conda-forge gdal
+pip install -r requirements.txt</code></pre>
+<p><strong>Configuration</strong>: The inference layer reads <code>infer/config.yaml</code> for client setup. No environment variables are documented beyond the conda install steps.</p>
+<p><strong>Running the pipeline</strong>:</p>
+<ol><li><strong>OSM extraction</strong>: <code>python process/osm_process.py --shp_path &lt;dir&gt; --output &lt;json&gt;</code></li><li><strong>Point cloud annotation</strong>: <code>python process/auto_annotate.py --work_dir &lt;path&gt; --shp_dir &lt;dir&gt; --pc_file &lt;filename&gt; --control_txt &lt;file&gt; --res &lt;resolution&gt;</code></li><li><strong>Scene graph generation</strong>: <code>python process/generate_scene_graph.py --pc_file &lt;annotated&gt; --shp_dir &lt;dir&gt; --osm_map_file &lt;file&gt; --osm_json_file &lt;input&gt; --output_json &lt;output&gt;</code></li><li><strong>Inference</strong>: <code>python infer/inference.py</code></li></ol>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A city planning team could extract OSM building footprints via Step 1, annotate a LiDAR point cloud with semantic labels via Steps 2–3, then feed the resulting scene graph into <code>infer/inference.py</code> to enable natural-language queries like "which buildings in this district exceed 10 stories and have underground parking?" The structured text output could further power a web-based LLM interface for interactive spatial reasoning across stakeholders.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>The static analysis produced the following findings:</p>
+<ul><li><strong>[CRITICAL]</strong> Upgrade the pinned dependency carrying a critical advisory: <code>pillow@10.0.0</code> CVE-2023-50447. The manifest pins the exact vulnerable version, so the risk is active. Fix: upgrade and commit the lockfile.</li><li><strong>[HIGH]</strong> Upgrade the pinned dependency carrying a published advisory: <code>gdal@3.7.0</code> CVE-2026-49014. The pinned version is the one that installs. Fix: upgrade and commit the lockfile.</li><li><strong>[MEDIUM]</strong> Enable Dependabot or Renovate: 1 manifest, no update bot configured. Without a bot, published advisories sit unpatched.</li><li><strong>[MEDIUM]</strong> Move large binaries to Git LFS or out of the repository: <code>overview.png</code> is 10.8MB. Every clone pays for undiffed data.</li><li><strong>[MEDIUM]</strong> Pin the resolution so a vulnerable version cannot install: no lockfile, and declared ranges reach <code>geopandas@0.10.0</code> CVE-2025-69662 (high). Fix: commit the lockfile.</li></ul>
+<p>Beyond these measured findings: no test files, no CI/CD pipeline, no Dockerfile, and a 10.8MB binary committed directly to the repo.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>SpatialLLM has a clear, functional pipeline for urban spatial reasoning, but the codebase is held back by critical dependency vulnerabilities, absent tooling (tests, CI, lockfile), and a large binary checked into version control. The four isolated modules work but lack internal cohesion — changing one step requires touching multiple files with no shared abstractions. Teams needing quick prototyping with urban spatial data could benefit from the pipeline structure, but they should pin dependency upgrades and address the hygiene gaps before production use.</p>
             </div>
 
             

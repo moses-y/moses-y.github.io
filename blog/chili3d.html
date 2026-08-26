@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Browser-based CAD tools typically fall into two camps: lightweight viewers that cannot perform real modeling operations, or server-side renderers that introduce latency and require backend infrastructure. Chili3D addresses this by running the full OpenCascade (OCCT) geometry kernel compiled to WebAssembly in the browser, delivering native-class modeling performance without installation.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Chili3D is a browser-based 3D CAD application with a command-driven architecture. The packages/core layer provides the foundation: document management, command patterns, event handling, and math utilities. The packages/app layer implements the actual modeling operations—each shape type (box, cylinder, sphere, etc.) has its own file under packages/app/src/bodys/, and each editing operation (fillet, chamfer, boolean, mirror) lives under packages/app/src/commands/.</p><p>The C++ layer in cpp/src/ wraps OpenCascade and compiles to WebAssembly. Key files include mesher.cpp for triangulation and converter.cpp for data exchange. The application supports STEP, IGES, and BREP import/export, plus a full undo/redo stack with transaction history.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repository and install dependencies with npm. The package.json at the root defines all scripts.</p><p>git clone https://github.com/xiangechen/chili3d.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Designers need a browser‑based CAD tool that runs without installing heavy native binaries. Existing web CAD solutions either require server‑side rendering or expose a limited set of primitives, forcing users to switch to desktop applications for anything beyond basic sketches.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>chili3d</code> delivers a full‑featured 3D CAD UI that runs entirely in the browser. Core geometry is powered by OpenCascade compiled to WebAssembly (<code>packages/wasm/lib/chili-wasm.d.ts</code>), while rendering and interaction use Three.js (<code>packages/three/src/threeView.ts</code>).</p>
+<p>The TypeScript monorepo is split into logical packages:</p>
+<ul><li><code>packages/app</code> – command definitions, UI bodies, and the top‑level command dispatcher.</li><li><code>packages/core</code> – foundational services (observer, pub/sub, math, i18n) and the document model.</li><li><code>packages/builder</code> – utilities for assembling the final bundle.</li></ul>
+<p>Key UI commands (e.g., <code>packages/app/src/commands/create/box.ts</code>, <code>.../boolean.ts</code>) map directly to the underlying shape primitives in <code>packages/core/src/shape</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in the CLI‑style command <code>execute</code> defined in <code>packages/app/src/commands/application/newDocument.ts</code> (line 14). That function instantiates a fresh document (<code>packages/core/src/document.ts</code>) and walks 290 internal functions, establishing the initial model graph.</p>
+<p>The most frequently traversed backbone is the <strong>foundation hub</strong>:</p>
+<ul><li><code>packages/core/src/foundation/observer.ts</code> – defines <code>getPrivateValue</code>, <code>setPrivateValue</code>, <code>initializeDefaultValue</code>. Called from 58 files, it propagates state changes to the UI.</li><li><code>packages/core/src/foundation/pubsub.ts</code> – implements <code>pub</code>, <code>sub</code>, <code>dispose</code>. Reached by 50 files and used by the undo/redo stack.</li></ul>
+<p>A dense import cycle surrounds the core index modules (<code>packages/core/src/foundation/index.ts</code>, <code>packages/core/src/math/index.ts</code>, <code>packages/core/src/document.ts</code>). The cycle inflates the blast radius: any change to a shared type forces recompilation of &gt;50 dependents and risks hidden runtime order bugs.</p>
+<p>The call graph shows a few high‑impact functions:</p>
+<ul><li><code>getPrivateValue</code> – called from 99 locations, central to every model mutation.</li><li><code>setProperty</code> – 83 callers, used by UI bindings and command handlers.</li><li><code>gc</code> – 54 callers, part of the custom memory manager for WebAssembly objects.</li></ul>
+<p>File‑level responsibilities that dominate runtime:</p>
+<ul><li><strong>Observer</strong> (<code>observer.ts</code>) – state change detection, used by UI components and command services.</li><li><strong>Pub/Sub</strong> (<code>pubsub.ts</code>) – event distribution for undo/redo, selection, and viewport updates.</li><li><strong>Matrix4</strong> (<code>matrix4.ts</code>) – geometric transforms, accessed by 41 files for every move/rotate operation.</li></ul>
+<p>No external I/O beyond two filesystem writes: <code>execute → commit → delete</code> (via <code>this.open</code>) and a read in <code>get</code> (also via <code>this.open</code>). No network calls are present in the static analysis.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repo
+git clone https://github.com/moses-y/chili3d
 cd chili3d
-npm install</p><p>Running it: Start the development server:</p><p>npm run dev # Launches at http://localhost:8080</p><p>Building: For production, run npm run build. The WebAssembly module is pre-built and included, but you can rebuild it with npm run setup:wasm followed by npm run build:wasm. A Dockerfile and compose.yml are present for containerized deployment. No environment variables or external services are required—the app runs entirely client-side.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A design team evaluating CAD tools can deploy Chili3D as an internal web application using the provided Docker setup. Engineers open STEP files from their PLM system, perform quick modifications (fillet, boolean operations, measurements), and export back to STEP. The command-based architecture in packages/core/src/command/ supports plugin development, and the i18n system in packages/core/src/i18n/ allows localization for multilingual teams. The document save/load flow in packages/app/src/commands/application/saveDocument.ts and openDocument.ts handles persistence.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Alpha-stage stability: The README explicitly states this is early development with breaking API changes and incomplete documentation. Production adoption carries risk.
-Low - Test coverage: Only 4 test files exist across the entire codebase (packages/app/test/). The core geometry and command layers have minimal automated coverage.
-Low - Build complexity: The dual C++/TypeScript build pipeline requires specific tooling for WebAssembly compilation, which adds friction to local development.
-Low - Single-maintainer risk: This is a fork of a project with 4,740 stars, but the active development appears concentrated. Bus factor is a consideration.</p><p>The codebase is well-structured with clear separation between core, app, and builder packages. CI is configured in .github/workflows/main.yml, and the license is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Chili3D is an impressive technical achievement—running a full OCCT geometry kernel in the browser is non-trivial, and the feature set (booleans, sweeps, lofts, measurements) covers real CAD workflows. It is not production-ready for enterprise use given its alpha status and thin test coverage, but it is a strong foundation for teams that need browser-based CAD capabilities and can invest in hardening it. For evaluation, prototyping, or internal tooling with modest requirements, it is worth a serious look.</p>
+
+# Install Node dependencies (lockfile present)
+npm ci
+
+# Build the WebAssembly module
+npm run setup:wasm   # installs emscripten toolchain if needed
+npm run build:wasm
+
+# Start development server
+npm run dev          # serves at http://localhost:8080</code></pre>
+<p>The Dockerfile (<code>Dockerfile</code>) can be used for production builds:</p>
+<pre data-lang="bash"><code>docker build -t chili3d .
+docker run -p 8080:80 chili3d</code></pre>
+<p>No additional environment variables are required; configuration lives in <code>packages/core/src/config.ts</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A manufacturing portal can embed the app by loading <code>index.html</code> from <code>cpp/test/</code>. The portal creates a new document via the exposed <code>execute</code> entry, runs a series of create commands (<code>create/box.ts</code>, <code>create/boolean.ts</code>) to generate a part, then calls <code>saveDocument</code> to export a STEP file. All steps run client‑side, eliminating server‑side CAD licensing.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM</strong> – GITHUB_TOKEN permissions not limited (<code>.github/workflows/main.yml</code>).</li><li><strong>MEDIUM</strong> – No Dependabot/Renovate configured (<code>14 manifest files</code>).</li><li><strong>MEDIUM</strong> – CI runs <code>npm install</code> instead of <code>npm ci</code>.</li><li><strong>MEDIUM</strong> – Docker base images are unpinned (<code>node:alpine</code>, <code>nginx:alpine</code>).</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – Large binary (<code>packages/wasm/lib/chili-wasm.wasm</code>, 15 MB) stored in Git.</li><li><strong>MEDIUM</strong> – Checkout step keeps credentials (<code>persist-credentials</code> default).</li><li><strong>LOW</strong> – No job timeout set in workflow.</li><li><strong>LOW</strong> – Missing convention files (<code>.editorconfig</code>, formatter config).</li></ul>
+<p>Static analysis also reported <strong>45 import‑cycle members</strong> and <strong>12 hub modules</strong> (e.g., <code>packages/core/src/foundation/index.ts</code>). These increase maintenance cost: any change to a hub may trigger widespread recompilation and risk subtle circular‑dependency bugs.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>chili3d</code> provides a functional, browser‑only CAD stack with a solid TypeScript foundation and WebAssembly‑accelerated geometry. It is suitable for teams that need an extensible web CAD surface and are comfortable managing import cycles and the current lack of automated security tooling. Expect to allocate effort to refactor core hubs and introduce CI hardening before using it in a production pipeline.</p>
             </div>
 
             

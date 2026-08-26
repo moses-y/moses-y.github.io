@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>April 18, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,28 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#docker-optional">Docker (optional)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers building in‑app video, audio rooms, or live‑streaming need a reliable signalling layer, media‑device management, and cross‑platform abstractions. Implementing these from scratch means handling WebRTC negotiation, device permissions, and edge‑network routing – all error‑prone and time‑consuming.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>stream-video-js delivers a set of TypeScript SDKs that wrap Stream’s video‑SFU service:</p><p>Low‑level client – core call lifecycle, signalling, and device handling live in packages/client. Key entry points are packages/client/src/StreamVideoClient.ts and packages/client/src/Call.ts.  
- Audio filters – Web‑only noise‑cancellation lives under packages/audio-filters-web/src/NoiseCancellation.ts and bundles the proprietary Krisp AI SDK (packages/audio-filters-web/src/krispai/dist/).  
- React &amp; React‑Native bindings – utility hooks and components are provided in packages/react-sdk and packages/react-native-sdk (not listed in the file dump but referenced from the root README).</p><p>Together they expose a single public API (packages/client/index.ts) that can be imported by browser, Node, or React codebases.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install the core client (Yarn 4 is pinned in .yarnrc.yml)
-yarn add @getstream/stream-video-client   # package name defined in packages/client/package.json</p><p>If you need the audio‑filter bundle:
-yarn add @getstream/stream-video-audio-filters-web</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy the example environment file and fill in your Stream credentials:
-cp packages/client/.env-example .env
-edit .env → STREAMAPIKEY, STREAMAPISECRET, STREAMAPPID</p><p>The client reads these via packages/client/src/helpers/client-details.ts.</p><h3 class="post-h" id="running">Running</h3><p>A minimal call setup (JavaScript/TypeScript):
-import { StreamVideoClient } from &#39;@getstream/stream-video-client&#39;;</p><p>const client = new StreamVideoClient({
-  apiKey: process.env.STREAMAPIKEY!,
-  userId: &#39;alice&#39;,
-  token: process.env.STREAMUSERTOKEN!,
-});</p><p>await client.joinCall(&#39;call-123&#39;);</p><p>For React projects, wrap the client with the provided context (packages/react-sdk/src/StreamVideoProvider.tsx) and use hooks such as useCall().</p><h3 class="post-h" id="docker-optional">Docker (optional)</h3><p>The repository includes a Dockerfile that builds a Node environment with the SDKs pre‑installed. Build and run with:
-docker build -t stream-video-sdk .
-docker run -e STREAMAPIKEY=… -e STREAMUSERTOKEN=… stream-video-sdk</p><p>(Actual runtime script is not provided; you would mount your own entry point.)</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A SaaS marketplace wants to add one‑to‑one video support. By importing the client in their front‑end, they can:
-Initialise StreamVideoClient with the logged‑in user’s token.  
-Call client.joinCall(roomId) when a buyer clicks “Start Call”.  
-Use useCall() from the React SDK to render &lt;VideoRenderer/&gt; components and react to onParticipantJoined events.</p><p>All media streams travel through Stream’s edge network, guaranteeing low latency without custom TURN/STUN configuration.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – package.json files exist but there is no yarn.lock or package-lock.json; reproducible builds rely on the Docker image or CI which may fetch newer versions unexpectedly.  
-Low – Limited CI coverage – GitHub Actions workflows (.github/workflows/*.yml) run tests, but there is no lint or security scan step.  
-Low – No public TypeScript declaration for krispai – The bundled Krisp SDK ships only compiled JS; consumers must rely on the bundled krispsdk.d.ts, which may lag behind runtime changes.  
-Low – Environment variable leakage risk – .env-example is present, but no guard against committing a populated .env. No secret‑scanning hooks are configured.  
-Low – Documentation gaps – The root README links to SDK packages, yet the packages/react-bindings and packages/react-native-sdk directories are not listed in the file tree, suggesting missing source or incomplete publishing.</p><p>Overall the repo contains 47 test files, a full CI pipeline for unit tests, and explicit TypeScript typings for most modules, indicating a mature codebase.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>stream-video-js offers a well‑structured, tested set of SDKs that abstract Stream’s video SFU for web, React, and React‑Native. It is ready for production use provided you lock dependencies (add a lockfile) and ensure proper secret handling. Teams that need rapid video integration without building their own signalling layer will find it a solid foundation.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a turnkey way to embed real‑time video, audio rooms, and live‑streaming into web, React, and React‑Native apps while handling signaling, media negotiation, and device management. Building that stack from scratch requires deep WebRTC knowledge, cross‑platform glue code, and a reliable backend.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo ships a family of SDKs that abstract those concerns:</p>
+<ul><li><code>packages/client</code> supplies the low‑level JavaScript client (<code>src/StreamVideoClient.ts</code>, <code>src/Call.ts</code>) that talks to Stream’s SFU, manages peer connections, and exposes a typed API.</li><li><code>packages/react-bindings</code> and <code>packages/react-sdk</code> wrap the client in React hooks (<code>useCallStateHooks</code>, <code>useCall</code>, <code>useStreamVideoClient</code>) and UI components (<code>src/components/index.tsx</code>).</li><li><code>packages/react-native-sdk</code> mirrors the same hooks for React‑Native, plus native modules for audio‑device handling.</li></ul>
+<p>All SDKs share common utilities (<code>packages/client/src/helpers/*</code>) and a generated protobuf model (<code>packages/client/src/gen/video/sfu/models/models.ts</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in the React entry points:</p>
+<ol><li><strong><code>packages/react-bindings/src/contexts/StreamCallContext.tsx</code></strong> creates <code>StreamCallProvider</code>. Inside it calls <code>useCallStateHooks</code> from <strong><code>packages/react-bindings/src/hooks/index.ts</code></strong>.</li><li><code>useCallStateHooks</code> (the most‑called function – 29 distinct callers) pulls in <code>useCall</code> from <code>StreamCallProvider</code> and ultimately creates a <code>Call</code> instance via <strong><code>packages/client/src/Call.ts</code></strong>.</li><li><code>Call.ts</code> imports the hub module <strong><code>packages/client/src/gen/video/sfu/models/models.ts</code></strong> (68 inbound imports) and wires up the WebRTC stack (<code>rtc/Publisher.ts</code>, <code>rtc/Subscriber.ts</code>).</li><li>Media tracks are created through <code>createAudioStreamForDevice</code> / <code>createVideoStreamForDevice</code> → <code>createTrack</code> (both called from two places).</li><li>Event flow runs through the internal call graph: <code>useCallStateHooks</code> → <code>useCall</code> → <code>Call</code> → <code>rtc/Dispatcher.ts</code> → <code>rtc/Publisher.ts</code> / <code>rtc/Subscriber.ts</code>.</li></ol>
+<p>The most central hub (<code>models.ts</code>) holds generated types used across 68 modules; any change there propagates widely. A notable import cycle links <code>packages/client/src/store/index.ts</code>, <code>packages/client/src/Call.ts</code>, and <code>packages/react-sdk/src/components/index.ts</code>, increasing the blast radius for refactors.</p>
+<p>Outside the repo the only observed side‑effect is a single file read/write (<code>packages/react-native-sdk/expo-config-plugin/fixtures/index.ts</code>). No database or external service calls are present in the static analysis.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/stream-video-js
+cd stream-video-js
+
+# Install dependencies (yarn is the declared package manager)
+yarn install
+
+# Build the packages (Nx workspace)
+yarn nx run-many --target=build --all
+
+# Run a sample app (e.g., React live‑stream)
+cd sample-apps/react/livestream-app
+yarn start   # uses Next.js / Vite as defined in package.json scripts</code></pre>
+<p>Configuration for the client lives in environment variables referenced in <code>packages/client/.env-example</code> (API key, secret, and user token). The sample apps read those values at runtime; replace the placeholder file with real credentials before starting.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A typical integration in a React app:</p>
+<pre data-lang="tsx"><code>import { StreamVideoProvider, useCall } from '@stream-io/react-sdk';
+
+function VideoRoom() {
+  const { call } = useCall();               // pulls Call instance
+  useEffect(() =&gt; call.join(), []);        // joins a room
+  return &lt;VideoComponent call={call} /&gt;;   // UI from react-sdk
+}</code></pre>
+<p>The provider injects the client, the hook creates the <code>Call</code> object, and the UI component renders remote tracks supplied by the underlying <code>rtc</code> layer.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Private key committed (<code>sample-apps/react-native/dogfood/android/app/debug.keystore</code>). Must rotate and purge from history.</li><li><strong>High</strong> – GitHub Actions not pinned to commit SHA (<code>.github/workflows/*</code>). Replace <code>@v3</code> tags with full SHAs.</li><li><strong>Medium</strong> – GITHUB_TOKEN permissions undefined (<code>.github/workflows/deploy-react-sample-apps.yml</code>). Add least‑privilege scopes.</li><li><strong>Medium</strong> – No automated dependency updater. Add <code>dependabot.yml</code>.</li><li><strong>Medium</strong> – Docker base images unpinned (<code>Dockerfile</code>). Use digest tags.</li><li><strong>Medium</strong> – No vulnerability scan in CI. Add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – Large binary assets (<code>packages/video-filters-web/mediapipe/models/*.tflite</code>) inflate repo size; move to Git LFS or external storage.</li><li><strong>Medium</strong> – Checkout step retains push token (<code>persist-credentials</code>). Set <code>persist-credentials: false</code>.</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout-minutes</code>. Add reasonable limits.</li></ul>
+<p>Static analysis also flagged:</p>
+<ul><li><strong>High/cognitive_load</strong> – Oversized files (<code>Call.ts</code>, <code>models.ts</code>, <code>index.ts</code> in coordinator) &gt; 1 k lines; consider splitting by responsibility.</li><li><strong>High/soundness</strong> – 41 modules involved in import cycles; break cycles by extracting shared types or inverting dependencies.</li><li><strong>High/clarity</strong> – Hub module (<code>models.ts</code>) highly connected; keep stable, move volatile logic elsewhere.</li><li><strong>Medium/cognitive_load</strong> – Functions with dense branching (<code>src/utils/StreamVideoRN/types.ts</code>, <code>src/utils/push/libs/callingx.ts</code>, <code>src/rtc/helpers/sdp.ts</code>); refactor to strategy tables.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a well‑structured, multi‑platform video SDK with comprehensive hooks and UI components, but the core client contains large, highly coupled modules and several import cycles that raise maintenance risk. Security hygiene needs immediate attention (private key, action pinning, token handling). Suitable for teams comfortable with TypeScript and willing to invest in refactoring the hub modules for long‑term stability.</p>
             </div>
 
             
