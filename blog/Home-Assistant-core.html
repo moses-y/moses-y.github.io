@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>March 22, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Home automation platforms typically require cloud connectivity, which raises privacy concerns and creates dependency on external services. Local control is technically challenging because it demands broad protocol support, reliable discovery, and secure local authentication—all of which are hard to build and maintain from scratch.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This is the core of Home Assistant, an open-source home automation platform that runs entirely on local infrastructure. The homeassistant/ directory contains the full runtime: bootstrap.py handles startup sequencing, auth/ manages local authentication with providers like trusted_networks.py and MFA modules, and components/ holds hundreds of device integrations (e.g., abode/, shelly/, mqtt/). The brands/ directory maps vendor names to their integration manifests.</p><p>The project is Python-based, with homeassistant/main.py as the entry point. Docker support exists via Dockerfile and Dockerfile.dev. CI/CD is handled through GitHub Actions (.github/workflows/ci.yaml, builder.yml, wheels.yml), and the repo includes developer tooling like .devcontainer/devcontainer.json and .vscode/ settings.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: No package manifest (pyproject.toml or requirements.txt) is visible in the file listing, so standard pip install isn&#39;t directly evidenced. The Docker path is the clearest route. Build from the root:</p><p>docker build -t home-assistant .
-docker run -d --name home-assistant -p 8123:8123 -v /path/to/config:/config home-assistant</p><p>Configuration: The platform reads its configuration from a configuration.yaml file in the config directory (standard Home Assistant behavior). No environment variables are documented in the repo files.</p><p>Running it: After container startup, access the web UI at http://localhost:8123. For development, homeassistant/main.py can be invoked directly with Python 3.x, but the exact CLI flags aren&#39;t documented in the visible files.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical deployment runs Home Assistant on a Raspberry Pi or local server, with the Docker container exposing port 8123. Users connect devices via the web UI, which writes integration configurations to configuration.yaml. Automations and scripts are defined in YAML files within the config directory, and the auth/ module secures local access with user accounts and optional MFA.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Sparse test coverage: Only 1 test file detected across 200 files. The ci.yaml workflow exists, but the test footprint is thin relative to the codebase size.
-Med - Large monorepo complexity: The components/ directory contains hundreds of integrations with individual manifest.json files. This modularity is intentional but creates maintenance overhead and requires strict contribution guidelines (visible in CONTRIBUTING.md and CODEOWNERS).
-Low - No obvious security red flags: No secrets or credentials appear in the file structure. The repo includes codecov.yml, dependabot.yml, and CodeQL workflows, indicating reasonable security hygiene.
-Low - Documentation depth: The README is brief and links to external docs. Developer guidance exists in CLAUDE.md and AGENTS.md, but these are AI-assistant oriented rather than user-facing.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is the production core of a mature, widely-deployed platform—the codebase is substantial and well-organized, with solid CI/CD infrastructure. The sparse test files and monorepo complexity are worth noting, but the project&#39;s long history and active community mitigate those concerns. Use it if you need a self-hosted automation platform with broad device support and want to extend or contribute to the core system.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Home‑Assistant‑core is a 24 k‑file Python‑centric home‑automation platform, but two reproducible‑build and CI‑security gaps let a malicious patch or a wedged CI step slip past the project’s own quality gates. The static analysis flagged <strong>no lockfile beside <code>pyproject.toml</code></strong> and <strong>GitHub Actions pinned only to branch tags</strong>, meaning the exact dependency set and action versions that passed tests can differ from what ships to users.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Home Assistant provides local‑first home automation, exposing a modular component model under <code>homeassistant/components/</code>. Core runtime lives in <code>homeassistant/__main__.py</code> (entry point <em>main</em>) and orchestrates services, config flows, and integrations through a central <code>Hass</code> instance. The framework is exercised by 11 350 test files and 12976 source files, predominantly Python (16 516) with JSON configs (5 450) and YAML manifests (794).</p>
+<p>Key structural facts:</p>
+<ul><li><strong>Internal call graph</strong> – 1 850 resolved self‑call edges; the most‑called functions are <code>response</code> (43 callers), <code>_is_feature_available</code> (16), <code>add_context_property</code> (15), and <code>_async_schedule_save</code> (14).</li><li><strong>Entry points</strong> – <code>main</code> in <code>homeassistant/__main__.py:168</code> reaches 14 functions; <code>execute</code> in <code>homeassistant/components/assist_pipeline/pipeline.py:1684</code> reaches 32 functions and is invoked by nothing else in the repo.</li><li><strong>What the code touches outside itself</strong> – 15 functions read/write files, 7 perform crypto/secrets ops, 14 make outbound network calls, 7 call a model for inference, 1 reads/writes a database. Traced paths: <code>main → restore_backup [filesystem via backup_file_path.unlink]</code> and <code>ensure_config_path [filesystem via os.mkdir]</code>.</li><li><strong>Files with most route traffic</strong> – <code>homeassistant/components/alexa/capabilities.py</code> (153 functions, 30 types, called from 3 files); <code>homeassistant/auth/__init__.py</code> (45 functions, 4 classes, performs crypto, reads/writes files, makes network calls); <code>homeassistant/components/assist_pipeline/pipeline.py</code> (69 functions, 21 classes, reads/writes files).</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>homeassistant/__main__.py:168</code> (<code>main</code>). From there the flow reaches <code>ensure_config_path</code> (mkdirs config dir), then proceeds to component set‑up via <code>async_setup_entry</code> across many integrations. The assist pipeline (<code>pipeline.py</code>) executes <code>execute</code> (line 1684) which resolves language models and runs intent pipelines, touching the filesystem for language data and making outbound calls to speech‑to‑text services.</p>
+<p>A concrete leak path: <code>main → restore_backup [filesystem via backup_file_path.unlink]</code> demonstrates that a backup‑restore routine can delete arbitrary files if the backup path is controllable. Another path: <code>ensure_config_path [filesystem via os.mkdir]</code> shows that missing config directories are auto‑created, which can be abused to plant files under the Home Assistant user’s home.</p>
+<p>The call graph reveals cycles through <code>interfaces → Alexa → AlexaEndpointHealth</code> and <code>capability_resources → serialize_capability_resources</code>, meaning changes to the Alexa capability definition ripple across 23 downstream edges, inflating the blast radius of any breaking change.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the exact repo the brief references
+git clone https://github.com/moses-y/Home-Assistant-core.git
+
+# Install into a virtualenv (pip is the declared package manager)
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e .[all]   # installs with optional extras</code></pre>
+<p><strong>Configuration</strong> The single config file is <code>configuration.yaml</code> (created under <code>$HOME/.homeassistant/</code> on first run). Secrets are stored in <code>secrets.yaml</code> – the code‑health audit flagged <code>tests/components/elmax/fixtures/direct/cert.pem</code> and <code>tests/util/yaml/test_secrets.py</code> as secret‑shaped paths; ensure any real keys live there and are <strong>not</strong> committed to version control.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># Start the Home Assistant server (Docker alternative also available)
+ha core start
+# or, via the entry point
+python -m homeassistant --config $HOME/.homeassistant</code></pre>
+<p>The CLI entry point is <code>homeassistant/__main__.py:168</code> (<code>main</code>). Docker users can build from <code>Dockerfile</code>; the image tags are not pinned to a commit SHA (see Code Health below).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer adding a new Z‑Wave lock creates a component under <code>homeassistant/components/zwave/</code>. The component’s <code>async_setup_entry</code> registers a <code>Lock</code> entity, which the assist pipeline can expose via Alexa through <code>homeassistant/components/alexa/capabilities.py</code>. The pipeline’s <code>execute</code> function resolves the lock state, calls the model for natural‑language intent, and writes the resulting state to the Home Assistant state store (SQLite by default). If the lock’s firmware update API is reachable, the same flow makes an outbound network call – the analyst should verify TLS certs and restrict outbound hosts in <code>configuration.yaml</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>The static analysis produced three findings (0 critical, 2 high, 0 medium, 1 low):</p>
+<ul><li><strong>HIGH – Pin third‑party GitHub Actions to a commit SHA</strong>   Evidence: <code>.github/workflows/*</code> reference <code>home-assistant/actions/helpers/info@master</code>, <code>…/version@master</code>, <code>…/verify-version@master</code>, <code>…/git-init@master</code>. A tag can move, so the action running with repository secrets may change without a code change. Fix: Replace each <code>@vN</code> with the 40‑character commit SHA (keep the version comment) and let Dependabot bump the SHAs.</li></ul>
+<ul><li><strong>HIGH – Commit a lockfile beside the manifest</strong>   Evidence: <code>pyproject.toml</code> has no lockfile in scope. Without a locked set of transitive dependencies, the artifact tested can differ from the artifact shipped. Fix: Run <code>pip lock</code> (or <code>uv lock</code>) once and commit the generated <code>requirements.txt</code> / <code>uv.lock</code> alongside <code>pyproject.toml</code>.</li></ul>
+<ul><li><strong>LOW – Set timeout‑minutes on the workflow jobs</strong>   Evidence: 3 workflows in <code>.github/workflows/</code> declare no <code>timeout-minutes</code>. A wedged step can run six hours (platform default), causing overlapping runs on a two‑hourly schedule. Fix: Add a realistic <code>timeout-minutes</code> to each job (e.g., 120 for build, 60 for test).</li></ul>
+<p>No lockfile, unpinned Actions, and missing job timeouts are the only SDLC gaps the structure supports; otherwise the repo has CI (GitHub Actions), Dockerfiles, and a licence file.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Home‑Assistant‑core is a large, modular home‑automation codebase with solid test coverage and a clear component model. Its main weaknesses are reproducibility (missing lockfile) and CI security (Actions pinned only to branch tags). Teams that need deterministic builds and supply‑chain safety should lock dependencies and pin Actions to SHAs immediately. For operators who value local control and can tolerate manual dependency management, the platform remains a capable, well‑documented foundation.</p>
             </div>
 
             
@@ -115,6 +145,26 @@ Low - Documentation depth: The README is brief and links to external docs. Devel
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>6</strong> of 120 declared dependencies are a major version behind. Resolved 63 of 120 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>certifi</code></td>
+                            <td>&gt;=2021.5.30</td><td>2026.7.22</td>
+                            <td class="beh">5 major</td></tr><tr><td><code>cryptography</code></td>
+                            <td>==46.0.5</td><td>50.0.0</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>packaging</code></td>
+                            <td>&gt;=23.1</td><td>26.3</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>astral</code></td>
+                            <td>==2.2</td><td>3.2</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>attrs</code></td>
+                            <td>==25.4.0</td><td>26.1.0</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>home-assistant-bluetooth</code></td>
+                            <td>==1.13.1</td><td>2.0.0</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
