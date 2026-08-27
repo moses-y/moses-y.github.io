@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>February 6, 2026</span>
                     <span>4 min read</span>
-                    <span class="post-language">Shell</span>
+                    <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>gh aw</h1>
@@ -80,27 +80,26 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams spend disproportionate effort translating operational policies (issue triage, report generation, compliance checks) into verbose GitHub Actions YAML. Maintaining that code is error‑prone and requires deep CI expertise, which slows automation adoption.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>GitHub Agentic Workflows lets engineers author natural‑language markdown files that describe a workflow, then automatically converts them into a runnable GitHub Actions workflow. The conversion is performed by the gh aw CLI (referenced in the README) and runs the AI agent inside a Docker‑based sandbox defined in .devcontainer/Dockerfile.</p><p>Key assets:  
-Workflow definition – e.g., .github/aw/create-agentic-workflow.md holds the markdown schema (on, permissions, safe-outputs).  
-CLI entry point – the gh aw command (documented in README.md and install.md) parses the markdown and emits a .yml file under .github/workflows/.  
-Safety layer – safe-outputs blocks (see the example in the README) restrict write actions to a whitelist, and the sandbox enforces read‑only defaults.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><div class="table-scroll"><table><thead><tr><th>Step</th><th>Evidence</th><th>Action</th></tr></thead><tbody><tr><td>Setup</td><td>.devcontainer/Dockerfile + devcontainer.json</td><td>Open the repo in VS Code with the provided devcontainer, or build the image manually: &lt;br&gt;bash&lt;br&gt;docker build -t gh-aw-dev .devcontainer&lt;br&gt;</td></tr></tbody></table></div><p>| | Installation | install.md (linked from the README) | Follow the Quick‑Start guide – it instructs to run the gh aw installer (likely a script that adds the CLI to $PATH). If missing, the repository does not contain a package manager file, so the installer must be a standalone script. | | Configuration | .github/aw/.md files | Create a workflow markdown file (e.g., my-report.md) following the schema in example-workflow-analyzer.md. Place it under .github/aw/. No explicit env‑vars are required; permissions are declared in the markdown header. | | Running | README.md example &amp; gh aw CLI | Convert and dispatch the workflow: &lt;br&gt;bash&lt;br&gt;gh aw convert .github/aw/my-report.md  # produces .github/workflows/my-report.yml&lt;br&gt;git add .github/workflows/my-report.yml &amp;&amp; git commit -m "Add agentic workflow"&lt;br&gt;git push  # triggers the workflow on GitHub\n</p><p>|</p><p>If the CLI is not already in the PATH after installation, invoke it via the devcontainer’s shell (./bin/gh-aw is a plausible location based on typical patterns).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A security team wants a daily “open‑issues health” report. They add daily-issues-report.md under .github/aw/ with a safe-outputs block that creates an issue prefixed [team‑status]. After conversion, the generated workflow runs nightly, reads all open issues, formats a summary, and posts the issue—no custom JavaScript or Action development required.</p><p>generated .github/workflows/daily-issues-report.yml
-on:
-  schedule: [{ cron: &#39;0 8   &#39; }]
-permissions:
-  contents: read
-  issues: write
-jobs:
-  report:
-    runs-on: ubuntu-latest
-    steps:
-uses: gh-aw/agent@v1   # placeholder for the runtime agent
-        with:
-          safe-outputs: create-issue</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Missing LICENSE – No license file at repo root; redistribution terms are unclear.  
-Low – Sparse test coverage – 13 test files exist, but no clear linkage to the CLI or markdown conversion logic; CI (.github/workflows/ci.yml) does not explicitly run unit tests.  
-Medium – Large volume of generated workflow files – Over 150 YAML action definitions increase maintenance overhead; any change to core conversion logic may require bulk updates.  
-Low – Documentation fragmentation – Core usage is split across README.md, install.md, and many .md files; a single “Getting Started” page would improve onboarding.  
-Low – Potential runtime security risk – While safe-outputs mitigates writes, the sandbox relies on Docker; any misconfiguration in .devcontainer/Dockerfile could expose host resources.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>GitHub Agentic Workflows provides a practical bridge from natural‑language intent to executable CI pipelines, reducing the YAML burden for routine automation. The project is functional but incomplete: missing a license, limited test integration, and a dispersed documentation set. It is best suited for teams already comfortable with GitHub Actions who want a lower‑code entry point for repeatable automation, provided they perform their own security review of the Docker sandbox.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Managing AI agents in CI means writing YAML workflows by hand, wiring permissions, sandboxing, and output sanitization for every job. That work repeats per repository, is easy to get wrong, and makes agent behavior opaque to the humans who must review it. GitHub Agentic Workflows (gh-aw) treats the workflow definition itself as the problem: write intent in markdown, generate the Actions YAML, and let the platform enforce the safety boundaries.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>gh aw</code> converts natural-language markdown files into GitHub Actions workflows that run AI agents (Copilot, Claude, Codex) in containerized environments on a schedule or manually. The core CLI entry point is <code>cmd/gh-aw/main.go</code>; the markdown-to-workflow pipeline and the agent runtime live under <code>pkg/</code>. The <code>actions/</code> tree is a separate JavaScript project — a setup action with an MCP server that handles safe input/output processing and secret redaction (<code>actions/setup/js/redact_secrets.cjs</code>, <code>safe_outputs_mcp_client.cjs</code>).</p>
+<p>This repository is not one codebase. It is six self-contained projects — <code>pkg</code> (Go, 1368 code files), <code>actions</code> (JS), <code>cmd</code>, <code>scripts</code>, <code>internal</code>, <code>skills</code> — plus 409 files of <code>.github/</code> agents, runbooks, and workflow definitions. Treat each as its own unit; there is no single architecture spanning them.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>cmd/gh-aw/main.go</code>. The CLI reads a markdown workflow file, validates it, and emits a <code>.github/workflows/*.yml</code> that invokes the setup action. The action's JavaScript is the real hub: <code>actions/setup/js/error_helpers.cjs</code> has 73 modules depending on it — the highest blast radius in the repo, and the highest-churn file to change. The module graph is healthy: 295 internal modules, 229 import edges, zero circular dependencies.</p>
+<p>For the Go side, the wiring is not mapped in the measured analysis — no traced call paths are available for <code>pkg/</code>. The <code>actions/</code> project, by contrast, is well-traced: <code>error_helpers.cjs</code> is the failure-handling hub everything routes through, and the MCP client/server pair (<code>safe_outputs_mcp_client.cjs</code>, <code>safe_inputs_mcp_server_http.cjs</code>) owns the network boundary where agent output is sanitized before it touches GitHub's API.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>gh extension install github/gh-aw
+gh aw create my-workflow.md   # generates the Actions workflow</code></pre>
+<p>The README's quick start is the authoritative path: install the extension, add a sample workflow, run it. Configuration lives in the markdown frontmatter (<code>on</code>, <code>permissions</code>, <code>safe-outputs</code>). No <code>.env</code> or key management is needed — the action's <code>validate_secrets.cjs</code> and <code>redact_secrets.cjs</code> handle secret handling inside the action.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team wants a daily status issue generated from repository activity. They write a markdown file declaring <code>on: schedule: daily</code>, read-only permissions, and a <code>safe-outputs</code> block that constrains the agent to creating issues with a title prefix and labels. <code>gh aw</code> compiles it, CI runs the agent container, and the only write the agent can perform is through the sanitized output handler — with human approval gating if configured.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (468 findings: 37 high, 431 medium) flags deep nesting in <code>pkg/workflow/</code> (max indentation depth 9), 449 duplicated 6-line blocks across 242 files, and two silent <code>catch {}</code> blocks in <code>actions/setup/js/</code>. The health audit adds:</p>
+<ul><li><strong>High</strong> — <code>ci.yml</code> lines 100 and 330 discard step exit codes; the job can report green on stale artifacts.</li><li><strong>Med</strong> — <code>.devcontainer/Dockerfile</code> uses a mutable base image tag; pin by digest.</li><li><strong>Med</strong> — 42MB and 21.2MB videos committed to <code>docs/public/videos/</code>; move to LFS or object storage.</li><li><strong>Med</strong> — <code>ci.yml</code> checkout leaves <code>persist-credentials</code> enabled; disable it.</li><li><strong>Low</strong> — <code>agentics-maintenance.yml</code> lacks <code>timeout-minutes</code> on jobs.</li><li><strong>High</strong> — committed secrets detected in the repo; audit and rotate.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Solid, security-conscious design for a genuinely useful tool — the safe-outputs model is the right instinct. The fork carries real hygiene debt (committed secrets, large binaries, discarded exit codes) that must be resolved before trusting it in production. Use it if you want agent-driven CI with guardrails; audit the fork's delta from upstream first.</p>
             </div>
 
             
@@ -110,18 +109,18 @@ Low – Potential runtime security risk – While safe-outputs mitigates writes,
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,743<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>107</b></li><li><span>YAML</span><i style="width:77%"></i><b>82</b></li><li><span>JSON</span><i style="width:4%"></i><b>4</b></li><li><span>Shell</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>1380</b></li><li><span>Markdown</span><i style="width:44%"></i><b>610</b></li><li><span>YAML</span><i style="width:13%"></i><b>173</b></li><li><span>Shell</span><i style="width:4%"></i><b>53</b></li><li><span>JSON</span><i style="width:3%"></i><b>40</b></li><li><span>TypeScript</span><i style="width:1%"></i><b>17</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -154,7 +153,7 @@ Low – Potential runtime security risk – While safe-outputs mitigates writes,
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>actions/setup/js/redact_secrets.cjs, actions/setup/js/redact_secrets.test.cjs, actions/setup/js/validate_secrets.cjs</code></span></li>
                     </ul>
                 </div>
 

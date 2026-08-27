@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 6, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,30 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Building interactive terminal applications in Go requires hand‑rolled handling of raw input, screen drawing, and widget layout. Without a reusable library, developers must duplicate low‑level code, leading to fragile UIs and inconsistent user experiences.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>tview supplies a self‑contained widget toolkit for terminal UIs. Core widgets live in top‑level source files such as box.go, button.go, inputfield.go, table.go, and treeview.go. Layout helpers (flex.go, grid.go, pages.go) and the application runner (application.go) orchestrate event loops and screen updates. The demos/ directory (86 files) showcases each widget with a minimal main.go (e.g., demos/button/main.go) and accompanying screenshots, making the API discoverable without external documentation.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup – The project uses Go modules; install the library with the command shown in the README:</p><p>go get github.com/rivo/tview@master</p><p>Configuration – No external configuration files are required. All widget behavior is controlled through method chaining (e.g., NewBox().SetBorder(true).SetTitle(&quot;Hello&quot;)).</p><p>Running a demo – Choose a demo folder, cd into it, and run the provided main.go. Example for the “Hello, World!” box:</p><p>cd demos/box
-go run main.go</p><p>To embed tview in your own code, import the package and start an Application:</p><p>package main</p><p>import &quot;github.com/rivo/tview&quot;</p><p>func main() {
-    box := tview.NewBox().
-        SetBorder(true).
-        SetTitle(&quot;Hello, world!&quot;)
-    if err := tview.NewApplication().
-        SetRoot(box, true).
-        Run(); err != nil {
-        panic(err)
-    }
-}</p><p>The library does not ship a CLI binary; the entry points are the demo main.go files.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A monitoring tool can render dynamic tables and log streams using tview.Table and tview.TextView. Example snippet:</p><p>tbl := tview.NewTable().
-    SetBorders(true).
-    SetFixed(1, 0)</p><p>tbl.SetCell(0, 0, tview.NewTableCell(&quot;Metric&quot;).
-    SetAlign(tview.AlignCenter).SetSelectable(false))
-tbl.SetCell(0, 1, tview.NewTableCell(&quot;Value&quot;).
-    SetAlign(tview.AlignCenter).SetSelectable(false))</p><p>app := tview.NewApplication().
-    SetRoot(tbl, true)</p><p>if err := app.Run(); err != nil {
-    log.Fatalf(&quot;UI error: %v&quot;, err)
-}</p><p>This pattern is used by projects such as K9s and glab (see README list).</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No test files – The repository contains zero *_test.go files, leaving core logic unverified.  
-Med – No CI/CD – .github/ holds only FUNDING.yml; there is no workflow definition to enforce builds or linting.  
-Low – Limited documentation for public API – While demos are extensive, the top‑level doc.go provides only package‑level comments; method‑level docs are sparse.  
-Low – Potential race conditions – Widgets share mutable state (e.g., SetSelectedFunc) without explicit synchronization; library assumes single‑goroutine UI loop, which is typical but should be documented.  
-Low – License present – LICENSE.txt is included, satisfying legal requirements.</p><p>No obvious security secrets or hard‑coded credentials are present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>tview delivers a mature, feature‑rich terminal UI toolkit with a clear API and extensive example code, making it suitable for production Go CLIs that need interactive interfaces. The main drawbacks are the absence of automated tests and CI, which increase maintenance risk for teams that require strict quality gates. If your project can tolerate manual testing or you plan to add coverage, tview is a solid choice.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building interactive terminal applications in Go often means hand‑crafting low‑level ANSI handling, layout math, and event loops. Teams spend time re‑implementing common widgets (tables, forms, trees) instead of focusing on domain logic, and the resulting code bases become hard to maintain because widget implementations are large, deeply nested, and duplicated across demos.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>tview</code> supplies a ready‑made widget library for terminal UIs. Core UI primitives live in the root (<code>box.go</code>, <code>textview.go</code>, <code>table.go</code>, <code>textarea.go</code>, <code>application.go</code>). Each widget type is a Go struct with methods such as <code>NewBox</code>, <code>SetBorder</code>, <code>SetTitle</code>, <code>NewTextView</code>, <code>SetText</code>, and <code>AddItem</code>. The <code>demos/</code> folder (86 files) shows concrete usage: <code>demos/box/main.go</code> creates a bordered box, <code>demos/table/main.go</code> builds a navigable table, and <code>demos/presentation</code> strings together multiple widgets for a slide‑deck style demo.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in a demo’s <code>main</code> (e.g., <code>demos/box/main.go:9</code>). The <code>main</code> function calls <code>tview.NewApplication()</code>, configures a root widget with <code>SetRoot</code>, then invokes <code>Run</code>. <code>Run</code> (in <code>application.go:276</code>) starts the event loop, repeatedly calling <code>Draw</code>. <code>Draw</code> routes to widget‑specific <code>DrawForSubclass</code> (e.g., <code>textview.go</code>, <code>table.go</code>) and ultimately to low‑level <code>printWithStyle</code> in <code>ansi.go</code>.</p>
+<p>Key hubs:</p>
+<ul><li><code>NewBox</code> (in <code>box.go</code>) is referenced from 20 places – it constructs the most common container.</li><li><code>step</code> (used in layout calculations) appears in 17 call sites.</li><li><code>HasFocus</code>, <code>AddItem</code>, <code>SetDoneFunc</code>, <code>SetTitle</code>, <code>SetText</code>, and <code>NewTextView</code> are each called &gt;10 times, indicating they are high‑impact APIs.</li></ul>
+<p>The internal call graph contains 669 edges; no circular imports were found, but three files (<code>textarea.go</code>, <code>table.go</code>, <code>textview.go</code>) each exceed 1,600 lines, making any change propagate widely. Deep nesting (max depth 10) appears in <code>ansi.go</code>, <code>application.go</code>, and <code>image.go</code>, while duplicated 6‑line blocks occur across many demo files (e.g., <code>frame/main.go</code>, <code>inputfield/main.go</code>). No outbound network calls are present except a single helper function, so the library is self‑contained.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/tview
+cd tview
+
+# Build a demo (example: box)
+go run demos/box/main.go</code></pre>
+<p>The <code>go.mod</code> file defines all dependencies; <code>go build ./...</code> compiles the library and demos. No additional configuration files are required. To embed the library, import <code>github.com/moses-y/tview</code> and instantiate widgets as shown in the README’s “Hello World” snippet.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A microservice CLI can replace its flag‑based UI with a <code>tview</code> form:</p>
+<pre data-lang="go"><code>app := tview.NewApplication()
+form := tview.NewForm().
+    AddInputField("Host", "", 20, nil, nil).
+    AddPasswordField("Token", "", 20, '*', nil).
+    AddButton("Connect", func() { /* connect logic */ })
+if err := app.SetRoot(form, true).Run(); err != nil { log.Fatal(err) }</code></pre>
+<p>The form handles keyboard navigation, focus, and validation without extra code, letting developers concentrate on the connection logic.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Add a test suite</strong> – 64 source files, no test files. No regression safety.</li><li><strong>High – Add CI workflow</strong> – No GitHub Actions or other CI config; builds are never gated.</li><li><strong>Medium – Enable Dependabot</strong> – Only <code>go.mod</code>/<code>go.sum</code> present; no bot to auto‑update dependencies.</li><li><strong>High – Deep nesting</strong> – Max indentation depth 10 in <code>ansi.go</code>, <code>application.go</code>, <code>image.go</code>. Hard to follow control flow.</li><li><strong>High – Duplicated code</strong> – 23 similar 6‑line blocks across 15 demo files; DRY violations.</li><li><strong>High – Oversized files</strong> – <code>textarea.go</code>, <code>table.go</code>, <code>textview.go</code> each &gt; 1,600 lines; single‑file changes have large blast radius.</li><li><strong>Medium – High branching density</strong> – 78 branches over 248 lines in <code>ansi.go</code>, <code>grid.go</code>, <code>list.go</code>. Complex decision logic.</li></ul>
+<p>All findings stem from deterministic static analysis; no speculative issues are added.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>tview</code> delivers a mature, feature‑rich terminal UI toolkit that can dramatically cut development time for Go‑based CLIs. Its single‑file widget implementations and duplicated demo code make the code base difficult to evolve, and the absence of tests or CI means changes are risky. Teams that need fast, reliable terminal interfaces should adopt it but first invest in a test suite, CI pipeline, and refactor the largest widgets to improve maintainability.</p>
             </div>
 
             

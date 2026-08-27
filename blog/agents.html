@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,57 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Traders seeking to automate Polymarket positions face fragmented integration points between AI agent frameworks and prediction market APIs, requiring custom implementation of order signing, market data parsing, and RAG pipeline construction for informed trading decisions.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This repo provides a modular developer framework for building AI agents that trade on Polymarket. The agents/ directory contains twelve Python modules organized into three subsystems: application/ handles trade execution and cron-based scheduling (trade.py, executor.py, cron.py), connectors/ standardizes data sourcing with chroma.py for vector storage, news.py for news feeds, and search.py for web queries, while polymarket/ implements the Polymarket class for API interaction and gamma.py for the Gamma API subset. Data models reside in agents/utils/objects.py using Pydantic, and utility functions are in agents/utils/utils.py. The architecture explicitly separates concerns—connectors fetch and vectorize data, the Polymarket class handles order construction and signing, and application scripts orchestrate execution.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repository and install dependencies from requirements.txt using pip install -r requirements.txt. The README documents creating a .env from the example: cp .env.example .env, then setting POLYGONWALLETPRIVATEKEY and OPENAIAPIKEY. Load the wallet with USDC before trading.</p><p>Configuration: The .env.example file at the root requires POLYGONWALLETPRIVATEKEY and OPENAIAPIKEY. Additional configuration may be needed for connector-specific keys depending on chosen data sources.</p><p>Running it: The entry points are scripts/python/cli.py for the command-line interface and scripts/python/server.py for server mode. To trade directly, execute python agents/application/trade.py (ensure PYTHONPATH=&quot;.&quot; is set when running outside Docker). Docker workflows are documented in scripts/bash/ with build-docker.sh and run-docker-dev.sh.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer building a sentiment-driven trading agent would import GammaMarketClient from agents/polymarket/gamma.py to fetch market metadata, initialize a Polymarket instance with their API keys, and use chroma.py to vectorize news articles from agents/connectors/news.py. Trades could be executed via the trade() method on the Polymarket class, with Pydantic models from agents/utils/objects.py validating order parameters before submission. This pattern separates data ingestion, market analysis, and execution into independently maintainable components.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low risk - Dependencies declared without a lockfile: requirements.txt lacks a corresponding requirements.lock or Pipfile.lock, creating non-reproducible build risk. Verify hashes before production deployment.
-Medium risk - Limited test coverage: only tests/test.py is present; no CI pipeline exercises the full agent workflow beyond dependency review.
-Low risk - Secrets in versioned examples: .env.example contains placeholder keys committed to the repo; while not actual secrets, this pattern should be documented as a &quot;do not commit real keys&quot; guideline.
-Low risk - No input validation layer documented: connector and API interaction files lack evident schema validation beyond Pydantic models, which may allow malformed data through RAG pipelines.</p><p>The repo has CI configured (GitHub Actions workflows present in .github/workflows/), a .pre-commit-config.yaml, and MIT licensing, but the single test file and absent lockfile are the most concrete hygiene gaps.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a functional, well-structured framework for Python-savvy traders who need to connect AI agents to Polymarket&#39;s API and data sources. It excels at modularity—connectors, API clients, and trade execution are cleanly separated—but the lack of a dependency lockfile and sparse test suite limit its readiness for production teams without additional CI/CD and pinning work. Ideal for solo developers or research prototypes; larger organizations should pin dependencies and expand test coverage before deployment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Manual interaction with Polymarket’s prediction‑market API is error‑prone and requires repetitive data‑fetch, prompt‑engineering, and order‑signing steps. Teams that want autonomous trading must stitch together API clients, a vector store for news retrieval, and LLM calls themselves, which slows experimentation and increases risk of bugs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo implements a modular framework that ties Polymarket API clients (<code>agents/polymarket/polymarket.py</code>, <code>agents/polymarket/gamma.py</code>) to LLM‑driven trading logic (<code>agents/application/executor.py</code>, <code>agents/application/trade.py</code>). Connectors for external data (<code>agents/connectors/chroma.py</code>, <code>agents/connectors/news.py</code>) supply Retrieval‑Augmented Generation (RAG) inputs. The command‑line interface in <code>scripts/python/cli.py</code> exposes three high‑level actions:</p>
+<ul><li><code>run_autonomous_trader</code> – runs a full trade loop using the best‑available market.</li><li><code>create_market</code> – selects and creates a market based on LLM‑generated recommendations.</li><li><code>ask_polymarket_llm</code> – forwards an arbitrary prompt to the Polymarket‑specific LLM prompt set.</li></ul>
+<p>All code lives under the <code>agents/</code> package; the Dockerfile and accompanying Bash scripts enable containerised execution.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the entry point <code>scripts/python/cli.py</code>. The most used command, <code>run_autonomous_trader</code> (line 119), invokes the following chain (counts are from the static call graph):</p>
+<ol><li><strong>CLI → <code>run_autonomous_trader</code></strong> calls <code>one_best_trade</code> in <code>agents/application/trade.py</code> (6 functions, 1 class).</li><li><code>one_best_trade</code> → <code>source_best_trade</code> (via <code>self.llm.invoke</code>) in <code>agents/application/executor.py</code>. This is the only LLM‑inference hop, accounting for 6 outbound model calls across the repo.</li><li><code>source_best_trade</code> → <code>get_llm_response</code> → <code>market_analyst</code> prompt defined in <code>agents/application/prompts.py</code>.</li><li>Trade execution ultimately reaches <code>Polymarket</code> class (<code>agents/polymarket/polymarket.py</code>) which performs signed HTTP calls (<code>httpx</code>) to the Polymarket DEX.</li></ol>
+<p>The <strong>hub modules</strong> are:</p>
+<ul><li><code>agents/application/executor.py</code> – 15 functions, 1 class, called from 3 files, mediates LLM calls and token estimation.</li><li><code>agents/polymarket/polymarket.py</code> – 22 functions, 1 class, called from 4 files, handles all network interactions.</li><li><code>agents/polymarket/gamma.py</code> – 13 functions, 1 class, supplies market listings used by both creator and trade flows.</li></ul>
+<p>The <strong>largest blast radius</strong> is <code>agents/application/executor.py</code> (instability 0.63) because many modules import it and it forwards LLM requests; a change here can affect trade, market‑creation, and CLI commands. No circular imports were detected, simplifying refactoring.</p>
+<p>File‑level responsibilities (excerpt):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Core Role</th></tr></thead><tbody><tr><td><code>agents/polymarket/polymarket.py</code></td><td>Polymarket API client, order signing, market filtering</td></tr><tr><td><code>agents/application/executor.py</code></td><td>LLM orchestration, token budgeting, inference wrapper</td></tr><tr><td><code>agents/application/trade.py</code></td><td>Trade orchestration, file I/O for local DBs</td></tr><tr><td><code>agents/application/creator.py</code></td><td>Market‑creation logic, uses executor for LLM suggestions</td></tr><tr><td><code>agents/connectors/chroma.py</code></td><td>Local vector DB, RAG query helpers</td></tr><tr><td><code>scripts/python/cli.py</code></td><td>User‑facing commands, maps CLI flags to the above flows</td></tr></tbody></table></div>
+<p>Unmapped areas: background scheduling (<code>agents/application/cron.py</code>) and the web server (<code>scripts/python/server.py</code>) are present but not traversed by the current entry‑point analysis.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repository
+git clone https://github.com/moses-y/agents
+cd agents
+
+# Build and run via Docker (recommended)
+./scripts/bash/build-docker.sh
+./scripts/bash/run-docker-dev.sh   # launches the CLI inside the container
+
+# Or run locally
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Populate environment variables
+cp .env.example .env
+# Edit .env and set POLYGON_WALLET_PRIVATE_KEY and OPENAI_API_KEY
+
+# Execute the autonomous trader
+python scripts/python/cli.py run_autonomous_trader</code></pre>
+<p>The README already lists these steps; the commands above follow them verbatim.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant‑fund could schedule <code>run_autonomous_trader</code> via cron (see <code>agents/application/cron.py</code>) to evaluate all tradable Polymarket events nightly, let the LLM pick the highest‑expected‑value market, and automatically place a signed order. The flow would be:</p>
+<pre data-lang="python"><code>from agents.application.executor import Executor
+from agents.application.trade import Trade
+
+executor = Executor()
+trade = Trade(executor)
+trade.run_autonomous_trader()   # same logic as the CLI command</code></pre>
+<p>All network traffic is confined to the Polymarket API and the LLM provider, while local state (e.g., cached markets) lives in the <code>agents/connectors/chroma.py</code> SQLite store.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>MEDIUM – GITHUB_TOKEN permissions</strong> – <code>.github/workflows/docker-image.yml</code> lacks an explicit <code>permissions</code> block.</li><li><strong>MEDIUM – Dependabot missing</strong> – No <code>.github/dependabot.yml</code> despite a <code>requirements.txt</code>.</li><li><strong>MEDIUM – Docker base image not pinned</strong> – <code>Dockerfile</code> uses <code>python:3.9</code> tag instead of a digest.</li><li><strong>MEDIUM – Checkout persists credentials</strong> – <code>.github/workflows/python-app.yml</code> does not set <code>persist-credentials: false</code>.</li><li><strong>LOW – Job timeouts undefined</strong> – <code>.github/workflows/dependency-review.yml</code> has no <code>timeout-minutes</code>.</li><li><strong>MEDIUM – Broad exception handling</strong> – <code>agents/application/trade.py</code> catches generic <code>except</code> blocks, masking errors.</li><li><strong>MEDIUM – Duplicated code</strong> – Similar 6‑line blocks appear in <code>agents/application/creator.py</code> and <code>agents/application/trade.py</code>; extracting helpers would improve DRYness.</li><li><strong>Low risk</strong> – No lockfile; builds rely on <code>requirements.txt</code> only, which can lead to non‑reproducible environments.</li></ul>
+<p>Other hygiene points: CI is present, Dockerfile exists, MIT licence is included, no secrets detected.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository delivers a clear, modular stack for LLM‑driven Polymarket trading, with a well‑defined CLI and Docker workflow. However, the codebase contains medium‑severity operational risks (unrestricted token permissions, missing dependency automation, broad exception handling) that should be addressed before production use. It is suited for developers comfortable with Python 3.9, LLM APIs, and containerised deployment, who can tolerate modest refactoring to tighten security and reproducibility.</p>
             </div>
 
             

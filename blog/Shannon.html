@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 5, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">TSX</span>
+                    <span>5 min read</span>
+                    <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>Shannon</h1>
@@ -80,32 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Enterprises that deploy autonomous LLM agents at scale hit three recurring blockers: unpredictable run‑time failures, runaway token costs, and lack of auditability. Without built‑in budgeting, tracing, and sandboxing, a single mis‑behaving agent can explode budgets or expose sensitive data.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Shannon supplies a production‑ready orchestration layer that runs agents inside WASI sandboxes, enforces per‑task token limits, and records every step to a Prometheus‑compatible metrics store. The core server lives in the Docker compose stack (deploy/compose/docker-compose.yml) and is driven by Temporal‑style workflows defined in config/workflows/.</p><p>The Python SDK (clients/python/src/shannon/cli.py, client.py) offers a thin wrapper around the REST API, while the desktop UI (desktop/app/...) visualises live event streams (desktop/components/radar/). Configuration files such as config/agent.yaml, config/models.yaml, and OPA policies (config/opa/policies/.rego) let operators tune model selection, security rules, and token budgets without code changes.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone and enter repo
-git clone https://github.com/Kocoro-lab/Shannon.git
-cd Shannon
-Copy example env and insert your keys
-cp .env.example .env          # keys: OPENAIAPIKEY, ANTHROPICAPIKEY, etc.
-Start the stack (Docker Compose pulls images defined in
-deploy/compose/docker-compose.yml and grafana/prometheus overlay)
-docker compose -f deploy/compose/docker-compose.yml up -d</p><p>If you need to rebuild the desktop app:</p><p>cd desktop
-npm ci                        # uses package-lock.json
-npm run dev   # or npm run build &amp;&amp; npm start for production</p><h3 class="post-h" id="configuration">Configuration</h3><p>API keys are read from the .env file (refer to the README “Required API Keys”).  
-Agent behaviour (token caps, model fallback) lives in config/agent.yaml.  
-OPA security rules are in config/opa/policies/*.rego and are automatically loaded by the server at start‑up.</p><h3 class="post-h" id="running">Running</h3><p>REST API – Submit a task with curl (see README).  
-Python SDK – Example from clients/python/examples/simpletask.py:</p><p>from shannon import ShannonClient</p><p>with ShannonClient(baseurl=&quot;http://localhost:8080&quot;) as client:
-    task = client.submit(query=&quot;Summarize Q3 earnings&quot;, sessionid=&quot;demo&quot;)
-    print(task.result())
-Desktop UI – Open http://localhost:3000 after npm run dev; the radar component streams events from the backend.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science platform can embed Shannon to run ad‑hoc research agents. A nightly job posts a task via the Python SDK, receives a streamed SSE feed, and stores the final summary in the platform’s knowledge base. The OPA policy config/opa/policies/teams/data-science/policy.rego can restrict the agent to only use approved internal LLM endpoints, ensuring compliance.</p><p>summary = client.submit(
-    query=&quot;Generate a risk assessment for the new product launch&quot;,
-    sessionid=&quot;risk-prod&quot;
-).wait()
-storeinkb(summary, tag=&quot;risk&quot;)</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Severity Low – Missing Go source – README badges reference Go (v1.22+) but the repo contains no .go files; build scripts may be absent.  
-Severity Medium – Python SDK lacks type hints – Files in clients/python/src/shannon/ are pure Python; static analysis will be limited.  
-Severity Low – OPA policy coverage – Policies exist, but no test suite validates them (config/opa has no corresponding tests).  
-Severity Low – Secrets in repo – No API keys are committed, but the .env.example may encourage developers to paste keys directly; recommend secret management via Docker secrets or Vault.  
-Severity Low – CI present – GitHub Actions workflows (.github/workflows/ci.yml) run tests, and a license file is included, indicating basic SDLC hygiene.  
-Severity Low – Tests – 14 test files across Python SDK and integration (clients/python/tests/) provide coverage for core client logic.</p><p>Overall the repository shows a coherent layout, versioned config, and automated CI. No obvious build‑breakers are detected.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Shannon delivers a ready‑to‑run stack for secure, cost‑controlled LLM agents, with a usable Python SDK and a visual desktop monitor. It’s well‑structured and CI‑backed, but the missing Go component and limited type safety in Python suggest a modest integration effort for teams that need strict static guarantees. Ideal for medium‑to‑large organizations that require observability, sandboxing, and policy enforcement around AI agents.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h2>Shannon — Production AI Agents That Actually Work</h2>
+<h3 id="the-problem">The Problem</h3>
+<p>AI agent deployments at scale typically face three interlocking problems: costs spiral without deterministic budgets, failures go undetected until users report them, and security boundaries between tenants or execution environments are porous. This repository addresses those pain points with a multi-agent orchestration framework designed for production infrastructure.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>Shannon is a portfolio of 9 self-contained projects rather than a single monolithic codebase. The largest projects by file count are:</p>
+<ul><li><strong>go/</strong> (282 files, 270 code files) — orchestration and gateway services</li><li><strong>python/</strong> (142 files, 135 code files) — LLM service layer, tooling, and provider management</li><li><strong>desktop/</strong> (141 files, 60 code files, 7 data files) — Tauri-based native desktop application</li><li><strong>rust/</strong> (45 files, 36 code files) — systems-level components</li><li><strong>clients/</strong> (29 files, 21 code files) — Python SDK and example integrations</li></ul>
+<p>The Python LLM service is the most active import hub: <code>python/llm-service/llm_service/tools/base.py</code> has 15 importers and 27 importees with instability 0.96, meaning small changes there ripple widely. Similarly, <code>python/llm-service/llm_service/tools/builtin/web_fetch.py</code> at 1,866 lines is the single largest cognitive-load hotspot — max indentation depth 7, oversized by any standard. Duplicated 6-line blocks appear 956 times across 168 files, particularly in <code>clients/python/examples/</code> and <code>clients/python/src/shannon/__init__.py</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution flow depends on the deployment target:</p>
+<ul><li><strong>Python SDK</strong>: <code>clients/python/src/shannon/cli.py</code> is the entry point, routing through <code>clients/python/src/shannon/client.py</code> to the REST gateway</li><li><strong>Desktop app</strong>: <code>desktop/src-tauri/src/main.rs</code> and <code>desktop/src-tauri/src/lib.rs</code> initialize the Tauri app, which connects to the local gateway via Tauri commands</li><li><strong>Go gateway</strong>: <code>go/orchestrator/cmd/gateway/</code> hosts the HTTP server; the Dockerfile at <code>go/orchestrator/cmd/gateway/Dockerfile</code> builds the runtime image</li><li><strong>Import graph</strong>: 223 internal modules with 126 import edges and zero circular dependencies. The Python LLM provider manager (<code>python/llm-service/llm_provider/manager</code>) has instability 1.0 — it imports 7 providers but nothing imports it back, making it a sink rather than a hub</li></ul>
+<p>What leaves the process: outbound HTTP to LLM providers (OpenAI, Anthropic, Google, DeepSeek), optional web fetch via Serpapi/Firecrawl keys, and WebSocket/event streaming for real-time task tracking. Database state is managed through the orchestrator’s Temporal-style workflow logs, though the exact schema is not mapped in this analysis.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<h4 id="setup">Setup</h4>
+<p>The repository includes a convenience install script referenced in the README:</p>
+<pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/Kocoro-lab/Shannon/v0.1.0/scripts/install.sh | bash</code></pre>
+<p>This pulls config, prompts for API keys, and starts Docker Compose services. Required env vars are documented in <code>.env.example</code> and include at minimum <code>OPENAI_API_KEY</code> or <code>ANTHROPIC_API_KEY</code>. Optional keys for web search (<code>SERPAPI_API_KEY</code>) and web fetch (<code>FIRECRAWL_API_KEY</code>) are noted there as well.</p>
+<h4 id="running-the-api">Running the API</h4>
+<pre data-lang="bash"><code># Submit a task
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is the capital of France?",
+    "session_id": "demo-session"
+  }'
+
+# Stream events
+curl -N "http://localhost:8080/api/v1/stream/sse?workflow_id=task-dev-123"
+
+# Get final result
+curl "http://localhost:8080/api/v1/tasks/task-dev-123"</code></pre>
+<h4 id="python-sdk">Python SDK</h4>
+<pre data-lang="python"><code>from shannon import ShannonClient
+
+with ShannonClient(base_url="http://localhost:8080") as client:
+    handl</code></pre>
+<p>Configuration is read from <code>.env</code> in the client working directory; the SDK pins the base URL and forwards all headers to the gateway.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A midsize analytics firm could use Shannon to replace a brittle homegrown agent runner. The Python SDK submits extraction tasks via the REST API; the gateway orchestrates a multi-step workflow — web search, content fetch, LLM extraction, and result aggregation — with token budgets enforced per step. If the primary LLM provider times out, the system falls back to a secondary model configured in <code>config/models.yaml</code>. Real-time SSE streaming lets the UI show step-by-step execution, and the OPA policies in <code>config/opa/policies/</code> enforce tenant-level data access limits. Deployment is Docker Compose (<code>deploy/compose/docker-compose.yml</code>) with Prometheus and Grafana metrics endpoints for cost and latency tracking.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis of 603 code files produced 252 findings (69 high, 178 medium, 5 low). The most severe items from the code health audit:</p>
+<ul><li><strong>[CRITICAL]</strong> Vulnerable dependencies pinned in manifests: <code>tauri-plugin-shell@2</code> CVE-2025-31477, <code>next@16.0.3</code> GHSA-9qr9-h5gf-34mp, and 33 more. The vulnerable code installs as-is; upgrading to the fixed versions and committing the lockfile is required.</li><li><strong>[CRITICAL]</strong> Secret exfiltration risk: <code>ANTHROPIC_API_KEY</code> is committed in <code>.github/workflows/claude-code-review.yml</code>, a workflow triggered by pull requests that holds a publish token.</li><li><strong>[HIGH]</strong> CORS wildcard with credentials enabled: <code>allow_origins=["*"]</code> in <code>python/llm-service/main.py</code> together with credentials allows any internet site to make authenticated requests on behalf of logged-in visitors.</li><li><strong>[HIGH]</strong> Dependencies unpinned: <code>clients/python/pyproject.toml</code> has no lockfile, so transitive code differences between test and production environments are unguarded.</li><li><strong>[HIGH]</strong> GitHub Actions not pinned to commit SHAs: <code>dtolnay/rust-toolchain@stable</code>, <code>Swatinem/rust-cache@v2</code>, and others can be silently updated by maintainers, executing code with repository tokens.</li><li><strong>[MEDIUM]</strong> No Dependabot or Renovate configured across 8 manifests — published advisories go unpatched until manual audit.</li><li><strong>[MEDIUM]</strong> Container base images mutable: <code>golang:1.24-alpine</code> and <code>alpine:3.19</code> in <code>go/orchestrator/Dockerfile</code> have no digest pinning.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Shannon is a functioning, production-oriented multi-agent framework with real orchestration primitives, Temporal-style workflow replay, and multi-provider fallback — valuable for teams needing observable, bounded AI agent execution. The codebase shows its age and scale in duplicated logic, oversized files, and critical dependency vulnerabilities that must be addressed before it can be relied upon in a hardened environment. It is best suited for organizations that can maintain their own dependency hygiene and are comfortable integrating via the REST SDK rather than requiring a fully opinionated opinionated UI.</p>
+<p><strong>Bottom line</strong>: Strong orchestration core let down by dependency security and code hygiene issues that should be resolved before production adoption.</p>
             </div>
 
             
@@ -122,11 +141,11 @@ Severity Low – Tests – 14 test files across Python SDK and integration (cl
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">876<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TSX</span><i style="width:100%"></i><b>43</b></li><li><span>YAML</span><i style="width:67%"></i><b>29</b></li><li><span>Markdown</span><i style="width:56%"></i><b>24</b></li><li><span>Python</span><i style="width:49%"></i><b>21</b></li><li><span>TypeScript</span><i style="width:33%"></i><b>14</b></li><li><span>JSON</span><i style="width:16%"></i><b>7</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>271</b></li><li><span>Python</span><i style="width:61%"></i><b>166</b></li><li><span>Markdown</span><i style="width:34%"></i><b>93</b></li><li><span>Shell</span><i style="width:26%"></i><b>71</b></li><li><span>TSX</span><i style="width:16%"></i><b>43</b></li><li><span>Rust</span><i style="width:14%"></i><b>38</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Next.js</span><span>Flask</span><span>Docker</span><span>LangChain</span><span>Vector store</span></p>
                     </div>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI coding assistants like Claude Code and OpenCode start each session with no memory of who you are, what you&#39;ve worked on, or how you prefer to work. Users repeat context, re-explain preferences, and lose insights from previous sessions. Scheduling recurring tasks or background reflection requires manual setup and external tooling.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Macrodata gives Claude Code and OpenCode persistent, self-maintaining memory and autonomous scheduling. It runs entirely locally, storing state as markdown and JSON files you can read and edit. The plugin injects working memory into every session — identity, current projects, daily focus, and recent activity — so the agent starts with context.</p><p>The core logic lives in plugins/macrodata/src/ and plugins/macrodata/opencode/. Key modules include conversations.ts (indexes past sessions), embeddings.ts (semantic search), indexer.ts (builds searchable history), and config.ts (path and state management). A daemon (bin/macrodata-daemon.ts) is a cron runner that spawns Claude Code for scheduled tasks. Four skill definitions (skills/) handle onboarding, memory distillation, dream-time reflection, and memory maintenance.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Requires Bun and macOS/Linux (WSL untested). Install via the Claude Code plugin marketplace:</p><p>/plugin marketplace add ascorbic/macrodata
-/plugin install macrodata@macrodata</p><p>For OpenCode, add &quot;plugin&quot;: [&quot;@macrodata/opencode&quot;] to ~/.config/opencode/opencode.json and launch the app to set up.</p><p>Configuration: No environment variables or external APIs. The plugin auto-creates state directories on first run. All configuration is in plugins/macrodata/src/config.ts.</p><p>Running it: The plugin activates on session start. The daemon (bin/macrodata-daemon.ts) runs as a background cron process for scheduled tasks. Memory state files (identity.md, human.md, today.md, workspace.md) are created and maintained automatically.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer who works across multiple projects installs Macrodata. Each morning, the daemon runs &quot;dream time&quot; — it reviews the previous day&#39;s journal entries, identifies patterns in how the developer solved problems, updates topics/ with new knowledge, and writes a today.md with priorities. When the developer starts a session on a bug they hit three weeks ago, semantic search in conversations.ts retrieves the relevant past discussion and injects it into context. The agent picks up where the developer left off without re-explaining anything.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No LICENSE file - root. Usage and redistribution rights are unclear despite the repo being public.
-Med - Experimental warning - README explicitly states &quot;experimental software. Use at your own risk.&quot; The daemon spawns Claude Code with existing permissions, but autonomous background execution carries inherent risk.
-Low - Platform limitations - macOS/Linux only; Windows support is explicitly untested. This limits adoption.
-Low - Test coverage - 7 test files exist covering config, daemon, hook, indexer, and reminders. Core conversation analysis and embedding logic lack direct tests.
-Low - Bun dependency - Requires Bun runtime, which is less ubiquitous than Node.js. The repo uses bun.lock and bun scripts, so this is a hard requirement.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Macrodata is a thoughtful implementation of persistent memory for AI coding assistants. The layered memory architecture and local-only design are well-conceived, and the skill-based approach to self-maintenance is practical. It&#39;s experimental and platform-limited, so it&#39;s best suited to developers who already use Bun and are comfortable with autonomous agent behavior. The missing license and limited test coverage are the main concerns for production use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers using Claude Code or OpenCode must repeatedly recreate context—identity, recent work, and project state—each session. Without a persistent, searchable memory layer, agents lose continuity, and users spend time re‑briefing the model or rebuilding reminders.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>macrodata</code> adds a local, file‑based knowledge store that the agent reads on start‑up. Core state lives under <code>plugins/macrodata/src/config.ts</code> (paths for <code>identity.md</code>, <code>journal.md</code>, etc.) and is indexed by the embedding pipeline in <code>plugins/macrodata/opencode/conversations.ts</code>.</p>
+<p>Two entry points drive the system:</p>
+<ul><li><strong>CLI daemon</strong> – <code>plugins/macrodata/bin/macrodata-daemon.ts</code> runs as a cron‑style background process, loading schedules (<code>loadAllSchedules</code> → <code>plugins/macrodata/opencode/tools.ts</code>) and firing reminders (<code>execute</code>).</li><li><strong>Plugin init</strong> – <code>plugins/macrodata/opencode/index.ts</code> registers the <code>MacrodataPlugin</code> with Claude Code, exposing functions like <code>start</code> and <code>triggerAgent</code> that inject the current context into every model call.</li></ul>
+<p>Memory distillation, “dream time”, and autonomous scheduling are implemented as scheduled tasks that call <code>embedBatch</code>, <code>updateAllConversationIndexes</code>, and the journal helpers in <code>plugins/macrodata/opencode/journal.ts</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <code>plugins/macrodata/bin/macrodata-daemon.ts</code> → <code>main</code> (line 640 of <code>src/index.ts</code>). <code>main</code> calls <code>ensureDirectories</code> (creates the state tree) and then <code>loadAllSchedules</code>.</p>
+<ul><li><code>loadAllSchedules</code> (in <code>opencode/tools.ts</code>) reads schedule files via <code>getRemindersDir</code> (defined in <code>src/config.ts</code>) and builds in‑memory <code>Schedule</code> objects.</li><li>When a schedule fires, <code>execute</code> (same file) invokes the Claude Code CLI through <code>detectUser.exec</code> (via <code>src/detect-user.ts</code>).</li><li>All logging funnels through <code>plugins/macrodata/opencode/logger.ts</code>; the logger is called 5–16 times across the code base, making it a low‑instability, high‑blast‑radius hub.</li></ul>
+<p>Conversation indexing follows: <code>plugins/macrodata/opencode/conversations.ts</code> → <code>getEmbeddingPipeline</code> → <code>embedBatch</code> (calls <code>getEmbeddingPipeline</code> again) → stores vectors in JSON under the <code>entities</code> directory (path from <code>src/config.ts</code>).</p>
+<p>The plugin entry <code>MacrodataPlugin</code> (in <code>opencode/index.ts</code>) registers <code>start</code> → <code>log</code> → <code>ensureDirectories</code> → <code>loadAllSchedules</code>. No circular imports were detected, but <code>src/config.ts</code> is the most‑connected module (imported by 8 others, never imports back), so changes to path helpers affect the majority of the code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/macrodata
+cd macrodata
+
+# Install dependencies (pnpm is declared; Bun is used for runtime)
+pnpm install   # or `bun install` if Bun is preferred
+
+# Register the plugin in Claude Code
+/plugin marketplace add ascorbic/macrodata
+/plugin install macrodata@macrodata
+
+# For OpenCode, add the plugin name to ~/.config/opencode/opencode.json
+# (see README snippet)
+{
+  "plugin": ["@macrodata/opencode"]
+}</code></pre>
+<p>To start the autonomous scheduler locally:</p>
+<pre data-lang="bash"><code># Run the daemon (the script expects a Unix‑like environment)
+pnpm exec ts-node plugins/macrodata/bin/macrodata-daemon.ts</code></pre>
+<p>Configuration files are plain markdown/JSON under the state root returned by <code>getStateRoot</code> (default <code>~/.macrodata</code>). No additional environment variables are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer adds a daily reminder “review PRs at 10 am”. The reminder file is written by <code>saveSchedule</code> → <code>plugins/macrodata/opencode/tools.ts</code>. At 10 am the daemon calls <code>execute</code>, which runs the Claude Code CLI with the current context (identity, recent journal entries). The model receives a prompt pre‑populated with <code>today.md</code> and the latest journal excerpt, allowing it to suggest actionable review steps without further prompting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Duplicated code blocks</strong> – Repeated 6‑line snippets across 9 files (<code>macrodata-daemon.ts</code>, <code>tools.ts</code>, <code>src/index.ts</code>, <code>context.ts</code>). Extract to shared helpers.</li><li><strong>High – Pin GitHub Actions</strong> – Workflows reference tags (<code>navikt/github-app-token-generator@v1</code>). Replace with commit SHAs to avoid supply‑chain risk.</li><li><strong>High – Missing LICENSE</strong> – No license file; default is “all rights reserved”. Add MIT/Apache‑2.0 to enable reuse.</li><li><strong>Medium – High branching density</strong> – <code>macrodata-hook.sh</code> contains 59 branches in 201 lines; consider refactoring to strategy objects.</li><li><strong>Medium – GITHUB_TOKEN permissions</strong> – Workflow <code>test.yml</code> lacks explicit <code>permissions:</code>; declare least‑privilege (e.g., <code>contents: read</code>).</li><li><strong>Medium – No Dependabot</strong> – Add <code>.github/dependabot.yml</code> to keep dependencies patched.</li><li><strong>Medium – No dependency‑review step</strong> – Insert <code>dependency-review-action</code> or <code>osv-scanner</code> in CI.</li><li><strong>Low – No job timeouts</strong> – Add <code>timeout-minutes</code> to each workflow job to prevent runaway runs.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>macrodata</code> provides a concrete, file‑based memory layer and autonomous scheduler for Claude Code/OpenCode with clear entry points and modest runtime footprint. The codebase is functional but suffers from duplicated utilities, a complex shell script, and several SDLC gaps (license, CI hardening). It is suitable for teams comfortable extending TypeScript plugins and willing to address the identified health issues before production use.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 6, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Transcribing speech on‑device or in low‑resource environments often requires heavy Python stacks (PyTorch, vLLM, CUDA) and large runtime dependencies. Teams that need a lightweight, self‑contained inference engine for the Voxtral Realtime 4B model lack a reference implementation that runs directly from C without a Python interpreter or GPU‑specific toolkits.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository supplies a pure‑C inference pipeline for the Mistral Voxtral Realtime 4B speech‑to‑text model. Core components live in the voxtral.c/.h files:</p><p>voxtralencoder.c / voxtraldecoder.c – implement the chunked audio encoder and transformer decoder.  
- voxtralkernels.c + voxtralmetal.m – provide CPU (BLAS) and Metal‑GPU kernels for attention and matrix ops.  
- voxtraltokenizer.c – converts model logits to token strings.  
- voxtralsafetensors.c – memory‑maps the BF16 weights from the Safetensors file, avoiding full loading.</p><p>The command‑line driver main.c (built as ./voxtral) exposes a simple CLI (-d &lt;modeldir&gt; -i &lt;wav&gt; or --stdin) and a streaming C API (voxstreamt) that can be linked into other applications. The pythonsimpleimplementation.py mirrors the same flow in Python for reference, but the C binary is fully independent of any Python runtime.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Build (choose backend)
-make mps          # Apple Silicon – Metal acceleration (fastest)
-or
-make blas         # Intel/macOS/Linux – OpenBLAS fallback
-Pull the model (≈8.9 GB)
-./downloadmodel.sh   # places model files under ./voxtral-model
-Transcribe a WAV file
-./voxtral -d voxtral-model -i samples/testspeech.wav
-Stream any audio format via ffmpeg
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Transcribing audio with modern LLM‑based speech models typically requires a Python runtime, heavy GPU libraries, or a proprietary inference server. Teams that need a lightweight, self‑contained binary for edge or embedded use must either re‑implement the pipeline or depend on large toolchains, which adds latency, licensing baggage, and deployment complexity.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>voxtral.c</code> delivers a pure‑C inference engine for Mistral’s <strong>Voxtral‑Realtime‑4B</strong> model. The repository bundles everything needed to load the model weights (<code>*.safetensors</code>), run the chunked audio encoder, and stream the decoder output as tokens.</p>
+<ul><li><strong>Core logic</strong> lives in <code>voxtral.c</code>, <code>voxtral_encoder.c</code>, <code>voxtral_decoder.c</code>, and <code>voxtral_kernels.c</code>.</li><li>Audio I/O and resampling are handled by <code>voxtral_audio.c</code>/<code>.h</code>.</li><li>Tokenization and weight loading are in <code>voxtral_tokenizer.c</code> and <code>voxtral_safetensors.c</code>.</li><li>The public streaming API is defined by <code>voxtral.h</code> (type <code>vox_stream_t</code>).</li></ul>
+<p>A minimal Python reference (<code>python_simple_implementation.py</code>) mirrors the same flow for inspection, but the production path is the compiled binary built from <code>main.c</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>main.c</code></strong> → <code>int main(int argc, char **argv)</code>. The function parses CLI flags (<code>-d</code>, <code>-i</code>, <code>--stdin</code>, <code>--silent</code>, <code>--debug</code>) and then:</p>
+<ol><li>Calls <code>vox_load_model()</code> (implemented in <code>voxtral.c</code>) which: <em> Opens the model directory, maps BF16 weights via <code>load_safetensors()</code> (<code>voxtral_safetensors.c</code>). </em> Initializes the KV cache and decoder state structures.</li><li>Sets up audio input: <em> If <code>--stdin</code> → reads raw PCM from <code>stdin</code>. </em> Otherwise → <code>vox_load_wav()</code> in <code>voxtral_audio.c</code> reads the WAV file, resamples to 16 kHz, and splits it into overlapping chunks.</li><li>For each audio chunk: <em> <code>vox_encode_chunk()</code> (<code>voxtral_encoder.c</code>) produces encoder embeddings. </em> <code>vox_decode_step()</code> (<code>voxtral_decoder.c</code>) runs the attention kernels (<code>voxtral_kernels.c</code>) and updates the KV cache. * Tokens are emitted via <code>vox_tokenizer_decode()</code> (<code>voxtral_tokenizer.c</code>) and printed to <code>stdout</code>.</li><li>When the KV cache exceeds 8192 positions, <code>vox_cache_compact()</code> in <code>voxtral_decoder.c</code> evicts the oldest entries, keeping memory bounded.</li></ol>
+<p>All heavy numeric work is delegated to either the Apple‑MPS path (<code>make mps</code>) or the OpenBLAS path (<code>make blas</code>). The call graph is essentially a linear pipeline: <strong>main → model load → audio load → encode → decode → tokenize → output</strong>. The biggest blast radius resides in <code>voxtral.c</code> (≈ 773 lines, deep nesting) and the duplicated control blocks across <code>main.c</code>, <code>voxtral.c</code>, <code>voxtral_decoder.c</code>, and <code>voxtral_encoder.c</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/voxtral.c
+cd voxtral.c
+
+# Build for Apple Silicon (fastest) or generic BLAS
+make mps          # or: make blas
+
+# Fetch the 8.9 GB model files
+./download_model.sh
+
+# Transcribe a WAV file
+./voxtral -d voxtral-model -i samples/test_speech.wav
+
+# Stream from ffmpeg (any format)
 ffmpeg -i audio.mp3 -f s16le -ar 16000 -ac 1 - 2&gt;/dev/null | \
-    ./voxtral -d voxtral-model --stdin</p><p>No external libraries are required for the binary itself; the only optional dependency is OpenBLAS when the blas target is used. All configuration is passed via CLI flags; there is no separate config file.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A voice‑assistant service running on a macOS edge device can embed voxtral.c as a static library, instantiate voxstreamt, feed microphone PCM buffers, and emit token strings to downstream NLU components in real time. Because the KV cache is circular and capped at 8192 positions, memory usage stays bounded even for hour‑long recordings.</p><p>voxstreamt st = voxstreamnew(&quot;voxtral-model&quot;);
-voxstreamfeed(st, pcmchunk, chunklen);
-char *text = voxstreamnexttoken(st);
-printf(&quot;%s &quot;, text);</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No CI/CD – No .github/workflows or other automation; build/test gating is manual.  
-Low – Limited test coverage – Only two test files (inspectweights.c, voxtraldecoder.c‑related checks) exist; core audio pipeline and streaming API lack unit tests.  
-Medium – Platform‑specific kernels – Metal implementation (voxtralmetal.m, voxtralshaders.metal) works only on Apple Silicon; fallback to BLAS may be slow due to BF16→FP32 conversion noted in README.  
-Low – Sparse documentation – README covers build and run steps, but internal APIs (voxstream_t, weight loading) have no inline docs or examples beyond the CLI.  
-Low – License present – LICENSE file exists; no apparent proprietary code.  
-Low – No runtime error handling – Functions like fopen or mmap are used without exhaustive checks, which could cause crashes on missing model files.</p><p>Overall the code is compact and self‑contained, but the lack of automated testing and limited platform support increase integration risk.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>voxtral.c delivers a functional, zero‑dependency C inference engine for the Voxtral Realtime 4B model, suitable for low‑overhead or Apple‑silicon deployments. It is a solid reference implementation, but production use should account for the modest test suite, missing CI, and the performance penalty of BF16‑to‑FP32 conversion on non‑Metal backends. Teams comfortable with C integration and willing to add their own validation harness will find it valuable.</p>
+    ./voxtral -d voxtral-model --stdin</code></pre>
+<p>The Python helper can be run with the same model directory for inspection:</p>
+<pre data-lang="bash"><code>pip install torch safetensors soundfile soxr
+python python_simple_implementation.py voxtral-model samples/test_speech.wav</code></pre>
+<p>No additional libraries, environment variables, or Docker images are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS edge node that receives live microphone streams can embed the compiled <code>voxtral</code> binary, pipe the PCM data directly from the capture process, and forward token strings to a downstream language‑understanding service. Because the KV cache rolls over automatically, the node can run indefinitely without growing memory.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Add a test suite</strong> – No test files are present; regression detection is absent.</li><li><strong>High – Add CI workflow</strong> – No <code>.github/</code> or other CI configuration; builds are not automatically verified.</li><li><strong>High – Deep nesting</strong> – Files <code>inspect_weights.c</code>, <code>voxtral.c</code>, <code>voxtral_decoder.c</code> each reach 9‑level indentation, making control flow hard to follow.</li><li><strong>High – Duplicated code blocks</strong> – Repeated 6‑line snippets appear across <code>main.c</code>, <code>voxtral.c</code>, <code>voxtral_decoder.c</code>, <code>voxtral_encoder.c</code>.</li><li><strong>Medium – Broad exception handling</strong> – <code>python_simple_implementation.py</code> uses bare <code>except</code> clauses that swallow errors.</li><li><strong>Medium – Oversized file</strong> – <code>voxtral.c</code> contains 773 lines, increasing change impact.</li><li><strong>Medium – High branching density</strong> – <code>voxtral_safetensors.c</code> and <code>voxtral_tokenizer.c</code> have 127 branch points over 374 lines, suggesting refactor into strategy tables.</li></ul>
+<p>Repository hygiene: tests – <strong>yes</strong> (2 test files found, but not exercising core code), CI – <strong>no</strong>, Dockerfile – <strong>no</strong>, licence – <strong>yes</strong>, lockfile – <strong>no</strong>, no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>voxtral.c</code> provides a functional, zero‑dependency C inference engine for Voxtral‑Realtime‑4B, suitable for low‑overhead deployments. The code works but suffers from deep nesting, duplicated logic, and a lack of automated testing/CI, which raises maintenance risk for production use. Teams comfortable with C refactoring can extract helpers and add a test harness to make the project robust for long‑running or large‑scale workloads.</p>
             </div>
 
             
@@ -123,7 +139,7 @@ Low – No runtime error handling – Functions like fopen or mmap are used with
                         <ul class="an-bars">
                             <li><span>C</span><i style="width:100%"></i><b>9</b></li><li><span>C/C++ Header</span><i style="width:67%"></i><b>6</b></li><li><span>Markdown</span><i style="width:33%"></i><b>3</b></li><li><span>Shell</span><i style="width:11%"></i><b>1</b></li><li><span>Python</span><i style="width:11%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 

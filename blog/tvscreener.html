@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 9, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#install-with-mcp-server-support-optional">Install with MCP server support (optional)</a><a href="#configuration">Configuration</a><a href="#running-the-library">Running the Library</a><a href="#running-the-mcp-server">Running the MCP Server</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Clients that need bulk market data (stocks, crypto, forex, bonds, futures, coins) must scrape TradingView’s web UI or write ad‑hoc HTTP calls. Those approaches are fragile, require manual parsing of HTML/JSON, and provide no typed, query‑builder interface, making integration into Python analytics pipelines error‑prone.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>tvscreener supplies a pure‑Python wrapper that talks to TradingView’s public screener endpoints and returns results as a pandas DataFrame. The library defines a separate screener class per market type (StockScreener, CryptoScreener, etc.) in tvscreener/core/. Each screener exposes a fluent, type‑safe API built on field enums (e.g., tvscreener/field/stock.py) and filter objects (tvscreener/filter.py).</p><p>The repository also ships a lightweight MCP (Model Context Protocol) server (tvscreener/mcp/server.py and tvscreener/mcp/main.py) that exposes the same query capabilities over HTTP, enabling AI assistants (Claude, etc.) to request market data without embedding the library.</p><p>Documentation lives under docs/ with markdown API reference, quick‑start notebooks, and a web‑based code generator (static assets in app/). The generator is built from pre‑computed field metadata in .dev/codegen/data/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install core library
-pip install tvscreener</p><h3 class="post-h" id="install-with-mcp-server-support-optional">Install with MCP server support (optional)</h3><p>pip install &quot;tvscreener[mcp]&quot;</p><p>Both commands are derived from the pyproject.toml and requirements.txt which list pandas, requests, fastapi, and uvicorn.</p><h3 class="post-h" id="configuration">Configuration</h3><p>No API keys are required—the library scrapes publicly available endpoints. If the MCP server runs behind a reverse proxy, configure the host/port via environment variables HOST and PORT before launching (tvscreener/mcp/server.py reads them).</p><h3 class="post-h" id="running-the-library">Running the Library</h3><p>from tvscreener import StockScreener, StockField</p><p>ss = StockScreener()
-ss.select(StockField.NAME, StockField.PRICE, StockField.CHANGEPERCENT)
-ss.where(StockField.PRICE &gt; 100)
-df = ss.get()          # returns pandas DataFrame
-print(df.head())</p><p>The example mirrors the usage shown in docs/getting-started/quickstart.md.</p><h3 class="post-h" id="running-the-mcp-server">Running the MCP Server</h3><p>Entry point defined in tvscreener/mcp/main.py
-tvscreener-mcp   # installs console script via the [mcp] extra</p><p>The server starts a FastAPI app on http://127.0.0.1:8000. Endpoints such as /discoverfields and /customquery are implemented in tvscreener/mcp/tools.py.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A quant team can embed the library in a nightly data‑ingestion pipeline:</p><p>from tvscreener import CryptoScreener, CryptoField
-import pandas as pd</p><p>cs = CryptoScreener()
-cs.select(CryptoField.SYMBOL, CryptoField.PRICE, CryptoField.VOLUME24H)
-cs.where(CryptoField.MARKETCAP &gt; 1e9)
-cryptodf = cs.get()
-cryptodf.toparquet(&quot;s3://data/crypto/daily.parquet&quot;)</p><p>Alternatively, a Claude‑powered chatbot can call the MCP endpoint to answer user queries like “Show the top 10 gainers in the crypto screener”.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile – pyproject.toml defines dependencies but there is no poetry.lock or requirements.lock, making reproducible builds harder.  
-Low – Limited error handling – Network calls in tvscreener/util.py raise raw requests exceptions; the library does not retry on transient failures.  
-Medium – No explicit rate‑limit handling – TradingView may throttle; the client does not back‑off, risking HTTP 429 errors in production.  
-Low – Tests exist but coverage is modest – 14 test files cover core functionality, and CI runs pytest via GitHub Actions (.github/workflows/codecov.yml). No integration tests for the MCP server.  
-Low – Documentation is extensive – docs/ includes API reference, notebooks, and a code‑generator guide, matching the code base.  
-Low – License present – LICENSE is included (MIT).</p><p>Overall the repo follows a clean package layout, uses type hints (tvscreener/py.typed), and ships a CI pipeline with code‑cov reporting.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>tvscreener provides a well‑documented, type‑safe Python API for pulling TradingView screener data, plus an optional MCP server for AI‑driven access. The codebase is small, test‑covered, and easy to integrate, though production users should add retry/ratelimit logic and consider pinning dependencies via a lockfile. Ideal for data‑science teams needing programmatic market data without building their own scraper.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Clients need programmatic access to TradingView’s public screener data across stocks, crypto, forex, bonds, futures and coins. The native UI provides no API, and scraping the site manually is brittle and hard to maintain. A reusable Python wrapper that hides the HTTP details, validates field types and returns a tidy <code>pandas.DataFrame</code> removes the most common source of friction for quantitative teams.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>tvscreener</code> implements a thin, type‑safe client library. Core screener classes live under <code>tvscreener/core/</code> (e.g. <code>stock.py</code>, <code>crypto.py</code>) and inherit common logic from <code>tvscreener/core/base.py</code>. Field definitions are collected in <code>tvscreener/field/</code> – the package’s hub (<code>tvscreener/field/__init__.py</code>) re‑exports 16 field classes and utilities such as <code>add_rec</code> and <code>add_historical</code>.</p>
+<p>The optional MCP server (<code>tvscreener/mcp/server.py</code>) exposes a small HTTP/JSON endpoint that AI assistants (Claude, etc.) can call. It offers high‑level helpers like <code>discover_fields</code>, <code>custom_query</code>, <code>search_stocks</code>, and <code>get_top_movers</code>. The web UI in <code>app/</code> (HTML + JS) drives the visual code generator that produces ready‑to‑run Python snippets.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the MCP entry points in <code>tvscreener/mcp/server.py</code>. For example, <code>custom_query</code> (line 103) invokes a chain of 12 internal functions, ultimately calling <code>StockScreener._get_filter</code> (used in 21 places) and <code>get_url</code> (network request) defined in <code>tvscreener/util.py</code>. The most‑used class is <code>StockScreener</code> – its methods appear in 46 distinct call sites.</p>
+<p><code>core/base.py</code> creates the HTTP payload, validates filters via <code>tvscreener/filter.py</code>, and forwards the request to TradingView. The response is parsed into a <code>pandas.DataFrame</code> by <code>beauty.py</code>.</p>
+<p>The hub module <code>tvscreener/field/__init__.py</code> is referenced by 11 other modules and defines 65 functions and 16 classes; any change here has a large blast radius. Two import cycles exist (<code>field/__init__.py</code> ↔ <code>filter.py</code>), which increase cognitive load and risk of runtime errors. Deep nesting (max depth 6) appears in <code>util.py</code>, <code>filter.py</code> and the code‑gen script <code>.dev/codegen/generate.py</code>, making the control flow harder to follow.</p>
+<p>Only two external effects are observed: a single file‑write in <code>app/scripts/export_fields.py</code> and a single outbound HTTP call in <code>core/base.py</code>. All other logic stays inside the repository.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Install the library with optional MCP support
+pip install "tvscreener[mcp]"
+
+# Run the MCP server (entry point installed by the package)
+tvscreener-mcp</code></pre>
+<p>The server listens on <code>localhost:8000</code> (default). To screen stocks from Python:</p>
+<pre data-lang="python"><code>from tvscreener import StockScreener, StockField
+
+ss = StockScreener()
+ss.where(StockField.PRICE &gt; 50, StockField.VOLUME &gt;= 1_000_000)
+df = ss.get()          # returns pandas.DataFrame
+print(df.head())</code></pre>
+<p>The web UI is served from <code>app/index.html</code>; the bundled <code>app/js/code-generator.js</code> calls the MCP endpoints to generate the same Python code shown above.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team can embed the library in nightly pipelines:</p>
+<pre data-lang="python"><code>from tvscreener import StockScreener, STOCK_VALUATION_FIELDS
+
+screener = StockScreener()
+screener.select(*STOCK_VALUATION_FIELDS)
+screener.where(StockField.MARKET_CAPITALIZATION.between(1e9, 5e10))
+df = screener.get()
+df.to_parquet("data/stock_valuation.parquet")</code></pre>
+<p>The resulting parquet file feeds downstream risk models without any custom scraping logic.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – No lockfile alongside <code>pyproject.toml</code>; reproducing the exact dependency set is impossible.</li><li><strong>MEDIUM</strong> – Dependabot/Renovate not configured; vulnerable transitive packages could linger.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI; known CVEs would not be caught automatically.</li><li><strong>MEDIUM</strong> – Checkout step keeps the token; set <code>persist-credentials: false</code> in <code>codecov.yml</code>.</li><li><strong>LOW</strong> – CI jobs lack <code>timeout-minutes</code>; long‑running steps could block the schedule.</li></ul>
+<p>Additional static findings: two import cycles (<code>field/__init__.py</code>, <code>filter.py</code>), several oversized files (&gt;800 LOC) and deep nesting (indentation depth 6) increase maintenance risk.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>tvscreener</code> delivers a functional, well‑documented Python wrapper for TradingView screener data and a convenient MCP server for AI‑driven queries. The core API is usable out‑of‑the‑box, but the codebase shows classic technical‑debt signals—import cycles, large modules and missing lockfiles—that should be addressed before relying on it for production‑critical pipelines. Engineers comfortable with Python and <code>pandas</code> will find it a practical shortcut, provided they budget time for the identified refactoring and security hardening.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 7, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers juggle multiple AI coding agents (Claude, Gemini, Codex) across separate terminal tools, each with its own interface, prompt syntax, and shell integration. Switching between agents means re-learning UIs and losing context. Toad unifies agent access behind a single terminal UI while preserving a real shell workflow.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Toad is a Textual-based terminal application that acts as a front-end for coding agents. It discovers and installs agents from a built-in catalog (src/toad/data/agents/.toml), speaks the Agent Client Protocol (src/toad/acp/), and renders a full TUI with a prompt editor, fuzzy file picker, diff viewer, and agent response widgets. The shell integration (src/toad/shell.py, src/toad/shellread.py) runs a real interactive shell inside the TUI, so cd and environment variables persist between commands—something most agent UIs don&#39;t do.</p><p>Core logic lives in src/toad/: app.py and cli.py are entry points, screens/main.py is the primary UI, and widgets/ holds the individual components (conversation, prompt, terminal, tool calls). Settings are schema-driven via settingsschema.py and settings.py. The agent catalog is plain TOML files, making it straightforward to add new agents.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>The repo has a pyproject.toml and a Makefile, so installation is pip/uv-based. There is no documented setup command in the README excerpt; the standard approach would be pip install -e . or uv sync from the repo root. The Makefile likely has targets for dev and build, but I can&#39;t confirm without seeing its contents.</p><p>Configuration: Agent credentials are typically provided via environment variables or the agent&#39;s own config files, but the repo doesn&#39;t document which variables Toad expects. Settings are managed in-app via src/toad/screens/settings.py and persisted through src/toad/settings.py.</p><p>Running it: The entry point is src/toad/main.py, so the command is toad after installation, or python -m toad from the repo root. The CLI is defined in src/toad/cli.py.</p><p>cd toad
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who want to drive LLM agents from a terminal must juggle a shell, a prompt editor, and ad‑hoc UI code.  The result is fragmented workflows, duplicated tooling, and fragile scripts that break when the UI changes.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>toad</code> delivers a single Textual‑based TUI that embeds a fully‑functional shell, a markdown prompt editor, a fuzzy file picker, and a diff viewer.  Core UI components live under <code>src/toad/widgets/</code> (e.g. <code>conversation.py</code>, <code>diff_view.py</code>, <code>prompt.py</code>).  The agent‑client protocol implementation resides in <code>src/toad/acp/</code> and the top‑level CLI lives in <code>src/toad/cli.py</code>.  Running <code>python -m toad</code> launches <code>src/toad/__main__.py</code>, which parses command‑line flags and hands control to <code>cli.run()</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – <code>src/toad/__main__.py</code> calls <code>cli.main()</code> (defined in <code>src/toad/cli.py</code> at line 75).  The <code>run</code> sub‑command (line 114) is the most used path, reaching <strong>60 functions</strong>.</li></ol>
+<ol><li><strong>Application bootstrap</strong> – <code>cli.run()</code> creates a <code>ToadApp</code> (class in <code>src/toad/app.py</code>).  The <code>on_mount</code> hook (line 588) is invoked by Textual during UI start‑up and reaches <strong>52 functions</strong>.  This hook wires the main screen (<code>src/toad/screens/main.py</code>) and registers callbacks that ultimately call <code>post_message</code>, <code>focus</code>, and <code>wait</code>.</li></ol>
+<ol><li><strong>Core message flow</strong> – The internal call graph shows <code>post_message</code> is invoked from <strong>46 distinct callers</strong> (e.g. <code>src/toad/widgets/flash.py</code>, <code>src/toad/widgets/command_pane.py</code>).  It propagates UI events to the agent layer.</li></ol>
+<ol><li><strong>Agent interaction</strong> – <code>src/toad/acp/agent.py</code> defines <code>start</code> (line 171) which builds an <code>Agent</code> object, writes a session file (<code>self._log_file_path.parent.mkdir</code>) and issues network calls via <code>client.post</code> (see <code>src/toad/app.py</code> → <code>jsonrpc</code>).  The most‑connected agent functions (<code>generate_datetime_filename</code>, <code>command</code>) are called from <strong>16 other modules</strong>.</li></ol>
+<ol><li><strong>Side effects</strong>   <em> <strong>Filesystem</strong> – 28 functions open or write files; examples are <code>src/toad/history.py</code> (<code>open</code>) and <code>src/toad/db.py</code> (<code>db.execute</code>). </em> <strong>Network</strong> – 4 functions perform outbound HTTP (<code>client.post</code>) in <code>src/toad/jsonrpc.py</code> and <code>src/toad/app.py</code>. * <strong>Database</strong> – 6 functions interact with SQLite via <code>src/toad/db.py</code>.</li></ol>
+<ol><li><strong>High‑impact modules</strong> – <code>src/toad/widgets/conversation.py</code> (109 functions, 8 classes) touches files and is called from 5 other files, making it a change‑hotspot.  <code>src/toad/ansi/_ansi.py</code> (56 functions, 25 classes) and <code>src/toad/acp/agent.py</code> (36 functions, 2 classes) also have wide reach.</li></ol>
+<p>No circular import cycles were detected, so the import graph is flat, but deep nesting (up to 8 levels) and oversized files (&gt;1 k lines) increase cognitive load.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/toad
+cd toad
+
+# Install in editable mode (pyproject.toml defines the build)
 pip install -e .
-toad</p><p>The README doesn&#39;t document a first-run wizard or agent setup flow, so that&#39;s likely discovered in the UI itself.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer working across multiple projects can launch Toad, pick an agent from the catalog (e.g., claude.com.toml), and interleave shell commands with agent prompts. For example: run git log --oneline in the embedded shell, reference a file with @src/toad/agent.py via the fuzzy picker, then ask the agent to refactor that file. Toad handles the agent protocol, renders the diff, and the shell state persists for the next command.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No test files detected - the entire src/ tree has no test_.py files, so the ACP protocol, shell integration, and UI logic are unverified. High regression risk.
-Med - No CI/CD pipeline - .github/ contains only issue templates and funding config, no workflow files. No automated build or test gate.
-Low - No dependency lockfile - only pyproject.toml is present, so builds are not reproducible. uv.lock or poetry.lock is missing.
-Low - Unusual project/calculator.py - a standalone calculator app in the root suggests a demo or leftover, not part of the main Toad application.</p><p>The codebase is otherwise well-structured: clear separation of concerns (protocol, widgets, screens, data), a schema-driven settings system, and a consistent file layout. The absence of tests is the main concern for a tool that wraps arbitrary agent protocols.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Toad is a well-architected terminal UI for AI agents, solving a real workflow problem with a genuinely useful shell integration. It&#39;s not production-ready for critical workflows—no tests, no CI, and the agent protocol layer is complex enough to need coverage. For a developer comfortable with early-stage tools, it&#39;s worth trying; for a team, wait for test coverage and a lockfile.</p>
+
+# Run the TUI
+python -m toad          # equivalent to `toad` if a console script is installed
+# Or invoke a specific command, e.g. start an agent session
+python -m toad --help    # shows CLI flags defined in src/toad/cli.py</code></pre>
+<p>Configuration files for agents live under <code>src/toad/data/agents/</code> (e.g. <code>openai.com.toml</code>).  The application reads its settings from <code>src/toad/settings.py</code> and <code>src/toad/settings_schema.py</code>.  No additional environment variables are required out‑of‑the‑box.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer can launch Toad, press <code>@</code> in the prompt editor to open the fuzzy picker, select <code>src/toad/data/agents/openai.com.toml</code>, and then issue a shell command (<code>!git status</code>).  The shell runs inside the TUI, preserving <code>cd</code> and environment changes, while the agent receives the full terminal output via the integrated JSON‑RPC layer.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Add a test suite</strong> – 100 source files, no tests.</li><li><strong>High – Commit a lockfile</strong> – <code>pyproject.toml</code> has no lockfile; reproducibility is at risk.</li><li><strong>High – Add CI workflow</strong> – No GitHub Actions or other CI configuration.</li><li><strong>Medium – Enable Dependabot/Renovate</strong> – No automated dependency updates.</li><li><strong>Medium – Pin vulnerable versions</strong> – Ranges include <code>gitpython@3.1.44</code> (CVE‑2026‑42284) and 25 other advisories.</li></ul>
+<p>Additional observations from the static analysis:</p>
+<ul><li><strong>High – Duplicated code blocks</strong> across 20 files (e.g. <code>_loop.py</code>, <code>widgets/diff_view.py</code>).</li><li><strong>High – Deep nesting</strong> (max indentation depth 8) in <code>acp/agent.py</code> and others.</li><li><strong>High – Oversized files</strong> (<code>ansi/_ansi.py</code>, <code>widgets/conversation.py</code>, <code>acp/agent.py</code>).</li><li><strong>Medium – Files opened without context manager</strong> in <code>agents.py</code>, <code>db.py</code>, <code>history.py</code>.</li><li><strong>Medium – Broad exception handling</strong> (bare <code>except</code>) in several modules.</li><li><strong>Low – Stale TODO/FIXME markers</strong> in <code>ansi/_ansi.py</code>.</li></ul>
+<p>No CI, Dockerfile, or secret files were found; a license file (<code>LICENSE</code>) is present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>toad</code> provides a feature‑rich terminal UI that unifies shell interaction, prompt editing, and LLM agent calls, but the codebase suffers from missing tests, lack of reproducible builds, and high cognitive complexity.  It is suitable for teams comfortable with Python/TUI development who can invest in adding tests and CI before relying on it in production.</p>
             </div>
 
             
@@ -107,7 +135,7 @@ Low - Unusual project/calculator.py - a standalone calculator app in the root su
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>100</b></li><li><span>TOML</span><i style="width:16%"></i><b>16</b></li><li><span>Markdown</span><i style="width:5%"></i><b>5</b></li><li><span>YAML</span><i style="width:3%"></i><b>3</b></li>
                         </ul>
-                        <p class="an-fw"><span>Django</span><span>Flask</span></p>
+                        <p class="an-fw"><span>Django</span><span>Flask</span><span>Transformers</span></p>
                     </div>
                 </div>
 
