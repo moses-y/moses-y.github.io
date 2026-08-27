@@ -34,8 +34,8 @@ const path = require('path');
 const GROUPS = [
   {
     name: 'code brain',
-    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'code-brain.js'],
-    provides: ['CBDom', 'CBData', 'CBPanel']
+    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'kg-traverse.js', 'code-brain.js'],
+    provides: ['CBDom', 'CBData', 'CBPanel', 'KGTraverse']
   },
   {
     name: 'semantic map',

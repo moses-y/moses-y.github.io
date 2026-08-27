@@ -372,8 +372,8 @@
             function readerOpen() { return !!window.SiteReader && SiteReader.isOpen(); }
 
             // A factory over el and the reader hook, so call sites are unchanged.
-            var panel = CBPanel.create(CBDom,
-                { openReader: openReader, reportSet: reportSet }, g);
+            var panel = CBPanel.create(CBDom, { openReader: openReader,
+                reportSet: reportSet, onNodeClick: onNodeClick, applyFilters: applyFilters }, g);
             var showInfo = panel.showInfo, hoverCard = panel.hoverCard,
                 renderFindings = panel.renderFindings;
 

@@ -115,6 +115,7 @@
         iDesc: document.getElementById('i-desc'),
         iMeta: document.getElementById('i-meta'),
         iLinks: document.getElementById('i-links'),
+        iKin: document.getElementById('i-kin'),
         iDive: document.getElementById('i-dive'),
         iDiveLabel: document.getElementById('i-dive-label'),
         diveBtn: document.getElementById('dive-btn'),

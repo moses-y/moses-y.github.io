@@ -387,6 +387,26 @@ if (fs.existsSync(page) && fs.existsSync(traverse)) {
   const dflt = html.match(/id="edge-min"[^>]*value="([\d.]+)"/);
   check('the default edge threshold is the clustering threshold',
     !!dflt && Number(dflt[1]) === CLUSTER_AT, dflt ? dflt[1] : 'no control');
+
+  /*
+   * Code Brain is the module's second caller and the reason it had a latent
+   * crash: it passes no simByRepo, and the fallback path read that index
+   * unguarded. The two pages must keep sharing one implementation rather than
+   * drifting into two, so the checks are on the shared module and on the second
+   * page having the container and the script it needs.
+   */
+  const brain = path.join(ROOT, 'code-brain.html');
+  if (fs.existsSync(brain)) {
+    const bh = fs.readFileSync(brain, 'utf8');
+    check('Code Brain loads the same traversal module',
+      bh.indexOf('assets/js/kg-traverse.js') !== -1);
+    check('it loads before the controller that reaches it',
+      bh.indexOf('assets/js/kg-traverse.js') < bh.indexOf('assets/js/code-brain.js'));
+    check('Code Brain has somewhere to render a neighbourhood',
+      /id="i-kin"/.test(bh));
+    check('the module survives a caller with no local similarity index',
+      /ctx\.simByRepo \|\| \{\}/.test(js), 'unguarded simByRepo read');
+  }
 } else {
   console.log('  skip  knowledge-graph.html or kg-traverse.js not present');
 }

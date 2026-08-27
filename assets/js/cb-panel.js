@@ -22,6 +22,23 @@
     function create(dom, hooks, g) {
         var el = dom.el, esc = dom.esc;
         var openReader = hooks.openReader;
+        /*
+         * Walking to a neighbour can land on a repository the current filters
+         * have hidden, and that is the interesting case rather than the edge
+         * case: a third of the clusters cross a domain boundary, so a hop out of
+         * the filtered domain is exactly what the block exists to offer.
+         * Clicking a named repository is an explicit request to go there, so the
+         * filters give way rather than the click doing nothing.
+         */
+        function onWalk(target) {
+            if (!target || !hooks.onNodeClick) return;
+            if (target._vis === false && hooks.applyFilters) {
+                el.fDomain.value = '';
+                el.fSize.value = '';
+                hooks.applyFilters();
+            }
+            hooks.onNodeClick(target);
+        }
         var firstSentences = dom.firstSentences;
         var domainCounts = g.domainCounts;
         // The same object the controller fills from structure/reports.json, not a
@@ -88,9 +105,34 @@
                 '<div class="hc-name">' + esc(n.name) + '</div>' + rows + '</div>';
         }
 
+        /*
+         * The neighbourhood block, rendered by the same module Code Graph uses
+         * and from the same published files. Code Brain owns depth - what is
+         * inside one repository - and had no way to say what is beside it; this
+         * is the one relation the hierarchy cannot express.
+         *
+         * No simByRepo is passed because this page draws no similarity edges. It
+         * does not need one: the kin files are fetched by id, and the module
+         * treats a missing local index as "nothing to fall back to".
+         */
+        var kinToken = 0;
+        function renderKin(node) {
+            if (!el.iKin || !global.KGTraverse) return;
+            el.iKin.innerHTML = '';
+            if (node.kind !== 'repo') return;
+            var mine = ++kinToken;
+            global.KGTraverse.render(el.iKin, node, {
+                token: mine,
+                stale: function (t) { return t !== kinToken; },
+                nodeById: g.nodeById,
+                onWalk: onWalk
+            });
+        }
+
         function showInfo(node) {
             el.info.classList.add('open');
             el.iMeta.innerHTML = ''; el.iLinks.innerHTML = ''; el.iDesc.textContent = '';
+            renderKin(node);
             el.iDive.style.display = 'none'; el.collapseBtn.style.display = 'none';
             el.reportBtn.style.display = 'none';
             elFindings.innerHTML = '';

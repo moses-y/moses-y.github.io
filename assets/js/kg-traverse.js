@@ -104,7 +104,11 @@
      * untagged: an unlabelled list next to a labelled one reads as measured.
      */
     function renderFallback(container, node, ctx) {
-        var kin = (ctx.simByRepo[node.id] || []).slice(0, 4);
+        // simByRepo is Code Graph's own similarity index and is the only part of
+        // ctx a caller may not have: Code Brain draws no similarity edges and
+        // passes none. Reading it unguarded made a module written to be reusable
+        // throw for its second caller.
+        var kin = ((ctx.simByRepo || {})[node.id] || []).slice(0, 4);
         // An empty panel would read as "nothing is like this". The truth is
         // "the relation layer has not been built for this one yet", and the two
         // are different answers.
