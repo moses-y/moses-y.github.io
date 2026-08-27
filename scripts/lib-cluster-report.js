@@ -11,10 +11,10 @@
  * computation, nothing inferred here that is not already inferred in the
  * source: the clusters come from semantic edges, which come from an embedding,
  * so every grouping below is INFERRED and the report has to keep saying so.
- * The one thing it must never say is "these are duplicates". Single-link
- * clustering chains, so a large group means "reachable from each other by
- * strong similarity", and the difference matters when the suggested action is
- * to archive something.
+ * The one thing it must never say is "these are duplicates". The grouping is a
+ * partition of an embedding graph by link density, which is a claim about how
+ * repositories describe themselves, and the difference matters when the
+ * suggested action is to archive something.
  */
 'use strict';
 
@@ -90,7 +90,7 @@ function paragraph(c) {
   return lines.join('\n');
 }
 
-function summary(clusters, threshold) {
+function summary(clusters, threshold, method) {
   const covered = clusters.reduce((s, c) => s + c.size, 0);
   const cross = clusters.filter(c => c.crossDomain);
   const ungraded = clusters.reduce((s, c) => s + c.ungraded, 0);
@@ -100,15 +100,17 @@ function summary(clusters, threshold) {
   return [
     '# Clusters, in prose',
     '',
-    '> ' + clusters.length + ' groups covering ' + covered + ' repositories, built ' +
-      'by joining every pair whose semantic similarity is at least ' + threshold +
-      ' and taking the connected components.',
+    '> ' + clusters.length + ' groups covering ' + covered + ' repositories. Every ' +
+      'pair scoring at least ' + threshold + ' semantic similarity is an edge, and ' +
+      (method || 'modularity clustering') + ' partitions that graph into groups ' +
+      'that are linked more densely inside than out.',
     '>',
     '> **These groupings are INFERRED.** They come from cosine distance between ' +
-      'neural embeddings, not from anything measured in a tree. And the method is ' +
-      'single-link, which chains: a group of ' + largest + ' does not mean ' + largest +
-      ' repositories that are all alike, it means ' + largest + ' reachable from ' +
-      'each other through a path of strong links. Read a large group as a thread ' +
+      'neural embeddings, not from anything measured in a tree. Density is a ' +
+      'stronger claim than the connected components this used previously - a ' +
+      'bridge repository no longer welds two unrelated neighbourhoods together - ' +
+      'but a group of ' + largest + ' still means ' + largest + ' closely related ' +
+      'projects, not ' + largest + ' copies of one. Read a large group as a thread ' +
       'to pull, never as a list of duplicates to delete.',
     '',
     '## What the numbers say',
@@ -158,7 +160,7 @@ function render(clustersFile) {
   const cross = clusters.filter(c => c.crossDomain).sort(bySize);
   const rest = clusters.filter(c => !c.crossDomain).sort(bySize);
 
-  const out = [summary(clusters, clustersFile.threshold)];
+  const out = [summary(clusters, clustersFile.threshold, clustersFile.method)];
   for (const c of cross) out.push(paragraph(c));
   out.push('## Groups inside a single domain\n');
   for (const c of rest) out.push(paragraph(c));

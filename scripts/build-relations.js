@@ -23,8 +23,8 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  cluster, nearestByRepo, packageSets, stackEdges,
-  CLUSTER_AT, MAX_DF_SHARE, MIN_STACK, KIN_LIMIT
+  communities, nearestByRepo, packageSets, stackEdges,
+  CLUSTER_AT, MAX_DF_SHARE, MIN_STACK, KIN_LIMIT, CLUSTER_METHOD
 } = require('./lib-relations.js');
 const { SITE } = require('./lib-schema.js');
 const { render } = require('./lib-cluster-report.js');
@@ -107,7 +107,7 @@ function writeLlmsTxt(index, gradesFile, manifest, sample) {
     '',
     '- Domains: ' + ranked + '.',
     '- Two edge types relate repositories, and they differ in how much they can be trusted. "stack" is EXTRACTED: IDF-weighted overlap of dependencies both repositories declare in a manifest, and each edge names the packages it was drawn from, so it can be checked and disagreed with. It answers "built the way you build things". "semantic" is INFERRED: cosine distance between embeddings, with no evidence attached beyond the number itself. It answers "probably solves the same problem". A pair scoring on both is the strongest signal that one repository is a usable starting point for the other, because the extracted edge corroborates the inferred one.',
-    '- Clusters in clusters.json are built from semantic edges only, so they inherit that provenance: they are INFERRED. Single-link union-find at the threshold, which chains, so the largest clusters are "reachable by strong similarity" rather than "all alike".',
+    '- Clusters in clusters.json are built from semantic edges only, so they inherit that provenance: they are INFERRED. Method is ' + CLUSTER_METHOD + ': a group is a set of repositories linked more densely to each other than to the rest of the estate. That is a stronger claim than the connected components this previously used, which chained through bridge repositories, but it is still a claim about an embedding and not about code. A large group is a set of closely related projects, not a set of duplicates.',
     '- Stack edges exist only for the ' + manifest.counts.withDeclaredDependencies + ' repositories that declare dependencies in a manifest this pipeline reads.',
     '- Grades cover ' + graded + ' of ' + index.total + ' repositories. An absent grade means not yet audited, not a bad grade.',
     '- Generated ' + manifest.generated.slice(0, 10) + '.',
@@ -140,7 +140,7 @@ function main() {
   }
 
   const links = index.links || [];
-  const groups = cluster(links, CLUSTER_AT);
+  const groups = communities(links, CLUSTER_AT);
   const semantic = nearestByRepo(links, KIN_LIMIT);
   const depSets = packageSets(deps);
   const stack = stackEdges(depSets);
@@ -261,6 +261,7 @@ function main() {
       }
     },
     clusterProvenance: 'INFERRED - clusters are built from semantic edges only',
+    clusterMethod: CLUSTER_METHOD,
     thresholds: {
       cluster: CLUSTER_AT,
       stackMin: MIN_STACK,
@@ -290,6 +291,7 @@ function main() {
   const clustersFile = {
     generated: manifest.generated,
     threshold: CLUSTER_AT,
+    method: CLUSTER_METHOD,
     clusters: clusters
   };
   fs.writeFileSync(path.join(OUT, 'clusters.json'), JSON.stringify(clustersFile));

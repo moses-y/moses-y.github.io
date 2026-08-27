@@ -70,6 +70,148 @@ function nearestByRepo(links, limit) {
   return by;
 }
 
+/*
+ * Louvain modularity clustering over the same thresholded edges.
+ *
+ * cluster() above is honest about what it computes and the computation is the
+ * wrong one. Connected components ask "is there a path of strong links between
+ * these two", and the answer is yes far too often: one repository that happens
+ * to sit between two unrelated neighbourhoods welds them into a single group of
+ * twenty, which then has to carry a paragraph of warning explaining that it is
+ * not what it looks like. Modularity asks a better question - are these two
+ * linked more densely to each other than chance would predict - so a bridge
+ * node joins whichever side it is more tied to instead of merging both.
+ *
+ * Same edge list, same threshold, so every group this returns is a subset of
+ * some group cluster() returns. It is a refinement, not a different graph, and
+ * test-relations.js asserts exactly that.
+ *
+ * Node iteration is sorted and no randomness is used anywhere, because the
+ * output is committed to the repository and a clustering that reshuffled itself
+ * on every build would produce a large meaningless diff every night.
+ */
+const MAX_LEVELS = 12;
+const MAX_PASSES = 20;
+const EPS = 1e-12;
+
+/*
+ * One level: move each node to the neighbouring community that most improves
+ * modularity, repeating until nothing moves. Degree is the sum of a row
+ * including its self-loop, which makes an aggregated node's degree equal the
+ * sum of the degrees of everything collapsed into it - the invariant the whole
+ * method rests on.
+ */
+function localMoving(graph) {
+  const nodes = [...graph.keys()].sort((a, b) => a - b);
+  const deg = new Map();
+  let twoM = 0;
+  for (const n of nodes) {
+    let d = 0;
+    for (const w of graph.get(n).values()) d += w;
+    deg.set(n, d);
+    twoM += d;
+  }
+  const comm = new Map(nodes.map(n => [n, n]));
+  if (!twoM) return comm;
+
+  const sumTot = new Map(nodes.map(n => [n, deg.get(n)]));
+
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    let moved = 0;
+    for (const n of nodes) {
+      const ki = deg.get(n);
+      const cur = comm.get(n);
+      sumTot.set(cur, sumTot.get(cur) - ki);
+
+      // Weight from this node into each neighbouring community. The self-loop
+      // is skipped: it travels with the node and cannot argue for a move.
+      const wTo = new Map();
+      for (const [j, w] of graph.get(n)) {
+        if (j === n) continue;
+        const c = comm.get(j);
+        wTo.set(c, (wTo.get(c) || 0) + w);
+      }
+
+      let best = cur;
+      let bestGain = (wTo.get(cur) || 0) - (sumTot.get(cur) || 0) * ki / twoM;
+      for (const [c, w] of wTo) {
+        const gain = w - (sumTot.get(c) || 0) * ki / twoM;
+        if (gain > bestGain + EPS) { bestGain = gain; best = c; }
+      }
+
+      sumTot.set(best, (sumTot.get(best) || 0) + ki);
+      if (best !== cur) { comm.set(n, best); moved++; }
+    }
+    if (!moved) break;
+  }
+  return comm;
+}
+
+function communities(links, at) {
+  const adj = new Map();
+  const bump = (a, b, w) => {
+    if (!adj.has(a)) adj.set(a, new Map());
+    adj.get(a).set(b, (adj.get(a).get(b) || 0) + w);
+  };
+  for (const [a, b, sim] of links) {
+    if (sim < at || a === b) continue;
+    bump(a, b, sim);
+    bump(b, a, sim);
+  }
+  if (!adj.size) return [];
+
+  let members = new Map([...adj.keys()].map(id => [id, [id]]));
+  let graph = adj;
+
+  for (let level = 0; level < MAX_LEVELS; level++) {
+    const comm = localMoving(graph);
+
+    const groups = new Map();
+    for (const n of [...graph.keys()].sort((a, b) => a - b)) {
+      const c = comm.get(n);
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(n);
+    }
+    // Nothing collapsed, so no further level can collapse anything either.
+    if (groups.size === graph.size) break;
+
+    const index = new Map();
+    const nextMembers = new Map();
+    let next = 0;
+    for (const nodes of groups.values()) {
+      const id = next++;
+      const collapsed = [];
+      for (const n of nodes) {
+        index.set(n, id);
+        for (const original of members.get(n)) collapsed.push(original);
+      }
+      nextMembers.set(id, collapsed);
+    }
+
+    // Edges between communities become edges between super-nodes; edges inside
+    // one become its self-loop, counted from both endpoints so that the degree
+    // invariant above still holds.
+    const folded = new Map();
+    for (const [n, nbrs] of graph) {
+      const a = index.get(n);
+      if (!folded.has(a)) folded.set(a, new Map());
+      const row = folded.get(a);
+      for (const [j, w] of nbrs) {
+        const b = index.get(j);
+        row.set(b, (row.get(b) || 0) + w);
+      }
+    }
+
+    graph = folded;
+    members = nextMembers;
+  }
+
+  return [...members.values()]
+    .filter(g => g.length > 1)
+    .map(g => g.slice().sort((a, b) => a - b))
+    .sort((a, b) => b.length - a.length || a[0] - b[0]);
+}
+
 // ---- stack ---------------------------------------------------------------
 
 function packageSets(depsRepos) {
@@ -162,7 +304,15 @@ function stackEdges(sets, opts) {
   return by;
 }
 
+/*
+ * One sentence describing how the clusters were made, exported rather than
+ * retyped, because it is quoted in the manifest, in llms.txt and in the prose
+ * report - three places that would otherwise describe three different methods
+ * the day one of them is changed.
+ */
+const CLUSTER_METHOD = 'Louvain modularity over the thresholded semantic edges';
+
 module.exports = {
-  cluster, nearestByRepo, packageSets, stackEdges,
-  CLUSTER_AT, MAX_DF_SHARE, MIN_STACK, KIN_LIMIT
+  cluster, communities, nearestByRepo, packageSets, stackEdges,
+  CLUSTER_AT, MAX_DF_SHARE, MIN_STACK, KIN_LIMIT, CLUSTER_METHOD
 };

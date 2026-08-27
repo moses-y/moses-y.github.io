@@ -17,7 +17,9 @@
 const fs = require('fs');
 const path = require('path');
 const { describe, RECORD } = require('./lib-schema.js');
-const { cluster, stackEdges, packageSets, CLUSTER_AT } = require('./lib-relations.js');
+const {
+  cluster, communities, stackEdges, packageSets, CLUSTER_AT
+} = require('./lib-relations.js');
 
 const ROOT = path.join(__dirname, '..');
 const DATA = path.join(ROOT, 'data');
@@ -75,6 +77,36 @@ check('similarity below the threshold does not join anything', groups.length ===
 check('a chain of strong links is one cluster', groups[0].length === 3, String(groups[0].length));
 check('a repository with no strong link is in no cluster',
   groups.every(g => g.indexOf(4) === -1));
+
+/*
+ * Louvain replaced connected components because components chain: one bridge
+ * repository merged two neighbourhoods into a group of 21 that was not one
+ * project. The invariant worth asserting is not the group count, which moves
+ * with the data, but the relationship between the two methods - modularity
+ * partitions each component and never reaches across one, so every group it
+ * returns must sit inside exactly one component. If that ever fails the new
+ * method is not refining the old one, it is describing a different graph.
+ */
+const barbell = [
+  [1, 2, 0.9], [1, 3, 0.9], [2, 3, 0.9],
+  [4, 5, 0.9], [4, 6, 0.9], [5, 6, 0.9],
+  [3, 4, 0.7],
+  [7, 8, 0.4]
+];
+const dense = communities(barbell, 0.68);
+check('two triangles joined by one bridge are two groups, not one',
+  dense.length === 2, JSON.stringify(dense));
+check('the bridge does not pull a weak pair in',
+  dense.every(g => g.indexOf(7) === -1));
+check('modularity never groups across a connected component', (() => {
+  const owner = new Map();
+  cluster(barbell, 0.68).forEach((g, i) => g.forEach(id => owner.set(id, i)));
+  return dense.every(g => new Set(g.map(id => owner.get(id))).size === 1);
+})());
+check('the same edges always produce the same groups',
+  JSON.stringify(communities(barbell, 0.68)) === JSON.stringify(dense));
+check('an edge list below the threshold produces no groups',
+  communities([[1, 2, 0.4]], 0.68).length === 0);
 
 console.log('stack edges weight by rarity, not by count');
 
@@ -241,6 +273,8 @@ if (report && clusters) {
     report.indexOf(clusters.clusters.length + ' groups covering ' + covered) !== -1);
   check('the report advertises the threshold that was used',
     report.indexOf('at least ' + clusters.threshold) !== -1);
+  check('the report names the clustering method the file was built with',
+    !!clusters.method && report.indexOf(clusters.method) !== -1, clusters.method);
   check('every group appears in the report',
     clusters.clusters.every(c => report.indexOf('### ' + c.id + ' -') !== -1));
   check('every clustered repository is named',
@@ -248,7 +282,7 @@ if (report && clusters) {
   check('the cross-domain count agrees with the file',
     report.indexOf(cross.length + ' of the ' + clusters.clusters.length + ' groups cross') !== -1);
   check('the report carries the provenance of what it describes',
-    /INFERRED/.test(report) && /single-link/.test(report));
+    /INFERRED/.test(report) && /embedding/.test(report));
   // The word is allowed exactly once, in the sentence that forbids the reading.
   check('the report warns against reading a group as duplicates',
     /never as a list of duplicates to delete/.test(report));
