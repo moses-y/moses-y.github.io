@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 31, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     
                     <span class="post-type">fork</span>
                 </div>
@@ -80,19 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running It</a><a href="#m-x-agent-shell">M-x agent-shell</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers who spend most of their day inside Emacs lack a native, interactive console for prompting LLM agents that follow the Agent Client Protocol (ACP). Switching to a terminal or web UI breaks workflow and forces context switches, slowing coding, debugging, and code‑review cycles.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>agent-shell implements an Emacs major mode that opens a buffer acting as a chat terminal for any ACP‑compatible LLM backend (Claude, Gemini, OpenAI, etc.). Core logic lives in agent-shell.el, which defines the mode, keymap, and buffer lifecycle. Backend‑specific adapters are in files such as agent-shell-openai.el, agent-shell-anthropic.el, agent-shell-google.el, and agent-shell-mistral.el. UI helpers (agent-shell-ui.el, agent-shell-viewport.el) render messages, while agent-shell-heartbeat.el monitors the running agent process.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Emacs ≥ 27.1.  
-Add the repository to your load-path (e.g., ~/.emacs.d/lisp/agent-shell).  
-Ensure the external ACP binaries required for your chosen agents are on PATH (see the External dependencies section of README.org). Example for Claude Code:</p><p>npm install -g @zed-industries/claude-code-acp
-which claude-code-acp   # must resolve</p><h3 class="post-h" id="configuration">Configuration</h3><p>Edit your init file to load the package and select a backend. The adapters expose customizable variables; for OpenAI the relevant file is agent-shell-openai.el and the variable is agent-shell-openai-key. Example:</p><p>(add-to-list &#39;load-path &quot;~/.emacs.d/lisp/agent-shell&quot;)
-(require &#39;agent-shell)</p><p>(setq agent-shell-openai-key &quot;sk-xxxxxxxxxxxxxxxx&quot;)
-(setq agent-shell-default-backend &#39;openai)   ;; defined in agent-shell.el</p><p>Other agents follow the same pattern (agent-shell-anthropic.el uses agent-shell-anthropic-key, etc.). No additional config files are shipped.</p><h3 class="post-h" id="running-it">Running It</h3><p>Start a shell with the interactive command defined in agent-shell.el:</p><h3 class="post-h" id="m-x-agent-shell">M-x agent-shell</h3><p>A buffer named agent-shell appears. Type a prompt, press RET, and the selected ACP client will stream the response back into the buffer. The UI automatically folds long outputs (agent-shell-viewport.el) and updates the mode line with activity (agent-shell-heartbeat.el).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A developer working on a Python module can open agent-shell, issue:</p><p>Explain the time‑complexity of this function:
-def foo(lst):
-    return [x2 for x in lst if x &gt; 0]</p><p>The response is inserted directly into the buffer, ready for copy‑paste or further refinement, keeping the entire edit‑review loop inside Emacs.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Missing CI/CD – No workflow files under .github/workflows; automated testing is not gated. (.github/ISSUE_TEMPLATE exists but no CI.)  
-Low – Limited Test Coverage – 9 test files exist (tests/agent-shell-.el) but they focus on the runner and fakes; core UI functions lack unit tests.  
-Low – Dependency Documentation – README lists several external binaries, but version constraints or verification scripts are absent; users may encounter runtime errors if an ACP client changes its CLI.  
-Low – License Present – LICENSE is supplied (MIT), satisfying legal reuse.  
-Low – Emacs‑Lisp Conventions – Files use provide/require correctly; however, some adapters (agent-shell-openai.el) embed raw shell command strings without escaping, which could lead to injection if user input is not sanitized.</p><p>Overall the code follows idiomatic Emacs Lisp, with clear separation between protocol handling, UI rendering, and backend adapters.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>agent-shell delivers a functional, Emacs‑native chat front‑end for any ACP‑compatible LLM, enabling developers to stay inside their primary editor. The implementation is clean and well‑documented, but the project lacks automated CI and comprehensive test coverage, so teams should validate critical workflows before production use. Suitable for solo developers or small teams that already use Emacs and are comfortable managing external ACP binaries.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who spend most of their day inside Emacs still need a convenient way to query LLM agents (Claude, Gemini, Cursor, etc.) without leaving the editor. Switching to a browser or separate terminal incurs context‑switch cost and makes it harder to incorporate AI‑generated suggestions into the current buffer.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>agent-shell</code> implements a native Emacs buffer that speaks the <strong>Agent Client Protocol (ACP)</strong> to any compliant LLM back‑end. The core entry point is the interactive command defined in <strong><code>agent-shell.el</code></strong>, which creates a <code>*agent-shell*</code> buffer and loads supporting modules:</p>
+<ul><li><strong><code>agent-shell-ui.el</code></strong> – UI widgets, prompt handling, and buffer management.</li><li><strong><code>agent-shell-completion.el</code></strong> – integrates Emacs completion frameworks with the agent’s suggestions.</li><li><strong><code>agent-shell-*.el</code></strong> (e.g., <code>agent-shell-openai.el</code>, <code>agent-shell-anthropic.el</code>) – thin wrappers that translate generic ACP calls into the command‑line invocations required for each provider.</li></ul>
+<p>The repository also ships a set of test suites under <strong><code>tests/</code></strong> that exercise the runner (<code>agent-shell-runner-tests.el</code>) and the provider‑specific adapters.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – <code>M-x agent-shell</code> (function <code>agent-shell</code> in <code>agent-shell.el</code>).</p>
+<ol><li><code>agent-shell</code> creates the buffer and calls <code>agent-shell--start-session</code>.</li><li><code>agent-shell--start-session</code> selects a provider module (e.g., <code>agent-shell-openai.el</code>) based on user configuration stored in Emacs variables (see <code>agent-shell-project.el</code>).</li><li>The provider module builds an ACP request and spawns the external binary (Claude‑code, Gemini‑cli, etc.) via <code>call-process</code>/<code>start-process</code>. The binary’s stdout/stderr are captured by <strong><code>agent-shell-runner.el</code></strong> (not listed but implied by the tests).</li><li>Responses flow back to <code>agent-shell--handle-response</code> in <code>agent-shell.el</code>, which updates the buffer, triggers completion (<code>agent-shell-completion.el</code>), and optionally refreshes the UI (<code>agent-shell-ui.el</code>).</li><li>UI hooks (<code>agent-shell-heartbeat.el</code>, <code>agent-shell-viewport.el</code>) keep the buffer responsive and scroll to the latest output.</li></ol>
+<p><strong>Effect surface</strong> – The only external side‑effects are process invocations of the provider binaries and writes to the current Emacs buffer. No file system writes or network calls are performed directly by the Lisp code; network traffic is handled by the external ACP clients.</p>
+<p><strong>Coupling</strong> – <code>agent-shell.el</code> is the hub; each provider file (<code>agent-shell-*.el</code>) is a leaf that only supplies the command string and basic argument handling. Changing a provider only requires editing its dedicated file; the rest of the system remains untouched. No circular dependencies are present in the current graph.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/agent-shell
+cd agent-shell
+
+# Add to Emacs load‑path (e.g., in init.el)
+(add-to-list 'load-path "/path/to/agent-shell")
+(require 'agent-shell)   ; registers the command
+
+# Install external ACP binaries as documented in README.org
+# Example for Claude Code:
+npm install -g @zed-industries/claude-code-acp
+# Verify: which claude-code-acp
+
+# Start a session inside Emacs
+M-x agent-shell</code></pre>
+<p>Configuration variables (e.g., <code>agent-shell-default-provider</code>) are defined in <code>agent-shell-project.el</code>. Adjust them in your init file to point at the desired binary.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A Python developer working on a Django view can open <code>*agent-shell*</code>, type a prompt like “Generate a DRF serializer for this model”, and paste the returned code directly into the current buffer. The workflow stays entirely within Emacs, preserving undo history and syntax highlighting.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – No CI pipeline</strong> – <code>.github/</code> contains issue and PR templates but no workflow files; tests must be run manually.</li><li><strong>Low – No Dockerfile</strong> – No containerised build environment is provided.</li><li><strong>Low – No lockfile</strong> – No package manager lockfile (e.g., <code>package-lock.json</code>) is present, making reproducible external binary installs reliant on user discretion.</li><li><strong>Positive – Tests exist</strong> – 9 test files under <code>tests/</code> validate core runner logic and traffic fixtures.</li><li><strong>Positive – License</strong> – <code>LICENSE</code> is present, allowing reuse.</li></ul>
+<p>No secrets were detected in the repository.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>agent-shell</code> delivers a functional Emacs‑native interface to any ACP‑compatible LLM, with a clean separation between core UI logic and provider adapters. The codebase is small, well‑tested, but lacks automated CI and container support, so integration teams should add a CI workflow before committing changes. Ideal for Emacs‑centric developers who need quick AI assistance without leaving their editor.</p>
             </div>
 
             

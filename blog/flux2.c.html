@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 23, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">C</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#build-choose-your-backend">Build (choose your backend)</a><a href="#download-the-model-16gb">Download the model (~16GB)</a><a href="#generate-an-image">Generate an image</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running FLUX.2 image generation models typically requires a Python ML stack (PyTorch, CUDA, or MPS) with substantial RAM and GPU resources. On Apple Silicon or Linux systems with 8GB RAM, the standard stack cannot even load the model. This repo removes that dependency entirely: it is a pure C implementation with zero external dependencies, using memory-mapped weights to run on hardware where the Python stack fails.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>This is a complete FLUX.2-klein-4B inference engine written in C. The core files are flux.c (main inference loop), fluxtransformer.c (denoising), fluxvae.c (image decoding), fluxqwen3.c (text encoder), and fluxkernels.c (math operations). It supports both text-to-image and image-to-image via in-context conditioning, with optional BLAS or Metal acceleration.</p><p>The repo includes a CLI (main.c), a library API (flux.h), and a test harness (runtest.py with reference images in testvectors/). A Makefile provides three build targets: mps (Apple Silicon), blas (Intel/Linux with OpenBLAS), and generic (pure C). The README claims MPS performance matches PyTorch&#39;s optimized pipeline.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Build with the appropriate target, then download the model weights (~16GB) using downloadmodel.sh or downloadmodel.py.</p><h3 class="post-h" id="build-choose-your-backend">Build (choose your backend)</h3><p>make mps       # Apple Silicon (fastest)
-or: make blas    # Intel Mac / Linux with OpenBLAS
-or: make generic # Pure C, no dependencies</p><h3 class="post-h" id="download-the-model-16gb">Download the model (~16GB)</h3><p>./downloadmodel.sh
-or: pip install huggingfacehub &amp;&amp; python downloadmodel.py</p><h3 class="post-h" id="generate-an-image">Generate an image</h3><p>./flux -d flux-klein-model -p &quot;A woman wearing sunglasses&quot; -o output.png</p><p>Configuration: No environment variables or config files required. The -d flag points to the model directory. Optional flags include --show and --show-steps for terminal image display (requires Kitty or Ghostty).</p><p>Running it: The entry point is main.c, compiled to the flux binary. For image-to-image, pass -i input.png with a descriptive prompt.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical workflow: a content pipeline on a headless Linux server generates images on demand. The pure C implementation means no Python runtime, no CUDA toolkit, and no GPU requirement beyond what the machine has. Memory-mapped weights keep peak RAM around 4-5GB, so an 8GB server can batch-generate images. The library API (flux.h) allows embedding generation directly into a C application without spawning a subprocess.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No CI/CD pipeline: No .github/ or CI config detected. No automated build or test gate, which is risky for a project with this much numerical code.
-Low - Single-maintainer risk: Forked from antirez/iris.c, this is a solo project with zero stars. Bus factor is one; there is no evidence of external review or contribution.
-Low - Test coverage is narrow: runtest.py and test_vectors/ cover 1/2/4-step generation and img2img, but there is no fuzzing or edge-case testing for malformed prompts or model files.
-Low - License present: LICENSE file exists; no compliance issues flagged.</p><p>The codebase is otherwise clean: no secrets in the repo, a clear Makefile, and documented build paths.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a serious engineering effort that solves a real deployment problem: running FLUX.2 on memory-constrained hardware without a Python stack. The zero-dependency design and memory-mapped weights are genuinely useful. The lack of CI and single-maintainer status are the main risks; treat it as a capable reference implementation rather than a production-ready dependency.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>FLUX.2-class image generation normally requires a Python ML stack, a CUDA or MPS runtime, and roughly 16GB of RAM. That rules out headless servers, low-memory VMs, and Apple Silicon machines without a working PyTorch install. This repo removes those constraints: a fork of <code>antirez/iris.c</code>, it runs FLUX.2-klein-4B entirely in C with zero external dependencies beyond the C standard library.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>It generates images from text prompts, and optionally transforms existing images, using the FLUX.2-klein-4B model. All inference — the Qwen3-4B text encoder, the transformer, the VAE — is implemented in C across <code>flux.c</code>, <code>flux_transformer.c</code>, <code>flux_image.c</code>, <code>flux_kernels.c</code>, <code>flux_qwen3.c</code>, <code>flux_tokenizer.c</code>, and <code>flux_vae.c</code>. The integrated Qwen3 encoder means no external embedding step is needed.</p>
+<p>Two properties matter operationally. Memory-mapped weights (default) cut peak memory from ~16GB to ~4-5GB, and the encoder is released after encoding to free ~8GB. MPS and BLAS acceleration are optional; the pure-C path runs anywhere.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main.c</code>. The static import graph is empty — 4 internal modules, 0 import edges, no cycles — so the C modules are not linked by analyzable imports; wiring between them is by direct function calls that the analysis did not map. What is documented: the CLI parses flags in <code>main.c</code>, routes to text-to-image or image-to-image paths, and drives the pipeline in <code>flux.c</code>. A run touches the outside world in few hops: <code>download_model.sh</code> or <code>download_model.py</code> fetches weights over the network from HuggingFace (~16GB); inference opens the safetensors via <code>flux_safetensors.c</code> and memory-maps them; output is written as PNG to the path given by <code>-o</code>. <code>flux_sample.c</code> handles the denoising loop, <code>flux_qwen3_tokenizer.c</code> tokenizes the prompt, and <code>flux_metal.m</code> / <code>flux_shaders.metal</code> provide optional GPU kernels on Apple Silicon.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>Build and run per the README:</p>
+<pre data-lang="bash"><code>make mps       # Apple Silicon (fastest)
+# or: make blas    # Intel Mac / Linux with OpenBLAS
+# or: make generic # Pure C, no dependencies
+
+./download_model.sh                      # or: python download_model.py
+
+./flux -d flux-klein-model -p "A fluffy orange cat sitting on a windowsill" -o cat.png</code></pre>
+<p>Image-to-image uses <code>-i input.png</code> with a descriptive prompt. <code>--show</code> displays results in Kitty/Ghostty terminals. No environment variables or keys are required. A <code>Makefile</code> defines the build targets; <code>main.c</code> is the CLI entry point.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A practical fit: an 8GB-RAM headless Linux box with no CUDA toolkit, where the Python ML stack cannot run FLUX.2 at all. The binary is self-contained, weights are memory-mapped, and generation runs via a single command — suitable for a batch job or a thin wrapper service that shells out to <code>./flux</code> and serves the resulting PNG.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found 29 findings: 11 high, 18 medium, across 5 kinds.</p>
+<ul><li><strong>High — deep nesting (x16)</strong> — <code>flux.c</code>, <code>flux.h</code>, <code>flux_kernels.c</code>: max indentation depth 13; control flow is hard to follow. Fix with early returns and extracted blocks.</li><li><strong>High — duplicated code (x22)</strong> — <code>flux.c</code>, <code>flux_sample.c</code>, <code>flux_kernels.c</code>, <code>flux_qwen3.c</code> and others: 22 repeated 6-line blocks across 8 files; extract shared helpers.</li><li><strong>High — oversized files (x7)</strong> — <code>flux_transformer.c</code>, <code>flux.c</code>, <code>flux_image.c</code>: 3356 code lines in one file; changes ripple widely. Split by responsibility.</li><li><strong>Medium — unclosed file handles</strong> — <code>debug/debug_img2img_compare.py</code>, <code>run_test.py</code>: <code>open(...)</code> not wrapped in <code>with</code>; use context managers.</li><li><strong>Medium — high branching density</strong> — <code>flux_image.c</code>, <code>flux_qwen3_tokenizer.c</code>, <code>flux_safetensors.c</code>: 234 branch points over 794 lines; consider table-driven dispatch.</li><li><strong>High — no CI</strong> — 17 source files, no workflow; every change merges unbuilt. Add a GitHub Actions workflow running <code>make</code> and the test suite on push/PR.</li></ul>
+<p>SDLC observations: tests and test vectors exist (<code>test_vectors/</code>, <code>run_test.py</code>), a license is present, and no committed secrets were found. There is no Dockerfile or lockfile.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>This is a serious piece of systems engineering — a dependency-free, memory-efficient FLUX.2 implementation that genuinely runs where the Python stack cannot. The trade-off is maintainability: deeply nested, oversized files and duplicated logic will make changes slow. Use it if you need image generation on constrained hardware; budget refactoring time before extending it.</p>
             </div>
 
             
@@ -108,7 +126,7 @@ Low - License present: LICENSE file exists; no compliance issues flagged.</p><p>
                         <ul class="an-bars">
                             <li><span>C</span><i style="width:100%"></i><b>13</b></li><li><span>C/C++ Header</span><i style="width:46%"></i><b>6</b></li><li><span>Markdown</span><i style="width:31%"></i><b>4</b></li><li><span>Python</span><i style="width:31%"></i><b>4</b></li><li><span>Shell</span><i style="width:8%"></i><b>1</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span></p>
                     </div>
                 </div>
 

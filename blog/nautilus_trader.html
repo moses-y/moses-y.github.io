@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,19 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#clone-and-enter-the-repo">Clone and enter the repo</a><a href="#build-the-rust-workspace">Build the Rust workspace</a><a href="#or-spin-up-the-provided-docker-stack">Or spin up the provided Docker stack</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Quant traders need a single code base that can back‑test strategies on historical market data and run the same logic live with minimal friction. Switching between a research environment and production often requires duplicated code, divergent dependencies, and manual re‑writes, which introduces bugs and latency.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>nautilustrader delivers a Rust‑centric core that implements an event‑driven engine for order management, market data ingestion, and risk checks. The core lives in the crates/ workspace; adapters (e.g., crates/adapters/architectax and crates/adapters/binance) translate exchange‑specific protocols into the common engine interfaces.</p><p>Key files:</p><p>crates/adapters/architectax/src/lib.rs – the primary library exposing the public API for the Architect‑AX exchange.  
- crates/adapters/binance/src/common/sbe/.rs – generated SBE codecs for Binance spot and futures messages.  
- Cargo.toml and crates/Cargo.toml – define the workspace and inter‑crate dependencies.</p><p>The platform also ships a Docker environment (.docker/DockerfileUbuntu, .docker/docker-compose.yml) that bundles the Rust binaries, a JupyterLab front‑end, and optional Python bindings (exposed via src/python/.rs).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><h3 class="post-h" id="clone-and-enter-the-repo">Clone and enter the repo</h3><p>git clone https://github.com/nautechsystems/nautilustrader.git
-cd nautilustrader</p><h3 class="post-h" id="build-the-rust-workspace">Build the Rust workspace</h3><p>cargo build --release</p><h3 class="post-h" id="or-spin-up-the-provided-docker-stack">Or spin up the provided Docker stack</h3><p>docker compose -f .docker/docker-compose.yml up --build</p><p>The Makefile includes shortcuts (make build, make test) that wrap the above commands; inspect it for exact targets.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy .env.example to .env and fill in required API keys (e.g., ARCHITECTAXAPIKEY, BINANCEAPIKEY).  
- Adapter‑specific JSON fixtures in crates/adapters//testdata/ illustrate the expected request/response schema.  
-Runtime parameters (log level, market data subscriptions) are read from the config.yaml located under .config/ (if present) or passed as CLI flags.</p><h3 class="post-h" id="running">Running</h3><p>The entry point for a live strategy is the binary produced by the nautilustrader crate (defined in the workspace root). After a successful cargo build, launch it with:</p><p>./target/release/nautilustrader --config .config/config.yaml</p><p>When using Docker, the service starts automatically under the nautilustrader container defined in docker-compose.yml. Logs are exposed on port 8080 (configurable).</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A quant team can embed a Python strategy module that calls the Rust API via the pyo3 bindings in src/python/mod.rs. Example workflow:</p><p>from nautilustrader import Engine</p><p>engine = Engine(configpath=&quot;config.yaml&quot;)
-engine.loadstrategy(&quot;mystrategy.py&quot;)
-engine.start()</p><p>The engine consumes live Binance market data (via the Binance adapter), executes the Python strategy each tick, and routes orders back through the same adapter, preserving identical logic used during back‑testing.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing top‑level README for building the core binary – The repo documents Docker usage but does not explicitly list a cargo run command for the main engine.  
-Medium – Adapter test coverage uneven – architectax has dedicated tests/http.rs and tests/websocket.rs; the Binance adapter only includes fixture JSON without corresponding Rust test modules.  
-Low – Secrets in repository – No API keys are committed, but the .env.example hints at required env vars; ensure production keys are never added.  
-Low – License duplication – Each adapter contains its own LICENSE file; while not a functional bug, it adds maintenance overhead.  
-Low – CI pipelines present – Multiple GitHub Actions (build.yml, codeql-analysis.yml, coverage.yml) are configured and the repository includes a Cargo.lock, indicating reproducible builds.</p><p>Overall the codebase follows Rust conventions, includes pre‑commit hooks for style and safety (checktokiousage.sh, checkerrorconventions.sh), and ships a comprehensive Docker development stack.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>nautilustrader offers a solid, Rust‑based engine with exchange adapters and optional Python bindings, making it suitable for teams that need high‑throughput back‑testing and live deployment without rewriting strategy code. The primary gaps are sparse documentation around the core binary launch and uneven test coverage across adapters; addressing these will smooth onboarding for new users.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Quantitative traders need a single code‑base that can back‑test strategies on historic market data <strong>and</strong> run them live without rewriting logic. Existing stacks force separate back‑tester and execution engines, leading to drift between simulation and production results.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>nautilus_trader</code> delivers a Rust‑centric, event‑driven engine with a Python front‑end. Core trading logic lives in the <code>crates/</code> workspace (≈1 560 Rust source files) while the <code>python/</code> package supplies a thin, idiomatic API for strategy authors.</p>
+<p>Key entry points are in <code>crates/adapters/architect_ax</code>:</p>
+<ul><li><code>crates/adapters/architect_ax/bin/http_public.rs</code> – <code>main</code> starts the HTTP server that exposes the public API.</li><li><code>crates/adapters/architect_ax/src/data.rs</code> – <code>start</code> boots the internal data pipelines.</li></ul>
+<p>Adapters for major venues (Binance, Bybit, BitMEX, etc.) live under <code>crates/adapters/…</code> and implement SBE codecs (e.g. <code>exchange_info_response_codec.rs</code>) that marshal binary messages to Rust structs.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Process start</strong> – <code>main</code> in <code>http_public.rs</code> (line 32) is the only top‑level entry point. It creates an <code>AxEnvironment</code> via <code>from_env</code>, which reads secrets (<code>Secrets::from_env()</code>) – the sole outbound <strong>cryptographic</strong> operation.</li></ol>
+<ol><li><strong>Environment bootstrap</strong> – <code>from_env</code> pulls configuration from <code>.env.example</code> (API keys, URLs). The environment is then passed to the HTTP client (<code>crates/adapters/architect_ax/src/http/client.rs</code>), which owns the only network‑calling code (e.g., <code>base_url</code>, <code>cancel_all_requests</code>).</li></ol>
+<ol><li><strong>Message flow</strong> – Incoming HTTP requests are dispatched to handlers in <code>crates/adapters/architect_ax/src/websocket/…</code>. The most‑used functions across the codebase are: <em> <code>from_str</code> – 259 call sites </em> <code>get_buf</code>, <code>get_buf_mut</code>, <code>set_limit</code> – each &gt;200 call sites (used by every SBE codec)</li></ol>
+<p>These buffer utilities form a <strong>hub</strong>: any change to their signature ripples through &gt;600 functions, so they carry the widest blast radius.</p>
+<ol><li><strong>Adapter codecs</strong> – The Binance SBE codecs (e.g., <code>exchange_info_response_codec.rs</code>, <code>new_order_full_response_codec.rs</code>) each define <code>wrap</code>, <code>encoded_length</code>, <code>get_buf_mut</code>, etc. They are called from 5–36 other files and collectively account for &gt;1 200 function definitions.</li></ol>
+<ol><li><strong>External effects</strong> – Apart from the initial secret load, the only outbound calls are: <em> HTTP client requests (network) </em> File reads/writes (e.g., loading test JSON via <code>load_test_json</code>) – 2 functions * Cryptographic secret handling – 7 functions</li></ol>
+<p>No database access is visible in the static graph; persistence is likely delegated to external services not compiled into the repo.</p>
+<ol><li><strong>Cycle / hub analysis</strong> – The call graph shows dense inter‑connections around the buffer utilities and SBE codec wrappers, but no obvious cycles. The concentration around <code>from_str</code> and buffer helpers suggests any refactor there will require extensive test coverage.</li></ol>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/nautilus_trader
+cd nautilus_trader
+
+# Build the Rust workspace (requires Rust 1.92)
+cargo build --release
+
+# Optional: run the Docker environment (DockerfileUbuntu + compose)
+docker compose -f .docker/docker-compose.yml up --build
+
+# Set required env vars (copy template)
+cp .env.example .env
+# edit .env with API keys, URLs, etc.
+
+# Start the HTTP server (the documented entry point)
+cargo run --bin http_public --manifest-path crates/adapters/architect_ax/Cargo.toml</code></pre>
+<p>The Python package can be installed from the <code>python/</code> directory with <code>pip install .</code> after the Rust wheels are built (see <code>github/actions/publish-wheels</code> workflow for the exact build steps).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant writes a strategy in Python, imports <code>nautilus_trader</code>, and registers callbacks with the HTTP API. The same code can be executed against a historical data feed by pointing the <code>AxEnvironment</code> to a file‑based data source, then switched to live trading by swapping the environment to use the Binance adapter. No code changes are required between back‑test and live runs.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Enable Dependabot</strong> – 38 manifests lack an automated update bot (<code>.github/dependabot.yml</code> missing).</li><li><strong>Medium – Dependency vulnerability gate</strong> – No scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Large test assets</strong> – <code>tests/integration_tests/adapters/betfair/resources/responses/betting_list_market_catalogue.json</code> (41 MB) should be moved to Git LFS or external storage.</li><li><strong>Low – Workflow timeouts</strong> – <code>.github/workflows/build-docs.yml</code> and three others lack <code>timeout-minutes</code>, risking stalled runs.</li></ul>
+<p>All other hygiene checks (tests, CI, Dockerfile, license, lockfile) are present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>nautilus_trader</code> offers a solid, high‑performance Rust engine with a Python façade, suitable for teams that need tight parity between simulation and production. The codebase is well‑structured but hinges on a few core utilities (<code>from_str</code>, buffer helpers) that are hot spots for change. Addressing the medium‑severity health items (dependency automation, large binaries) will improve maintainability for production deployments. Ideal for quant teams comfortable with Rust‑Python interop and looking for an open‑source, event‑driven trading stack.</p>
             </div>
 
             
@@ -109,11 +138,11 @@ Low – CI pipelines present – Multiple GitHub Actions (build.yml, codeql-anal
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">3,864<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>72</b></li><li><span>JSON</span><i style="width:46%"></i><b>33</b></li><li><span>YAML</span><i style="width:33%"></i><b>24</b></li><li><span>Shell</span><i style="width:22%"></i><b>16</b></li><li><span>Markdown</span><i style="width:22%"></i><b>16</b></li><li><span>TOML</span><i style="width:15%"></i><b>11</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>1561</b></li><li><span>Python</span><i style="width:69%"></i><b>1072</b></li><li><span>JSON</span><i style="width:31%"></i><b>489</b></li><li><span>Markdown</span><i style="width:10%"></i><b>163</b></li><li><span>TOML</span><i style="width:4%"></i><b>57</b></li><li><span>Shell</span><i style="width:3%"></i><b>44</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Docker</span><span>Transformers</span><span>pandas</span></p>
                     </div>
                 </div>
 

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,56 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>LLM agents quickly lose context when conversations exceed a few hundred tokens. Existing memory layers either replay raw dialogue (high token cost) or rely on costly re‑reasoning loops, making long‑term recall impractical for production bots.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SimpleMem implements a three‑stage “semantic lossless compression” pipeline that turns raw chat into compact, query‑able facts.</p><p>Compression – core/memorybuilder.py extracts atomic facts from a dialogue using entropy‑based filtering.  
- Indexing – core/hybridretriever.py builds a hierarchical index (atoms → molecules) stored in database/vectorstore.py.  
- Adaptive Retrieval – core/answergenerator.py selects the smallest set of facts that satisfy a query, balancing semantic relevance and token budget.</p><p>The repository ships three usable forms:</p><div class="table-scroll"><table><thead><tr><th>Component</th><th>Core files</th><th>Entry point</th><th>Typical use</th></tr></thead><tbody><tr><td>Library</td><td>core/, utils/, models/</td><td>main.py</td><td>Import SimpleMem in any Python project.</td></tr><tr><td>MCP Server</td><td>MCP/server/, MCP/config/</td><td>MCP/run.py</td><td>Run a multi‑tenant HTTP memory service.</td></tr><tr><td>Skill</td><td>SKILL/simplemem-skill/src/</td><td>SKILL/simplemem-skill/src/main.py</td><td>Deploy as a Claude skill via the provided CLI.</td></tr></tbody></table></div><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install core library + all optional components
-pip install -r requirements.txt          # root requirements
-pip install -r MCP/requirements.txt      # MCP server deps
-pip install -r SKILL/simplemem-skill/requirements.txt  # Skill deps</p><h3 class="post-h" id="configuration">Configuration</h3><p>MCP server – edit MCP/config/settings.py to set HOST, PORT, and optionally JWTSECRET.  
- Skill – create a config.yaml (see SKILL/simplemem-skill/src/config.py.example) with your OPENROUTERAPIKEY and MCPENDPOINT.</p><h3 class="post-h" id="running">Running</h3><p>Library – simple import:  
-from core.memorybuilder import MemoryBuilder
-mb = MemoryBuilder()
-facts = mb.compressdialogue(chathistory)</p><p>MCP server – start the HTTP service:  
-python MCP/run.py</p><p>The server listens on the host/port defined in MCP/config/settings.py.</p><p>Skill – register the skill and launch the CLI helper:  
-python SKILL/simplemem-skill/scripts/clipersistentmemory.py --config config.yaml</p><p>The CLI prints a token that can be pasted into the Claude skill definition.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A customer‑support bot can call MemoryBuilder.compressdialogue() after each user turn, persisting the returned facts in the MCP server (POST /memory). When the bot needs context, it sends the current query to GET /retrieve?userid=…&amp;query=…; the server runs answergenerator.generateanswer() and returns only the minimal fact set, saving ~70 % of token usage compared with naïve context concatenation.</p><p>import requests
-store new facts
-requests.post(&quot;https://mcp.simplemem.cloud/memory&quot;, json={&quot;user&quot;:&quot;123&quot;, &quot;facts&quot;:facts})</p><p>retrieve relevant facts for a new question
-resp = requests.get(&quot;https://mcp.simplemem.cloud/retrieve&quot;,
-                    params={&quot;user&quot;:&quot;123&quot;, &quot;query&quot;:&quot;How do I reset my password?&quot;})
-context = resp.json()[&quot;facts&quot;]</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Missing CI/CD – No .github/workflows or other pipeline files; automated testing is not enforced.  
- Low – No lockfile – Dependencies are listed only in requirements.txt; reproducible builds rely on external package versions.  
- Low – Sparse input validation – Core functions (e.g., memorybuilder.compressdialogue) lack explicit type checks; malformed inputs could raise uncaught exceptions.  
- Low – Documentation gaps – README.md explains high‑level concepts, but API reference for library functions is missing.  
- Medium – Security exposure – MCP/config/settings.py contains placeholders for secrets; accidental commit of real keys would be a risk.  
-Positive – Test coverage – 9 test files (tests/, testref/) exercise vector store and retrieval logic, indicating functional intent.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SimpleMem delivers a practical, Python‑native memory layer that reduces token consumption while preserving relevant knowledge, suitable for teams building LLM‑backed assistants that need long‑term context. The codebase is functional but lacks production safeguards (CI, lockfiles, thorough docs). Use it if you can handle the modest operational overhead; otherwise, expect to add testing pipelines and stricter security handling before deploying at scale.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <p><strong>SimpleMem – Technical Briefing</strong> <em>Repository:</em> <code>https://github.com/moses-y/SimpleMem</code></p>
+<hr>
+<h3 id="the-problem">The Problem</h3>
+<p>LLM agents quickly exhaust context windows when they need to recall past interactions. Existing approaches either keep the entire dialogue (high token cost) or rely on costly iterative reasoning. The result is poor long‑term recall and expensive inference.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SimpleMem implements a three‑stage “compression‑index‑retrieve” pipeline that stores dialogue facts in a compact vector store and serves them via a lightweight MCP (Memory‑Control‑Protocol) server.</p>
+<ul><li><strong>Core pipeline</strong> – See <code>core/hybrid_retriever.py</code> (744 LOC) and its duplicates under <code>MCP/reference/core/</code> and <code>SKILL/simplemem-skill/src/core/</code>. The <code>HybridRetriever.retrieve</code> entry point orchestrates the flow:   1. <code>_retrieve_with_planning</code> → <code>_analyze_information_requirements</code> → <code>chat_completion</code> (model call). 2. Results are post‑processed by <code>extract_json</code> → <code>_clean_json_string</code>.</li></ul>
+<ul><li><strong>Memory model</strong> – <code>models/memory_entry.py</code> defines the <code>MemoryEntry</code> data class; it is imported by 20 other modules, making it the primary data contract.</li></ul>
+<ul><li><strong>LLM client</strong> – <code>utils/llm_client.py</code> (also duplicated in <code>MCP/reference/utils/llm_client.py</code>) provides <code>chat_completion</code>, <code>_handle_streaming_response</code>, and JSON extraction. It is the only module that talks to the external LLM service and is used by 15 callers.</li></ul>
+<ul><li><strong>Vector store</strong> – <code>database/vector_store.py</code> (and its MCP counterpart) implements <code>add_entries</code>, <code>semantic_search</code>, and <code>keyword_search</code>. It opens a SQLite connection via <code>_get_connection</code> (used by 9 callers) and persists embeddings.</li></ul>
+<ul><li><strong>MCP server</strong> – <code>MCP/server/http_server.py</code> runs a FastAPI‑style HTTP endpoint (<code>run.py</code> starts it). Requests are routed through <code>MCP/server/mcp_handler.py</code>, which builds a <code>MemoryBuilder</code> and a <code>HybridRetriever</code>.</li></ul>
+<ul><li><strong>Skill wrapper</strong> – <code>SKILL/simplemem-skill/src/main.py</code> exposes the same API as a Claude skill, loading the local vector store defined in <code>SKILL/simplemem-skill/scripts/cli_persistent_memory.py</code>.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>MCP/run.py</code> → <code>main</code> (line 14). <code>main</code> imports <code>MCP/server/http_server.py</code> and starts the HTTP server. Each incoming request is handled by <code>MCP/server/mcp_handler.py.to_dict</code>, which:</p>
+<ol><li>Calls <code>_get_client</code> → <code>utils/llm_client.py.__init__</code> (creates the LLM client).</li><li>Instantiates <code>HybridRetriever</code> (<code>core/hybrid_retriever.py.__init__</code>).</li><li>Calls <code>HybridRetriever.retrieve</code>, which invokes:   <em> <code>_retrieve_with_planning</code> → <code>_analyze_information_requirements</code> → <code>chat_completion</code> (network + model). </em> <code>extract_json</code> → <code>_clean_json_string</code> (JSON parsing).</li></ol>
+<p>The retrieval path reaches the vector store via <code>database/vector_store.py._semantic_search</code> (reads the SQLite DB).</p>
+<p>A secondary CLI entry point is <code>MCP/reference/main.py</code>. The <code>ask</code> function (line 145) follows the same call chain but returns the answer directly to the caller instead of an HTTP response.</p>
+<p><strong>Blast radius:</strong></p>
+<ul><li><code>models/memory_entry.py</code> – 20 dependents, any change ripples through the entire codebase.</li><li><code>utils/llm_client.py</code> – 15 dependents, central to all model calls.</li><li><code>database/vector_store.py</code> – 10 dependents, touches the persistent store.</li></ul>
+<p>No circular imports were detected, and the internal call graph contains 363 resolved edges, confirming a mostly linear flow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/SimpleMem
+cd SimpleMem
+
+# 2. Install Python dependencies (root + sub‑projects)
+pip install -r requirements.txt
+pip install -r MCP/requirements.txt
+pip install -r MCP/reference/requirements.txt
+pip install -r SKILL/simplemem-skill/requirements.txt
+
+# 3. Start the MCP server
+python MCP/run.py   # listens on the default port defined in MCP/config/settings.py
+
+# 4. Optional: use the reference CLI
+python MCP/reference/main.py ask "What did we discuss about compression?" </code></pre>
+<p>Configuration lives in <code>MCP/config/settings.py</code> (e.g., <code>OPENROUTER_API_KEY</code>). The skill version reads the same key from <code>SKILL/simplemem-skill/src/config.py.example</code>. No Dockerfile or Makefile is present, so containerisation must be added manually if required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A customer integrating SimpleMem into a chatbot can run the MCP server alongside the bot process. The bot forwards user utterances to <code>http://localhost:&lt;port&gt;/ask</code>. The server compresses the dialogue, stores the embedding, and on subsequent turns retrieves the most relevant facts with a single <code>chat_completion</code> call, reducing token usage by ≈ 70 % compared with naive context concatenation.</p>
+<pre data-lang="python"><code>import requests, json
+
+def ask_simplemem(question):
+    resp = requests.post("http://localhost:8000/ask", json={"query": question})
+    return resp.json()["answer"]</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH – Add CI workflow</strong> – 63 source files, no GitHub Actions or other CI configuration.</li><li><strong>MEDIUM – Enable Dependabot/Renovate</strong> – 4 requirement files, no automated dependency updates.</li><li><strong>MEDIUM – Move large binaries to LFS</strong> – <code>MCP/reference/fig/simplemem-new.mp4</code> (20 MB) and a 10.9 MB spreadsheet are stored in Git history.</li></ul>
+<p>Additional observations from static analysis: deep nesting (max depth 7) in <code>utils/llm_client.py</code> and duplicated answer‑generator code across three locations. No lockfiles are present, making reproducible builds harder.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>SimpleMem provides a concrete, modular implementation of lifelong memory for LLM agents, with a clear HTTP‑based MCP layer and a reusable skill wrapper. The codebase is functional but suffers from maintenance‑heavy duplication, missing CI, and large binary assets in the repo. It is suitable for teams that need a ready‑made memory service and are prepared to address the hygiene gaps before production deployment.</p>
             </div>
 
             

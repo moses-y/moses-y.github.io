@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 22, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Kubernetes users need a native desktop UI that works offline, integrates with local tooling (kubectl, kubeconfig) and runs consistently on macOS, Windows, and Linux. Existing options are either cloud‑only, require a browser, or are tied to a specific distribution, forcing teams to juggle separate CLI workflows.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>freelens ships an Electron‑based IDE that bundles the UI, a minimal Node backend, and platform‑specific installers (see freelens/build/.sh, freelens/electron-builder.yml). The main process starts from freelens/src/main/index.ts, registers injectables, and launches the renderer defined in freelens/src/renderer/index.ts. Webpack builds for both processes are driven by freelens/webpack/main.ts and freelens/webpack/renderer.ts.</p><p>Feature modules live under packages/ and are wired through the DI system:
- Keyboard shortcuts – packages/business-features/keyboard-shortcuts/index.ts
- Cluster settings – packages/cluster-settings/index.ts
- Sidebar UI – packages/cluster-sidebar/src/sidebar-items.injectable.ts</p><p>All UI code is TypeScript/React (e.g., packages/cluster-sidebar/src/feature.tsx), and the project is monorepo‑managed with pnpm (pnpm-lock.yaml at the root and in freelens/).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install pnpm if not present
-npm i -g pnpm
-Install workspace dependencies
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Kubernetes clusters are powerful but their CLI‑centric workflow makes day‑to‑day navigation, resource inspection and quick actions cumbersome for developers and operators who prefer a graphical UI.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>freelens</code> ships a desktop Electron application that bundles a React/Tailwind front‑end with a Node‑back‑end. The main UI lives under <code>freelens/src/renderer/</code> (e.g., <code>index.ts</code>) and the Electron main process starts from <code>freelens/src/main/index.ts</code>. Core domain logic – catalog entities, kube‑object stores, and API wrappers – lives in the monorepo <code>packages/core/</code> and is reused by feature packages such as <code>packages/cluster-sidebar</code> and <code>packages/business-features/keyboard-shortcuts</code>. The build pipeline is driven by <code>pnpm</code> (see <code>pnpm-lock.yaml</code>) and Webpack configs in <code>freelens/webpack/</code> and each feature package.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong> – Electron launches <code>freelens/src/main/index.ts</code>. This registers injectables (<code>register-injectables.ts</code>) and calls the <code>start</code> helper in <code>freelens/integration/helpers/utils.ts</code> (line 118).</li></ul>
+<ul><li><strong>Bootstrap flow</strong> – <code>start</code> reaches seven internal functions, the most used being <code>getId</code> (called from 20 places) and <code>getName</code> (10 places). For example, <code>podSelector → getName</code> occurs six times, and <code>index → getId</code> five times.</li></ul>
+<ul><li><strong>Core data path</strong> – The catalog entity model in <code>packages/core/src/common/catalog/catalog-entity.ts</code> defines <code>parseId</code>, <code>getId</code>, <code>getName</code>, and <code>getBadge</code>. This file is called from eight other files and underpins most UI listings.</li></ul>
+<ul><li><strong>Kubernetes API layer</strong> – <code>packages/core/src/common/k8s-api/kube-object.store.ts</code> implements the store that queries the cluster, exposing <code>query</code>, <code>getAllByNs</code>, and <code>getTotalCount</code>. It makes outbound network calls (four internal edges) via the <code>api</code> object (e.g., <code>attemptStart → remove</code> where <code>remove</code> triggers <code>this.api.delete</code>).</li></ul>
+<ul><li><strong>Extension discovery</strong> – <code>packages/core/src/extensions/extension-discovery/extension-discovery.ts</code> (init function at line 141) loads bundled extensions from the local <code>node_modules</code> folder, registering them with the DI container.</li></ul>
+<ul><li><strong>Feature injection</strong> – Feature packages register their services via <code>register-injectables.ts</code> (e.g., <code>packages/cluster-sidebar/src/register-injectables.ts</code>). The DI system resolves tokens like <code>keyboard-shortcut-injection-token</code> used by the shortcut listener in <code>packages/business-features/keyboard-shortcuts/src/keyboard-shortcut-listener.tsx</code>.</li></ul>
+<ul><li><strong>Outbound effects</strong> – Only five functions touch the outside world: one file read/write and four network calls. The shortest external path is <code>start → attemptStart → remove</code> (network <code>api.delete</code>). No direct file system writes are observed beyond the initial setup scripts.</li></ul>
+<ul><li><strong>Hot spots</strong> – <code>catalog-entity.ts</code> (12 functions, 25 types) and <code>kube-object.store.ts</code> (34 functions) have the highest internal connectivity and therefore the widest blast radius for changes.</li></ul>
+<ul><li><strong>Unmapped wiring</strong> – The call graph does not resolve framework callbacks (React event handlers) or the Webpack bundling step, so those pathways are not reflected in the static edge count.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/freelens.git
+cd freelens
+
+# Install deps with pnpm (lockfile present)
 pnpm install
-Build the Electron app (script defined in root package.json)
-pnpm run build   # runs webpack and packages the binaries</p><p>The package.json files in the root, freelens/, and each package contain the necessary scripts; the exact names can be confirmed with pnpm run.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Kubeconfig location is read from the standard $HOME/.kube/config unless overridden by the environment variable KUBECONFIG (handled in packages/core/src/common/app-paths/directory-for-kube-configs).  
-Binary paths for kubectl and helm are resolved by the injectables in packages/core/src/common/app-paths/directory-for-kubectl-binaries. No additional config files are required for a default install.</p><h3 class="post-h" id="running">Running</h3><p>After a successful build, the packaged binary can be launched directly (./dist/freelens on macOS/Linux, Freelens.exe on Windows) or via the generated installers (.dmg, .deb, .rpm). For development, start the hot‑reloaded UI with:
-pnpm run start   # runs webpack dev server (see freelens/webpack/dev-server.ts)</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI pipeline can provision a temporary Kind cluster, then invoke the app in headless mode for automated UI tests:
-import { createCluster } from &#39;./freelens/integration/helpers/kind&#39;;
-await createCluster(&#39;test-cluster&#39;);
-await page.goto(&#39;app://-&#39;); // Playwright script against the Electron renderer</p><p>The integration test suite (freelens/integration/tests/.tests.ts) already demonstrates this pattern.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – No explicit linting failures – biome.jsonc and GitHub Actions (.github/workflows/biome-migrate.yaml) enforce formatting.  
-Low – Test coverage present – 17 Jest test files across core and feature packages, plus integration tests.  
-Medium – Dependency duplication – Separate package.json files in each package may cause version drift; lockfile is only at the workspace root (pnpm-lock.yaml).  
-Low – Platform‑specific scripts – Build scripts for Debian (freelens/build/apt/.list) assume apt availability; Windows/macOS equivalents are present, but CI does not test all three platforms in a single workflow.  
-Low – Limited runtime error handling – Some injectables (e.g., directory-for-kubectl-binaries) assume binaries exist; missing binaries will surface as uncaught errors at startup.  
-None – License &amp; CI – MIT license present, CI pipelines cover unit, integration, security scanning, and Trunk checks.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>freelens provides a well‑structured, Electron‑based Kubernetes UI with a clear modular architecture and solid test coverage. It is ready for internal deployment or small‑team use, though teams should monitor dependency versions across packages and verify binary availability on target hosts. If you need a self‑contained desktop IDE for Kubernetes without vendor lock‑in, this repo is a practical starting point.</p>
+
+# Build the Electron app (webpack config)
+pnpm run build   # defined in package.json scripts
+
+# Run the development version
+pnpm start       # launches Electron using src/main/index.ts</code></pre>
+<p>Configuration files such as <code>freelens/integration/tsconfig.json</code> and <code>freelens/webpack/main.ts</code> are already wired; no additional environment variables are required for a local cluster connection, but the app expects a kubeconfig file at the default location (<code>~/.kube/config</code>) which is read by the API layer (<code>kube-object.store.ts</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A developer working on a microservice can open Freelens, select a cluster from the sidebar (<code>cluster-sidebar</code>), and instantly view pod logs, exec into containers, or apply Helm charts via the UI. Keyboard shortcuts registered in <code>packages/business-features/keyboard-shortcuts/src/keyboard-shortcut-listener.tsx</code> let power users trigger common actions (e.g., <code>Ctrl+Shift+L</code> to open logs) without leaving the desktop.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>write-all</code> permission in <code>.github/workflows/release.yaml</code>.</li><li><strong>Critical</strong> – Exposed <code>GH_TOKEN</code> in <code>.github/workflows/npm-audit.yaml</code>.</li><li><strong>High</strong> – Unpinned third‑party actions (e.g., <code>helm/kind-action@v1</code>).</li><li><strong>High</strong> – <code>continue-on-error</code> on a correctness step in <code>.github/workflows/integration-tests.yaml</code>.</li><li><strong>Medium</strong> – <code>persist-credentials: false</code> missing on checkout step in the same workflow.</li></ul>
+<p>Additional observations: tests are present (539 files) and CI runs via GitHub Actions; a license file exists; a lockfile (<code>pnpm-lock.yaml</code>) is committed. No Dockerfile is provided, and the repo contains committed secrets flagged by the analysis.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Freelens delivers a well‑structured Electron UI for Kubernetes, with clear separation between core catalog logic and feature extensions. The codebase is heavily typed, heavily tested, but the CI workflow contains several serious security misconfigurations that must be addressed before production deployment. It is suitable for teams that need a desktop Kubernetes UI and are prepared to remediate the workflow issues.</p>
             </div>
 
             
@@ -109,18 +125,18 @@ None – License &amp; CI – MIT license present, CI pipelines cover unit, inte
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">5<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">4,536<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>83</b></li><li><span>YAML</span><i style="width:33%"></i><b>27</b></li><li><span>JSON</span><i style="width:13%"></i><b>11</b></li><li><span>JavaScript</span><i style="width:11%"></i><b>9</b></li><li><span>Markdown</span><i style="width:10%"></i><b>8</b></li><li><span>TSX</span><i style="width:8%"></i><b>7</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>3135</b></li><li><span>TSX</span><i style="width:21%"></i><b>672</b></li><li><span>SCSS</span><i style="width:8%"></i><b>256</b></li><li><span>JSON</span><i style="width:4%"></i><b>110</b></li><li><span>JavaScript</span><i style="width:3%"></i><b>87</b></li><li><span>YAML</span><i style="width:2%"></i><b>52</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span></p>
+                        <p class="an-fw"><span>React</span><span>Tailwind</span></p>
                     </div>
                 </div>
 
@@ -131,6 +147,12 @@ None – License &amp; CI – MIT license present, CI pipelines cover unit, inte
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>packages/core/src/common/front-end-routing/routes/cluster/config/secrets/navigate-to-secrets.injectable.ts, packages/core/src/renderer/components/config-secrets/secrets.scss, packages/core/src/renderer/components/config-secrets/secrets.tsx</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1140075360">Open in Code Brain &rarr;</a>

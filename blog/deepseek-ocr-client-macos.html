@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 2, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,23 +80,30 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#on-windows">On Windows</a><a href="#on-macos-linux">On macOS / Linux</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#start-the-client-once-per-session">Start the client (once per session)</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Users of DeepSeek‑OCR need a simple way to run inference locally without writing code or managing separate server/client processes. The existing CLI requires manual setup of a Python server, then a separate UI, which is cumbersome for non‑technical operators.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>deepseek-ocr-client-macos bundles an Electron front‑end (index.html, main.js, renderer.js, styles.css) with a thin Python wrapper (backend/ocrserver.py). The UI provides drag‑and‑drop image upload, real‑time OCR display, region‑click copy, and ZIP export of results. The back‑end launches the DeepSeek‑OCR model via the Python script start.py, which imports backend/init.py and starts the local HTTP server that the Electron renderer talks to.</p><p>Key files:</p><p>package.json – declares Electron, React, and front‑end dependencies.  
- requirements.txt – pins the Python runtime and DeepSeek‑OCR Python package.  
- start-client.bat / start-client.sh – orchestrate the npm install, pip install, and launch sequence.  
- backend/ocrserver.py – defines the Flask (or similar) API that receives image data and returns OCR text.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Node.js 18+ first (https://nodejs.org/)
-Install Python 3.12+ first (https://python.org/)</p><h3 class="post-h" id="on-windows">On Windows</h3><p>start-client.bat   # first run installs npm and pip deps, subsequent runs start the app</p><h3 class="post-h" id="on-macos-linux">On macOS / Linux</h3><p>chmod +x start-client.sh
-./start-client.sh</p><p>The batch / shell script runs npm ci (using package-lock.json) and pip install -r requirements.txt, then launches the Electron process (npm start or electron .). No additional configuration files are required.</p><h3 class="post-h" id="running">Running</h3><p>After the splash screen, click “Load Model” – the UI triggers the Python server to download or load the DeepSeek‑OCR model (cached in the user&#39;s home directory). Drop an image onto the window or use the file picker, then press “Run OCR”. Results appear instantly; clicking a region copies the extracted text. Use the Export button to generate a ZIP containing a Markdown file with embedded images.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A small imaging lab can deploy this on a workstation with an NVIDIA GPU. The workflow is:</p><h3 class="post-h" id="start-the-client-once-per-session">Start the client (once per session)</h3><p>./start-client.sh</p><p>In the UI:
-Load the model (once per GPU)
-Drag a scanned invoice image
-Click “Run OCR”
-Export results → ZIP → share with downstream processing scripts</p><p>The exported Markdown can be fed directly to downstream data‑extraction pipelines without manual copy‑paste.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No automated tests – repository lacks any test. files or testing framework configuration.  
- Med – No CI/CD pipeline – no .github/workflows, Travis, or similar; quality gates are absent.  
- Low – Platform limitation – README notes macOS/Linux are “experimental”; no CI to verify cross‑platform behavior.  
- Low – Hard‑coded start script – start-client.bat and start-client.sh embed the install commands; changes to dependency files require manual script updates.  
- Low – Minimal error handling – backend/ocrserver.py appears to forward requests directly to the model without try/except blocks, risking crashes on malformed input.  
- Low – Documentation – README covers Windows usage well but provides no environment variable list or logging guidance.  
-Low – License present – MIT license is included (LICENSE.md).</p><p>No obvious security secrets are committed, and dependency lists (package-lock.json, requirements.txt) are present, allowing reproducible builds.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repo delivers a functional, low‑effort GUI for DeepSeek‑OCR that works out‑of‑the‑box on Windows and can be trialed on macOS/Linux. It is suitable for solo developers or small teams that need quick visual OCR without building a custom front‑end. However, the lack of tests, CI, and robust error handling means the codebase is not production‑ready for larger deployments; users should treat it as a prototype and consider adding validation, automated testing, and cross‑platform CI before scaling.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running DeepSeek-OCR from the command line is slow and unfriendly: you manage a Python environment, download a multi-gigabyte model, and get output as raw text. This repo wraps the model in a desktop GUI with drag-and-drop image upload, real-time OCR, click-to-copy regions, and ZIP export—so a non-technical user can run OCR without touching a terminal.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>start.py</code> is the orchestrator: it checks prerequisites, installs Node and Python dependencies, and launches the Electron app. <code>main.js</code> is the Electron main process; <code>renderer.js</code> is the frontend logic (755 lines) handling drag-and-drop, progress display, and export. <code>backend/ocr_server.py</code> is the Python side: it loads the model, runs inference via <code>perform_ocr</code>, streams progress through <code>update_progress</code>, and serves results.</p>
+<p>The app targets Windows (via <code>start-client.bat</code>); Linux/macOS support is untested per the README.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>start.py:254</code>, which reaches 9 functions. It calls <code>setup_python_environment</code>, which leaves the process via <code>subprocess.run</code> and touches the filesystem (<code>temp_req.unlink</code>). So a run first provisions the environment, then boots Electron.</p>
+<p>The hub of the system is <code>update_progress</code>, called from 5 places—<code>load_model_background</code> calls it 9 times, <code>monitor_download</code> 3 times, <code>perform_ocr</code> 2 times. Change its signature and you break the model loader, the download monitor, the OCR path, and the streaming writer. Second is <code>get_preferred_device</code> (4 callers), which gates CUDA selection for <code>load_model_background</code>, <code>health_check</code>, and <code>perform_ocr</code>.</p>
+<p>File-by-file map: <code>backend/ocr_server.py</code> owns model loading, inference, and progress (16 functions, 1 class). <code>start.py</code> owns environment setup and process launching (10 functions, runs external commands). <code>renderer.js</code> owns the UI state. The import graph shows 5 modules with zero edges between them—each file is effectively isolated, so there is no hub-and-spoke coupling to unwind, but also no shared contract.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/deepseek-ocr-client-macos
+cd deepseek-ocr-client-macos
+# Windows: double-click start-client.bat
+# Linux/macOS: ./start-client.sh</code></pre>
+<p>First run installs dependencies automatically. Then click "Load Model" in the GUI, drop an image, and run OCR. A CUDA-capable NVIDIA GPU, Node 18+, and Python 3.12+ are required. No environment variables or config files are documented.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A document-processing workflow: a user drags a scanned invoice onto the window, the model runs locally (no data leaves the machine), OCR text appears in real time, and the user clicks a region to copy the value, then exports the full result as a ZIP with markdown images. For a small office handling sensitive documents, that local inference is the selling point.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>From static analysis (measured, not opinion):</p>
+<ul><li><strong>High – deep nesting</strong> – <code>backend/ocr_server.py</code> and <code>renderer.js</code> reach indentation depth 8; control flow is hard to follow. Fix with early returns and extracted inner blocks.</li><li><strong>Medium – broad exception handling</strong> – <code>backend/ocr_server.py</code> swallows errors with bare/<code>Exception</code>-wide <code>except</code> clauses. Catch specific exceptions and re-raise the rest.</li><li><strong>Medium – oversized file</strong> – <code>renderer.js</code> at 755 lines concentrates UI state and logic; splitting it by responsibility reduces ripple.</li><li><strong>High – vulnerable pinned dependency</strong> – <code>torch@2.9.1</code> (CVE-2026-24747, high, plus 3 more) and <code>transformers@4.46.3</code> (CVE-2026-4372, high, plus 41 more). The pinned version is what installs. Upgrade to the fixed versions and commit the lockfile.</li><li><strong>Medium – no update bot</strong> – no Dependabot/Renovate config, so advisories sit unpatched. Add <code>.github/dependabot.yml</code>.</li></ul>
+<p>SDLC gaps: no test files, no CI pipeline. Six dependencies are behind major versions, including <code>electron</code> (^28 vs 43).</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A functional single-purpose OCR GUI that works, but it is a quickly-assembled prototype (the README admits this): deep nesting, broad exception handling, and a 755-line renderer will hurt whoever maintains it. The pinned vulnerable torch/transformers versions should be addressed before production use. Fine for a local, offline OCR tool; not ready for anything with a release pipeline.</p>
             </div>
 
             

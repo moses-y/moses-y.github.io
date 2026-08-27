@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 30, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,12 +79,31 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Transforming ML papers into runnable code repositories requires coordinating multiple LLM agents across planning, analysis, and generation stages. This repo attempts that automation but inherits the typical risk: code-generation paths are untested, and there’s no automated gate to catch pipeline breaks when agents interact or when prompts shift.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Paper2Code implements a three-stage pipeline across codes/:
-Planning (codes/1planning.py, codes/1planningllm.py)
-Analysis (codes/2analyzing.py, codes/2analyzingllm.py)
-Code generation (codes/3coding.py, codes/3codingllm.py, codes/3.1codingsh.py, codes/4debugging.py)</p><p>Prompt files data/prompts/refbased.txt and data/prompts/reffree.txt steer agent behavior. The system supports both OpenAI API and vLLM-backed open-source models (deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct default).</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Reproducing a machine-learning paper's implementation from its PDF or LaTeX source is slow, error-prone manual work. PaperCoder automates that conversion: it takes a scientific paper and produces a working code repository, using a multi-agent LLM pipeline.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>PaperCoder runs a three-stage pipeline: planning, analysis, and code generation, each handled by a separate agent (<code>codes/1_planning.py</code>, <code>codes/2_analyzing.py</code>, <code>codes/3_coding.py</code>). The pipeline accepts either a PDF converted to JSON or raw LaTeX source, and emits a repository under <code>outputs/&lt;paper&gt;_repo</code>.</p>
+<p>Two backends exist: OpenAI API (<code>*_llm.py</code> variants excluded) and local vLLM serving, selected by which shell script you run from <code>scripts/</code>. The repo also ships the Paper2Code benchmark dataset under <code>data/paper2code/</code> and an evaluation script (<code>codes/eval.py</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>codes/0_pdf_process.py:19</code>, which reaches 14 functions. The pipeline is orchestrated by shell scripts (<code>scripts/run.sh</code>, <code>run_latex.sh</code>, <code>run_llm.sh</code>), not by Python imports — the import graph shows 0 edges between the 13 internal modules. That means the modules are coupled through the filesystem and the scripts, so changing the order of stages means editing a shell script, and there is no static type or import safety net between stages.</p>
+<p>The single hub is <code>codes/utils.py</code>: 18 functions, called from 1 other file, and the most-called functions in the repo (<code>content_to_json</code>, <code>extract_planning</code>, <code>print_log_cost</code>) live there. <code>content_to_json</code> chains through <code>content_to_json2/3/4</code> — a deep call chain that is part of the 374 duplicated 6-line blocks the analysis found across 11 files. Three functions read or write files; three call a model for inference. The shortest path from an entry point to leaving the process is <code>main -&gt; api_call</code>, which hits <code>client.chat.completions.create</code> — two hops from start to the network call.</p>
+<p>The <code>_llm</code> file pairs (<code>1_planning_llm.py</code>, <code>2_analyzing_llm.py</code>, <code>3_coding_llm.py</code>) mirror the API versions but route through <code>run_llm</code> for vLLM. <code>codes/4_debugging.py</code> applies fixes back to files via <code>parse_and_apply_changes</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>Per the README:</p>
+<pre data-lang="bash"><code>pip install openai
+export OPENAI_API_KEY="&lt;OPENAI_API_KEY&gt;"
+cd scripts
+bash run.sh</code></pre>
+<p>For local models: <code>pip install vllm</code>, then <code>cd scripts &amp;&amp; bash run_llm.sh</code> (defaults to <code>deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct</code>). The example paper is "Attention Is All You Need". Input papers are configured via environment variables in the shell scripts; the README documents switching to your own paper by modifying those. Estimated cost for the o3-mini run: $0.50–$0.70.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A research team wants to reproduce a paper's results without hand-writing the implementation. They convert the PDF to JSON using the documented <code>s2orc-doc2json</code> flow, set <code>OPENAI_API_KEY</code>, run <code>scripts/run.sh</code>, and get a generated repository under <code>outputs/&lt;paper&gt;_repo</code> plus planning/analysis/coding artifacts they can audit before trusting the code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (not opinion) found the following:</p>
+<ul><li><strong>High – Duplicated code blocks</strong> – 374 repeated 6-line blocks across 11 files, including <code>codes/1_planning.py</code>, <code>codes/2_analyzing.py</code>, <code>codes/3.1_coding_sh.py</code>, <code>codes/3_coding.py</code>. Fix: extract shared helpers.</li><li><strong>Medium – Deep nesting</strong> – max indentation depth 6 in <code>codes/4_debugging.py</code> and <code>codes/utils.py</code>. Fix: guard clauses and early returns.</li><li><strong>High – No test suite</strong> – 13 source files, zero tests; every change ships with no regression signal.</li><li><strong>High – No CI</strong> – no build or test gate on any change.</li><li><strong>Medium – No dependency update bot</strong> – <code>requirements.txt</code> exists but no Dependabot/Renovate config.</li><li><strong>Medium – Large binary committed</strong> – <code>data/paper2code/paper2code_data.zip</code> (5.0MB) bloats every clone; move to LFS or object storage.</li><li><strong>Low – No lockfile</strong> – <code>requirements.txt</code> without pinned transitive deps means non-reproducible builds.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The pipeline design is sound and the README is genuinely usable. The weaknesses are engineering hygiene: no tests, no CI, heavy code duplication, and a 5MB dataset committed to git. Use it for prototyping paper-to-code conversion, not as a foundation to build on without first adding a test suite and CI.</p>
             </div>
 
             

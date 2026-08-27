@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 26, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,22 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#testing">Testing</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers spend disproportionate time understanding legacy code, reproducing bugs, and iterating on fixes. Manual debugging and patch generation are error‑prone, especially in large, inter‑dependent repositories where context is scattered across files, issue trackers, and CI pipelines.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Prometheus implements a knowledge‑graph‑driven AI agent that extracts code‑base structure, stores it in Neo4j, and uses LLM reasoning to produce verifiable patches.</p><p>The graph builder lives in prometheus/graph/filegraphbuilder.py and populates prometheus/graph/knowledgegraph.py.  
- Service orchestration is in prometheus/app/services/, e.g., knowledgegraphservice.py, llmservice.py, and neo4jservice.py.  
- Individual reasoning steps are modeled as nodes and sub‑graphs under prometheus/langgraph/nodes/ and prometheus/langgraph/subgraphs/. For example, bugreproducingexecutenode.py runs the reproduced test, while finalpatchselectionnode.py selects the best patch.  
- The FastAPI API entry points are prometheus/app/api/main.py (router registration) and prometheus/app/main.py (application startup).</p><p>Together these components let a user submit a GitHub issue (via /api/routes/issue.py) and receive an AI‑generated, test‑validated fix without manual code search.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Build and start the stack (Neo4j, the API, and optional background workers)
-docker compose up --build -d</p><p>Dockerfile defines the Python environment; docker-compose.yml wires the API container to a Neo4j service.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy example.env to .env and fill in required keys:  
-   NEO4JURI, NEO4JUSER, NEO4JPASSWORD – consumed by prometheus/app/services/neo4jservice.py.  
-   OPENAIAPIKEY – used by prometheus/app/services/llmservice.py.  
-   Any additional service URLs are read from prometheus/configuration/config.py.</p><h3 class="post-h" id="running">Running</h3><p>Start the FastAPI server (if not using docker-compose)
-uvicorn prometheus.app.main:app --host 0.0.0.0 --port 8000</p><p>The API documentation is available at http://localhost:8000/docs.</p><h3 class="post-h" id="testing">Testing</h3><p>pytest</p><p>The repository includes 25 test modules and CI pipelines defined in .github/workflows/pytestandcoverage.yml and .github/workflows/ruffcheck.yml.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A CI job can call the internal client (prometheus/app/services/issueservice.py) to auto‑triage new GitHub issues:</p><p>from prometheus.app.services.issueservice import IssueService</p><p>service = IssueService()
-patch = service.handlenewissue(repo=&quot;org/repo&quot;, number=42)
-patch is a diff string that has already passed regression tests.</p><p>Deploying the stack alongside a corporate Neo4j instance lets the AI agent reuse historical bug‑fix knowledge across projects, reducing MTTR (Mean Time To Repair) for recurring defect patterns.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Missing secret management – API keys are expected via environment variables (OPENAIAPIKEY etc.) but no secret‑handling helper is provided; accidental commit of a real key would be a risk.  
-Low – Limited type hints – Many service and node modules lack explicit Python type annotations, which can hinder IDE assistance and static analysis.  
-Low – Sparse documentation for custom nodes – The langgraph/nodes/ directory contains &gt;50 node files, but only high‑level diagrams exist in docs/; each node’s contract is not documented in code, raising onboarding friction.  
-Low – Dependency pinning – Dockerfile installs packages via requirements.txt (not shown), but versions are not pinned; reproducible builds depend on upstream releases.  
-Low – Test coverage gaps – CI runs pytest and coverage, yet the repository ships only 25 test files for &gt;200 source files, suggesting many code paths (e.g., graph mutation, LLM interaction) are untested.</p><p>Overall, the repo includes a CI pipeline, Docker configuration, and a clear package layout, indicating a mature baseline.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Prometheus delivers a concrete, containerized platform for AI‑assisted bug reproduction and patch generation, anchored by a Neo4j knowledge graph. It is ready for teams that already operate Docker and have access to OpenAI and Neo4j services. The main drawbacks are modest test coverage and the need for disciplined secret management; organizations should supplement the codebase with additional tests and a secret‑vault integration before production use.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need an automated way to understand, navigate, and repair large, heterogeneous codebases. Manual inspection is slow and error‑prone, especially when the code spans many languages and integrates external services (GitHub, Neo4j, LLM APIs).</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>Prometheus</code> builds a <strong>knowledge graph</strong> of a repository’s files, AST nodes, and textual artefacts, then runs <strong>reasoning agents</strong> (LLM‑driven sub‑graphs) to answer or fix GitHub issues.</p>
+<ul><li>Core graph logic lives in <code>prometheus/graph/knowledge_graph.py</code> and the supporting types in <code>prometheus/graph/graph_types.py</code>.</li><li>Docker orchestration (<code>Dockerfile</code>, <code>docker-compose.yml</code>) provides a Neo4j instance and a Python service container.</li><li>The FastAPI API (<code>prometheus/app/api/main.py</code>, routers under <code>prometheus/app/api/routes/</code>) exposes endpoints for repository cloning, issue retrieval, and LLM‑based patch generation.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Startup</strong> – Execution begins in <code>prometheus/app/main.py</code> (<code>lifespan</code> function). It creates a <code>FastAPI</code> app, registers the JWT middleware (<code>prometheus/app/middlewares/jwt_middleware.py</code>), and includes all route modules (<code>/auth</code>, <code>/github</code>, <code>/issue</code>, <code>/repository</code>, <code>/user</code>).</p>
+<p><strong>Request flow (example: POST /issue/solve)</strong></p>
+<ol><li><strong>JWT middleware</strong> validates the bearer token (<code>decode_token</code> → <code>jwt.decode</code>).</li><li>The route handler in <code>prometheus/app/api/routes/issue.py</code> calls <code>IssueService</code> (<code>prometheus/app/services/issue_service.py</code>).</li><li><code>IssueService</code> invokes <code>KnowledgeGraphService</code> (<code>prometheus/app/services/knowledge_graph_service.py</code>), which in turn calls <code>KnowledgeGraphHandler</code> (<code>prometheus/neo4j/knowledge_graph_handler.py</code>) to read/write Neo4j nodes.</li><li>For a new GitHub issue, <code>IssueService</code> uses <code>GitRepository</code> (<code>prometheus/git/git_repository.py</code>) to clone the repo, then <code>FileGraphBuilder</code> (<code>prometheus/graph/file_graph_builder.py</code>) to populate the graph.</li><li>LLM interaction is performed by <code>LLMService</code> (<code>prometheus/app/services/llm_service.py</code>), which constructs a <code>FakeListChatWithToolsModel</code> (used in tests) and invokes the tool‑enabled chain (<code>__call__ -&gt; invoke</code>).</li></ol>
+<p><strong>External touch points</strong> –</p>
+<ul><li><strong>Network</strong>: <code>GitRepository</code> → <code>client.get</code> (GitHub API) and <code>LLMService</code> → external LLM endpoints.</li><li><strong>Database</strong>: <code>KnowledgeGraphHandler</code> writes nodes/edges to Neo4j (≈20 functions).</li><li><strong>Filesystem</strong>: <code>FileGraphBuilder</code>, <code>GitRepository</code>, and various <code>file_operation</code> helpers read/write source files (≈26 functions).</li></ul>
+<p><strong>Blast‑radius hubs</strong> – <code>knowledge_graph.py</code> is imported by 54 modules, <code>docker/base_container.py</code> by 47, and <code>git/git_repository.py</code> by 42. Changes in these files propagate widely, so they should remain stable and well‑tested.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/Prometheus
+cd Prometheus
+
+# 2. Build and start containers
+docker compose up --build -d   # uses Dockerfile and docker-compose.yml
+
+# 3. Provide runtime config (copy the example)
+cp example.env .env           # edit .env to add GITHUB_TOKEN, NE04J credentials, LLM keys
+
+# 4. Run the API (inside the container or locally)
+uvicorn prometheus.app.main:app --host 0.0.0.0 --port 8000</code></pre>
+<p>For ad‑hoc debugging of a single issue, the script <code>prometheus/script/github_issue_debug.py</code> can be executed directly:</p>
+<pre data-lang="bash"><code>python -m prometheus.script.github_issue_debug &lt;issue_number&gt;</code></pre>
+<p>The script follows the path <code>main → process_issue → get_github_issue</code> (network call) → graph construction → LLM reasoning.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI system detects a new GitHub issue, posts its ID to <code>/issue/solve</code>. The service clones the repo, builds a knowledge graph, runs the “bug‑fix verification” sub‑graph, and returns a suggested patch. The patch can be auto‑applied via the <code>/repository/create_branch_and_push</code> endpoint, closing the loop without human intervention.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – Add a lockfile (<code>pyproject.toml</code> → generate <code>uv.lock</code> or <code>poetry.lock</code>).</li><li><strong>High</strong> – Remove privileged mode &amp; host networking (<code>docker-compose.yml</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>ruff_check.yml</code>).</li><li><strong>Medium</strong> – Enable Dependabot/renovate for automated updates.</li><li><strong>Medium</strong> – Pin base Docker image by digest (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan step to CI.</li><li><strong>Medium</strong> – Use <code>persist-credentials: false</code> on checkout (<code>pytest_and_coverage.yml</code>).</li><li><strong>Medium</strong> – Run container as non‑root (<code>Dockerfile</code>).</li><li><strong>Low</strong> – Set explicit <code>timeout-minutes</code> on workflow jobs.</li></ul>
+<p>Static analysis also flagged:</p>
+<ul><li>Deep nesting (max indent 7) in <code>knowledge_graph.py</code>, <code>base_container.py</code>, <code>graph_traversal.py</code>.</li><li>Hub modules with &gt;50 dependents (see above).</li><li>Repeated 6‑line code blocks across many files – extract to shared helpers.</li><li>File opened without a context manager in <code>file_graph_builder.py</code>.</li><li>Broad <code>except:</code> clauses in <code>script/github_issue_debug.py</code>.</li></ul>
+<p>No critical findings were reported.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>Prometheus</code> delivers a full pipeline—from repo ingestion to LLM‑driven issue resolution—wrapped in a Docker‑composeable FastAPI service. The architecture is clear but hinges on several high‑centrality modules that need careful stewardship. Security hardening (action pinning, lockfile, container privileges) is required before production use. Suitable for teams ready to integrate automated code‑graph reasoning into their DevOps flow.</p>
             </div>
 
             
@@ -112,9 +134,9 @@ Low – Test coverage gaps – CI runs pytest and coverage, yet the repository s
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">362<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>178</b></li><li><span>Markdown</span><i style="width:4%"></i><b>8</b></li><li><span>YAML</span><i style="width:2%"></i><b>3</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>296</b></li><li><span>Markdown</span><i style="width:3%"></i><b>9</b></li><li><span>YAML</span><i style="width:1%"></i><b>3</b></li><li><span>TOML</span><i style="width:0%"></i><b>1</b></li><li><span>Java</span><i style="width:0%"></i><b>1</b></li><li><span>C</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Docker</span><span>Neo4j</span></p>
                     </div>
@@ -144,6 +166,12 @@ Low – Test coverage gaps – CI runs pytest and coverage, yet the repository s
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1142274543">Open in Code Brain &rarr;</a>

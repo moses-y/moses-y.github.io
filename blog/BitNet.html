@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 29, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,20 +80,55 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#build-the-native-libraries">Build the native libraries</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#server-mode-rest-api">Server mode (REST API)</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Running large‑scale language models on edge devices is constrained by memory bandwidth and power budgets. Traditional 8‑bit or 4‑bit quantization still leaves a substantial footprint, making real‑time inference on CPUs or modest GPUs impractical for many enterprise workloads.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>bitnet.cpp implements a 1‑bit inference engine for the BitNet family (e.g., b1.58). The core compute lives in the C++ sources under src/ (ggml-bitnet-lut.cpp, ggml-bitnet-mad.cpp) and the GPU kernels in gpu/bitnetkernels/ (bitnetkernels.cu). Header files in include/ expose the public API (ggml-bitnet.h). Python wrappers in gpu/ (model.py, generate.py) provide a convenient front‑end for loading a model, converting checkpoints (convertcheckpoint.py, convertsafetensors.py), and running inference (runinference.py, runinferenceserver.py). Preset kernel configurations for several model sizes are stored in presetkernels/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Python dependencies
-pip install -r requirements.txt          # core Python deps
-pip install -r gpu/requirements.txt      # GPU‑specific deps (e.g., torch, transformers)</p><h3 class="post-h" id="build-the-native-libraries">Build the native libraries</h3><p>mkdir build &amp;&amp; cd build
-cmake .. -DCMAKEBUILDTYPE=Release
-cmake --build . --config Release</p><p>The CMakeLists.txt at the repository root compiles the CPU backend; the GPU kernel is built by running gpu/bitnetkernels/setup.py (invoked automatically by the CMake step for CUDA builds).</p><h3 class="post-h" id="configuration">Configuration</h3><p>Model files (GGUF or Safetensors) are placed wherever convenient; the Python scripts accept a path argument (e.g., --modelpath path/to/model.gguf).  
-Kernel tiling and embedding quantization are controlled by the INI files in presetkernels//kernelconfig.ini. These are read automatically by the C++ backend when the corresponding preset directory is selected.</p><h3 class="post-h" id="running">Running</h3><p>One‑shot inference
-python runinference.py --modelpath models/bitnet-b1.58-2B.gguf --prompt &quot;Explain quantum tunneling.&quot;</p><h3 class="post-h" id="server-mode-rest-api">Server mode (REST API)</h3><p>python runinferenceserver.py --modelpath models/bitnet-b1.58-2B.gguf --port 8080</p><p>Both scripts import gpu/model.py, which constructs a BitNetModel object using the compiled C++ library and executes the forward pass via the 1‑bit kernels.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can embed the engine in a microservice that scores short text snippets on a low‑cost VM. Example workflow:</p><p>from gpu.model import BitNetModel</p><p>model = BitNetModel(&quot;models/bitnet-b1.58-3B.gguf&quot;)
-response = model.generate(&quot;Summarize the quarterly earnings report.&quot;)
-print(response)</p><p>The service runs on a single vCPU (or a modest NVIDIA GPU) while delivering 5–7 tokens /s for a 100 B‑parameter model, matching the performance claims in the README.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Missing CI/CD – No .github/workflows or other CI config; builds and tests must be run manually.  
-Low – No lockfile for Python deps – requirements.txt is not version‑pinned, risking reproducibility across environments.  
-Low – Limited test coverage – Only four test files (gpu/test.py, utils/test_*.py) exist; they focus on utilities rather than end‑to‑end inference.  
-Low – Platform‑specific build – CUDA kernel compilation assumes a compatible NVIDIA toolchain; no fallback for non‑CUDA GPUs is provided.  
-Low – Documentation gaps – The README outlines usage, but the gpu/README.md and src/README.md lack detailed parameter descriptions for the C++ API.</p><p>Overall the repository compiles cleanly on supported platforms and includes reference scripts for both CPU and GPU inference.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>bitnet.cpp delivers a functional 1‑bit inference stack with both C++ and Python entry points, making it feasible to run very large LLMs on commodity hardware. The code is organized and builds with standard CMake/Pip tooling, but the lack of CI, pinned dependencies, and sparse testing mean teams should allocate time for verification before production deployment. Suitable for organizations that need ultra‑low memory footprints and can manage a modest amount of integration effort.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running inference on 1‑bit LLMs requires custom kernels and quant‑aware data layouts that ordinary frameworks do not provide. Without a dedicated runtime, developers must hand‑craft CUDA kernels, manage low‑level model conversion, and stitch together disparate Python utilities—an error‑prone, time‑consuming effort.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>BitNet</code> supplies a self‑contained inference stack for 1‑bit models.</p>
+<ul><li><strong>Kernel layer</strong> – CUDA sources live in <code>gpu/bitnet_kernels/</code> (<code>bitnet_kernels.cu</code>, <code>bitnet_kernels.h</code>) and are compiled by <code>gpu/bitnet_kernels/compile.sh</code> or the Python wrapper <code>gpu/bitnet_kernels/setup.py</code>.</li><li><strong>Model conversion</strong> – <code>gpu/convert_checkpoint.py</code> and <code>gpu/convert_safetensors.py</code> turn Hugging‑Face checkpoints into the BitNet format used by the runtime.</li><li><strong>Generation pipeline</strong> – the primary CLI entry point is <code>gpu/generate.py</code>; its <code>main</code> function (line 322) orchestrates model loading, tokenisation (<code>gpu/tokenizer.py</code>), and kernel execution.</li><li><strong>CPU fallback</strong> – the <code>src/</code> directory contains C++ reference kernels (<code>ggml-bitnet‑*.cpp</code>) and a CMake build (<code>src/CMakeLists.txt</code>) for CPU‑only inference.</li></ul>
+<p>Utility scripts in <code>utils/</code> (e.g., <code>convert‑ms‑to‑gguf‑bitnet.py</code>, <code>quantize_embeddings.py</code>) provide data‑pre‑processing and benchmarking helpers.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>gpu/generate.py → main</code>. From there:</p>
+<ol><li><strong>Argument parsing</strong> (<code>parse_args</code>) selects a model and runtime mode.</li><li><strong>Model loading</strong> calls <code>load → UnquantizedTensor</code> (16 call sites) which reads the binary model file (<code>gpu/tokenizer.model</code>).</li><li><strong>Tensor preparation</strong> repeatedly invokes <code>astype</code> (13 callers) and <code>LazyTensor</code> (14 callers) to reshape and quantise weights.</li><li><strong>Kernel compilation</strong> runs <code>run_command</code> (8 callers) which launches the shell script <code>gpu/bitnet_kernels/compile.sh</code>.</li><li><strong>Generation loop</strong> uses <code>forward_with_attn_bias</code> (3 callers) and <code>LazyTensor</code> to feed data into the CUDA kernels.</li></ol>
+<p>The only external side‑effects are file I/O (model files, generated token logs) and subprocess launches (<code>subprocess.run</code> via <code>run_command</code>). No network calls are present in the static analysis. The most “blast‑radius” functions are <code>LazyTensor</code>, <code>astype</code>, and <code>run_command</code> because they are invoked from &gt;10 distinct locations each.</p>
+<p>The internal call graph contains 271 resolved edges across 436 functions and 67 classes. No circular imports were detected, but several header files (<code>preset_kernels/*/bitnet‑lut‑kernels‑tl*.h</code>) exhibit deep nesting (max indentation depth 11) and duplicated code blocks (≈2400 lines repeated across 20 files), which makes future changes risky.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/BitNet
+cd BitNet
+
+# Install Python deps
+pip install -r requirements.txt          # core deps
+pip install -r gpu/requirements.txt    # GPU‑specific deps (torch, transformers, etc.)
+
+# Build CPU kernels (optional)
+mkdir build &amp;&amp; cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+
+# Build GPU kernels
+cd ../gpu/bitnet_kernels
+python setup.py build   # or ./compile.sh
+
+# Convert a Hugging‑Face checkpoint (example)
+python gpu/convert_checkpoint.py \
+    --src path/to/hf/checkpoint \
+    --dst path/to/bitnet/model.bin
+
+# Run inference
+python gpu/generate.py --model path/to/bitnet/model.bin --prompt "Hello world"</code></pre>
+<p>If only CPU inference is needed, skip the GPU build steps and run <code>src/ggml-bitnet‑*.cpp</code> via the provided CMake target.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A micro‑service can wrap <code>run_inference.py</code> to expose a REST endpoint. The service would:</p>
+<pre data-lang="python"><code>from run_inference import run_inference
+
+def handle_request(prompt: str):
+    return run_inference(prompt, model_path="models/b1.58-2B-4T.bin")</code></pre>
+<p>The function spawns the same subprocess chain used by the CLI, preserving the proven tokenisation and kernel workflow while allowing integration into larger pipelines.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – CI missing</strong> – 27 source files, no <code>.github/workflows</code> configuration. → Add a GitHub Actions workflow that runs <code>pip install -r requirements.txt</code>, builds the C++/CUDA targets, and executes the test suite.</li><li><strong>Medium – Dependabot absent</strong> – Two manifest files (<code>requirements.txt</code>, <code>gpu/requirements.txt</code>) lack an update bot. → Commit <code>.github/dependabot.yml</code> for Python dependencies and GitHub Actions.</li><li><strong>High – Deep nesting</strong> – Header files in <code>preset_kernels/*/bitnet‑lut‑kernels‑tl*.h</code> reach 11‑level indentation, making control flow hard to follow. → Refactor into smaller helper functions with early returns.</li><li><strong>High – Duplicated code</strong> – Identical 6‑line blocks appear across 20 files (e.g., <code>gpu/model.py</code>, <code>gpu/test.py</code>, several kernel headers). → Extract shared logic into a common module.</li><li><strong>High – Oversized files</strong> – <code>utils/convert‑ms‑to‑gguf‑bitnet.py</code> (1257 lines) and two kernel headers exceed 1200 lines each. → Split by responsibility (e.g., separate conversion, quantisation, and I/O helpers).</li><li><strong>Medium – Broad exception handling</strong> – <code>utils/quantize_embeddings.py</code> and <code>utils/test_perplexity.py</code> use bare <code>except:</code> clauses. → Catch specific exception types and log unexpected errors.</li><li><strong>Low – Stale TODO/FIXME markers</strong> – Eight markers in conversion utilities remain unresolved. → Convert to tracked GitHub issues or resolve.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>BitNet</code> delivers a functional, open‑source inference stack for 1‑bit LLMs with both CPU and CUDA paths, but the codebase suffers from maintainability problems (deep nesting, duplicated kernels) and lacks basic SDLC hygiene (CI, dependency bots). It is suitable for teams that need immediate 1‑bit inference capability and are prepared to invest in refactoring and CI integration.</p>
             </div>
 
             
@@ -114,7 +149,7 @@ Low – Documentation gaps – The README outlines usage, but the gpu/README.md 
                         <ul class="an-bars">
                             <li><span>Python</span><i style="width:100%"></i><b>25</b></li><li><span>C/C++ Header</span><i style="width:36%"></i><b>9</b></li><li><span>Markdown</span><i style="width:24%"></i><b>6</b></li><li><span>Shell</span><i style="width:12%"></i><b>3</b></li><li><span>C++</span><i style="width:8%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>Transformers</span><span>CUDA</span></p>
                     </div>
                 </div>
 

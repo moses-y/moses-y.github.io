@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 1, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,29 +80,42 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers and knowledge workers need a quick way to capture spoken ideas, turn them into searchable text, and extract actionable items without manual transcription or note‑taking.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>noteGPT is a full‑stack web app that records voice notes in the browser, stores the audio in Convex file storage, and pipelines the file through Replicate‑hosted Whisper for transcription. The transcript is then summarized and turned into task items using a Together.ai LLM (Mixtral) and embeddings for vector search.</p><p>Key UI components live in app/ and components/:  
-app/record/page.tsx renders the recording UI (desktop &amp; mobile variants in components/pages/recording).  
-app/dashboard/page.tsx shows saved notes, summaries, and generated action items (cards defined in components/pages/dashboard/RecordedfileItemCard.tsx).</p><p>Backend logic resides in convex/:  
-convex/notes.ts defines CRUD operations for notes and references convex/whisper.ts (calls Replicate) and convex/together.ts (LLM summarization).  
-convex/generated/server.js is the compiled entry point for Convex cloud functions.</p><p>Authentication is handled by Clerk (app/auth.ts and ConvexClientProvider.tsx). Styling is Tailwind‑based (tailwind.config.ts, app/globals.css).</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install dependencies
-npm ci
-Create a Convex project (first run will prompt login)
-npm run dev   # starts Next.js dev server and Convex watcher
-Configure required secrets
-Add the following keys to Convex environment variables (via Convex dashboard):
-CLERKISSUERURL   (from your Clerk account)
-REPLICATEAPIKEY  (Replicate Whisper)
-TOGETHERAPIKEY   (Together LLM &amp; embeddings)
-Store local dev keys in .env.local as documented in README.example.
-Open the app
-Next.js runs on http://localhost:3000 by default.
-Sign in with Clerk, then use the “Record” page to capture audio.</p><p>The repo does not contain a Dockerfile or explicit CI scripts; the only documented start command is npm run dev.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A product manager could embed this UI in an internal portal. After a sprint planning meeting, they click “Record”, speak the meeting recap, and within seconds receive a list of action items that can be copied into Jira or Notion (future integration is outlined in the README). The notes are searchable via vector search powered by Together embeddings.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No test suite – No tests or .test. files; code paths (e.g., Whisper/LLM calls) are unverified.  
-Medium – Missing CI/CD – No .github/workflows, circle.yml, etc.; no automated lint, type‑check, or test gate.  
-Medium – No LICENSE – Repository lacks a license file, leaving usage rights ambiguous.  
-Low – Hard‑coded env var names – convex/auth.config.js expects CLERKISSUER_URL; missing validation could cause runtime failures if mis‑typed.  
-Low – Minimal error handling – Functions in convex/whisper.ts and convex/together.ts forward external API errors directly to the client; no retry or user‑friendly messages.  
-Low – UI layout shifts – README notes a layout‑shift issue on dashboard refresh; current code does not show a loading state (app/dashboard/dashboard.tsx).</p><p>No obvious security leaks (e.g., secrets are not committed). TypeScript provides basic type safety, and the project compiles without errors.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>noteGPT delivers a functional prototype for voice‑to‑task conversion using modern serverless services, with clear separation between front‑end UI and Convex back‑end. It is suitable for teams that can manage their own CI, testing, and licensing, and who are comfortable adding the missing production polish (error handling, loading states, CI). If you need a quick internal tool and are prepared to extend it, this repo provides a solid starting point.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users need a quick way to capture spoken ideas, turn them into searchable text, and extract actionable items without leaving a single interface. Manual transcription and note‑taking are slow and error‑prone, especially when the user is on the move.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>noteGPT</code> is a Next.js app that records voice notes in the browser, uploads the audio to Convex file storage, and triggers a Whisper model (via Replicate) to produce a transcript. The transcript is summarized with a Mixtral LLM (via Together.ai) and parsed into a list of action items that are stored in Convex’s vector search for later retrieval.</p>
+<p>Key files:</p>
+<ul><li><code>app/record/page.tsx</code> – UI for starting/stopping a recording and submitting it.</li><li><code>convex/whisper.ts</code> – calls Replicate’s Whisper API, writes the transcript to Convex.</li><li><code>convex/together.ts</code> – sends the transcript to Together’s LLM, stores the summary and extracted tasks.</li><li><code>convex/notes.ts</code> – CRUD helpers that the frontend consumes through the generated API (<code>convex/_generated/api.d.ts</code>).</li></ul>
+<p>The frontend wraps the Convex client in <code>app/ConvexClientProvider.tsx</code>, exposing hooks used by components such as <code>components/pages/dashboard/RecordedfileItemCard.tsx</code> and <code>components/pages/recording/RecordingDesktop.tsx</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins when a developer runs <code>npm run dev</code>. Next.js launches the server and loads <code>app/layout.tsx</code>, which mounts <code>ConvexClientProvider</code>. When a user clicks “record”, <code>components/pages/recording/RecordingDesktop.tsx</code> (or the mobile counterpart) invokes the browser MediaRecorder API, then calls <code>convex/notes.ts</code> via the generated client (<code>api.recordNote</code>).</p>
+<p><code>convex/notes.ts</code> stores the raw audio file in Convex file storage. A Convex mutation defined in <code>convex/whisper.ts</code> is automatically queued; it fetches the file, posts it to Replicate, and writes the returned transcript back to the same note record. After the transcript is saved, <code>convex/together.ts</code> reads it, calls the Together Mixtral endpoint, and writes both the summary and the derived action items to the note document and to Convex vector search (<code>convex/utils.ts</code> assists with embedding generation).</p>
+<p>The internal import graph shows three hubs:</p>
+<ul><li><code>convex/_generated/api</code> – imported by 3 files, no outgoing imports (instability 0).</li><li><code>convex/utils</code> – imported by 3 files, imports only one module (instability 0.25).</li><li><code>components/ui/UserNav</code> – imports 3 modules, is imported once (instability 0.75).</li></ul>
+<p>No circular dependencies were detected, so changes to a hub affect at most three downstream modules.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/noteGPT.git
+cd noteGPT
+
+# Install dependencies
+npm install
+
+# Create a .env.local (copy .example.env) and add:
+#   CLERK_ISSUER_URL – from your Clerk dashboard
+#   REPLICATE_API_KEY – from Replicate
+#   TOGETHER_API_KEY – from Together.ai
+
+# Run the dev server
+npm run dev</code></pre>
+<p>The dev server starts the Next.js frontend and, on first run, prompts you to log into Convex and create a project. After the environment variables are set in Convex’s dashboard, the UI is usable; recordings will be stored, transcribed, summarized, and displayed on the dashboard.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A sales professional could open the web app on a laptop, dictate a meeting recap, and instantly receive a bullet‑point list of follow‑up tasks. The tasks are searchable via Convex vector search, and can be exported to a Notion page once the planned integration is added.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Missing LICENSE</strong> – no licence file at repository root; legal reuse is blocked.</li><li><strong>High – No test suite</strong> – 41 source files, zero test files; regressions are undetectable.</li><li><strong>High – No CI pipeline</strong> – no <code>.github/workflows</code> or other CI config; builds and tests are never automatically verified.</li><li><strong>Medium – No Dependabot</strong> – only <code>package-lock.json</code> present; dependencies are not auto‑updated.</li><li><strong>Medium – Duplicated code blocks</strong> – identical 6‑line snippets appear in <code>app/dashboard/action-items/ais.tsx</code>, <code>components/pages/recording/RecordingDesktop.tsx</code>, <code>components/pages/recording/RecordingMobile.tsx</code>, and generated API typings. Refactor into shared helpers.</li><li><strong>Medium – Deep nesting</strong> – max indentation depth of 6 in the same three files makes the control flow hard to follow; early returns or extracted sub‑functions would improve readability.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>noteGPT</code> delivers a functional end‑to‑end voice‑note pipeline with modern cloud services, but it lacks the engineering hygiene (tests, CI, licence) required for production confidence. It is suitable for proof‑of‑concept work or as a foundation for a custom internal tool, provided the team adds testing, CI, and proper licensing before scaling.</p>
             </div>
 
             
