@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#basic-capture">Basic capture</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Standard curl or wget downloads only return flattened HTML. JavaScript-heavy sites render content dynamically, so the actual CSS, JS, and assets a browser loads are invisible to simple HTTP fetchers. Teams doing offline analysis, web archiving, or frontend debugging need the real resource tree a browser would load—not just the initial HTML document.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>pagesource is a Python CLI that drives a headless Chromium browser via Playwright to capture every network resource a page loads—HTML, CSS, JS, images, fonts—and saves them to disk preserving the original directory structure. The core logic lives in src/pagesource/downloader.py (resource capture and saving), src/pagesource/browser.py (Playwright browser setup), and src/pagesource/cli.py (argument parsing and orchestration). src/pagesource/utils.py handles path sanitization, filename deduplication, and extension inference from Content-Type headers.</p><p>The tool strips query strings from filenames, handles duplicate resource names, and optionally includes external/CDN resources under their own host directories. The --wait flag gives JavaScript-heavy SPAs extra time to load before capture.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pip, then install the Playwright Chromium browser. The pyproject.toml declares Python 3.10+ and Playwright as dependencies.</p><p>pip install pagesource
-playwright install chromium</p><p>Configuration: No environment variables or config files required. All behavior is controlled via CLI flags documented in README.md.</p><p>Running it: The entry point is the pagesource console command (defined in pyproject.toml), backed by src/pagesource/cli.py.</p><h3 class="post-h" id="basic-capture">Basic capture</h3><p>pagesource https://example.com</p><p>Custom output directory, extra wait time, include external resources
-pagesource https://example.com -o ./output --wait 3 --include-external</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A frontend team investigating a production issue where styles differ between local and deployed environments can capture the actual deployed page&#39;s resources:</p><p>pagesource https://staging.example.com -o ./staging-capture --include-external</p><p>The resulting directory tree shows exactly which CSS/JS files the browser loaded, from which hosts, making it straightforward to compare against local builds or archive a snapshot for regression testing.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No test suite - No test files detected anywhere in the repository. Core logic in downloader.py (path sanitization, filename deduplication, extension inference) is exactly the kind of code that benefits from unit tests.
-Med - No CI/CD pipeline - No .github/ workflows or CI configuration found. There&#39;s no automated gate for linting, testing, or packaging.
-Low - No dependency lockfile - pyproject.toml declares dependencies but no lockfile is present, so installs aren&#39;t fully reproducible across environments.
-Low - Committed pycache artifacts - .pyc files are present in the repo structure, indicating the .gitignore may not be excluding them properly in all cases.</p><p>The codebase is small (5 Python files) and the README is clear and accurate. The lack of tests is the most significant gap; a tool that manipulates filesystem paths and handles network resources would benefit from at least basic coverage.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A focused, well-documented CLI tool that solves a real problem for anyone needing the actual resource tree of a webpage. The Playwright dependency makes setup heavier than a pure-HTTP tool, but that&#39;s the tradeoff for capturing JavaScript-rendered content. Suitable for web developers, QA engineers, and archivists—though adding tests and CI would make it production-grade.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Many teams need to capture the full set of assets a page loads—CSS, JavaScript, fonts, images—so they can audit, test, or archive the page offline.  Existing CLI tools either dump a single flattened HTML file or require custom browser scripts that are fragile and hard to maintain.  There was no lightweight, reusable Python utility that preserves the original directory structure while handling query‑string stripping, extension inference, and duplicate‑filename resolution.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>pagesource</code> is a <strong>Python CLI</strong> (entry point <code>src/pagesource/cli.py:30</code>) that drives a headless browser via <strong>Playwright</strong> to navigate a URL, collect every network resource, and write them to disk keeping the URL‑derived path layout.</p>
+<ul><li><strong><code>capture</code></strong> (<code>cli.py</code>) is the top‑level function; it reaches 14 other internal functions before the process ends.</li><li>Resources flow through <strong><code>downloader.py</code></strong> (<code>save_resource</code>, <code>save_resources</code>, <code>ResourceSaver</code>) which writes files via <code>local_path.parent.mkdir</code> and infers extensions with <strong><code>utils.py</code></strong> (<code>infer_extension</code>, <code>is_same_origin</code>, <code>sanitize_path_component</code>).</li><li>The browser layer (<strong><code>browser.py</code></strong>) orchestrates page load, waits (<code>--wait</code>), and dispatches events to the downloader.  It contains a bare <code>except Exception</code> that swallows errors indiscriminately (see Health section).</li><li><strong><code>utils.py</code></strong> provides pure‑Python helpers: <code>parse_url</code>, <code>_split_extension</code>, <code>infer_extension</code>, <code>is_same_origin</code>, and <code>sanitize_path_component</code>.</li></ul>
+<p>The tool can output to a custom directory (<code>-o</code>) and optionally keep external CDN assets (<code>--include-external</code>) in their own host folders.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>capture</code></strong> in <code>src/pagesource/cli.py:30</code>.  The call graph (16 resolved edges) shows the shortest path to the filesystem:</p>
+<pre><code>capture → save_resources → save_resource → local_path.parent.mkdir</code></pre>
+<p>Key edges (caller → callee, frequency):</p>
+<ul><li><code>capture_page_resources → _status</code> (4×)</li><li><code>url_to_local_path → sanitize_path_component</code> (2×)</li><li><code>save_resource → is_same_origin</code>, <code>url_to_local_path</code>, <code>infer_extension</code>, <code>_deduplicate_path</code></li><li><code>save_resources → ResourceSaver → save_resource</code></li></ul>
+<p>No edges leave the repository besides the filesystem write and the Playwright API calls that are external to the code base.  The module dependency graph has <strong><code>src/pagesource/utils</code></strong> as a leaf (3 importers, 0 importers of others) and <strong><code>src/pagesource/browser</code></strong> as a modest hub (2 importers, 1 importer).  Changing the downloader or utils ripple through all callers, but there are no circular dependencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Install the package
+pip install pagesource
+
+# Install the Playwright browser (required)
+playwright install chromium</code></pre>
+<p><strong>Configuration</strong> No external config files or environment variables are required beyond the URL.  The only prerequisite is Python 3.10+ and the Playwright Chromium binary.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># Basic capture
+pagesource https://example.com
+
+# Custom output and wait for SPA rendering
+pagesource https://example.com -o ./my-output --wait 5
+
+# Include third‑party CDN assets
+pagesource https://example.com --include-external</code></pre>
+<p>All output lands under <code>./pagesource_output/&lt;host&gt;/</code> preserving <code>css/</code>, <code>js/</code>, <code>images/</code>, etc.  Query strings are stripped from filenames; duplicate names are disambiguated automatically.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A QA team wants to archive a single‑page app for later regression testing.  They run:</p>
+<pre data-lang="bash"><code>pagesource https://app.example.com -o ./archive --wait 3 --include-external</code></pre>
+<p>The resulting <code>./archive/</code> tree contains the app’s bundled JS, CSS modules, and external font files, which can be version‑controlled or fed into an automated accessibility scanner.  Because the directory structure mirrors the live site, downstream scripts can locate assets by path without parsing HTML.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[HIGH] Commit a lockfile beside the manifest</strong> – <code>pyproject.toml</code> declares dependencies without a lockfile, so installed versions can diverge between developer machines and CI/CD.  Fix: run the package manager once and commit the generated lockfile.</li><li><strong>[MEDIUM] Enable Dependabot or Renovate</strong> – No update bot is configured; security advisories remain unpatched until a manual audit.  Fix: add <code>.github/dependabot.yml</code> for Python ecosystems and GitHub Actions.</li><li><strong>[MEDIUM/resilience] Broad exception handling</strong> – <code>src/pagesource/browser.py</code> uses bare <code>except Exception</code> that swallows errors indiscriminately.  Fix: catch specific exceptions (e.g., <code>playwright._impl._errors.PageError</code>, <code>OSError</code>) and log or re‑raise the rest.</li></ul>
+<p>No test files or CI/CD pipeline are present, and the repository has no Dockerfile or committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>pagesource</code> fills a niche: a no‑nonsense CLI that extracts a page’s actual assets with minimal configuration.  The codebase is small (5 Python files, ~150 lines total) and the call graph is shallow, making it easy to inspect or modify.  The main production concerns are the missing lockfile and the unhandled exception in the browser layer; addressing those will raise confidence for any team integrating it into a pipeline.  It is well‑suited for one‑off captures, documentation archives, or lightweight asset‑audit workflows.</p>
             </div>
 
             

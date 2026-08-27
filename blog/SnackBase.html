@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 25, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,21 +80,60 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#database-initialization">Database Initialization</a><a href="#running-the-service">Running the service</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams that need a self‑hosted Backend‑as‑a‑Service often build custom CRUD layers, duplicate authentication logic, and struggle to enforce row‑level security across tenants. Maintaining separate codebases for API, admin UI, and real‑time features adds operational overhead.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>SnackBase delivers a single repository that generates REST endpoints from database collections, enforces multi‑tenant row‑level security, and ships a ready‑made React admin UI. The backend lives under the package entry point snackbase/main.py (invoked via python -m snackbase serve) and follows a clean‑architecture layout (domain/, application/, infrastructure/). The admin UI and example front‑ends are in examples/*, e.g., examples/feature-voting-app/src/App.tsx. Migration scripts are managed by Alembic in alembic/versions/, while security rules are documented in .agent/rules/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone and move to project root
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>SnackBase is a self‑hosted BaaS that promises auto‑generated REST APIs, multi‑tenancy, row‑level security and an admin UI, yet the repository ships <strong>without any CI/CD configuration</strong>. Across 505 source files no automated build or test gate exists, so every merge lands un‑validated.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>SnackBase is a <strong>portfolio of five semi‑independent projects</strong> rather than a single monorepo. The top‑level layout groups code by concern:</p>
+<div class="table-scroll"><table><thead><tr><th>Directory</th><th class="num">Files</th><th>Primary language</th></tr></thead><tbody><tr><td><code>src/</code></td><td class="num">189</td><td>Python (FastAPI) – domain, application and infrastructure layers</td></tr><tr><td><code>ui/</code></td><td class="num">172</td><td>TSX/TypeScript – React admin UI</td></tr><tr><td><code>examples/</code></td><td class="num">128</td><td>Mix of React demos and single‑tenant toys</td></tr><tr><td><code>alembic/</code></td><td class="num">22</td><td>Database migration scripts</td></tr><tr><td><code>scripts/</code></td><td class="num">1</td><td>Helper cleanup script</td></tr></tbody></table></div>
+<p>Key entry points lives in the examples:</p>
+<ul><li><code>examples/feature-voting-app/index.html</code></li><li><code>examples/feature-voting-app/src/App.tsx</code></li><li><code>examples/realtime-demo-app/index.html</code></li><li><code>examples/realtime-demo-app/src/App.tsx</code></li></ul>
+<p>The <strong>backend</strong> is driven by FastAPI under <code>src/snackbase/</code>. Important modules (import‑graph Ca / Ce) include:</p>
+<ul><li><code>src/snackbase/infrastructure/api/routes/__init__</code> – Ca 0 Ce 19 (instability 1) – the main router that wires all API endpoints.</li><li><code>tests/security/conftest</code> – Ca 8 Ce 1 (instability 0.11) – security test fixtures.</li><li><code>src/snackbase/core/rules/__init__</code> – Ca 0 Ce 6 (instability 1) – rule‑engine core.</li></ul>
+<p>The <strong>frontend</strong> lives in <code>ui/src/components</code>; the most connected UI module is <code>ui/src/components/collections/SchemaBuilder.tsx</code> (deep nesting, 15‑level indent).</p>
+<p>The repo also ships a <strong>Dockerfile</strong>, <code>docker-compose.yml</code>, and <code>package.json</code> files under each example, indicating a containerised deployment model and an npm‑based front‑end build.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Control flow starts at the FastAPI <strong>main</strong> module (exposed via <code>uv run python -m snackbase serve</code>). The router in <code>src/snackbase/infrastructure/api/routes/__init__</code> registers all auto‑generated endpoints by scanning domain models; each endpoint ultimately calls the <strong>infrastructure</strong> layer (<code>src/snackbase/infrastructure/persistence/database.py</code>) which executes Alembic‑managed migrations (<code>alembic/versions/…</code>).</p>
+<p>The <strong>multi‑tenancy</strong> hook is injected through <code>src/snackbase/core/rules/__init__</code> and the <strong>rule engine</strong> (<code>src/snackbase/core/rules/parser.py</code>) evaluates SQL‑native row‑level policies.</p>
+<p>On the UI side, <code>ui/src/App.tsx</code> mounts the React admin UI, which talks to the FastAPI <code>/api/*</code> endpoints via <code>fetch</code>. Real‑time demo stores (<code>examples/realtime-demo-app/src/stores/realtime.store</code>) subscribe to WebSocket events, but the real‑time feature is still marked “not started” in the roadmap.</p>
+<p>Outside the repo, the system touches a PostgreSQL database (Docker‑compose defines <code>db</code> service) and, optionally, an OAuth/SAML identity provider for enterprise login.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (from the README and present config files):</p>
+<pre data-lang="bash"><code># 1️⃣ Clone your fork
 git clone https://github.com/yourusername/snackbase.git
-cd SnackBase</p><p>Install Python dependencies (uv is used in the README)
-uv sync          # reads pyproject.toml / requirements.txt</p><p>(Optional) Build the Docker image
-docker build -t snackbase .</p><h3 class="post-h" id="configuration">Configuration</h3><p>Copy the example environment file and fill in secrets:</p><p>cp .env.example .env
-edit .env – set SNACKBASESECRETKEY, SNACKBASEENCRYPTIONKEY, etc.</p><p>The same pattern applies to the example front‑ends (examples/feature-voting-app/.env.example).</p><h3 class="post-h" id="database-initialization">Database Initialization</h3><p>uv run python -m snackbase init-db   # creates tables using Alembic
-uv run python -m snackbase create-superadmin   # creates the first admin account</p><h3 class="post-h" id="running-the-service">Running the service</h3><p>uv run python -m snackbase serve   # starts FastAPI on http://0.0.0.0:8000</p><p>The admin UI is reachable at http://localhost:8000 (served by FastAPI’s static files). Front‑end demos can be launched with npm:</p><p>cd examples/feature-voting-app
-npm ci
-npm run dev   # Vite dev server, typically http://localhost:5173</p><p>Container deployment – docker-compose.yml defines a snackbase service and a PostgreSQL container; docker-compose up -d will start both.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A SaaS product can deploy SnackBase as the data layer for each customer account. When a new tenant signs up, the platform calls the internal API (POST /accounts) to create an isolated schema; the built‑in RLS policies (see snackbase/infrastructure/rls.py) automatically restrict queries to rows belonging to that tenant. The React admin UI can be embedded in the product’s internal dashboard, providing immediate CRUD screens without additional front‑end work.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – Missing CI/CD – No .github/workflows or other pipeline files; automated testing or linting is not enforced.  
-Low – License clarity – LICENSE exists (AGPL‑3.0) but the README does not surface it prominently, which can cause compliance friction.  
-Medium – Secret handling – Example .env.example files are present, but the repo includes no .env template for production keys; developers may inadvertently commit real secrets.  
-Low – Test coverage – Only one test file detected despite a claim of “153 test files” in the README; actual test suite appears incomplete.  
-Medium – Docker image size – The Dockerfile installs both Python and Node tooling, which may produce a bulky image for production.  
-Low – Documentation gaps – While extensive docs exist, the “Realtime subscriptions” feature is listed as TODO, and associated server code is missing.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>SnackBase provides a functional, open‑source BaaS with a solid FastAPI backend, Alembic migrations, and a polished React admin UI—useful for teams that want a quick, self‑hosted data service with multi‑tenant security. The codebase is reasonably organized, but the lack of CI, incomplete test suite, and missing production‑grade deployment guidance mean additional engineering effort is required before adopting it in a critical production environment.</p>
+cd SnackBase
+
+# 2️⃣ Install backend deps (uv) and front‑end deps (npm)
+uv sync               # installs Python dependencies from pyproject.toml
+# each example has its own package.json; run e.g.:
+cd examples/feature-voting-app &amp;&amp; npm install
+
+# 3️⃣ Copy environment examples and adjust
+cp .env.example .env   # contains SNACKBASE_SECRET_KEY, etc.
+# examples also have .env.example files
+
+# 4️⃣ Initialise the database and create the superadmin
+uv run python -m snackbase init-db
+uv run python -m snackbase create-superadmin
+
+# 5️⃣ Start the server
+uv run python -m snackbase serve   # defaults to http://localhost:8000
+
+# 6️⃣ Open the admin UI
+open http://localhost:8000</code></pre>
+<p><strong>Docker</strong> alternative (Dockerfile present):</p>
+<pre data-lang="bash"><code>docker build -t snackbase .
+docker compose up -d   # defined in docker-compose.yml</code></pre>
+<p>Environment variables referenced in <code>.env.example</code> (and per‑example files) are the only required configuration; no external secrets are committed.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A product team wants a quick backend for an internal “project‑tasks” app with row‑level access per‑company. They clone SnackBase, run <code>uv sync</code>, set <code>SNACKBASE_SUPERADMIN_EMAIL</code>/<code>PASSWORD</code>, and <code>init-db</code>. Using the admin UI they create a <strong>Collection</strong> called <em>tasks</em>, enable <strong>multi‑tenancy</strong>, and define a rule in <code>src/snackbase/core/rules/parser.py</code> that restricts each <code>account_id</code> to its own rows. The API instantly exposes <code>/api/tasks</code> with CRUD; the React admin UI auto‑generates list/create/edit forms. If they need OAuth login, they configure <code>SNACKBASE_OAUTH_PROVIDERS</code> in <code>.env</code> and the <code>saml_router.py</code>/<code>oauth</code> docs guide the IdP setup. Within minutes they have a production‑grade API + UI, ready for internal consumption.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis, 144 total):</strong></p>
+<ul><li><strong>[HIGH/clarity]</strong> Duplicated code blocks – 2 562 repeated 6‑line blocks across 257 files, e.g. <code>alembic/versions/038a7194dd07_enhance_password_reset_template.py</code> and <code>src/snackbase/infrastructure/persistence/database.py</code>. Extract shared helpers.</li><li><strong>[HIGH/cognitive_load]</strong> Deep nesting – max indent 15 in <code>ui/src/components/collections/SchemaBuilder.tsx</code>, <code>ui/src/components/records/DynamicFieldInput.tsx</code>, <code>examples/realtime-demo-app/src/components/realtime/ActionsPanel.tsx</code>. Flatten with guard clauses.</li><li><strong>[MEDIUM/resilience]</strong> Broad exception handling x3 – <code>tests/security/conftest.py</code>, <code>src/snackbase/infrastructure/api/routes/realtime_router.py</code>, <code>src/snackbase/infrastructure/api/routes/saml_router.py</code>. Catch specific exceptions; log or re‑raise.</li><li><strong>[MEDIUM/cognitive_load]</strong> High branching density – <code>src/snackbase/core/rules/lexer.py</code> has 52 branch points over 180 lines. Decompose with a strategy dispatch.</li></ul>
+<p><strong>Code‑health audit (6 findings, 0 critical):</strong></p>
+<ul><li><strong>[HIGH]</strong> Add a CI/CD workflow that builds and tests on push &amp; PR.</li><li><strong>[HIGH]</strong> Add a build gate for the Docker image – validate manifests automatically.</li><li><strong>[MEDIUM]</strong> Enable Dependabot/Renovate for Python and JavaScript manifests.</li><li><strong>[MEDIUM]</strong> Pin the container base image by digest (<code>python:3.12-slim@sha256:…</code>) and enable Docker‑ecosystem Dependabot.</li><li><strong>[MEDIUM]</strong> Add a non‑root USER to the Docker image; chown required paths and end Dockerfile with <code>USER</code>.</li><li><strong>[LOW]</strong> Add project convention files: <code>.editorconfig</code>, <code>.gitattributes</code> (text=auto eol=lf), formatter config (e.g., black, prettier).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>SnackBase delivers a functional BaaS skeleton with auto‑generated APIs, multi‑tenancy and a ready‑to‑admin UI, making it attractive for teams that need a self‑hosted PocketBase alternative without building from scratch. The main drawback is the <strong>absence of automated testing and CI</strong>, plus several code‑quality hotspots (duplication, deep nesting, broad exception catches) that will require refactoring before it can be safely iterated in a production team. It is well‑suited for early‑stage products, internal tools, or prototypes where rapid deployment outweighs the need for a polished engineering pipeline.</p>
             </div>
 
             

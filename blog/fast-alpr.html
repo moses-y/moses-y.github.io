@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 17, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>License plate recognition (LPR) typically requires stitching together multiple models for detection and OCR, with heavy setup and poor performance on edge devices. FastALPR addresses this by providing a ready-to-run ALPR pipeline with optimized ONNX models that work out of the box, while still allowing you to swap in custom detection and OCR models.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>FastALPR is a Python framework that combines a license plate detector (fastalpr/defaultdetector.py) and an OCR engine (fastalpr/defaultocr.py) into a single ALPR class in fastalpr/alpr.py. It uses ONNX Runtime for inference, with optional backends for CUDA, OpenVINO, DirectML, and Qualcomm QNN. The core API is minimal: initialize ALPR, call it on an image, and get plate text, bounding boxes, and confidence scores.</p><p>The project includes a Makefile for common tasks, a pyproject.toml for packaging, and a uv.lock file that pins dependencies for reproducible development builds. Documentation lives in docs/ (built with mkdocs.yml), and CI/CD is handled through seven GitHub Actions workflows in .github/workflows/, covering tests, releases, CodeQL analysis, and secret scanning.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pip with the appropriate ONNX backend extra. The README documents these commands verbatim:</p><p>pip install fast-alpr[onnx]          # CPU
-pip install fast-alpr[onnx-gpu]      # NVIDIA GPU
-pip install fast-alpr[onnx-openvino] # Intel CPUs</p><p>Running it: The entry point is the ALPR class. Default models are specified in fastalpr/defaultdetector.py and fastalpr/defaultocr.py, but you can pass custom model names to the constructor:</p><p>from fastalpr import ALPR</p><p>alpr = ALPR(
-    detectormodel=&quot;yolo-v9-t-384-license-plate-end2end&quot;,
-    ocrmodel=&quot;cct-xs-v1-global-model&quot;,
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Deploying an Automatic License Plate Recognition (ALPR) service often requires stitching together a detector, an OCR engine, and runtime glue code. Teams spend time writing boiler‑plate wrappers, handling model loading, and exposing a clean API. Fast‑ALPR supplies a ready‑made Python package that hides those details behind a single <code>ALPR</code> class.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements a thin, extensible wrapper around ONNX‑based detection and OCR models. Core logic lives in <code>fast_alpr/alpr.py</code>, which defines the public <code>ALPR</code> class and its <code>predict</code> method. Model defaults are provided by <code>fast_alpr/default_detector.py</code> (<code>DefaultDetector</code>) and <code>fast_alpr/default_ocr.py</code> (<code>DefaultOCR</code>). Shared data structures such as <code>BoundingBox</code>, <code>DetectionResult</code>, and <code>OcrResult</code> are defined in <code>fast_alpr/base.py</code>. Tests in <code>test/test_alpr.py</code> exercise the end‑to‑end flow.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when a client instantiates <code>fast_alpr.ALPR</code> (file <code>fast_alpr/alpr.py</code>).</p>
+<ol><li><strong><code>fast_alpr/alpr.py</code> – <code>__init__</code></strong>   * Imports and constructs <code>DefaultDetector</code> and <code>DefaultOCR</code> (calls <code>__init__</code> in <code>fast_alpr/default_detector.py</code> and <code>fast_alpr/default_ocr.py</code>).</li></ol>
+<ol><li><strong><code>fast_alpr/alpr.py</code> – <code>predict</code></strong>   <em> Calls <code>self.detector.predict</code> → <code>fast_alpr/default_detector.py</code> → <code>BaseDetector.predict</code> (from <code>fast_alpr/base.py</code>). </em> The detector returns a <code>DetectionResult</code> containing plate bounding boxes.</li></ol>
+<ol><li><strong><code>fast_alpr/alpr.py</code> – <code>predict</code> (continued)</strong>   <em> For each detection, calls <code>self.ocr.predict</code> → <code>fast_alpr/default_ocr.py</code> → <code>BaseOCR.predict</code> (also in <code>fast_alpr/base.py</code>). </em> OCR returns an <code>OcrResult</code> with the recognized string.</li></ol>
+<ol><li><strong>Result Assembly</strong>   * <code>predict</code> builds an <code>ALPRResult</code> (defined in <code>fast_alpr/alpr.py</code>) that aggregates detection and OCR data.</li></ol>
+<ol><li><strong>Optional Visualization</strong>   * <code>draw_predictions</code> (in <code>fast_alpr/alpr.py</code>) accepts an image and an <code>ALPRResult</code>, then calls <code>draw_predictions</code> → <code>predict</code> (internal edge) to overlay bounding boxes.</li></ol>
+<p>The internal call graph shows 11 resolved edges. The most widely used functions are <code>predict</code> (called from both the test fixture and the public API) and <code>ALPR</code> (the class constructor). No circular imports are present, and the module with the highest inbound degree is <code>fast_alpr/base.py</code> (four other modules import its types).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/fast-alpr
+cd fast-alpr
+
+# Install with ONNX runtime (CPU example)
+pip install "fast-alpr[onnx]"
+
+# Run the library in a Python REPL or script
+python - &lt;&lt;'PY'
+from fast_alpr import ALPR
+
+alpr = ALPR(
+    detector_model="yolo-v9-t-384-license-plate-end2end",
+    ocr_model="cct-xs-v1-global-model",
 )
-results = alpr(&quot;assets/testimage.png&quot;)</p><p>Configuration: No environment variables or config files are required. Model selection is done via constructor arguments. The README&#39;s quick start example is cut off in the excerpt, but the docs/quickstart.md file likely contains the full example.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>Typical deployment: a parking access system or toll booth where a camera feed captures frames, and FastALPR extracts plate text for database lookup. The ONNX-optimized models are designed for low-latency inference on modest hardware. Since detection and OCR are decoupled, you could replace the OCR model with one trained for a specific region&#39;s plate fonts without touching the detection side.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Dependencies declared without a lockfile in pyproject.toml: The uv.lock file exists, which mitigates this for uv users, but pip install fast-alpr will resolve dependencies at install time. This is a minor reproducibility concern for end users.
-Low - Test coverage is thin: Only 4 test files exist in test/, and test_alpr.py is the sole test module. For a framework with model-swapping flexibility, there&#39;s no visible test matrix covering different ONNX backends or custom model inputs.
-Low - No license file: The repo has a LICENSE file, but the README badge references it without specifying the license type. Verify the license before commercial use.
-Positive: CI is well-configured with separate workflows for tests, releases, CodeQL, and secret scanning. The Makefile and pyproject.toml indicate a structured development workflow. The project uses mypy and pylint, suggesting type-checking and linting are enforced.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FastALPR is a solid, focused ALPR framework that prioritizes performance and modularity over feature sprawl. The ONNX backend flexibility is a genuine advantage for edge deployment. It&#39;s best suited for developers who need a working LPR pipeline quickly and want the ability to swap models later. The thin test suite and lack of a pip lockfile are minor concerns, but the clean architecture and good documentation make it a reasonable choice for production use with proper validation.</p>
+
+# assets/test_image.png is shipped with the repo
+result = alpr.predict("assets/test_image.png")
+print(result)
+PY</code></pre>
+<p>The package does not ship a CLI script; the entry point is the <code>ALPR</code> class in <code>fast_alpr/alpr.py</code>. No additional configuration files or environment variables are required for the default models. If custom models are used, they must be supplied as arguments to <code>ALPR</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A parking‑lot management system can instantiate <code>ALPR</code> at service start‑up, keep the detector and OCR objects in memory, and call <code>alpr.predict(frame)</code> for each captured camera frame. The returned <code>ALPRResult</code> supplies the plate string and its location, which can be logged to a database or passed to an access‑control API.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin third‑party GitHub Actions</strong> – <code>.github/workflows/*.yaml</code> uses tags (<code>@v6</code>, <code>@v1</code>). Replace with commit SHA to avoid supply‑chain risk.</li><li><strong>Medium – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions</strong> – <code>ci.yaml</code> lacks a <code>permissions:</code> block; add <code>contents: read</code> (and narrow per job).</li><li><strong>Medium – Enable Dependabot or Renovate</strong> – No update bot configured despite a <code>pyproject.toml</code>. Add <code>.github/dependabot.yml</code>.</li><li><strong>Medium – Add dependency‑vulnerability scan</strong> – No scan step in CI; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Low – Set <code>timeout-minutes</code> on workflow jobs</strong> – Jobs in <code>ci.yaml</code> have no timeout; specify a reasonable limit (e.g., <code>timeout-minutes: 30</code>).</li></ul>
+<p>Additional observations: the repo includes a <code>LICENSE</code>, a full test suite (<code>test/test_alpr.py</code>), and CI via GitHub Actions, but it lacks a lockfile for reproducible builds (no <code>uv.lock</code> is committed). The existing <code>uv.lock</code> file is present but not referenced in the CI configuration.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Fast‑ALPR delivers a compact, well‑documented Python wrapper that lets developers plug in ONNX detection and OCR models with a single <code>ALPR</code> object. The codebase is small and test‑covered, but production use should address the high‑severity CI security gaps and add a lockfile for deterministic installs. Suitable for teams that need a quick, extensible ALPR component without building the model‑pipeline from scratch.</p>
             </div>
 
             

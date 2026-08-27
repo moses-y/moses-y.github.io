@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,14 +80,54 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Standard web maps handle 2D vector and raster tiles well, but large LiDAR point clouds (millions to billions of points) are impractical to load as a single file. Existing solutions require custom servers or heavy desktop software. This plugin solves that by bringing viewport-based streaming of COPC and EPT point clouds directly into a MapLibre GL JS map, using deck.gl for GPU rendering.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>maplibre-gl-lidar is a MapLibre GL JS plugin that renders LiDAR point clouds as an interactive layer. The core logic lives in src/lib/: loaders/ handles streaming from COPC and EPT sources, layers/PointCloudManager.ts manages the deck.gl point cloud layer with chunking, and core/LidarControl.ts provides the map control with a GUI panel (gui/) for color scheme, point size, elevation filter, and classification toggles.</p><p>The repo includes three usage modes: a vanilla TypeScript API (src/index.ts), a React integration with hooks (src/react.ts, src/lib/hooks/), and a standalone online viewer (viewer/main.ts) that loads any COPC URL via a query parameter.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup – Install via npm:</p><p>npm install maplibre-gl-lidar</p><p>Configuration – No environment variables or API keys required. Point clouds are loaded directly from public URLs (e.g., S3-hosted COPC files) or EPT server endpoints.</p><p>Running it – Add the control to a MapLibre map after load:</p><p>const lidarControl = new LidarControl({ colorScheme: &quot;elevation&quot;, pointSize: 2 });
-map.addControl(lidarControl, &quot;top-right&quot;);
-lidarControl.loadPointCloud(&quot;https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz&quot;);</p><p>For local development, run npm install then npm run dev (Vite config is present). The examples/basic/ and examples/ept/ folders show minimal working setups. A Dockerfile is included for containerized builds.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical scenario: an environmental consulting firm hosts classified LiDAR (ground, vegetation, buildings) as COPC on S3. A field team opens a web map, loads the point cloud by URL, toggles off the &quot;ground&quot; classification via the legend, and applies an elevation filter to inspect surface features. The viewer/ page supports shareable links:</p><p>https://opengeos.org/maplibre-gl-lidar/viewer/?url=https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – Untested streaming logic: The loaders (CopcStreamingLoader.ts, EptStreamingLoader.ts) handle network requests and chunk merging, but only tests/helpers.test.ts exists. No tests cover loader behavior, error handling, or viewport culling.
-Med – WASM binary duplication: laz-perf.wasm and lazrswasm_bg.wasm appear in both public/ and public/libs/. This is a maintenance and bundle-size concern.
-Low – Single-maintainer risk: Forked from opengeos/maplibre-gl-lidar with 0 stars on this fork. CI is configured (GitHub Actions for publish and Docker), but bus-factor risk is real.
-Low – No input validation on URLs: The viewer and loadPointCloud accept arbitrary URLs with no obvious validation or size limits, which could be abused if exposed publicly.
-Clean signals: MIT license, dependabot config, pre-commit hooks, TypeScript throughout, and a structured src/lib/ separation of concerns are all present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a well-architected plugin that solves a genuinely hard problem—streaming massive point clouds in a browser map—with a clean API and good documentation. It&#39;s production-usable for demos and internal tools, but the thin test coverage and single-maintainer status make it a moderate risk for mission-critical deployments. Best suited for teams that need LiDAR visualization on the web and are comfortable forking or contributing fixes.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Displaying massive LiDAR point clouds in a web map requires on‑the‑fly loading, CRS conversion, and interactive styling. Existing MapLibre plugins handle raster tiles only, so developers must write custom loaders, manage streaming, and build UI controls for color schemes, filters, and point picking.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repo delivers a <strong>MapLibre GL JS plugin</strong> (<code>src/index.ts</code>) that wraps a Deck.gl <code>PointCloudLayer</code>. Core logic lives in <code>src/lib/core/LidarControl.ts</code> (control lifecycle, state handling) and the streaming loaders <code>src/lib/loaders/CopcStreamingLoader.ts</code> and <code>src/lib/loaders/EptStreamingLoader.ts</code>. GUI components such as the classification legend and range sliders are in <code>src/lib/gui/</code>.</p>
+<p>Example entry points – <code>examples/basic/main.ts</code>, <code>examples/ept/main.ts</code>, and the React demo <code>examples/react/main.tsx</code> – show how to instantiate <code>LidarControl</code> (vanilla) or <code>LidarControlReact</code> (React hook) and call <code>loadPointCloud()</code> with a COPC/EPT URL. The plugin ships CSS (<code>src/lib/styles/lidar-control.css</code>) and WebAssembly binaries (<code>public/*.wasm</code>) for LAZ decoding.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in an example file, e.g. <code>examples/react/main.tsx</code> → <code>App</code> component (line 14). The component calls <code>useLidarState()</code> (from <code>src/lib/hooks/useLidarState.ts</code>) which internally creates a <code>LidarControlReact</code> instance (<code>src/lib/core/LidarControlReact.tsx</code>).</p>
+<p>When <code>loadPointCloud(url)</code> is invoked, the call path is:</p>
+<ol><li><code>LidarControlReact.loadPointCloud</code> → <code>LidarControl.loadPointCloud</code> (<code>src/lib/core/LidarControl.ts</code>).</li><li><code>LidarControl</code> decides the loader based on URL and creates either <code>CopcStreamingLoader</code> or <code>EptStreamingLoader</code> (<code>src/lib/loaders/*</code>).</li><li>The loader calls <code>createBufferGetter</code> → WebAssembly <code>laz-perf</code> (<code>public/laz-perf.wasm</code>) to decode LAS/LAZ chunks.</li><li>Decoded buffers flow to <code>PointCloudManager</code> (<code>src/lib/layers/PointCloudManager.ts</code>) which builds a Deck.gl <code>PointCloudLayer</code> and registers it on the MapLibre map.</li><li>UI updates (point size, color scheme) travel through <code>PanelBuilder</code> (<code>src/lib/gui/PanelBuilder.ts</code>) and the React hook <code>useLidarState</code>, which ultimately call <code>setState</code> (found 23 callers) and emit events via <code>_emit</code> (24 callers).</li></ol>
+<p>The <strong>blast‑radius modules</strong> are:</p>
+<ul><li><code>src/lib/core/LidarControl.ts</code> – 64 internal functions, called from 4 files, emits events, holds the main state machine.</li><li><code>src/lib/loaders/CopcStreamingLoader.ts</code> – 32 functions, creates buffers and attribute arrays, called from 3 files.</li><li><code>src/lib/core/types.ts</code> – a pure type hub with 15 dependents; changes here affect most of the code base.</li></ul>
+<p>No circular imports were detected, but the high instability scores (e.g., <code>LidarControl</code> 0.83) indicate many downstream dependencies.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/maplibre-gl-lidar
+cd maplibre-gl-lidar
+
+# Install dependencies
+npm ci
+
+# Run a demo (basic example)
+npm run dev -- --config vite.examples.config.ts   # uses Vite to serve examples/basic</code></pre>
+<p><em>The <code>package.json</code> defines the <code>dev</code> script via Vite; the <code>vite.examples.config.ts</code> configures the example server.</em></p>
+<p>For containerised builds:</p>
+<pre data-lang="bash"><code>docker build -t maplibre-gl-lidar .
+docker run -p 5173:5173 maplibre-gl-lidar   # serves the Vite dev server inside the container</code></pre>
+<p>The plugin CSS must be imported (<code>import "maplibre-gl-lidar/style.css"</code>). No additional environment variables are required—point‑cloud URLs are passed directly to <code>loadPointCloud()</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A municipal GIS portal can embed the plugin in a React dashboard:</p>
+<pre data-lang="tsx"><code>import { LidarControlReact, useLidarState } from "maplibre-gl-lidar/react";
+
+function CityLidar() {
+  const { setColorScheme, setPointSize } = useLidarState();
+  return (
+    &lt;LidarControlReact
+      url="https://s3.amazonaws.com/city/streets.copc.laz"
+      onLoad={() =&gt; setColorScheme("classification")}
+      pointSize={3}
+    /&gt;
+  );
+}</code></pre>
+<p>The control streams only the viewport‑visible nodes, keeping bandwidth low while allowing analysts to toggle classification layers and adjust Z‑offset for alignment with orthophotos.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Action versions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>publish.yml</code>).</li><li><strong>Medium</strong> – Pin Docker base images by digest (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout (<code>deploy-pages.yml</code>).</li><li><strong>Medium</strong> – Run container as non‑root (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Test coverage is low (2 test files vs 41 source files).</li><li><strong>Low</strong> – Define job timeouts in workflows (<code>deploy-pages.yml</code>).</li></ul>
+<p>Additional observations: the three oversized modules (<code>LidarControl.ts</code>, <code>PointCloudLoader.ts</code>, <code>CopcStreamingLoader.ts</code>) each exceed 1 400 lines, making single‑file changes high‑risk. Repeated 6‑line blocks appear across examples and the library entry point, suggesting a DRY refactor. The hub module <code>src/lib/core/types.ts</code> has the highest fan‑in; keeping it stable is critical.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>maplibre-gl-lidar</code> provides a functional, TypeScript‑first plugin for streaming LiDAR into MapLibre, with both vanilla and React APIs. It works out‑of‑the‑box for demos, but the core codebase is large, tightly coupled, and under‑tested, which raises maintenance overhead. It suits teams that need quick visualisation of COPC/EPT clouds and are prepared to invest in refactoring and test expansion for production use.</p>
             </div>
 
             

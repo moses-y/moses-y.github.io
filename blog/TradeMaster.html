@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,20 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Quantitative‑trading researchers often need a single codebase that wires together data loading, environment simulation, agent architecture, and training loops across many market micro‑structures (equities, crypto, FX).  Without a shared framework each prototype requires re‑implementing these pipelines, which quickly becomes maintenance burden.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>TradeMaster provides a modular directory of RL components that can be mixed‑and‑matched out‑of‑the‑box.  The core structure lives under configs/:</p><p>Agents – configs/base/agents/algorithmictrading/deepscalper.py, configs/base/agents/highfrequencytrading/ddqn.py, and portfolio‑management agents such as deeptrader.py and eiie.py.  
- Environments – configs/base/environments/algorithmictrading/env.py, configs/base/environments/highfrequencytrading/env.py, plus portfolio‑management envs.  
- Datasets – algorithmic‑trading data sets (configs/base/datasets/algorithmictrading/AAPL.py, BTC.py), high‑frequency datasets (BTC.py), and order‑execution datasets (orderexecutiondataset.py).  
- Networks – actor‑critic and Q‑network definitions (configs/base/nets/deeptrader.py, dqn.py, highfrequencytradingdqn.py).  
- Trainers – per‑task training scripts (configs/base/trainers/algorithmictrading/trainer.py, portfoliomanagement/deeptradertrainer.py, etc.).</p><p>A Dockerfile at the root enables a containerised build, and the repository is written in Python 3.9 (as shown by the README badge).  No package.json or pyproject.toml is present, so dependencies are not version‑pinned in a manifest; they are likely listed inside the Docker image or discovered by importing the modules.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>The only build artifact detected is the Dockerfile.  Build and run the image:</p><p>docker build -t trademaster .
-docker run --rm -it trademaster</p><p>If running outside Docker, the README states Python 3.9 is required, but no pip install or conda environment is documented in the root.  Users will need to install any missing dependencies (e.g., torch, gym, numpy) themselves or consult the project’s external documentation.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Training configurations are stored as YAML‑style files under configs/.  For example, configs/algorithmictrading/algorithmictradingBTCdeepscalperdeepscalperadammse.py defines an algorithmic‑trading experiment using the DeepScalper agent, Adam optimizer, and MSE loss.  Edit the file or override command‑line flags to change the agent, dataset, or environment.</p><h3 class="post-h" id="running-it">Running it</h3><p>No single CLI entry point is exposed in the repo structure.  Training is typically launched from a trainer module, e.g.:</p><p>python -m configs.base.trainers.algorithmictrading.trainer \
-    --config configs/algorithmictrading/algorithmictradingBTCdeepscalperdeepscalperadammse.py</p><p>If a different entry point is required, the user should consult the project’s external docs or run python -m configs to list available sub‑commands.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A researcher wanting to prototype a high‑frequency DQN agent on BTC order‑book data can:
-Copy configs/highfrequencytrading/highfrequencytradingBTCdqndqnadammse.py as the experiment config.  
-Point the config’s dataset path to data/algorithmictrading/BTC/BTC.csv.  
-Launch the trainer as shown above.</p><p>The resulting checkpoint will be stored alongside the experiment’s log directory, ready for later evaluation or deployment.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No CI/CD pipeline – the .github directory and any CI configuration are absent; there is no automated build or test gate.  
-Single test file – only one test file is present; coverage of the many agent/environment combos is minimal.  
-Large config surface – 173 config files spread across many sub‑domains increase the risk of mismatched hyper‑parameters or broken import paths when experiments are copied.  
-No explicit entry point – the absence of a main.py or documented CLI means newcomers must infer how to start training from the trainer modules.</p><p>The repo does include a LICENSE file and a README.md with basic badges, which mitigates some legal and onboarding concerns.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>TradeMaster is a well‑structured, config‑driven platform that abstracts much of the RL‑trading pipeline into reusable modules and supports containerised deployment via Docker.  It is most useful for teams or researchers who need to iterate quickly across many agent/environment combinations and are comfortable managing dependencies outside the repo.  Solo users or groups requiring out‑of‑the‑box CI and a single‑command start‑up may find the lack of automated gates and a documented entry point limiting.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Quantitative‑trading teams need a reproducible stack that ties together market data, RL environments, model definitions, and deployment scripts. Most open‑source kits stop at a single algorithm; they lack a unified way to switch between high‑frequency, portfolio‑management, and market‑dynamics use cases while keeping training, evaluation, and serving consistent.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>TradeMaster</code> bundles eight related projects (e.g., <strong>FinAgent</strong>, <strong>EarnMore</strong>, <strong>EarnHFT</strong>) under a common folder layout. Core RL components live in <code>trademaster/</code> – environments (<code>trademaster/environments/*</code>), agents (<code>trademaster/agents/*</code>), networks (<code>trademaster/nets/*</code>), and trainers (<code>trademaster/trainers/*</code>). Configuration files in <code>configs/_base_/</code> describe every combination of dataset, model, optimizer, and trainer, so a new experiment is a matter of selecting a YAML‑style Python config. The <code>tools/finagent/</code> CLI (<code>main.py</code>) is the primary entry point for end‑to‑end runs: it parses a config, builds the environment, constructs the agent, and kicks off training or inference.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>tools/finagent/main.py</code></strong> (line 62 <code>main</code>). <code>main</code> parses command‑line arguments, then calls <code>run</code> (line 149) which:</p>
+<ol><li>Calls <code>init_path</code> → creates the output directory (<code>os.makedirs</code>).</li><li>Calls <code>build_environment</code> (via <code>trademaster/environments/builder.py</code>) – the most‑referenced builder (25 inbound imports).</li><li>Calls <code>build_from_cfg</code> (in <code>trademaster/utils/utils.py</code>) to instantiate the selected agent, net, and trainer from the config.</li><li>Enters the training loop (<code>run_step</code> → <code>run_mdm</code> for market‑dynamics labeling, etc.).</li></ol>
+<p>Key blast‑radius modules:</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th class="num">Inbound (<code>Ca</code>)</th><th class="num">Outbound (<code>Ce</code>)</th><th class="num">Instability</th></tr></thead><tbody><tr><td><code>trademaster/utils/__init__.py</code></td><td class="num">70</td><td class="num">7</td><td class="num">0.09</td></tr><tr><td><code>finagent/registry.py</code></td><td class="num">29</td><td class="num">0</td><td class="num">0</td></tr><tr><td><code>pm/registry.py</code></td><td class="num">28</td><td class="num">0</td><td class="num">0</td></tr></tbody></table></div>
+<p>These hubs host utility functions (<code>print</code>, <code>get_attr</code>, <code>build_from_cfg</code>) that are invoked from <strong>82</strong> distinct call sites (e.g., <code>print</code> is the most‑used builtin). Changing a hub file can ripple through dozens of modules.</p>
+<p>Four circular import groups were detected (e.g., <code>finagent/provider/__init__.py</code> ↔ <code>finagent/query/__init__.py</code> ↔ <code>finagent/prompt/__init__.py</code>). The cycle inflates import time and hampers refactoring; breaking it by extracting shared types into a new module would reduce coupling.</p>
+<p>Filesystem interaction is limited to a few paths: <code>os.makedirs</code> for output folders, <code>shutil.copy</code> in <code>plot_kline</code>, and dataset CSV reads in <code>pm/utils/replay_buffer.py</code>. No external network calls are made from the core CLI.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/TradeMaster
+cd TradeMaster
+
+# Install Python deps (pip, no lockfile)
+pip install -r requirements.txt
+pip install -e .   # editable install registers entry points
+
+# Optional: build the Docker image (base image: nvidia/cuda:11.3.0-cudnn8-devel-ubuntu20.04)
+docker build -t trademaster .
+
+# Run a training job (example config)
+python tools/finagent/main.py \
+    --config configs/_base_/agents/algorithmic_trading/deepscalper.py \
+    --work-dir ./outputs/deepscalper</code></pre>
+<p>The <code>--config</code> argument points to a Python file under <code>configs/_base_/</code> that selects dataset, model, optimizer, and trainer. Output artifacts (model checkpoints, logs) are written under the supplied <code>--work-dir</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A quant team can plug their own market‑data CSV into <code>data/high_frequency_trading/</code> and reference it via a custom config that inherits from <code>configs/_base_/datasets/high_frequency_trading/BTC.py</code>. Running the CLI trains a DQN agent (<code>trademaster/nets/dqn.py</code>) on the new data, logs performance to TensorBoard, and produces a Docker‑ready inference service (<code>deploy/backend_service.py</code>) that can be deployed behind a REST API.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – CI missing</strong> – 450 source files, no <code>.github/workflows</code> (affects every change).</li><li><strong>High – Docker build gate missing</strong> – Dockerfile present but never validated automatically.</li><li><strong>Medium – Dependabot not configured</strong> – 4 requirement files, no automated updates.</li><li><strong>Medium – Base image not pinned</strong> – <code>nvidia/cuda:11.3.0-cudnn8-devel-ubuntu20.04</code> mutable; use digest.</li><li><strong>Medium – Notebook outputs</strong> – <code>trademaster/evaluation/market_dynamics_labeling/example.ipynb</code> stores &gt;7 MB of output.</li><li><strong>Medium – Large data blobs</strong> – CSVs in <code>data/high_frequency_trading/...</code> exceed 5 MB; should move to Git LFS or external storage.</li><li><strong>Medium – Test coverage</strong> – 11 test files for ~450 source files (ratio 0.024); expand, starting with the high‑fan‑in modules listed above.</li></ul>
+<p>No license or secret issues were found; a <code>LICENSE</code> file is present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>TradeMaster</code> delivers a cohesive, config‑driven RL pipeline for multiple trading paradigms, with clear entry points and reusable utilities. Its main weaknesses are the lack of automated CI/CD, a mutable Docker base, and limited test coverage, which together raise the risk of regression when the hub modules are modified. Teams comfortable managing their own CI pipelines and willing to refactor the identified import cycles can extract substantial value from the platform.</p>
             </div>
 
             
@@ -110,11 +133,11 @@ No explicit entry point – the absence of a main.py or documented CLI means new
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">776<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>164</b></li><li><span>Markdown</span><i style="width:1%"></i><b>1</b></li><li><span>JSON</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>451</b></li><li><span>Markdown</span><i style="width:6%"></i><b>25</b></li><li><span>Jupyter Notebook</span><i style="width:2%"></i><b>10</b></li><li><span>reStructuredText</span><i style="width:0%"></i><b>2</b></li><li><span>JSON</span><i style="width:0%"></i><b>1</b></li><li><span>YAML</span><i style="width:0%"></i><b>1</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Flask</span><span>Docker</span><span>PyTorch</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -168,7 +191,7 @@ No explicit entry point – the absence of a main.py or documented CLI means new
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>docs/requirements.txt</code></span></li>
                     </ul>
                 </div>
 

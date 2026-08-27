@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>WhatsApp automation traditionally requires navigating the Whatsmeow Go library&#39;s complex protobuf definitions and event system. Developers building Python-based WhatsApp bots face a choice: use Whatsmeow directly through awkward bridging, or accept limited, often abandoned Python wrappers that lack enterprise features like media handling, group management, and real-time event support.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Neonize bridges this gap with a dual-layer architecture. The goneonize/ directory (72 files) contains the Go implementation built on Whatsmeow, handling protobuf parsing, connection management, and WhatsApp protocol interactions across 56 proto definition files. The neonize/ Python package (83 files) provides the user-facing API, generating protobuf Python stubs from the Go definitions (goneonize/defproto/ contains 56 .proto files). Key entry points include goneonize/main.go and neonize/client.py, with Python protobuf modules located at neonize/proto/ generating from goneonize/defproto/Neonize.proto. The project uses GitHub Actions CI/CD (6 workflow files) and maintains goneonize/go.mod/go.sum for dependency management.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via pip install neonize. The Go backend requires Go 1.19+; the Python package depends on the compiled Go shared library. Configuration requires no environment variables in the basic setup, but production deployments should configure the Go client instance per docs/getting-started/installation.md.</p><p>Configuration: The neonize/client.py NewClient() constructor accepts a session name. Persistent sessions store state locally; re-running with the same name resumes an existing session. No API keys or secrets are required for basic operation—the library uses WhatsApp&#39;s web session model.</p><p>Running it: The primary entry point is goneonize/main.go, but Python users invoke the library through neonize/client.py. Example workflow from the README:</p><p>from neonize.client import NewClient
-from neonize.events import MessageEv, ConnectedEv, event</p><p>client = NewClient(&quot;mybot&quot;)</p><p>@client.event
-def onconnected(client: NewClient, event: ConnectedEv):
-    print(&quot;Bot connected successfully&quot;)</p><p>@client.event
-def onmessage(client: NewClient, event: MessageEv):
-    print(f&quot;Received: {event.message}&quot;)</p><p>client.run()</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A practical scenario: a Python service needs to process incoming WhatsApp media messages, validate documents against business rules, and route them to internal systems. Neonize&#39;s event-driven architecture handles this via neonize/events.py with onmessage hooks. The library supports media attachment handling through protobuf-defined message types across goneonize/defproto/ folders (e.g., waMediaEntryData, waMediaTransport). For async operation, examples/asyncbasic.py and examples/asynconeshot.py demonstrate non-blocking message processing using aioze/client.py. Group operations leverage goneonize/chatsettingsstore.go and goneonize/contact_store.go for state management. The SQLite/PostgreSQL database support mentioned in docs enables persistent message history without external services.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests: 1 test file found—limited coverage. The repository has CI configured (6 GitHub Actions workflows), but test density is low.
-License: Apache 2.0 present in root—compliant.
-Dependency hygiene: goneonize/go.mod/go.sum exist with version-pinned modules; Python dependencies are minimal (the package is installable via pip with no requirements.txt visible at root).
-Structural separation: Clear Go/Python boundary, but the auto-generated protobuf stubs (neonize/proto/) are committed to the repo rather than generated at build time, creating merge friction when proto definitions change.
-Documentation: 24 doc files cover getting started, user guides, and API references—adequate for onboarding but sparse on advanced protocol details.</p><p>High: Dual-language architecture (Go + Python) with real protobuf definitions.</p><p>Med: Sparse test coverage; generated stubs committed to repo.</p><p>Low: No apparent secrets or config in the repo; build pipeline is functional.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Neonize delivers a functional Python abstraction over Whatsmeow&#39;s Go foundation. It works for bot workflows that need media handling, group management, and real-time events without writing Go. The trade-off: teams requiring deep protocol customization or maximum performance should engage with the Go layer directly; Python users get productivity at the cost of some flexibility. Best suited for Python teams building WhatsApp bots that need enterprise features without maintaining Go expertise.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Automating WhatsApp interactions from Python requires bridging a high‑performance Go backend (Whatsmeow) with a Python‑friendly API. Existing solutions either expose raw Go bindings, which are cumbersome for Python developers, or provide thin wrappers that lack async support and robust media handling. Teams need a single library that hides the Go complexity while offering a clean, async‑first interface for sending, receiving, and managing messages, groups, and media.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>neonize/</code> implements the public Python API. Core client logic lives in <code>neonize/aioze/client.py</code> (132 functions, 5 classes) and <code>neonize/client.py</code> (126 functions, 4 classes). Media utilities such as <code>neonize/utils/ffmpeg.py</code> and <code>neonize/utils/sticker.py</code> wrap external tools for conversion. The Go side (<code>goneonize/</code>) contains the compiled protobuf definitions and a thin wrapper (<code>goneonize/main.go</code>) that builds the Go binary used by the Python extension. Helper scripts in <code>tools/</code> (e.g., <code>tools/goneonize.py</code>, <code>tools/version.py</code>) automate proto generation and version bumps.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts from the Python examples (e.g., <code>examples/async_basic.py</code>). The script imports <code>neonize.client.NewClient</code>, which instantiates <code>neonize/aioze/client.Client</code>. During initialization the client loads the compiled Go library (built from <code>goneonize/Neonize.proto</code> via <code>goneonize/build_python_proto.py</code>).</p>
+<p>Key call chain for sending a message:</p>
+<ol><li><strong>handler</strong> (<code>examples/async_basic.py:56</code>) → <code>neonize/aioze/client.send_message</code> (called 13 times).</li><li><code>send_message</code> → <code>neonize/aioze/client.get_bytes</code> / <code>free_bytes</code> (both invoked from 51 places, the widest blast radius).</li><li><code>get_bytes</code> reads a file or URL via <code>neonize/utils/iofile.get_bytes_from_name_or_url</code> (network I/O).</li><li>The byte payload is passed to the Go layer (<code>neonize/aioze/client.call</code>) which ultimately invokes the Whatsmeow‑backed RPC to deliver the message.</li></ol>
+<p>Media paths add a filesystem hop: <code>handler</code> → <code>build_sticker_message</code> → <code>neonize/utils/sticker.convert_to_sticker</code> → external <code>ffmpeg</code> command (<code>neonize/utils/ffmpeg.py</code>).</p>
+<p>The most connected modules are <code>neonize/aioze/client</code> (21 outgoing imports, part of a circular dependency) and <code>neonize/client</code> (19 outgoing imports, also in a cycle). These cycles inflate the cognitive load when refactoring because changes ripple through both modules.</p>
+<p>File‑level responsibilities (selected):</p>
+<div class="table-scroll"><table><thead><tr><th>File</th><th>Primary Role</th><th>External Effect</th></tr></thead><tbody><tr><td><code>neonize/aioze/client.py</code></td><td>Async client core, request routing</td><td>Calls external commands, reads/writes files</td></tr><tr><td><code>neonize/utils/ffmpeg.py</code></td><td>Media conversion wrapper</td><td>Executes <code>ffmpeg</code>, writes temporary files</td></tr><tr><td><code>neonize/utils/iofile.py</code></td><td>Unified byte‑source loader</td><td>Performs network fetches</td></tr><tr><td><code>tools/goneonize.py</code></td><td>Proto generation &amp; Go build orchestration</td><td>Runs <code>protoc</code>, writes compiled Go files</td></tr><tr><td><code>goneonize/main.go</code></td><td>Go entry point (binary)</td><td>Provides low‑level WhatsApp RPCs</td></tr></tbody></table></div>
+<p>Because the import graph shows 4 modules in circular dependencies, any change to shared types (e.g., <code>neonize/types</code>) must consider both sides of the cycle to avoid import errors.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/neonize
+cd neonize
+
+# Install Python dependencies (uses the pyproject.toml)
+pip install -e .        # editable install pulls in all required packages
+
+# Build the Go protobuf layer (requires Go 1.19+)
+cd goneonize
+go run build_python_proto.py   # generates the Go bindings used by the Python package</code></pre>
+<p>Run an example to verify the stack:</p>
+<pre data-lang="bash"><code>python ../examples/async_basic.py</code></pre>
+<p>The example creates a <code>NewClient</code>, registers event callbacks, and calls <code>handler</code> which ultimately invokes <code>send_message</code> as described above.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A support desk could embed the library in a Flask service that receives HTTP tickets, creates a <code>NewClient</code>, and forwards the ticket text as a WhatsApp message:</p>
+<pre data-lang="python"><code>from neonize.client import NewClient
+
+client = NewClient("my_bot")
+client.send_message(to_jid="12345@s.whatsapp.net", text=ticket.body)</code></pre>
+<p>The call traverses the same async client → byte loader → Go RPC path, guaranteeing that media handling and encryption are performed by the underlying Whatsmeow backend.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin third‑party GitHub Actions to commit SHA (<code>.github/workflows/*</code>).</li><li><strong>HIGH</strong> – No test suite present (<code>109 source files, 0 test files</code>).</li><li><strong>HIGH</strong> – Missing Python lockfile beside <code>pyproject.toml</code>.</li><li><strong>HIGH</strong> – <code>continue-on-error</code> on correctness step in <code>release.yml</code>.</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>autobump.yml</code>).</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate for automated updates.</li><li><strong>MEDIUM</strong> – Add a dependency‑vulnerability scan step in CI.</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout (<code>autobump.yml</code>).</li><li><strong>LOW</strong> – Add <code>timeout-minutes</code> to workflow jobs.</li><li><strong>LOW</strong> – Add repository convention files (<code>.editorconfig</code>, formatter config, etc.).</li></ul>
+<p>Additional static findings: oversized files (<code>neonize/aioze/client.py</code>, <code>neonize/client.py</code>, <code>neonize/utils/ffmpeg.py</code>), broad exception handling, deep nesting, an import cycle involving <code>neonize/aioze/client.py</code> and <code>neonize/events.py</code>, and duplicated example code blocks.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Neonize delivers a functional Python wrapper around a performant Go WhatsApp core, with clear async APIs and media utilities. However, the codebase suffers from high cognitive load, circular imports, and a lack of automated testing and dependency lockfiles. It is suitable for teams comfortable navigating a mixed Python/Go stack and willing to invest in refactoring and test coverage before production use.</p>
             </div>
 
             
@@ -107,9 +136,9 @@ Documentation: 24 doc files cover getting started, user guides, and API referenc
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">278<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>56</b></li><li><span>Protocol Buffers</span><i style="width:100%"></i><b>56</b></li><li><span>Markdown</span><i style="width:41%"></i><b>23</b></li><li><span>Go</span><i style="width:16%"></i><b>9</b></li><li><span>YAML</span><i style="width:14%"></i><b>8</b></li><li><span>C/C++ Header</span><i style="width:4%"></i><b>2</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>105</b></li><li><span>Protocol Buffers</span><i style="width:53%"></i><b>56</b></li><li><span>Markdown</span><i style="width:22%"></i><b>23</b></li><li><span>Go</span><i style="width:9%"></i><b>9</b></li><li><span>YAML</span><i style="width:8%"></i><b>8</b></li><li><span>C/C++ Header</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
                         
                     </div>

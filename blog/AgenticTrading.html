@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,26 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Quant teams must stitch together data ingestion, signal generation, portfolio construction and execution while preserving context across runs. Traditional algorithmic pipelines are static, making it difficult to reuse insights, adapt to new market regimes, or audit decisions end‑to‑end.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The FinAgent Orchestration framework replaces a linear pipeline with a network of autonomous agents that communicate via the MCP/A2A protocols. Core components live under FinAgents/agentpools/alphaagentpool/:</p><p>core/ – defines domain models (models.py) and port interfaces (ports/) that each agent implements.  
- agents/ – concrete agents such as autonomousagent.py, dataminingagent.py, meanreversionagent.py, and the memory client (alphamemoryclient.py).  
- corepkg/ – reusable services (executor.py, orchestrator.py, planner.py) and policies (circuit‑breaker, retry, timeout).</p><p>A high‑level query is turned into a DAG by the Planner Agent (corepkg/services/planner.py), then executed by the Orchestrator (corepkg/services/orchestrator.py). The Memory Agent persists context in memoryunit.json and can be swapped for a Neo4j backend (referenced in corepkg/observability/logger.py).</p><p>Demo scripts illustrate usage:</p><p>FinAgents/agentpools/alphaagentdemo/exampleusage.py – runs a single alpha‑signal agent.  
- FinAgents/agentpools/alphaagentpool/demodecoupledsystem.py – end‑to‑end walk‑through of planning, orchestration, and memory logging.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Install Python (&gt;=3.9) – version pinned in .python-version
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Algorithmic‑trading pipelines are typically hard‑coded, single‑threaded scripts that cannot retain context across runs or flexibly recombine components. Teams that need a mutable, memory‑backed workflow must stitch together data ingestion, signal generation, risk, and execution manually, leading to duplicated effort and fragile integrations.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>FinAgents/</code> implements a <strong>multi‑agent orchestration framework</strong> that maps each trading stage to an autonomous LLM‑powered agent. Core pools live under <code>FinAgents/agent_pools/</code> – e.g. <code>alpha_agent_pool</code>, <code>risk_agent_pool</code>, <code>execution_agent_pool</code>, and a shared <strong>Memory Agent</strong> that persists state in Neo4j.</p>
+<p>The demo entry point <code>FinAgents/agent_pools/alpha_agent_demo/alpha_signal_agent.py</code> (function <code>run</code> at line 462) shows a full end‑to‑end run: it loads market data, builds technical features, calls a model for inference, writes results to a JSON file, and records metadata in the memory graph.</p>
+<p>The orchestration backbone resides in <code>FinAgents/agent_pools/alpha_agent_pool/core.py</code> (functions <code>initialize</code>, <code>parse_command</code>, <code>execute_structured_task</code>) and the observability package <code>corepkg/observability/metrics.py</code>, which aggregates counters used by 69 other modules.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <strong>CLI entry point</strong> <code>FinAgents/agent_pools/alpha_agent_demo/alpha_signal_agent.py → run()</code>.</p>
+<ol><li><code>run()</code> → <strong>data loading</strong> (<code>_load_price_series</code>) reads CSV files from <code>FinAgents/agent_pools/alpha_agent_pool/qlib_local/qlib_data/…</code>.</li><li>Feature construction (<code>create_technical_features</code>) → calls <code>add_returns</code> and <code>calculate_indicators_tool</code> (both in the same file).</li><li>Model inference (<code>_calculate_technical_indicators</code>) invokes a <strong>LLM / ML model</strong> (counted as 30 outbound inference calls).</li><li>Results are persisted via <code>json.dump</code> to <code>alpha_signals_output.json</code> (filesystem write) and a <strong>Neo4j memory node</strong> through <code>FinAgents/agent_pools/memory_agent_pool/...</code> (database write).</li></ol>
+<p>The orchestrator path is <code>FinAgents/agent_pools/alpha_agent_pool/core.py → execute_structured_task</code> (called 35 times across the repo) → <code>call_tool_http</code> (network POST) → external service (<code>client.post</code>). The most‑used internal symbols are <code>sum</code> (195 callers) and <code>initialize</code> (42 callers), indicating that many agents share a common bootstrap routine.</p>
+<p>A <strong>circular import</strong> exists in <code>FinAgents/agent_pools/data_agent_pool/registry.py</code>, linking back to the data pool’s core modules; this creates a tight coupling that inflates the blast radius of any change to the registry. The most‑connected module <code>FinAgents/agent_pools/alpha_agent_pool/corepkg/observability/metrics.py</code> touches 28 functions and is imported by 69 files, making it a change‑impact hotspot.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/AgenticTrading
+cd AgenticTrading
+
+# Install the top‑level dependencies (pyproject.toml)
 python -m venv .venv
 source .venv/bin/activate
-pip install -r FinAgents/agentpools/alphaagentdemo/requirements.txt</p><p>The demo requirements include pydantic, networkx, and fastapi for the MCP server.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Agent pool settings: FinAgents/agentpools/alphaagentpool/config/alphapool.yaml.  
- Orchestrator policies: FinAgents/agentpools/alphaagentpool/config/autonomous.yaml.  
- Memory store: edit FinAgents/agentpools/alphaagentpool/memoryunit.json if a custom path is needed.</p><p>No environment‑variable secrets are shipped; users must provide API keys for any external data source referenced in their own adapters.</p><h3 class="post-h" id="running">Running</h3><p>Run the full demo (planner → orchestrator → agents)
-python FinAgents/agentpools/alphaagentpool/demodecoupledsystem.py</p><p>For a quick single‑agent test:
-python FinAgents/agentpools/alphaagentdemo/exampleusage.py</p><p>Both scripts print execution logs and store results in alphasignalsoutput.json.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A hedge‑fund quant could embed the orchestrator into a nightly batch job that receives a strategic request (e.g., “generate long‑short equity signals for the next trading day”). The planner builds a DAG of data‑fetch, feature‑engineer, and alpha‑generation agents, the orchestrator runs the graph, and the memory agent writes the plan and outcomes to a central Neo4j graph for later analysis.</p><p>from FinAgents.agentpools.alphaagentpool.corepkg.services.planner import Planner
-from FinAgents.agentpools.alphaagentpool.corepkg.services.orchestrator import Orchestrator</p><p>plan = Planner().createplan(query=&quot;Long‑short equity signals for 2024‑09‑01&quot;)
-results = Orchestrator().execute(plan)
-print(results.summary())</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No CI/CD pipeline – repository lacks .github/, Makefile, or other automation; each change must be manually validated.  
- Medium – Missing LICENSE – legal reuse unclear; add an MIT/Apache‑2.0 file.  
- Low – No lockfile – requirements.txt is not version‑pinned; reproducibility depends on PyPI state.  
- Low – Sparse test coverage – only three test files (testwithrealdata.py etc.) exist; many agents have no unit tests.  
- Low – Hard‑coded file paths – several modules reference relative CSVs under qlibdata/; moving the repo will break them unless paths are updated.  
-Low – Potential runtime errors – adapters such as agents/adapters/mcpclient/strategyadapter.py assume external services are reachable; no fallback or retry logic beyond the generic policy modules.</p><p>No obvious security secrets are committed, and the code follows a clean separation of ports/services, making future extensions straightforward.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>FinAgent Orchestration provides a concrete, modular implementation of agent‑centric trading pipelines, with clear entry points and configurable policies. The codebase is sizable but organized; however, the lack of automated testing, licensing, and pinned dependencies raises maintenance risk. Teams ready to invest in custom adapters and operational tooling will find a solid foundation; smaller projects may need to trim the framework before production use.</p>
+pip install -e .
+
+# Install demo‑specific deps
+pip install -r FinAgents/agent_pools/alpha_agent_demo/requirements.txt</code></pre>
+<p>Configuration files live alongside each pool:</p>
+<ul><li><code>FinAgents/agent_pools/alpha_agent_pool/config/alpha_pool.yaml</code> – orchestrator settings.</li><li><code>FinAgents/agent_pools/alpha_agent_pool/config/autonomous.yaml</code> – LLM prompt and tool definitions.</li></ul>
+<p>Run the demo:</p>
+<pre data-lang="bash"><code>python FinAgents/agent_pools/alpha_agent_demo/alpha_signal_agent.py</code></pre>
+<p>The script prints a short summary and writes <code>alpha_signals_output.json</code>. To start the data‑agent server (used by other pools):</p>
+<pre data-lang="bash"><code>python FinAgents/agent_pools/data_agent_pool/server.py</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A hedge‑fund quant team can replace a static back‑test script with the <code>alpha_signal_agent</code> demo, feeding live market CSVs into the pipeline. The Memory Agent will automatically log each run, enabling the planner to query historical performance and adapt future signal generation without code changes.</p>
+<pre data-lang="python"><code>from FinAgents.agent_pools.alpha_agent_demo.alpha_signal_agent import run
+run(data_path="data/latest_prices.csv")</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – CI missing</strong> – No GitHub Actions workflow; 288 source files have never been gated by automated builds.</li><li><strong>Medium – Dependabot absent</strong> – Six manifest files (<code>requirements.txt</code>, <code>pyproject.toml</code>) lack an update bot; security advisories stay unpatched.</li><li><strong>Medium – Large binary</strong> – <code>tests/data_error_rate/comparison_log.csv</code> (7 MB) is stored directly in the repo, inflating clone size.</li></ul>
+<p>Additional observations from the static analysis:</p>
+<ul><li><strong>High – Deep nesting</strong> – 46 files contain indentation depth ≥ 6, making control flow hard to follow (e.g., <code>transaction_cost_agent_pool/schema/cost_models.py</code>).</li><li><strong>High – Import cycle</strong> – <code>FinAgents/agent_pools/data_agent_pool/registry.py</code> participates in a circular import, increasing maintenance risk.</li><li><strong>High – Oversized files</strong> – <code>portfolio_construction_agent_pool/core.py</code> (≈ 1500 LOC) bundles many responsibilities; splitting is advisable.</li><li><strong>Medium – Broad exception handling</strong> – Several agents swallow all exceptions, potentially hiding runtime failures.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>AgenticTrading</code> delivers a modular, LLM‑driven trading orchestration layer with clear separation of concerns across agent pools, but the codebase suffers from high cyclomatic complexity, import cycles, and missing production safeguards (CI, dependency bots, binary management). It is suitable for teams willing to invest in refactoring and adding CI pipelines to unlock the framework’s full potential.</p>
             </div>
 
             
@@ -109,18 +129,18 @@ Low – Potential runtime errors – adapters such as agents/adapters/mcpclient/
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">3<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">539<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>86</b></li><li><span>JSON</span><i style="width:10%"></i><b>9</b></li><li><span>Markdown</span><i style="width:6%"></i><b>5</b></li><li><span>YAML</span><i style="width:6%"></i><b>5</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>301</b></li><li><span>Markdown</span><i style="width:10%"></i><b>30</b></li><li><span>YAML</span><i style="width:7%"></i><b>21</b></li><li><span>JSON</span><i style="width:6%"></i><b>17</b></li><li><span>reStructuredText</span><i style="width:5%"></i><b>14</b></li><li><span>Shell</span><i style="width:4%"></i><b>13</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>LangChain</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
@@ -164,7 +184,7 @@ Low – Potential runtime errors – adapters such as agents/adapters/mcpclient/
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>FinAgents/agent_pools/alpha_agent_demo/requirements.txt</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>FinAgents/agent_pools/alpha_agent_demo/requirements.txt</code></span></li>
                     </ul>
                 </div>
 

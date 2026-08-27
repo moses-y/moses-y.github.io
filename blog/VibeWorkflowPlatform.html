@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,16 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#build-the-application">Build the application</a><a href="#start-in-development-mode">Start in development mode</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Non-technical creators need to build AI automation workflows without writing code, but existing tools either require technical expertise (n8n, Temporal) or lock users into closed ecosystems. There&#39;s a gap for a visual, prompt-driven workflow platform that enables creation, sharing, and monetization without coding barriers.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>VibeWorkflowPlatform is a NestJS-based backend (apps/api/) for a visual workflow platform called Refly.AI. The codebase organizes functionality into feature modules: auth, canvas, canvas-sync, code-artifact, collab, credit, drive, event, form, knowledge, and copilot. Key infrastructure modules live in apps/api/src/modules/common/: fulltext-search (with elasticsearch, prisma, and token backends), object-storage (fs and minio backends), and vector-search (lancedb, qdrant implementations). Authentication uses OAuth strategies for Google, GitHub, Notion, and Twitter via guards and strategies in apps/api/src/modules/auth/. The system employs Prisma ORM, Redis, and supports both SQL (Prisma) and vector databases (LanceDB, Qdrant) for search and retrieval.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup:
-Install dependencies
-cd apps/api &amp;&amp; npm install</p><h3 class="post-h" id="build-the-application">Build the application</h3><p>npm run build</p><h3 class="post-h" id="start-in-development-mode">Start in development mode</h3><p>npm run start:dev</p><p>Configuration:
-Required environment variables are defined in apps/api/.env.example and apps/api/.env.development. The .env.development file contains what appears to be committed credentials, which is a security concern. Key variables likely include database connection strings, OAuth client secrets, and API keys for vector search/storage services.</p><p>Running it:
-The entry point is apps/api/src/main.ts which bootstrap the NestJS application. Start the development server with npm run start:dev or run via Docker using apps/api/Dockerfile.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A non-technical creator uses the visual canvas to build an AI automation: they describe a task to the Workflow Copilot, which generates a multi-step workflow on the canvas. The creator connects pre-packaged Agents (nodes) to handle tasks like content generation, data enrichment, and image creation. Once published to the Workflow Marketplace, other users can import and execute the workflow, with the original creator earning credits based on usage. Behind the scenes, the API processes the execution graph, leveraging vector search for semantic document retrieval and object storage for media handling.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>High/Security - Possible secrets/credentials committed to apps/api/.env.development - verify and rotate any exposed keys immediately
-Low/Risk - Dependencies declared without a lockfile in apps/api/package.json - non-reproducible builds; add package-lock.json or pnpm-lock.yaml
-Medium - 14 test files present but coverage unknown; apps/api/jest.config.ts exists; consider running npm test to validate
-Medium - CI/CD pipeline configured in .github/workflows/ with 20+ workflows for build, test, and deployment; verify pipeline integrity and secret masking
-Low - No tsconfig.json at root detected; TypeScript configuration lives within apps/api/</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a functional NestJS backend for a visual AI workflow platform. The codebase is well-structured with modular feature separation and supporting infrastructure for search, storage, and vector databases. However, the lockfile absence and potential secrets in .env.development are concrete risks that should be addressed before considering production use. Best suited for teams wanting to self-host an AI workflow platform rather than individual non-technical creators, given the DevOps overhead of Docker, Prisma, and Redis dependencies.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Non‑technical creators need a way to stitch together AI services without writing code, yet most workflow engines require scripting or deep UI configuration. The result is a high barrier to entry and fragile “black‑box” automations that cannot be inspected or edited on the fly.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>VibeWorkflowPlatform</code> delivers a visual canvas (see <code>apps/web/</code>) where each node is a pre‑built Agent (e.g., vector search, object storage). The backend lives in <code>apps/api/</code> and exposes REST endpoints that the front‑end calls. Core services such as Prisma DB access (<code>apps/api/src/modules/common/prisma.service.ts</code>), Redis caching (<code>apps/api/src/modules/common/redis.service.ts</code>), and file storage (<code>apps/api/src/modules/common/object-storage/backend/fs.ts</code>) are centralized, while the vector store and LangChain‑based agents live in <code>packages/ai-workspace-common/</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>apps/api/src/main.ts</code></strong> → function <code>bootstrap</code> (line 35) which creates the NestJS server and loads the environment (<code>apps/api/.env.example</code>). The most‑used internal utilities are:</p>
+<ul><li><code>buildSuccessResponse</code> (called 191 times) – formats API replies.</li><li><code>safeParseJSON</code> (118 calls) – defensive JSON handling.</li><li><code>create</code> (96 calls) – generic entity creation used by many services.</li></ul>
+<p>A typical request (e.g., creating a canvas) follows:</p>
+<ol><li>Controller <code>apps/api/src/modules/canvas/canvas.controller.ts</code> receives HTTP.</li><li>Calls <code>CanvasService</code> (<code>apps/api/src/modules/canvas/canvas.service.ts</code>), which invokes Prisma via <code>prisma.service</code> (77 modules import this hub).</li><li>If file assets are needed, <code>object-storage/backend/fs.ts</code> reads/writes the filesystem and updates <code>staticFile</code> rows.</li><li>For embeddings, <code>provider.service.ts</code> selects a model and may call external vector APIs (7 functions make outbound network calls overall).</li></ol>
+<p>The import graph shows 39 circular dependencies, the largest hub being <code>prisma.service.ts</code> (77 inbound imports, 0 outbound). Such a hub carries a high blast radius: any change to DB schema or Prisma client ripples through most API modules. The most crowded files (<code>provider.service.ts</code>, <code>canvas.service.ts</code>, <code>misc.service.ts</code>) each exceed 1 200 lines, indicating high cognitive load.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/VibeWorkflowPlatform
+cd VibeWorkflowPlatform
+
+# Install dependencies (pnpm is the declared manager)
+pnpm install
+
+# Build and run the API locally (Dockerfile present)
+docker build -t vibe-api -f apps/api/Dockerfile .
+docker run -p 3000:3000 --env-file apps/api/.env.example vibe-api</code></pre>
+<p><em>Configuration</em> – copy <code>apps/api/.env.example</code> to <code>apps/api/.env.development</code> (contains JWT secret, Stripe key, etc.) and adjust values for your environment. The same applies to <code>apps/web/.env.example</code> for the front‑end.</p>
+<p><em>Running the UI</em> – build the web container similarly (<code>apps/web/Dockerfile</code>) and expose port 4000, then navigate to <code>http://localhost:4000</code>.</p>
+<p>If you prefer a local Node run, execute the NestJS bootstrap script:</p>
+<pre data-lang="bash"><code>pnpm --filter api run start:dev   # inferred from package.json scripts</code></pre>
+<p>(Exact npm scripts are not listed; the Dockerfile is the reliable entry point.)</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A content creator wants to auto‑publish blog posts to Medium after generating an outline with GPT‑4. They add two nodes: “Generate Outline” (LangChain agent) and “Publish to Medium” (HTTP tool). When the canvas runs, the API routes the request through <code>tool.service.ts</code>, stores the generated markdown via <code>object-storage</code>, and calls Medium’s API in a single transaction, all visible on the canvas for pause/review.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Rotate credentials in <code>apps/api/.env.development</code>; remove the file from the repo.</li><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – Remove the committed <code>.env</code> and replace with an example.</li><li><strong>High</strong> – Add a test step to CI (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – Enable Dependabot (<code>.github/dependabot.yml</code>).</li><li><strong>Medium</strong> – Pin Docker base images by digest (<code>apps/api/Dockerfile</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan to CI.</li><li><strong>Medium</strong> – Add a pre‑commit secret‑scan hook.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout (<code>deploy-test.yml</code>).</li><li><strong>Medium</strong> – Run container as non‑root (<code>apps/api/Dockerfile</code>).</li></ul>
+<p>The repo includes 57 test files, but the CI workflows never invoke them. Documentation is extensive (≈ 400 Markdown files) and a license is present, yet secret‑shaped files and unpinned actions expose production risk.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The platform offers a functional visual AI workflow engine with a clear separation of front‑end canvas and back‑end services, but core modules are oversized and tightly coupled, making maintenance risky. Immediate remediation of secret handling, CI test execution, and dependency pinning is required before using this codebase in production. Suitable for teams that can invest in refactoring and security hardening.</p>
             </div>
 
             
@@ -99,18 +123,18 @@ Low - No tsconfig.json at root detected; TypeScript configuration lives within a
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">2,203<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>129</b></li><li><span>YAML</span><i style="width:21%"></i><b>27</b></li><li><span>Markdown</span><i style="width:8%"></i><b>10</b></li><li><span>JSON</span><i style="width:3%"></i><b>4</b></li><li><span>JavaScript</span><i style="width:1%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>975</b></li><li><span>TSX</span><i style="width:52%"></i><b>509</b></li><li><span>Markdown</span><i style="width:12%"></i><b>116</b></li><li><span>JSON</span><i style="width:7%"></i><b>73</b></li><li><span>SCSS</span><i style="width:7%"></i><b>70</b></li><li><span>YAML</span><i style="width:5%"></i><b>44</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Vue</span><span>Tailwind</span><span>Docker</span><span>Kubernetes</span><span>LangChain</span><span>Vector store</span></p>
                     </div>
                 </div>
 
@@ -149,7 +173,7 @@ Low - No tsconfig.json at root detected; TypeScript configuration lives within a
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>apps/api/package.json</code></span></li><li><span class="an-sev sev-high">High</span><span>Possible secrets/credentials committed to the repo <code>apps/api/.env.development</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>apps/api/.env.development</code></span></li>
                     </ul>
                 </div>
 

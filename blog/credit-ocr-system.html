@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 16, 2026</span>
-                    <span>4 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,32 +80,32 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Manual review of credit‑application PDFs is slow, error‑prone, and costly. Teams need a repeatable way to extract structured financial fields from scanned documents without sending data to external APIs.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository implements a self‑contained OCR pipeline that runs entirely on‑premise. Core code lives under src/:</p><p>src/ocr/easyocrclient.py – wraps EasyOCR, returns raw text and bounding boxes.  
- src/llm/fieldextractor.py – feeds OCR output to a local LLM (served by Ollama) to produce key‑value pairs.  
- src/tasks/pipelinetasks.py and src/celeryapp.py – define Celery workers that orchestrate OCR → LLM → validation asynchronously.</p><p>The Flask API (src/api/main.py) exposes endpoints for document upload and status queries, while src/visualization/ocrvisualization.py creates overlay images for human review. Configuration files (config/credit-ocr-system.conf, config/documenttypes.conf) drive document‑type rules and storage paths.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Prepare the environment  
-   # Copy the template and edit as needed
-   cp .env.template .env
-   # Edit .env to set POSTGRES, REDIS, AZURITE, and Ollama connection strings</p><p>The .env values are consumed by docker-compose.yml and by the Flask app via src/api/config.py.
-Build and start the stack  
-   docker compose up --build -d</p><p>Dockerfile builds the Python image used by the api service.  
-compose.yml defines PostgreSQL, Redis, Azurite (Azure Blob emulator), Ollama, and the API container.
-Run the API locally (optional)  
-   If you prefer a direct Python launch:
-   uv pip install -r &lt;(uv pip compile pyproject.toml)   # installs declared deps
-   python runapi.py                                   # starts Flask on port 5000
-Upload a document  
-   Send a POST request to http://localhost:5000/upload with a PDF file.  
-   The API stores the blob in Azurite, creates a Celery job, and returns a job ID.
-Check processing status  
-   curl http://localhost:5000/status/&lt;jobid&gt;</p><p>When completed, the response includes extracted fields, confidence scores, and a URL to the visual overlay image.</p><p>All notebooks under notebooks/ (e.g., 02ocrtextextraction.ipynb) demonstrate each stage step‑by‑step and can be used as reference implementations.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A loan‑origination service can embed the API behind its existing web portal:</p><p>import requests</p><p>files = {&#39;file&#39;: open(&#39;loanapplication.pdf&#39;, &#39;rb&#39;)}
-resp = requests.post(&#39;https://ocr.mycompany.com/upload&#39;, files=files)
-jobid = resp.json()[&#39;jobid&#39;]</p><p>poll until done
-while True:
-    status = requests.get(f&#39;https://ocr.mycompany.com/status/{jobid}&#39;).json()
-    if status[&#39;state&#39;] == &#39;COMPLETED&#39;:
-        break
-    time.sleep(2)</p><p>print(status[&#39;extractedfields&#39;])</p><p>The workflow runs entirely on internal infrastructure, preserving data privacy while delivering sub‑10‑minute turnaround.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><div class="table-scroll"><table><thead><tr><th>Severity</th><th>Issue</th><th>Location</th></tr></thead><tbody><tr><td>Medium</td><td>No CI/CD pipeline (no .github/, GitLab CI, etc.) – builds and tests are not gated automatically.</td><td>Root</td></tr><tr><td>Medium</td><td>No LICENSE file – downstream users cannot be sure of redistribution rights.</td><td>Root</td></tr><tr><td>Low</td><td>Dependencies are declared only in pyproject.toml; there is no lockfile (uv.lock exists but is not referenced in CI).</td><td>pyproject.toml, uv.lock</td></tr><tr><td>Low</td><td>.env.template contains placeholder secrets; production deployment relies on manual editing, increasing risk of accidental commit of real credentials.</td><td>.env.template</td></tr><tr><td>Low</td><td>Celery tasks (src/tasks/pipelinetasks.py) lack explicit retry/back‑off policies, which could cause lost work under transient failures.</td><td>src/tasks/pipelinetasks.py</td></tr><tr><td>Low</td><td>API input validation is minimal – uploaded files are accepted without size/type checks.</td><td>src/api/routes.py</td></tr><tr><td>Low</td><td>Documentation is extensive (README, notebooks, docs/), but the quick‑start section in the README is truncated, leaving the exact start command ambiguous.</td><td>README.md</td></tr></tbody></table></div><p>Overall the test suite (tests/) covers API routes, DMS integration, and the full pipeline, indicating reasonable functional coverage.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>The repo provides a complete, on‑premise OCR‑LLM pipeline with Docker‑compose orchestration, suitable for organizations that must keep credit‑application data internal. Code quality is solid, but the lack of CI, a license, and automated dependency locking means additional operational effort is required before production adoption. Teams with in‑house DevOps resources will find it a practical foundation; smaller teams may need to add the missing governance pieces.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Credit evaluation teams process 15–20 page loan applications by hand, taking hours per case. This repo automates the document pipeline: OCR text extraction, local LLM field extraction, validation, and stage-based storage — all on local infrastructure with no external AI APIs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>src/ocr/label_value_extraction.py</code> extracts key-value pairs from scanned documents using EasyOCR with spatial analysis; <code>src/llm/field_extractor.py</code> validates extracted data against business rules via a local Llama3.1:8b model hosted by Ollama. Results are stored in Azure Blob emulation (Azurite) by processing stage (raw, OCR, LLM, annotated), with metadata in PostgreSQL.</p>
+<p>The system is built as a tutorial: nine notebooks under <code>notebooks/</code> walk from infrastructure setup through a Flask API (<code>src/api/main.py</code>, <code>src/api/routes.py</code>) with Celery async workers (<code>src/tasks/pipeline_tasks.py</code>, <code>src/celery_app.py</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>run</code> in <code>start_credit_ocr.py:281</code>, which reaches 7 functions. The shortest path from entry to leaving the process: <code>run -&gt; check_prerequisites</code> (subprocess.run) and <code>start -&gt; _setup_database</code> (psycopg2.connect). A full run starts Docker services, waits for them, then serves the API via <code>run_api.py:27</code> (<code>main</code>).</p>
+<p>Everything routes through <code>src/storage/storage.py</code>: <code>get_storage</code> is called from 21 places, <code>upload_blob</code> from 9, <code>blob_path</code> and <code>get_document</code> from 8 each. That module is the dependency hub — 12 modules import it, and churn there is high-blast-radius. The most unstable module is <code>src/integration/pipeline</code> (Ca 5, Ce 9, instability 0.64), which orchestrates OCR → LLM → visualization.</p>
+<p>Effects outside the process: 37 functions make outbound network calls, 20 read/write a database, 12 run external commands, 5 touch files. <code>src/dms/adapters.py</code> owns database I/O; <code>src/dms/service.py</code> computes SHA-256 and handles document upload/retrieval; <code>src/api/routes.py</code> wires HTTP to the pipeline.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/credit-ocr-system
+cd credit-ocr-system
+# install (pyproject.toml + uv.lock present)
+pip install -e .        # or: uv sync
+docker compose up -d    # PostgreSQL, Redis, Ollama, Azurite
+python start_credit_ocr.py   # starts infrastructure
+python run_api.py             # serves the Flask API</code></pre>
+<p>Configuration lives in <code>config/credit-ocr-system.conf</code> and <code>config/document_types.conf</code>; copy <code>.env.template</code> to <code>.env</code> for credentials. The README directs setup through <code>notebooks/1-setup/01_setup.ipynb</code>.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A loan officer uploads <code>data/loan_application.pdf</code> via the API. <code>upload_document</code> stores the blob, Celery runs <code>integrated_pipeline</code> (OCR → LLM extraction → visualization), results land in stage-based containers, and the officer reviews extracted fields with confidence scores and bounding-box overlays in the web UI (<code>src/api/templates/index.html</code>).</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 19 findings (2 high, 17 medium). High: deep nesting (max depth 6, in <code>src/dms/adapters.py</code>, <code>start_credit_ocr.py</code>, <code>src/api/routes.py</code>) and 48 duplicated 6-line blocks across 11 files. Notable mediums: broad exception handling in <code>src/storage/storage.py</code>, <code>src/dms/adapters.py</code>, <code>src/dms/service.py</code>; the <code>storage.py</code> hub (12 dependents); high branching in <code>src/llm/validation.py</code> and <code>src/ocr/label_value_extraction.py</code> (23 branch points over 74 lines).</p>
+<p>SDLC gaps: no CI workflow, no LICENSE (all rights reserved by default), Dockerfile runs as root with an unpinned base image (<code>python:3.11-slim</code>), and no Dependabot. Note: <code>uv.lock</code> exists despite the "no lockfile" finding — verify which dependency tool is canonical. Notebook <code>02_ocr_text_extraction.ipynb</code> is 1MB, dominated by stored outputs.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A well-structured local-first OCR pipeline that demonstrates a complete credit-document workflow cleanly. It is tutorial-grade, not production-grade: no CI, no license, root containers, and a hot storage hub. Use it to learn the architecture or as a scaffold, not as-is in production.</p>
             </div>
 
             
@@ -124,7 +124,7 @@ while True:
                         <span class="an-lab">Composition</span>
                         <div class="an-score">90<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>46</b></li><li><span>Markdown</span><i style="width:26%"></i><b>12</b></li><li><span>YAML</span><i style="width:2%"></i><b>1</b></li><li><span>SQL</span><i style="width:2%"></i><b>1</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li><li><span>HTML</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>46</b></li><li><span>Markdown</span><i style="width:26%"></i><b>12</b></li><li><span>Jupyter Notebook</span><i style="width:20%"></i><b>9</b></li><li><span>YAML</span><i style="width:2%"></i><b>1</b></li><li><span>SQL</span><i style="width:2%"></i><b>1</b></li><li><span>TOML</span><i style="width:2%"></i><b>1</b></li>
                         </ul>
                         <p class="an-fw"><span>Flask</span><span>Docker</span></p>
                     </div>

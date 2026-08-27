@@ -80,12 +80,44 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Data scientists and ML engineers routinely build models in Python but hit a wall when it&#39;s time to expose them as web applications. The usual path means either learning a JavaScript framework or forcing a Python web framework to handle interactive data visualizations, scenario comparison, and pipeline orchestration. Taipy removes that gap by letting you build the entire application—UI, data flows, and scenario management—in Python.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Taipy is a Python library that generates production-ready web applications from Python code. The repo is primarily a documentation and CI/CD layer for the main taipy package, with 155 files in doc/gui/examples/ showing the breadth of what the library supports: charts (from simple line plots to Gantt, heatmaps, and polar charts), controls (buttons, date pickers, chat interfaces, file uploads), and layout blocks (dialogs, panes, and page layouts). The doc/gui/examples/ directory is effectively a gallery of working examples, each a standalone Python script you can run.</p><p>The library itself covers user interface generation, data integration, pipeline orchestration, what-if analysis with scenario management, authentication, and cron-based scheduling. The .github/workflows/ directory shows a mature CI setup: 31 workflow files covering build-and-release, frontend tests, CodeQL analysis, packaging, and integration tests. The Pipfile handles dependency declaration, though it lacks a lockfile.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install the stable release with pip install taipy as documented in the README. The project targets Python 3.9 through 3.12.</p><p>Configuration: No environment variables or configuration files are required for a basic app. Authentication and user management are built-in features you enable in code, not via external config.</p><p>Running it: Each example in doc/gui/examples/ is a standalone script you can run directly. For a custom app, you&#39;d write a Python script that imports taipy and defines your UI and logic.</p><p>pip install taipy
-Run any example, e.g. a simple button control
-python doc/gui/examples/controls/button_simple.py</p><p>The repo doesn&#39;t include a main.py or CLI entry point because the taipy package itself is the artifact—the actual source code lives in the separate Avaiga/taipy repository (19,427 stars). This repo is a fork focused on documentation and CI infrastructure.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A typical scenario: a team has a demand forecasting model in Python. They use Taipy to build an internal tool where planners can upload historical data, run the forecast, compare multiple what-if scenarios side by side, and export results—all without leaving the browser. The scenario management feature handles versioning and comparison of different model runs, while the built-in authentication controls who can access the tool.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low - Dependencies declared in Pipfile without a lockfile, meaning builds are not fully reproducible. A Pipfile.lock should be committed.
-Low - The repo contains only documentation and CI files (200 files total, 155 in doc/). The actual library source isn&#39;t here, so code quality assessment is limited to what&#39;s visible: the CI configuration is thorough (31 workflows) and the examples are well-organized. No obvious bugs or security issues in the visible code.
-Med - The repo has no pyproject.toml or setup.py, which is unusual for a Python project. The Pipfile alone suggests the packaging configuration lives in the upstream repository. Anyone forking this repo expecting to build the package directly will be confused.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Taipy is a legitimate tool for teams that want to ship data applications quickly without splitting effort across a Python backend and JavaScript frontend. The example gallery in doc/gui/examples/ is genuinely useful as both documentation and a starting point for real apps. The lack of a lockfile and the incomplete packaging setup in this fork are minor concerns; the upstream project is mature and actively maintained. Best suited for data teams that want a single-language path from model to deployed web app.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Data‑science teams often need to turn notebooks and model code into a web UI that can be deployed, monitored and versioned without learning a full‑stack framework. Maintaining separate front‑end and back‑end codebases, handling Docker builds, and wiring data pipelines creates friction and technical debt.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>taipy</code> bundles a Python‑centric runtime (<code>taipy/</code>) with a React‑based GUI (<code>frontend/taipy-gui/</code>). The core library lives in <code>taipy/</code>, exposing high‑level APIs such as <code>taipy.core.taipy.set</code> and <code>taipy.core.taipy.update</code>. The GUI entry point is <code>frontend/taipy-gui/src/components/Taipy/index.ts</code>, while the Flask server that serves the UI starts from <code>taipy/gui/servers/flask/server.py</code>. The repository also ships a full Dockerfile (<code>tools/gui/docker/nginx-prefix/Dockerfile</code>) and a Pipfile/<code>pyproject.toml</code> for Python dependency management.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the Flask server’s <code>run</code> function (<code>taipy/gui/servers/flask/server.py:337</code>). <code>run</code> builds the webapp by invoking <code>_build_webapp</code>, which launches a subprocess (<code>os.system</code>) that ultimately runs the front‑end build (<code>npm</code> scripts in <code>frontend/taipy-gui/</code>).</p>
+<p>Key internal pathways:</p>
+<div class="table-scroll"><table><thead><tr><th>Caller → Callee (calls)</th><th>Reach</th></tr></thead><tbody><tr><td><code>__init__</code> → <code>set</code> – 33×</td><td>186 functions in <code>taipy/gui/gui.py</code></td></tr><tr><td><code>set</code> → <code>_build_manager</code> – 22×</td><td>Manager factory (<code>taipy/core/_manager/_manager_factory.py</code>)</td></tr><tr><td><code>_build_manager</code> → <code>_load_fct</code> – 15×</td><td>Loads user‑defined functions, used by orchestrator (<code>taipy/core/_orchestrator/_dispatcher/_task_function_wrapper.py:38</code>)</td></tr><tr><td><code>_enhance_columns</code> → <code>_warn</code> – 14×</td><td>Central warning hub (<code>taipy/gui/_warnings.py</code>)</td></tr><tr><td><code>handle_message</code> (<code>taipy/gui/servers/flask/server.py:115</code>) → 420 functions</td><td>Handles WebSocket messages from the UI</td></tr></tbody></table></div>
+<p>The most connected module is <code>taipy/gui/__init__.py</code> (404 inbound imports, 13 outbound), acting as a hub for the entire package. It participates in a circular import cycle with <code>taipy/common/config/__init__.py</code> and <code>taipy/__init__.py</code>, which inflates change impact and can cause import‑time failures.</p>
+<p>File‑level responsibilities (high‑impact):</p>
+<ul><li><code>taipy/gui/gui.py</code> – UI bootstrap, script injection, file I/O, 186 functions, referenced by 37 files.</li><li><code>taipy/core/exceptions/exceptions.py</code> – defines 67 exception classes, used across the stack.</li><li><code>taipy/core/taipy.py</code> – public API (<code>set</code>, <code>update</code>, <code>is_editable</code>, …) called from 43 files.</li><li><code>taipy/core/_manager/_manager_factory.py</code> – constructs managers that underpin data node and job handling.</li></ul>
+<p>External effects:</p>
+<ul><li>Filesystem writes via <code>_save</code> (<code>taipy/core/_manager/_manager.py</code>) and template rendering (<code>my_index</code> → <code>template.read_text</code>).</li><li>One outbound network call (e.g., telemetry) and three external command executions (Docker build, npm scripts).</li><li>Database interactions in <code>taipy/core/data/_abstract_sql.py</code> (16 functions, 21 calls).</li></ul>
+<p>The import graph shows 194 modules in circular dependencies, which raises the risk of subtle bugs when refactoring hub modules.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/taipy
+cd taipy
+
+# Python environment (Pipenv is present)
+pipenv install --dev   # installs core + test deps
+
+# Build the front‑end (npm is implied by package.json)
+cd frontend/taipy-gui
+npm ci                # creates a lockfile (currently missing)
+npm run build         # produces static assets
+
+# Run the Flask server (entry point)
+pipenv run python -m taipy.gui.servers.flask.server</code></pre>
+<p><em>Configuration</em>: No explicit config file is required for a basic run; the server reads environment variables for host/port if set. The Dockerfile (<code>tools/gui/docker/nginx-prefix/Dockerfile</code>) can be used to containerise the built UI.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can place a <code>taipy</code> pipeline definition in <code>my_pipeline.py</code>, expose it via <code>taipy.core.taipy.set(...)</code>, and launch the UI with the Flask server. Users interact with the generated React UI to trigger model runs, view charts (see <code>doc/gui/examples/charts/</code>), and download results without writing any front‑end code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – GitHub Actions reference mutable tags (<code>stefanzweifel/git-auto-commit-action@v5</code>, <code>pypa/gh-action-pypi-publish@release/v1</code>). Pin to commit SHA.</li><li><strong>HIGH</strong> – Front‑end <code>package.json</code> lacks a lockfile; run <code>npm ci</code> and commit <code>package-lock.json</code>.</li><li><strong>HIGH</strong> – CI workflows never execute the test suite (595 test files). Add a <code>run: pytest</code> step.</li><li><strong>MEDIUM</strong> – Workflows grant default <code>GITHUB_TOKEN</code> permissions; restrict to <code>contents: read</code>.</li><li><strong>MEDIUM</strong> – No Dependabot or Renovate configured; add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – Docker base image uses mutable tag (<code>nginx</code>); replace with digest.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability gate; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – Checkout step keeps token persisted; set <code>persist-credentials: false</code>.</li><li><strong>LOW</strong> – Jobs lack <code>timeout-minutes</code>; define reasonable limits.</li></ul>
+<p>Additional observations: import cycles (32 high‑severity instances) and deep nesting (max depth 10) increase cognitive load; oversized files (&gt;800 LOC) merit splitting. Broad <code>except:</code> blocks in <code>taipy/gui/gui.py</code> and <code>_context.py</code> should be narrowed.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>taipy</code> delivers a cohesive Python‑first stack for turning data pipelines into web apps, with a clear separation between core logic and a React UI. The codebase is functional but hampered by import cycles, oversized hub modules, and several CI/ops hygiene gaps that should be addressed before production use. Teams comfortable with Python and willing to tighten the build pipeline will find it a solid foundation for rapid prototyping.</p>
             </div>
 
             
@@ -152,6 +184,30 @@ Med - The repo has no pyproject.toml or setup.py, which is unusual for a Python 
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>12</strong> of 21 declared dependencies are a major version behind. Resolved 20 of 21 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@typescript-eslint/eslint-plugin</code></td>
+                            <td>^5.30.7</td><td>8.67.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>@typescript-eslint/parser</code></td>
+                            <td>^5.30.7</td><td>8.67.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>copy-webpack-plugin</code></td>
+                            <td>^11.0.0</td><td>14.0.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>eslint-plugin-react-hooks</code></td>
+                            <td>^4.6.0</td><td>7.1.1</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>eslint-webpack-plugin</code></td>
+                            <td>^3.2.0</td><td>6.0.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>typescript</code></td>
+                            <td>^4.7.4</td><td>7.0.2</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>webpack-cli</code></td>
+                            <td>^4.10.0</td><td>7.2.2</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>plotly.js</code></td>
+                            <td>^2.35.3</td><td>4.0.0</td>
+                            <td class="beh">2 major</td></tr>
+                    </table>
+                </div>
 
                 
 

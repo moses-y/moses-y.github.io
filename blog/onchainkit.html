@@ -61,7 +61,7 @@
                 <div class="post-meta">
                     <span>January 17, 2026</span>
                     <span>3 min read</span>
-                    <span class="post-language">TypeScript</span>
+                    <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
                 <h1>onchainkit</h1>
@@ -80,24 +80,29 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-the-example">Running the example</a><a href="#using-the-library">Using the library</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers building on‑chain UX need reusable React components and TypeScript helpers that abstract low‑level blockchain calls, wallet integration, and transaction building. Without a shared library, each project re‑implements similar logic, leading to duplicated effort, inconsistent error handling, and higher maintenance cost.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>onchainkit is a monorepo that ships three primary packages:</p><p>packages/onchainkit – core React components (OnchainKitProvider, DefaultOnchainKitProviders) and a suite of API helpers (src/api/buildMintTransaction.ts, src/api/getPriceQuote.ts, etc.). The public entry is src/api/index.ts.  
- packages/create-onchain – a CLI (src/cli.ts) that scaffolds a full Next.js “mini‑app” using the core kit (packages/create-onchain/src/minikit.ts).  
- packages/miniapp‑manifest‑generator – a small UI app that creates signed manifests for Farcaster mini‑apps (src/App.tsx, src/hooks/useSignManifest.ts).</p><p>All packages share a PNPM workspace configuration (see root package.json with &quot;workspaces&quot;), enabling a single pnpm install to pull dependencies for every package. CI is defined in .github/workflows/.yml, running lint, format, and Vitest test suites.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>git clone https://github.com/coinbase/onchainkit.git
-cd onchainkit
-pnpm install          # installs all workspace packages</p><p>Node 20 and PNPM 10 are required (documented in the root README).</p><h3 class="post-h" id="configuration">Configuration</h3><p>The core kit expects a wagmi client and an alchemy (or other RPC) provider. Example code lives in examples/minikit-example/app/components/Context.tsx, where wagmi config is created and passed to &lt;OnchainKitProvider&gt;.</p><h3 class="post-h" id="running-the-example">Running the example</h3><p>pnpm f:play dev      # starts the playground (Next.js) on http://localhost:3000</p><p>The playground lives in examples/minikit-example. For a fresh project, use the CLI:</p><p>pnpm f:create run cli -- create my-app   # scaffolds a new mini‑app under ./my-app
-cd my-app
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Building onchain applications means wiring wallets, swaps, identity, and transactions against blockchain RPCs and Coinbase APIs — repetitive, error-prone boilerplate that has nothing to do with the product. OnchainKit packages that plumbing into ready-made React components and TypeScript utilities so a team can ship a working onchain app without reimplementing wallet connection, token swaps, or Farcaster frames.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>This is a fork of <code>coinbase/onchainkit</code> (1,043 upstream stars) containing four self-contained projects. The core is <code>packages/onchainkit</code> — React components for buy, swap, fund, earn, wallet, identity, and appchain bridge flows, plus an <code>api/</code> layer for Coinbase transactions. <code>packages/create-onchain</code> is a scaffolding CLI. <code>packages/miniapp-manifest-generator</code> is a browser tool for generating mini-app manifests. <code>examples/minikit-example</code> is a Next.js reference app demonstrating Farcaster frames (<code>app/actions/AddFrame.tsx</code>, <code>SendToken.tsx</code>, <code>SwapToken.tsx</code>).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>init</code> in <code>packages/create-onchain/src/cli.ts</code>, which reaches 18 functions; the only traced path leaving the process is <code>init -&gt; getVersion</code>, a filesystem read via <code>fs.readFile</code>. The rest of the system is React context and hooks, not a linear pipeline.</p>
+<p>Everything routes through a small set of shared modules. <code>styles/theme.ts</code> is a hub with 62 dependents — churn there has a wide blast radius. <code>swap/types.ts</code> (39 dependents), <code>fund/types.ts</code> (37), and <code>api/types.ts</code> (31) are type hubs. Four modules sit in import cycles (<code>swap/types</code>, <code>WalletProvider</code>, <code>api/types</code>, <code>transaction/types</code>), which makes isolated changes and testing harder than the file count suggests.</p>
+<p>The most-called functions carry the runtime: <code>sendAnalytics</code> (18 call sites), <code>useFundContext</code> (17), <code>useEarnContext</code> and <code>useAnalytics</code> (16 each). <code>FundCardProvider.tsx</code> and <code>EarnProvider.tsx</code> each feed 13 files; <code>buildErrorStruct</code> in <code>api/utils/buildErrorStruct.ts</code> centralizes error shaping across 10 callers.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/onchainkit.git
 pnpm install
-pnpm dev</p><p>(See packages/create-onchain/src/cli.ts for supported flags.)</p><h3 class="post-h" id="using-the-library">Using the library</h3><p>Import components or API helpers directly:</p><p>import { OnchainKitProvider } from &#39;@coinbase/onchainkit&#39;;
-import { getPriceQuote } from &#39;@coinbase/onchainkit/api&#39;;</p><p>function App() {
-  const quote = await getPriceQuote({ token: &#39;USDC&#39;, amount: &#39;1&#39; });
-  return &lt;OnchainKitProvider&gt;{/ UI /}&lt;/OnchainKitProvider&gt;;
-}</p><p>All TypeScript types are exported from src/api/types.ts.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A DeFi front‑end can embed &lt;SwapButton /&gt; (found in packages/onchainkit/src/appchain/bridge/components/) to let users swap tokens without writing contract interaction code. The component internally calls buildSwapTransaction and getSwapQuote, handling gas estimation and error mapping, so the host app only needs to supply a connected wallet and RPC URL.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing lockfile for example – examples/minikit-example/package.json lacks a pnpm-lock.yaml; reproducible builds rely on workspace lock only.  
- Low – Duplicate lint configs – Both root and example have separate ESLint configs (eslint.config.mjs vs examples/minikit-example/eslint.config.mjs); could drift.  
- Medium – No explicit runtime env validation – API helpers read RPC URLs from the provider but do not guard against undefined values; callers must ensure config.  
- Low – Test coverage appears complete – 51 test files across all packages, and the README badge claims 100 % coverage; Vitest config present (vitest.config.ts).  
- Low – License present – MIT license in LICENSE.md.  
- Low – CI runs on every push – Multiple GitHub Actions (build, lint, format, test) indicate a healthy SDLC.</p><p>No obvious security secrets are committed, and the monorepo uses strict TypeScript settings (tsconfig.json with &quot;strict&quot;: true).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>onchainkit delivers a well‑structured, type‑safe React toolkit for on‑chain interactions, backed by a CLI scaffold and solid test/CI coverage. It is ready for integration in production DeFi or NFT front‑ends, provided the consuming app supplies proper wallet and RPC configuration. The primary limitation is the lack of a lockfile for the example package, which is easily remedied. Teams looking to accelerate on‑chain UI development will find the library immediately useful.</p>
+pnpm f:ock build        # build the core package
+npm create onchain       # scaffold a new app</code></pre>
+<p>Requires Node.js v20 and pnpm v10. No environment variables are documented in the repo. The README's quickstart is <code>npm create onchain</code>; package shorthands like <code>pnpm f:play dev:watch</code> run the playground at localhost:3000.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team building a Farcaster mini-app uses <code>examples/minikit-example</code> as the starting point: <code>app/rootProvider.tsx</code> wires the OnchainKit provider, <code>app/actions/SendToken.tsx</code> and <code>SwapToken.tsx</code> expose frame actions, and <code>app/api/me/route.ts</code> serves user data. The frame manifest generated by <code>miniapp-manifest-generator</code> gets deployed with the app.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 94 findings (50 high, 44 medium): 34 import-cycle members, 22 hub modules, 2 oversized files (<code>identity/abis/L2ResolverAbi.ts</code> and <code>appchain/bridge/abi.ts</code>, 1,282 lines each), and high branching density in <code>OnchainKitProvider.tsx</code> and <code>useGetETHBalance.ts</code>. 418 test files exist and CI runs via GitHub Actions.</p>
+<p>SDLC findings from the workflow files:</p>
+<ul><li><strong>High</strong> — CI never executes the test suite: 407 test files, no test command in the 4 workflows read. A green check that ran no assertions is worse than none. Add a test step to the existing workflow.</li><li><strong>Med</strong> — No Dependabot/Renovate config; 7 manifests, no update bot. Advisories sit unpatched until manual audit.</li><li><strong>Med</strong> — No dependency vulnerability scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Med</strong> — <code>build.yml</code> checkout keeps <code>persist-credentials</code> true; set it false so a malicious postinstall script can't read a pushable token.</li><li><strong>Low</strong> — No <code>timeout-minutes</code> on workflow jobs; a wedged step runs to the six-hour platform default.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A competent fork of a mature, well-tested onchain component library with solid structure and real reference examples. The one thing to fix before trusting CI is making the workflows actually run the existing test suite. Use it if you're building Coinbase-ecosystem onchain apps and want the wallet/swap/frame boilerplate pre-solved.</p>
             </div>
 
             
@@ -107,16 +112,16 @@ import { getPriceQuote } from &#39;@coinbase/onchainkit/api&#39;;</p><p>function
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,192<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>70</b></li><li><span>TSX</span><i style="width:70%"></i><b>49</b></li><li><span>YAML</span><i style="width:27%"></i><b>19</b></li><li><span>Markdown</span><i style="width:21%"></i><b>15</b></li><li><span>JSON</span><i style="width:20%"></i><b>14</b></li><li><span>JavaScript</span><i style="width:11%"></i><b>8</b></li>
+                            <li><span>TSX</span><i style="width:100%"></i><b>564</b></li><li><span>TypeScript</span><i style="width:88%"></i><b>497</b></li><li><span>JSON</span><i style="width:4%"></i><b>23</b></li><li><span>YAML</span><i style="width:4%"></i><b>21</b></li><li><span>Markdown</span><i style="width:3%"></i><b>18</b></li><li><span>CSS</span><i style="width:2%"></i><b>13</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span><span>Next.js</span><span>Express</span><span>Tailwind</span></p>
                     </div>
@@ -153,12 +158,6 @@ import { getPriceQuote } from &#39;@coinbase/onchainkit/api&#39;;</p><p>function
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>examples/minikit-example/package.json</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1136168479">Open in Code Brain &rarr;</a>
