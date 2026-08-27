@@ -354,5 +354,42 @@ if (fs.existsSync(SKILL) && clusters && index) {
   console.log('  skip  skill or built data not present');
 }
 
+console.log('the graph page consumes the layer rather than re-deriving it');
+
+/*
+ * Code Graph now reads /data/kin/<id>.json instead of building its own
+ * similarity lists from forks.json. That makes it a consumer of the published
+ * files, which is the point - but it also means a path or a load order can go
+ * wrong in a way that only shows up as an empty panel in a browser nobody is
+ * looking at. These are the two failures that would be silent.
+ */
+const page = path.join(ROOT, 'knowledge-graph.html');
+const traverse = path.join(ROOT, 'assets', 'js', 'kg-traverse.js');
+if (fs.existsSync(page) && fs.existsSync(traverse)) {
+  const html = fs.readFileSync(page, 'utf8');
+  const js = fs.readFileSync(traverse, 'utf8');
+
+  const at = s => html.indexOf(s);
+  check('the page loads the traversal module',
+    at('assets/js/kg-traverse.js') !== -1);
+  check('it loads before the controller that calls it',
+    at('assets/js/kg-traverse.js') < at('assets/js/knowledge-graph.js'));
+
+  // The builder writes data/kin/<id>.json. If either side moves, the panel
+  // silently falls back to the old similarity list and looks fine.
+  check('the module fetches the path the builder writes',
+    /fetch\('data\/kin\/'/.test(js));
+  check('the module labels both provenance levels',
+    /extracted/.test(js) && /inferred/.test(js));
+
+  // The drawn graph and the clustering must agree on what counts as kin, or
+  // the picture argues with data/clusters.json.
+  const dflt = html.match(/id="edge-min"[^>]*value="([\d.]+)"/);
+  check('the default edge threshold is the clustering threshold',
+    !!dflt && Number(dflt[1]) === CLUSTER_AT, dflt ? dflt[1] : 'no control');
+} else {
+  console.log('  skip  knowledge-graph.html or kg-traverse.js not present');
+}
+
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');
 process.exit(fail ? 1 : 0);

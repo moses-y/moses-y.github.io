@@ -33,6 +33,10 @@
             iKin: document.getElementById('i-kin'),
             infoClose: document.getElementById('info-close'),
             semantic: document.getElementById('semantic-toggle'),
+            edgeCtl: document.getElementById('edge-ctl'),
+            edgeMin: document.getElementById('edge-min'),
+            edgeMinVal: document.getElementById('edge-min-val'),
+            edgeCount: document.getElementById('edge-count'),
             prev: document.getElementById('prev'),
             next: document.getElementById('next'),
             nCount: document.getElementById('n-count')
@@ -238,11 +242,21 @@
                 });
             }
 
+            // Only edges at or above the control are drawn. See kg-traverse.js.
+            var edges = KGTraverse.edgeControl(el, simLinks, function (visible) {
+                if (!semanticOn) return;
+                activeLinks = links.concat(visible);
+                rebuildAdjacency(activeLinks);
+                Graph.graphData({ nodes: nodes, links: activeLinks });
+                computeHighlight(focusId);
+            });
+
             function setSemantic(on) {
                 semanticOn = on;
                 el.semantic.setAttribute('aria-pressed', on ? 'true' : 'false');
                 el.semantic.textContent = on ? 'Force layout' : 'Semantic map';
-                activeLinks = on ? links.concat(simLinks) : links;
+                edges.show(on);
+                activeLinks = on ? links.concat(edges.visible()) : links;
                 // Adjacency drives both highlighting and neighbor-walking, so in semantic
                 // mode "Next" walks semantic kin too, not just same-language siblings.
                 rebuildAdjacency(activeLinks);
@@ -250,6 +264,7 @@
                 Graph.graphData({ nodes: nodes, links: activeLinks });
                 if (!on && Graph.d3ReheatSimulation) Graph.d3ReheatSimulation();
                 computeHighlight(focusId);
+                edges.refresh();
                 Graph.zoomToFit(900, 140);
             }
 
@@ -287,28 +302,30 @@
                 el.info.classList.remove('open');
             }
 
-            // Nearest semantic kin for a repo, clickable so you can hop by meaning.
+            /*
+             * The neighbourhood panel. This used to read simByRepo, which the
+             * page derives from forks.json, and showed one undifferentiated list
+             * of similar repositories. It now reads /data/kin/<id>.json - the
+             * published relation layer - so the page consumes the same files
+             * llms.txt advertises rather than keeping a private second opinion,
+             * and so both edge types can be shown under their provenance.
+             *
+             * kinToken guards against a slow fetch painting into a panel that has
+             * already moved to another node.
+             */
+            var kinToken = 0;
             function renderKin(node) {
                 if (node.kind !== 'repo') return;
-                var kin = (simByRepo[node.id] || []).slice(0, 4);
-                if (!kin.length) return;
-                var label = document.createElement('div');
-                label.className = 'label';
-                label.textContent = 'Semantically closest';
-                el.iKin.appendChild(label);
-                kin.forEach(function (k) {
-                    var target = nodeById[k.id];
-                    if (!target) return;
-                    var b = document.createElement('button');
-                    var nameEl = document.createElement('span');
-                    nameEl.textContent = target.name;   // repo names are untrusted input
-                    var scoreEl = document.createElement('span');
-                    scoreEl.className = 'score';
-                    scoreEl.textContent = k.sim.toFixed(2);
-                    b.appendChild(nameEl);
-                    b.appendChild(scoreEl);
-                    b.addEventListener('click', function () { focusNode(target); });
-                    el.iKin.appendChild(b);
+                var mine = ++kinToken;
+                KGTraverse.render(el.iKin, node, {
+                    token: mine,
+                    stale: function (t) { return t !== kinToken; },
+                    nodeById: nodeById,
+                    simByRepo: simByRepo,
+                    // A hop to a repository the graph does not hold is possible:
+                    // the relation layer is built from a later pipeline stage
+                    // than forks.json. Ignoring it beats navigating to nothing.
+                    onWalk: function (target) { if (target) focusNode(target); }
                 });
             }
 

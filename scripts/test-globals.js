@@ -39,8 +39,8 @@ const GROUPS = [
   },
   {
     name: 'semantic map',
-    files: ['kg-data.js', 'knowledge-graph.js'],
-    provides: ['KGData']
+    files: ['kg-data.js', 'kg-traverse.js', 'knowledge-graph.js'],
+    provides: ['KGData', 'KGTraverse']
   }
 ];
 
