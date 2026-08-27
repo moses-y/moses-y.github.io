@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 13, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,25 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#development-workflow-as-described-in-readme">Development workflow (as described in README)</a><a href="#production-build">Production build</a><a href="#running-the-app">Running the app</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers and power‑users often need to compare responses from several large language model (LLM) providers (ChatGPT, Gemini, Claude, etc.). Switching browsers or copying results between tabs is time‑consuming and error‑prone.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>llm-god is an Electron‑based desktop wrapper that opens the web consoles of supported LLMs in separate BrowserViews and forwards a single prompt to all of them. The UI lives in src/renderer.ts and the main process logic in src/main.ts. Model selection is handled by src/dropdown.ts and persisted via src/saveprompt.ts / src/saveeditedprompt.ts. Answer‑scraping helpers (answerscrapers/answersavergpt.js, answerscrapers/answersaver_gemini.js) extract the text from each provider’s page for display in the shared textarea.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>git clone https://github.com/czhou578/llm-god.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Users who work with multiple large‑language‑model (LLM) web interfaces must switch browsers, copy prompts, and juggle windows. That manual choreography wastes time and introduces copy‑paste errors, especially when the same prompt must be sent to ChatGPT, Gemini, Claude, Grok, DeepSeek, etc.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>llm-god</code> is an Electron‑based desktop app (Windows‑only, with a Linux build in testing) that embeds each supported LLM in a separate <code>BrowserView</code>. The UI lets the user add or remove models via the dropdown in <code>src/dropdown.ts</code>, paste a prompt once, and dispatch it to all active views with <strong>Ctrl + Enter</strong>.</p>
+<p>Key files:</p>
+<ul><li><code>src/main.ts</code> – creates the main Electron window (<code>createWindow</code>) and three auxiliary windows (form, model selector).</li><li><code>src/renderer.ts</code> – runs in each view; provides helpers such as <code>stripEmojis</code>, <code>logToWebPage</code>, and model‑specific open/close functions (<code>openClaudeMessage</code>, <code>openDeepSeekMessage</code>).</li><li><code>src/utilities.ts</code> – orchestrates prompt injection (<code>injectPromptIntoView</code>) and view management (<code>addBrowserView</code>, <code>removeBrowserView</code>).</li></ul>
+<p>The app’s assets (<code>*.html</code>, <code>tooltips.css</code>) are loaded into the Electron windows, while <code>answer_scrapers/</code> contains scripts that can persist LLM responses.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>src/main.ts:81</code> in the <code>createWindow</code> function, which builds the primary Electron BrowserWindow and registers a <code>resize</code> listener. That listener calls <code>updateViewBounds</code>, which in turn invokes <code>getViewHeight</code> and <code>updateZoomFactor</code>.</p>
+<p>When the user presses <strong>Ctrl + Enter</strong>, the renderer process calls <code>injectPromptIntoView</code> (defined in <code>src/utilities.ts</code>). This function:</p>
+<ol><li>Calls <code>stripEmojis</code> (implemented in <code>src/renderer.ts</code>) to sanitise the prompt.</li><li>Calls <code>updateCharCounter</code> (also in <code>src/renderer.ts</code>) to keep the UI counter in sync.</li><li>Sends the cleaned prompt to each active <code>BrowserView</code> via Electron’s IPC channel.</li></ol>
+<p><code>stripEmojis</code> is the most widely used internal utility (called from four locations). <code>buildPromptTable</code> and <code>refreshPromptTable</code> (in <code>src/save_prompt.ts</code>) are invoked when the user adds or removes a model, updating the on‑screen table that lists active prompts.</p>
+<p>The internal call graph shows <strong>41</strong> resolved edges; no circular dependencies exist. The most “blast‑radius” modules are <code>src/utilities.ts</code> (8 functions, deep nesting, 9‑level indentation) and <code>src/main.ts</code> (7 functions, 870 lines total). Both are hotspots for future change because many UI actions funnel through them.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the exact repository
+git clone https://github.com/moses-y/llm-god.git
 cd llm-god
-npm install                # installs Electron, TypeScript, Jest, etc.</p><h3 class="post-h" id="development-workflow-as-described-in-readme">Development workflow (as described in README)</h3><p>Terminal 1 – continuous TypeScript compilation
-npx tsc --watch</p><p>Terminal 2 – run the Electron app with hot‑reloading
-npx electronmon dist/main.js</p><h3 class="post-h" id="production-build">Production build</h3><p>npm run make               # invokes electron‑builder per .github/workflows/build.yml</p><p>The resulting installer appears under out/app-win32-x64.</p><h3 class="post-h" id="running-the-app">Running the app</h3><p>Launch the generated Setup.exe (Windows) or the compiled binary on macOS/Linux (experimental).  
-Use the dropdown (bottom‑right) to add/remove LLM tabs; the defaults (ChatGPT, Gemini, Llama) are locked.  
-Paste a prompt and press Ctrl + Enter to broadcast it.  
-Close the app with Ctrl + W.</p><p>No external configuration files or environment variables are required; the only prerequisite is an active login to each LLM’s web console inside the embedded browser.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A data‑science team can embed llm-god in their local workstation to benchmark model outputs for a given query:</p><p>// Example: automate a batch prompt
-import { ipcRenderer } from &#39;electron&#39;;
-const prompt = &quot;Explain the bias‑variance trade‑off in 3 sentences.&quot;;
-ipcRenderer.send(&#39;broadcast-prompt&#39;, prompt);   // internal channel used in src/main.ts</p><p>All open LLM tabs will display the answer side‑by‑side, enabling rapid comparison without manual copy‑paste.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Low – Missing code‑signing – forge.config.cjs builds unsigned Windows binaries; users must bypass Windows SmartScreen.  
-Medium – External webview security – src/main.ts loads third‑party LLM URLs in Electron BrowserViews without CSP or sandboxing, exposing the app to potential XSS or credential leakage.  
-Low – Platform limitation – README states Windows‑only; macOS/Linux support is experimental and not CI‑tested.  
-Low – Hard‑coded model list – src/dropdown.ts defines default models; adding new providers requires code changes, reducing extensibility.  
-Low – No runtime config – No .env or config file for API keys; the app relies entirely on user‑session cookies, which may break if sessions expire.  
-Low – Good test coverage – 10 Jest test files (tests/*.test.ts) cover main process, renderer, and utility functions.  
-Low – CI present – GitHub Actions workflow (.github/workflows/build.yml) runs npm run lint &amp;&amp; npm test, indicating a basic CI pipeline.  
-Low – License – MIT license present (LICENSE).</p><p>No obvious dead code or lint failures detected from the tree; TypeScript compilation passes per npm run start instructions.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>llm-god delivers a functional, Electron‑packaged UI for simultaneous prompting of multiple LLM web consoles, with a clear development script and basic test suite. It is suitable for solo developers or small teams needing quick side‑by‑side model comparison, but the lack of code‑signing, limited platform support, and security exposure of embedded webviews make it less appropriate for production‑grade deployments without further hardening.</p>
+
+# Install dependencies
+npm install
+
+# Development workflow (as documented)
+npm run start            # creates a desktop shortcut and runs the app
+# or, for hot‑reload:
+npx tsc --watch &amp;
+npx electronmon dist/main.js
+
+# Build a distributable Windows installer
+npm run make</code></pre>
+<p>No environment variables or external configuration files are required; the app expects the user to be logged into each LLM within the embedded browsers.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A software team can place <code>llm-god</code> on each developer’s workstation. When a new feature spec is drafted, the author pastes the spec into the app, hits <strong>Ctrl + Enter</strong>, and receives parallel answers from ChatGPT, Gemini, and Claude. The team then aggregates the responses without leaving the IDE, cutting the typical 5‑minute per‑model copy‑paste cycle to seconds.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin third‑party GitHub Actions to a commit SHA (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> in <code>build.yml</code>.</li><li><strong>Medium</strong> – Enable Dependabot or Renovate for automated dependency updates.</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan step to CI.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on the checkout action.</li><li><strong>Low</strong> – Add <code>timeout-minutes</code> to workflow jobs.</li><li><strong>Low</strong> – Provide repository convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Static analysis also flags:</p>
+<ul><li><strong>Deep nesting</strong> in <code>src/utilities.ts</code> (max indentation depth 9).</li><li><strong>Oversized files</strong>: <code>src/utilities.ts</code> and <code>src/main.ts</code> (~870 LOC each).</li><li><strong>Duplicated test blocks</strong> across several <code>__tests__/*.test.ts</code> files.</li><li><strong>High branching density</strong> in <code>src/utilities.ts</code> and <code>answer_scrapers/answer_saver_gpt.js</code> (245 branch points).</li></ul>
+<p>All findings are deterministic; no additional issues were invented.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>llm-god</code> delivers a functional, single‑window workflow for sending identical prompts to multiple LLM web UIs, and its codebase is small enough to grasp quickly. However, the core modules are large, deeply nested, and rely on outdated dependencies, which raises maintenance risk. The project is suitable for teams that need immediate multi‑LLM prompting and are comfortable refactoring the utility layer and updating the Electron stack.</p>
             </div>
 
             

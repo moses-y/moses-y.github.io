@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,18 +80,46 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Face swapping and manipulation tools are typically research codebases with poor CLI ergonomics, no job management, and no way to run unattended batch operations. This repo addresses that by packaging face manipulation into a production-oriented tool with a documented command surface, job queue, and headless execution mode.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>faceswap (a fork of facefusion) is a Python-based face manipulation platform. The core entry point is facefusion.py, which exposes commands for running, benchmarking, and managing jobs. The facefusion/ package is organized by responsibility: faceanalyser.py, facedetector.py, and facelandmarker.py handle detection; processors/modules/ contains the actual manipulation processors (e.g., faceswapper.py, agemodifier.py, lipsyncer.py); jobs/ implements the job queue with jobmanager.py and jobrunner.py.</p><p>The UI layer in facefusion/uis/ provides Gradio-based components for interactive use, while the CLI supports headless and batch modes. The ffmpeg.py and ffmpegbuilder.py modules handle video encoding, and download.py manages model acquisition. The test suite is substantial—40 files covering CLI paths, job management, and core utilities.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install dependencies with pip install -r requirements.txt from the repo root. The README warns that installation requires technical skill and points to platform-specific installers.</p><p>Configuration: No environment variables are required. Model files are downloaded automatically via download.py. Optional configuration lives in facefusion.ini, and CLI options are defined in args.py.</p><p>Running it: The primary entry point is python facefusion.py. The README documents these commands:</p><p>python facefusion.py run                    # interactive UI
-python facefusion.py headless-run           # no UI
-python facefusion.py batch-run              # batch processing
-python facefusion.py benchmark              # performance testing
-python facefusion.py job-create             # create a job
-python facefusion.py job-submit             # queue a job
-python facefusion.py job-run                # execute queued jobs</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A media forensics lab needs to process a batch of videos through face swapping for a client demonstration. The workflow: use job-create to define a job with source and target faces, job-submit to queue it, then job-run-all to process the batch unattended. The benchmark command lets the team compare processor performance across hardware before committing to a large run. The job system also supports retry (job-retry) for failed items, which matters when processing large video files that may hit transient encoding errors.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No dependency lockfile - requirements.txt pins nothing, so builds are non-reproducible. CI runs will drift over time.
-Med - No license file in repo root - LICENSE.md exists but the README badge references OpenRAIL-AS; verify the actual license text matches the claim.
-Low - Single CI workflow - .github/workflows/ci.yml exists, but coverage is unverified; the README references Coveralls but no config file is present.
-Low - Large module count - 126 files in facefusion/ suggests possible over-fragmentation, but the naming is consistent and test coverage is broad.
-Low - No input validation on CLI - args.py and clihelper.py handle parsing, but there&#39;s no evidence of schema validation for user-supplied paths or options.</p><p>The test suite is a genuine strength—40 files covering both unit and CLI integration paths. The codebase is well-organized with clear separation between processors, jobs, and UI layers.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A mature, well-structured face manipulation tool with a real job system and solid test coverage. The lack of dependency pinning is the main operational risk for production use. Suitable for teams needing scriptable, batch-oriented face processing rather than one-off experimentation.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a ready‑to‑run pipeline for face‑swap, enhancement, and related video/audio processing. Existing scripts are scattered across many modules, making it hard to trace execution, manage dependencies, and ensure security.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>facefusion/</code> implements the full stack: UI components (<code>facefusion/uis/*</code>), processing modules (<code>facefusion/processors/modules/*</code>), and job orchestration (<code>facefusion/jobs/*</code>). The top‑level script <code>facefusion.py</code> simply forwards CLI arguments to the core entry point in <code>facefusion/core.py</code>. Core functions such as <code>create_job</code>, <code>run</code>, <code>render</code>, and <code>pre_check</code> drive the workflow, while helper modules (<code>common_helper.py</code>, <code>filesystem.py</code>, <code>state_manager.py</code>) provide cross‑cutting utilities.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<div class="table-scroll"><table><thead><tr><th>Entry point</th><th>File &amp; line</th><th>Reach</th></tr></thead><tbody><tr><td><strong>cli</strong></td><td><code>facefusion/core.py:33</code></td><td>401 functions</td></tr><tr><td><strong>run</strong></td><td><code>facefusion/benchmarker.py:34</code></td><td>399 functions</td></tr><tr><td><strong>start</strong></td><td><code>facefusion/process_manager.py:36</code></td><td>67 functions</td></tr></tbody></table></div>
+<p>The CLI (<code>cli</code>) parses arguments and calls <code>run</code> (the benchmark runner) which in turn:</p>
+<ol><li>Calls <code>pre_check</code> → <code>create_static_model_set</code> → <code>resolve_relative_path</code> (172 calls) and <code>resolve_download_url</code> (168 calls).</li><li>Uses <code>get_item</code> (called from 117 locations) to fetch UI components, job definitions, and model files.</li><li>Invokes <code>ffmpeg.run_ffmpeg</code> (via <code>facefusion/ffmpeg.py</code>) which spawns a subprocess (<code>subprocess.Popen</code>).</li><li>Generates a hash with <code>hashlib.sha1().hexdigest</code> in <code>suggest_output_path</code> (cryptographic operation).</li></ol>
+<p>The <strong>hub module</strong> <code>facefusion/__init__.py</code> is imported by 91 other modules, making it the highest‑impact change point. State is stored in <code>facefusion/state_manager.py</code> (7 functions, referenced by 67 files) and persisted via <code>facefusion/filesystem.py</code> (27 functions, 35 callers). Job lifecycle (<code>create_job</code>, <code>submit_job</code>, <code>run_job</code>) lives in <code>facefusion/jobs/job_manager.py</code> (27 functions, 15 callers).</p>
+<p>External effects:</p>
+<ul><li>Subprocess execution (<code>ffmpeg.run_ffmpeg</code>, <code>subprocess.call</code>) – 42 functions.</li><li>File I/O – 4 functions (<code>open_stream</code>, <code>open_ffmpeg</code>, etc.).</li><li>Cryptographic hash – 1 function (<code>suggest_output_path</code>).</li></ul>
+<p>No circular imports were detected; the import graph is a clean DAG of 167 modules and 712 edges.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/faceswap.git
+cd faceswap
+
+# Install Python dependencies (no lockfile, so use a virtualenv)
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt</code></pre>
+<p>The primary command line is documented in the README:</p>
+<pre data-lang="bash"><code>python facefusion.py run          # normal run
+python facefusion.py headless-run  # headless mode
+python facefusion.py benchmark   # benchmark suite</code></pre>
+<p>Configuration files such as <code>facefusion.ini</code> and <code>facefusion.ico</code> are read by <code>facefusion/config.py</code>. No additional environment variables are required for a basic run.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A media‑production pipeline can invoke the CLI from a CI step to generate a swapped‑face video:</p>
+<pre data-lang="yaml"><code>- name: Generate swap
+  run: |
+    source .venv/bin/activate
+    python facefusion.py run --input source.mp4 --output out.mp4 --job face_swapper</code></pre>
+<p>The job manager records the job in the internal state store, and <code>ffmpeg</code> streams the processed frames to <code>out.mp4</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>gradio==5.42.0</code> and <code>onnx==1.19.0</code> have known CVEs (CVE‑2026‑27167, CVE‑2026‑28500). Upgrade to fixed versions and add a lockfile.</li><li><strong>High</strong> – GitHub Actions reference tags (<code>AnimMouse/setup-ffmpeg@v1</code>). Pin to commit SHA to prevent supply‑chain drift.</li><li><strong>Medium</strong> – No explicit <code>permissions</code> for <code>GITHUB_TOKEN</code>; add <code>permissions: contents: read</code>.</li><li><strong>Medium</strong> – No Dependabot/Renovate config; add <code>.github/dependabot.yml</code>.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium</strong> – <code>actions/checkout</code> leaves the token persisted; set <code>persist-credentials: false</code>.</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout-minutes</code>; define reasonable limits.</li></ul>
+<p>Additional static findings (selected):</p>
+<ul><li><strong>Hub module</strong> (<code>facefusion/__init__.py</code>) is imported by 91 modules – high change impact.</li><li><strong>Resource safety</strong> – <code>facefusion/uis/core.py</code> opens files without a context manager.</li><li><strong>Deep nesting</strong> – up to 6 levels in <code>facefusion/download.py</code>, <code>facefusion/face_analyser.py</code>, <code>facefusion/program_helper.py</code>.</li><li><strong>Duplicated code</strong> – 137 six‑line blocks repeated across 44 files (e.g., benchmark UI and core logic).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository provides a complete, test‑covered face‑manipulation pipeline but suffers from a few high‑impact security and maintainability risks: outdated pinned dependencies, unpinned CI actions, and a large central module that should be stabilized. It is suitable for teams comfortable with Python and willing to address the critical advisories and refactor the hub module before production deployment.</p>
             </div>
 
             

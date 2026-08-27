@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Vue</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,49 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>WhatsApp Business platforms typically require either expensive proprietary solutions or fragmented open-source patches that lack unified messaging, chatbot automation, and campaign management. Teams needing WhatsApp integration often face steep API costs, limited automation capabilities, or vendor lock-in with closed platforms.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Whatomate is a modern, open-source WhatsApp Business Platform delivering a single binary with embedded frontend. The backend is written in Go using Fastglue (cmd/whatomate/main.go) and the frontend runs Vue.js 3 with shadcn-vue components across 134 files in frontend/. Core capabilities include multi-tenant architecture with role-based access control (Admin, Manager, Agent), WhatsApp Cloud API integration, real-time WebSocket chat, template management, bulk campaigns with retry support, and chatbot automation supporting keyword-based auto-replies, conversation flows with branching logic, and AI-powered responses via OpenAI, Anthropic, or Google. Canned responses with slash commands (/shortcut) and dynamic placeholders are also available, alongside an analytics dashboard for tracking messages and campaign performance.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repository and run the production build:</p><p>git clone https://github.com/shridarpatil/whatomate.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Organizations that need a WhatsApp Business integration must stitch together separate messaging APIs, authentication, UI dashboards, and analytics. Existing commercial solutions are costly and lock‑in, while open‑source alternatives rarely ship a single binary that includes both API server and a ready‑to‑run UI.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>whatomate</code> delivers a self‑contained WhatsApp Business Platform. The Go backend (<code>cmd/whatomate/main.go</code>) builds a single binary that embeds the Vue‑based UI (<code>frontend/</code>). Core capabilities such as multi‑tenant data isolation, role‑based access control, webhook handling for Meta’s Cloud API, real‑time WebSocket chat, template &amp; campaign management, and AI‑driven chatbot flows live in the <code>internal/</code> and <code>pkg/</code> packages. The <code>docs/</code> folder holds a static site generated with Astro that documents the REST API and UI features.</p>
+<p>Key files:</p>
+<ul><li><code>cmd/whatomate/main.go</code> – entry point, parses CLI flags, runs DB migrations, starts HTTP server.</li><li><code>internal/handlers/*.go</code> – HTTP handlers for agents, analytics, campaigns, etc.</li><li><code>frontend/src/components/**</code> – Vue 3 components (shadcn‑vue) that render the dashboard.</li><li><code>docker/docker-compose.yml</code> – orchestration of the Go service, a PostgreSQL container, and optional Redis worker.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins in <code>cmd/whatomate/main.go</code>. After flag parsing it calls <code>server.Start()</code> (in <code>internal/server</code>). That function:</p>
+<ol><li>Loads configuration from <code>config.example.toml</code> (or a user‑provided <code>config.toml</code>).</li><li>Initializes the PostgreSQL connection (via <code>pkg/db</code>).</li><li>Registers routes defined in <code>internal/router.go</code>, wiring each endpoint to a handler in <code>internal/handlers</code>.</li><li>Starts a WebSocket hub (<code>internal/ws/hub.go</code>) that pushes real‑time messages to connected Vue components.</li></ol>
+<p>Handlers such as <code>internal/handlers/campaigns.go</code> invoke service layer functions in <code>pkg/service/*</code>, which in turn use repository structs in <code>pkg/repo/*</code> to perform CRUD against the DB. The only circular import detected involves the toast UI (<code>frontend/src/components/ui/toast/index.ts</code> ↔ <code>frontend/src/components/ui/toast/use-toast.ts</code>). The most connected module is <code>frontend/e2e/helpers/index.ts</code>, imported by 13 test pages, indicating a high‑impact area for test‑suite stability.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the upstream repository
+git clone https://github.com/moses-y/whatomate.git
 cd whatomate
-make build-prod
-./whatomate server -migrate</p><p>The sample config lives at config.example.toml; copy and edit it before running. Docker is also supported via docker-compose.yml and Dockerfile in the docker/ directory. Default login is admin@admin.com / admin.</p><p>Configuration: Edit config.example.toml to set WhatsApp Business API credentials, AI provider keys (OpenAI/Anthropic/Google), database connection details, and multi-tenant organization settings. The Go backend reads this config at startup; the frontend connects to the API endpoint configured in the Go binary.</p><p>Running it: Start the server with ./whatomate server (API + 1 worker by default) or ./whatomate worker -workers=4 for scaled worker processes. The API runs on port 8080 by default, and the frontend dev server runs on port 3000 via cd frontend &amp;&amp; npm run dev.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A mid-sized support team can deploy Whatomate to handle WhatsApp customer inquiries without paying per-message fees to Meta&#39;s API resellers. The chatbot flow builder (frontend/src/components/chatbot/flow-builder/FlowBuilder.vue) allows non-technical staff to design branching conversation flows visually, while AI-powered responses (frontend/e2e/tests/chatbot/ai-contexts.spec.ts) can handle common queries. Failed campaign messages are retried automatically, and canned responses with slash commands let agents reply quickly with approved templates. The multi-tenant model isolates data per organization, making it suitable for agencies managing multiple client accounts.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests &amp; CI: 18 e2e test files exist under frontend/e2e/tests/ and GitHub Actions workflows are configured in .github/workflows/ (test.yml, release.yml, deploy-docs.yml, e2e-tests.yml). CI covers test runs and releases.
-License: LICENSE present at root.
-Dependency hygiene: frontend/package.json and docs/package.json are present with package-lock.json files, suggesting npm-based dependency management.
-Configuration separation: config.example.toml is documented but not committed as config.toml — this is expected for a starter config but should be noted for production onboarding.
-No obvious structural red flags: Tests, CI, license, and lockfiles are all present where expected.</p><p>Med severity — The config.example.toml is checked into the repo without secrets, which is a positive pattern, but teams should ensure actual secrets (WhatsApp API tokens, AI keys) are excluded via .gitignore and injected at runtime.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>Whatomate delivers a functional, single-binary WhatsApp platform with solid frontend coverage and Go-backed API automation. It&#39;s well-suited for teams that need self-hosted WhatsApp capabilities with chatbot flows, campaigns, and multi-tenancy without recurring per-message fees. The Vue.js frontend is mature for a 0-star repo, and the Go backend is straightforward to build and deploy. If your team already uses Vue and Go, the learning curve is low; otherwise, expect a moderate onboarding period to navigate the flow-builder and AI provider configuration.</p>
+
+# Build the single binary (requires Go 1.24+)
+make build-prod          # produces ./whatomate
+
+# Prepare configuration
+cp config.example.toml config.toml   # edit as needed (DB credentials, Meta API keys)
+
+# Run migrations and start the server
+./whatomate server -migrate
+
+# UI is served at http://localhost:8080
+# Default login: admin@admin.com / admin</code></pre>
+<p>Docker alternative (requires Docker Engine):</p>
+<pre data-lang="bash"><code>curl -LO https://raw.githubusercontent.com/shridarpatil/whatomate/main/docker/docker-compose.yml
+curl -LO https://raw.githubusercontent.com/shridarpatil/whatomate/main/config.example.toml
+cp config.example.toml config.toml
+docker compose up -d</code></pre>
+<p>Both paths rely on the embedded frontend; no separate <code>npm install</code> is needed for production runs.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A contact‑center can deploy <code>whatomate</code> behind an internal reverse proxy, point the Meta WhatsApp Cloud webhook at <code>https://myhost/api/webhook</code>, and let agents log in via the dashboard. Campaign JSON files can be dropped into a watched directory (handled by <code>internal/worker/campaign_worker.go</code>), triggering bulk sends with automatic retry on failure.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li>HIGH – Deep nesting (max depth 8) in several Vue view files – refactor with guard clauses.</li><li>HIGH – Duplicated 6‑line blocks across 145 test files – extract shared helpers.</li><li>HIGH – Import cycle between toast UI modules – break the cycle.</li><li>HIGH – Oversized Vue files (&gt; 1 600 lines) – split by responsibility.</li><li>MEDIUM – Hub module <code>frontend/e2e/helpers/index.ts</code> (13 dependents) – keep stable, move volatile logic out.</li><li>MEDIUM – High branching density in Go handlers (<code>internal/handlers/*.go</code>) – decompose decision logic.</li></ul>
+<p><strong>Code‑health audit</strong></p>
+<ul><li>HIGH – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li>MEDIUM – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>e2e-tests.yml</code>).</li><li>MEDIUM – Enable Dependabot/Renovate (<code>.github/dependabot.yml</code> missing).</li><li>MEDIUM – Pin Docker base images by digest (<code>docker/Dockerfile</code>).</li><li>MEDIUM – Add dependency‑vulnerability scan to CI.</li><li>MEDIUM – Set <code>persist-credentials: false</code> on checkout (<code>deploy-docs.yml</code>).</li><li>MEDIUM – Run container as non‑root (<code>docker/Dockerfile</code>).</li><li>LOW – Define job timeouts in workflows.</li><li>LOW – Add convention files (<code>.editorconfig</code>, <code>.gitattributes</code>, formatter config).</li></ul>
+<p>Additional observations: tests exist (34 files) and CI runs via GitHub Actions; a license file is present; no secrets were found in the history.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>whatomate</code> offers a functional, single‑binary WhatsApp Business platform with a complete UI and extensible Go backend. It is production‑ready but carries technical debt: deep nesting, large Vue files, and a few import cycles that will increase maintenance cost. Teams comfortable with Go and Vue can adopt it quickly, especially if they address the high‑severity findings and tighten CI/CD hygiene.</p>
             </div>
 
             

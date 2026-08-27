@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 14, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TSX</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI agents need to interact with web pages, but browser automation tools are built for humans or require embedding a library. Existing solutions like Playwright or Puppeteer are heavyweight, require writing code in a specific language, and don&#39;t expose a clean command-line interface that an LLM can drive step-by-step. The result is that building agents that browse the web means writing custom integration code for each agent framework.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>agent-browser is a headless browser automation CLI designed for AI agents. It exposes a command-per-action interface — open, click, fill, snapshot — that an agent can call sequentially. The Rust CLI in cli/src/main.rs handles command parsing and dispatch, with a Node.js fallback in src/ for environments without Rust. The snapshot command produces an accessibility tree with element refs (@e1, @e2), which is the agent-friendly way to locate elements without CSS selectors.</p><p>The repo also includes a daemon mode (src/daemon.ts) and a streaming server (src/stream-server.ts) for persistent connections, plus a full documentation site under docs/ built with Next.js. The skills/agent-browser/SKILL.md file is a skill definition for agent frameworks that support the &quot;skills&quot; pattern.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install via npm, or build from source. The repo uses pnpm (see package.json and pnpm-lock.yaml), and the native Rust build requires a Rust toolchain (cli/Cargo.toml).</p><p>npm install -g agent-browser
-agent-browser install  # Download Chromium</p><p>Running it: The CLI is the entry point. Core commands from the README:</p><p>agent-browser open example.com
-agent-browser snapshot                    # Get accessibility tree with refs
-agent-browser click @e2                   # Click by ref from snapshot
-agent-browser fill @e3 &quot;test@example.com&quot; # Fill by ref
-agent-browser screenshot page.png
-agent-browser close</p><p>Configuration: No environment variables are required. The agent-browser install command handles Chromium download, and --with-deps installs Linux system dependencies.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A customer-support agent that needs to check order status:</p><p>agent-browser open https://shop.example.com/orders
-agent-browser fill &quot;#email&quot; &quot;customer@example.com&quot;
-agent-browser fill &quot;#password&quot; &quot;secret&quot;
-agent-browser click &quot;#login&quot;
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents need a reliable way to control a headless browser without writing custom Selenium or Playwright scripts. Existing CLI tools are either heavyweight Node‑only solutions or require separate language bindings, making integration noisy and slow for agents that already run in a Rust or Node environment.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>agent-browser</code> ships a native Rust binary (<code>cli/src/main.rs</code>) that drives Chromium via Playwright under the hood, falling back to a JavaScript implementation when the native build isn’t available. The CLI is exposed through the <code>bin/agent-browser</code> wrapper, which forwards commands to the Rust binary. Core browser actions live in <code>src/browser.ts</code> (high‑cognitive‑load, 1.6 k lines) and are orchestrated by <code>src/actions.ts</code>, while the low‑level protocol handling resides in <code>src/protocol.ts</code>.</p>
+<p>The documentation site (<code>docs/</code>) is a Next.js app that renders the README‑style help pages, reusing UI components such as <code>docs/src/components/code-block.tsx</code>. The Docker configuration (<code>docker/Dockerfile.build</code>) builds a reproducible image that bundles both the Rust binary and the Node runtime.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>cli/src/main.rs</code></strong> – the compiled entry point for the <code>agent-browser</code> command. <code>main.rs</code> parses CLI flags (<code>cli/src/flags.rs</code>) and dispatches to sub‑commands defined in <strong><code>cli/src/commands.rs</code></strong>. Each command creates a <code>Browser</code> instance from <strong><code>src/browser.ts</code></strong>, which internally:</p>
+<ol><li>Calls <code>install()</code> from <strong><code>cli/src/install.rs</code></strong> (deep nesting, max indentation depth 8) to ensure Chromium is present.</li><li>Opens a Playwright session via the <strong><code>protocol</code></strong> module (<code>src/protocol.ts</code>).</li><li>Executes the requested action (<code>click</code>, <code>type</code>, <code>snapshot</code>, etc.) by invoking functions exported from <strong><code>src/actions.ts</code></strong>.</li></ol>
+<p><code>src/actions.ts</code> imports <code>src/browser.ts</code> (5 inbound edges) and <code>src/protocol.ts</code> (3 edges), making it a central hub; changes here ripple across the CLI. The <code>daemon</code> module (<code>src/daemon.ts</code>) runs a background server for streaming snapshots but has no inbound imports, indicating it is only invoked explicitly.</p>
+<p>The import graph contains 32 internal modules with 17 edges and <strong>no circular dependencies</strong>. The most‑connected module is <code>src/browser</code> (Ca 5, Ce 2, instability 0.29), followed by <code>src/actions</code> (Ca 3, Ce 3, instability 0.5). The <code>docs</code> UI components are isolated, each with a single import edge.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/agent-browser
+cd agent-browser
+
+# Install dependencies (pnpm) and build the Rust binary
+pnpm install
+pnpm build:native   # requires rustup (see https://rustup.rs)
+
+# Install Chromium for the CLI
+pnpm link --global   # makes `agent-browser` globally available
+agent-browser install   # downloads the browser binary
+
+# Example command sequence
+agent-browser open https://example.com
 agent-browser snapshot
-Agent reads the snapshot, finds the order status element by ref
-agent-browser get text @e7
-agent-browser close</p><p>The agent can loop: snapshot → parse the tree → act on a ref → snapshot again. This works well with LLM agents that process text output.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - Dual implementation drift risk: The Rust CLI (cli/src/) and TypeScript fallback (src/) duplicate logic. They can diverge in behavior. Tests exist (src/actions.test.ts, src/browser.test.ts, src/protocol.test.ts) but only cover the TypeScript side, not the Rust CLI.
-Low - Untested Rust CLI: cli/src/ has no test files. The core command parsing and browser connection logic in cli/src/commands.rs and cli/src/connection.rs is untested.
-Low - Postinstall script complexity: scripts/postinstall.js and scripts/copy-native.js handle binary copying. This is a common failure point on exotic platforms, and the fallback behavior isn&#39;t documented.
-Low - CI coverage unknown: .github/workflows/ci.yml exists, but the analysis doesn&#39;t show what it covers. The test/serverless.test.ts file suggests some serverless-specific testing.</p><p>The repo is reasonably clean: license present, lockfiles committed, CI configured, husky pre-commit hook in place.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a well-designed tool for a specific niche: giving AI agents a simple, stateless CLI for browser automation. The ref-based snapshot approach is genuinely better for LLM consumption than raw selectors. The dual Rust/TypeScript implementation adds maintenance overhead, but the npm distribution makes it easy to adopt. Worth trying if you&#39;re building agent workflows that need web interaction and want to avoid embedding Playwright directly.</p>
+agent-browser click @e2
+agent-browser close</code></pre>
+<p>The <code>agent-browser install</code> step runs the code in <code>cli/src/install.rs</code>. All runtime configuration is driven by command‑line flags; no external config files are required.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A microservice that generates automated UI reports can invoke the CLI from a Node worker:</p>
+<pre data-lang="js"><code>const { execSync } = require('child_process');
+execSync('agent-browser open https://myapp.internal');
+execSync('agent-browser snapshot &gt; report.json');</code></pre>
+<p>The worker receives a JSON accessibility tree, enabling an LLM to reason about page structure without parsing raw HTML.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Pin GitHub Actions to commit SHA (<code>.github/workflows/ci.yml</code>).</li><li><strong>HIGH</strong> – Upgrade vulnerable <code>next@16.1.1</code> (CVE‑2026‑44575).</li><li><strong>MEDIUM</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions.</li><li><strong>MEDIUM</strong> – Enable Dependabot/Renovate for automatic updates.</li><li><strong>MEDIUM</strong> – Pin Docker base image by digest (<code>docker/Dockerfile.build</code>).</li><li><strong>MEDIUM</strong> – Add dependency‑vulnerability scan to CI.</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout step.</li><li><strong>MEDIUM</strong> – Add non‑root <code>USER</code> in Dockerfile.</li><li><strong>MEDIUM</strong> – Review/disable <code>postinstall</code> script in <code>package.json</code>.</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on CI jobs.</li></ul>
+<p>Additional static findings: three oversized files (<code>src/actions.ts</code>, <code>src/browser.ts</code>, <code>src/protocol.ts</code>) each exceed 1 600 lines, and deep nesting appears in <code>cli/src/commands.rs</code>, <code>cli/src/main.rs</code>, and <code>cli/src/install.rs</code>. Repeated UI fragments across several docs pages suggest a DRY improvement.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>agent-browser</code> delivers a fast, Rust‑backed CLI for headless browser control with a Node fallback, suitable for AI‑driven automation pipelines. The codebase functions but suffers from large, deeply nested modules and several security‑focused hygiene gaps that should be addressed before production use. Teams comfortable with Rust and Node can adopt it quickly, provided they apply the listed hardening fixes.</p>
             </div>
 
             

@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>May 19, 2025</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">original</span>
                 </div>
@@ -80,16 +80,51 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Retail businesses need to make sense of large volumes of sales data and customer feedback, but the analytics tools available to them are often fragmented. Sales forecasting, customer segmentation, and review analysis typically live in separate systems, making it hard to connect the dots between what customers say and what those comments mean for revenue. Decision-makers end up with dashboards that show numbers but not the reasoning behind them.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>retail-analytics is a full-stack analytics platform that combines sales forecasting, customer segmentation, and NLP-based product review analysis into a single application. The core logic lives in src/models/ (XGBoost forecasting, KMeans segmentation, BERT sentiment) and src/nlp/ (RAG pipeline with embeddings and vector search). A FastAPI layer in api/ exposes these capabilities via REST endpoints, and a Streamlit dashboard in dashboard/ provides the interactive UI.</p><p>The platform is structured around five functional areas: sales analytics, forecasting, customer segmentation, review analysis, and RAG-based Q&amp;A. The api/routers/ directory contains separate routers for each domain. Data preprocessing and feature engineering are handled in src/data/, with drift detection and metric tracking in src/monitoring/ for MLOps concerns.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install dependencies from requirements.txt. The README suggests uv pip install -r requirements.txt after creating a virtual environment.</p><p>Configuration: Copy .env.example to .env and edit. Additional configuration lives in config/ — apiconfig.yml, modelconfig.yml, and monitoringconfig.yml.</p><p>Running it: The README documents three entry points — the API via uvicorn api.main:app --reload --port 8000, the dashboard via streamlit run dashboard/app.py, and Docker via docker-compose up -d. A Makefile and setup.py are present for build tasks.</p><p>python -m venv venv
-source venv/bin/activate
-uv pip install -r requirements.txt
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Retail teams need a single place to turn raw sales, customer, and review data into forecasts, segmentations, and sentiment insights. Building and maintaining separate pipelines, APIs, and dashboards for each analytic task is time‑consuming and error‑prone.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a <strong>portfolio of four self‑contained projects</strong>:</p>
+<div class="table-scroll"><table><thead><tr><th>Project</th><th>Core code</th><th>Main purpose</th></tr></thead><tbody><tr><td><code>src/</code></td><td>data preprocessing, model training, utilities, visualisation (<code>src/data/</code>, <code>src/models/</code>, <code>src/utils/</code>, <code>src/visualization/</code>)</td><td>End‑to‑end pipelines for sales forecasting, customer segmentation, and review‑sentiment modelling.</td></tr><tr><td><code>api/</code></td><td>FastAPI entry point (<code>api/main.py</code>) and routers (<code>api/routers/*.py</code>)</td><td>HTTP layer exposing model inference, data retrieval, and RAG‑based Q&amp;A.</td></tr><tr><td><code>dashboard/</code></td><td>Streamlit app (<code>dashboard/app.py</code>) and UI components (<code>dashboard/components/*.py</code>, <code>dashboard/pages/*.py</code>)</td><td>Interactive visualisation of forecasts, segmentations, and sentiment dashboards.</td></tr><tr><td><code>notebooks/</code></td><td>Exploratory notebooks (<code>notebooks/*.ipynb</code>)</td><td>Prototype analyses and visual output for data‑science validation.</td></tr></tbody></table></div>
+<p>Key files: <code>src/cli.py</code> (CLI that drives training/evaluation), <code>api/models.py</code> (validation helpers), <code>src/models/sentiment.py</code> (LLM‑based sentiment pipeline), <code>src/models/forecasting.py</code> (XGBoost/LightGBM/Prophet), <code>src/models/segmentation.py</code> (KMeans/DBSCAN), <code>dashboard/components/charts.py</code> (plot utilities), <code>src/utils/config.py</code> (central config loader).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>CLI entry points</strong> (<code>src/cli.py</code>) – <code>train_models</code>, <code>evaluate_models</code>, <code>preprocess_data</code>.   <em> <code>train_models</code> → loads config (<code>load_config</code> in <code>src/utils/config.py</code> – 11 callers) → prepares data (<code>prepare_sentiment_data</code>, <code>prepare_forecasting_data</code>) → calls model‑specific trainers (<code>train_sentiment_model</code>, <code>train_xgboost_model</code>, <code>train_kmeans_model</code>). </em> <code>evaluate_models</code> → loads test data (<code>load_data</code>) → runs <code>evaluate_models</code> → persists metrics (<code>save_plot</code> – called from 14 places). * <code>preprocess_data</code> → reads raw CSV/JSON (<code>load_data</code>), cleans (<code>clean_retail_sales_data</code>), writes processed files (<code>save_processed_data</code>).</li></ol>
+<ol><li><strong>API server</strong> (<code>api/main.py</code>) starts a FastAPI app. Routers (<code>api/routers/*.py</code>) import helpers from <code>api/dependencies.py</code> (13 functions, 2 classes). Typical request flow:   <em> <code>/forecast</code> → <code>api/routers/forecasting.py</code> → <code>api/dependencies.get_forecasting_model</code> → <code>src/models/forecasting.get_model_config</code> → model inference (<code>model.predict</code>). </em> <code>/sentiment</code> → <code>api/routers/reviews.py</code> → <code>src/models/sentiment.train_sentiment_model</code> (or inference) → returns sentiment scores.</li></ol>
+<ol><li><strong>Dashboard</strong> (<code>dashboard/app.py</code>) launches Streamlit. UI callbacks call the same utility functions used by the API (<code>load_config</code>, <code>save_plot</code>, <code>generate_embeddings</code>). The only external call is a <code>requests</code> call without a timeout (identified as a medium issue).</li></ol>
+<p><strong>Hot‑spot modules</strong> (most inbound imports):</p>
+<ul><li><code>dashboard/components/charts.py</code> (Ca = 5) – central plot creator.</li><li><code>src/utils/config.py</code> (Ca = 6) – sole source of configuration loading.</li></ul>
+<p><strong>Call‑graph highlights</strong> – <code>save_plot</code> is invoked from 14 distinct locations, making it a high‑impact change point. <code>train_sentiment_model</code> and <code>train_kmeans_model</code> each have 8–7 callers, indicating tightly coupled training logic.</p>
+<p>No circular imports were detected; the import graph is shallow (47 edges across 57 modules). The most unstable module by metric is <code>src/cli.py</code> (instability = 1) because it imports many others but is not imported itself.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (exact URL as requested)
+git clone https://github.com/moses-y/retail-analytics.git
+cd retail-analytics
+
+# Virtual‑env install (as per README)
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+uv pip install -r requirements.txt   # uv is used in the README
+
+# Copy and edit environment variables
 cp .env.example .env
-uvicorn api.main:app --reload --port 8000</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A retail operations team could deploy this platform to monitor weekly sales forecasts, identify underperforming customer segments, and track sentiment shifts in product reviews. The RAG endpoint (api/routers/rag.py) lets analysts ask questions like &quot;What do customers complain about most for the wireless headphones?&quot; and get answers grounded in actual review data. The forecasting models in src/models/forecasting.py feed predictions into the dashboard&#39;s sales analysis pages, giving store managers a single view of expected demand and current customer sentiment.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No dependency lockfile: requirements.txt declares dependencies without pinned versions, so builds are not reproducible. This matters for a project claiming production readiness.
-Med - Duplicate test files: Tests exist in both tests/ and tests/unit/ with overlapping names (testapi.py, testmodels.py, testpreprocessing.py). This suggests either redundancy or confusion about the test layout.
-Low - Data files committed: data/raw/ contains CSV and JSONL data files. This is fine for a demo but not appropriate for a production system with real customer data.
-Low - Inconsistent notebook organization: Several notebooks live at the repo root (productreviewanalysisRAG.ipynb, salesforecastingcustomersegmentation.ipynb) alongside their markdown counterparts, while others are in notebooks/. The root-level placement is untidy.
-Positive: CI/CD is configured in .github/workflows/ (ci, cd, and tests workflows), 12 test files exist, and documentation is reasonably complete (docs/ has API docs, dashboard guide, MLOps design).</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a well-scoped retail analytics platform with a sensible architecture and working ML components. The RAG-based Q&amp;A feature is a differentiator, and the Docker/CI setup makes it deployable. The main weakness is dependency management — lack of a lockfile undermines the production-ready claim. Good fit for a mid-size retail team wanting an integrated analytics stack, less suitable for teams needing strict reproducibility or handling sensitive customer data.</p>
+# Edit .env to set DB paths, API keys, etc.
+
+# Run the API
+uvicorn api.main:app --reload --port 8000
+
+# Run the dashboard
+streamlit run dashboard/app.py
+
+# Or build/run everything with Docker
+docker compose up -d</code></pre>
+<p><em>Configuration</em> lives in <code>config/</code> (<code>api_config.yml</code>, <code>model_config.yml</code>, <code>monitoring_config.yml</code>). The CLI and API both call <code>src.utils.config.load_yaml_config</code> to read these files. No secret values are committed; the <code>.env.example</code> shows required keys.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A retailer schedules a nightly CI job that executes <code>python src/cli.py train_models</code>. The script reads <code>config/model_config.yml</code>, trains the XGBoost forecasting model and a KMeans segmentation model, and writes serialized artifacts to <code>models/</code>. The FastAPI service then serves <code>/forecast</code> and <code>/segment</code> endpoints for downstream inventory‑management systems, while the Streamlit dashboard visualises the latest forecasts for business users.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>permissions</code> for <code>GITHUB_TOKEN</code> (<code>.github/workflows/cd.yml</code>).</li><li><strong>Medium</strong> – Enable Dependabot/Renovate for dependency updates.</li><li><strong>Medium</strong> – Pin Docker base image by digest (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan step to CI.</li><li><strong>Medium</strong> – Split oversized notebook cell (<code>notebooks/sales_forecasting_customer_segmentation.ipynb</code>).</li><li><strong>Medium</strong> – Add timeout to outbound <code>requests</code> call (<code>dashboard/app.py</code>).</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout (<code>.github/workflows/cd.yml</code>).</li><li><strong>Medium</strong> – Run container as non‑root user (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Pin vulnerable package resolutions by committing a lockfile (currently none).</li><li><strong>Low</strong> – Deep nesting (max indentation depth = 8) in <code>api/models.py</code>, <code>src/data/preprocessing.py</code>, <code>src/utils/metrics.py</code>.</li><li><strong>Medium</strong> – Broad exception handling in <code>api/dependencies.py</code> and <code>src/models/forecasting.py</code>.</li><li><strong>High</strong> – Duplicated 6‑line blocks across routers and dashboard pages.</li><li><strong>Medium</strong> – Oversized files (<code>src/visualization/plots.py</code>, <code>api/routers/reviews.py</code>).</li></ul>
+<p>The repo includes tests (<code>tests/</code>), CI (<code>.github/workflows/</code>), a Dockerfile, and an MIT licence, but lacks a lockfile and several hardening practices noted above.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The codebase delivers a functional end‑to‑end retail analytics stack with clear separation between pipelines, API, and UI. It is usable out‑of‑the‑box but suffers from maintainability concerns (deep nesting, duplicated blocks) and security hygiene gaps (unpinned actions, no lockfile). Engineers comfortable refactoring Python code and tightening CI/CD can adopt it quickly; teams that need a production‑grade, reproducible build should first address the high‑severity health items.</p>
             </div>
 
             
@@ -108,7 +143,7 @@ Positive: CI/CD is configured in .github/workflows/ (ci, cd, and tests workflows
                         <span class="an-lab">Composition</span>
                         <div class="an-score">118<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>57</b></li><li><span>Markdown</span><i style="width:19%"></i><b>11</b></li><li><span>YAML</span><i style="width:14%"></i><b>8</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>57</b></li><li><span>Markdown</span><i style="width:19%"></i><b>11</b></li><li><span>YAML</span><i style="width:14%"></i><b>8</b></li><li><span>Jupyter Notebook</span><i style="width:5%"></i><b>3</b></li>
                         </ul>
                         <p class="an-fw"><span>Flask</span><span>Docker</span></p>
                     </div>

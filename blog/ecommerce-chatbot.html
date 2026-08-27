@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>June 30, 2025</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">original</span>
                 </div>
@@ -80,16 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#local-development-from-readme">Local development (from README)</a><a href="#or-via-docker">Or via Docker</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>E-commerce customers repeatedly ask the same operational questions—order status, return policy, and how to reach a human. Each query costs support time, and answers live in separate systems (databases, policy documents, contact workflows). Ari centralizes those three intents into a single chat interface backed by Google Gemini for intent detection, so routine questions resolve without an agent.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>Ari is a Gradio chat application with a modular agent architecture. The src/agents/ directory contains three intent-specific handlers—orderstatusagent.py, returnpolicyagent.py, and humanrepagent.py—coordinated by src/core/conversation.py. Order lookups query a SQLite database through SQLAlchemy (src/db/), return policy answers come from data/policies.json, and human handoff collects contact details via src/services/contactservice.py.</p><p>The LLM layer is a thin abstraction. src/llm/geminiservice.py handles primary inference, while fallbackllmservice.py and groqservice.py provide alternatives. The app.py entry point launches the Gradio interface defined in src/ui/gradioapp.py. Docker support exists via Dockerfile and docker-compose.yml, and CI runs through .github/workflows/ci.yml.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup — Clone the repo, create a virtual environment, and install dependencies. The README prescribes uv for package installation, but note that requirements.txt is the only dependency manifest. No lockfile exists, so builds are not fully reproducible.</p><p>Configuration — Required environment variables live in .env.example. The critical one is the Google Gemini API key; the code also supports Groq as an alternative provider. Copy .env.example to .env and populate it before running.</p><p>Running it — app.py is the entry point. The README documents launching via Gradio directly. A Docker path also exists if you prefer containerized execution.</p><h3 class="post-h" id="local-development-from-readme">Local development (from README)</h3><p>pip install uv
-uv venv
-source .venv/bin/activate  # macOS/Linux
-uv pip install -r requirements.txt
-python app.py</p><h3 class="post-h" id="or-via-docker">Or via Docker</h3><p>docker-compose up</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A small-to-mid-size e-commerce operation with a SQLite order database and a static return policy document can deploy this as a first-line support channel. A customer asks &quot;Where is my order?&quot;—Gemini classifies the intent, orderstatusagent.py queries the database by the 32-character order ID, and the response returns in the chat. If the customer asks for a person, humanrepagent.py collects their contact details and contactservice.py queues a follow-up. The Gradio UI means non-technical staff can monitor or test the bot without a custom frontend.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med — No dependency lockfile. requirements.txt declares direct dependencies only, so transitive versions drift across installs. Use uv lock or pip freeze to pin.
-Med — data/cachedorders.csv and data/policies.json ship in-repo. If the CSV contains real customer data (order IDs, names), that is a privacy exposure. Verify contents before public deployment.
-Low — The README mentions a chatbotdata.db file in data/, but the file listing shows only cachedorders.csv and policies.json. Either the DB is generated at runtime via src/db/setupdb.py or the README is stale.
-Low — Tests exist (tests/testmainflows.py, tests/testfallback_llm.py) and CI is configured. Coverage appears thin but present. The src/llm/interface.py abstraction is a reasonable pattern for swapping providers.
-Low — No input validation visible beyond what SQLAlchemy and the agent logic enforce. Order ID format is checked per the README, but free-text prompt injection into Gemini is not addressed.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a solid, well-structured starter for an LLM-backed support chatbot. The agent separation is clean, the fallback LLM layer is a thoughtful touch, and the Docker/CI setup makes it deployable. It is not production-hardened—no lockfile, potential data exposure in the repo, and limited test coverage—so treat it as a working prototype to harden rather than a finished product. Best suited for a team wanting a working reference architecture for Gemini-based conversational agents.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Retail support teams spend manual effort handling repetitive queries about order status, return policies, and escalation to human agents. Those interactions are high‑volume, low‑complexity, and often cause delays that hurt customer satisfaction.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository implements <strong>Ari</strong>, an agentic chatbot that interprets user intent with Google Gemini and routes the request to a dedicated agent.</p>
+<ul><li><code>src/agents/</code> contains the intent‑specific agents (<code>order_status_agent.py</code>, <code>return_policy_agent.py</code>, <code>human_rep_agent.py</code>). Each agent declares the services it needs via <code>get_required_service_keys()</code> and implements a <code>process()</code> method.</li><li>Business‑logic lives in <code>src/services/</code> – e.g. <code>order_service.py</code> formats order details from the SQLite DB, while <code>policy_service.py</code> reads <code>data/policies.json</code>.</li><li>Core conversation handling is in <code>src/core/conversation.py</code>, which creates a <code>ConversationManager</code>, loads agents, and maintains per‑session state (<code>src/core/state.py</code>).</li><li>The UI is a Gradio web app (<code>src/ui/gradio_app.py</code>) that forwards user messages to the manager and streams LLM responses.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>app.py</code></strong> (line 18) where <code>ensure_database()</code> creates the SQLite schema (<code>src/db/setup_db.py → create_tables</code>) and loads sample orders (<code>load_orders_from_csv</code>). The Flask‑style entry point is <code>src/ui/gradio_app.py</code> – the Gradio server runs <code>main()</code> (line 519) which instantiates <code>ConversationManager</code> from <code>src/core/conversation.py</code>.</p>
+<p>Message flow:</p>
+<ol><li><strong><code>handle_message</code></strong> (<code>src/core/conversation.py</code>) is invoked for each user turn. It updates the conversation state (<code>src/core/state.py → update_state</code>) and logs the exchange.</li><li>The manager calls <strong><code>determine_intent</code></strong> (<code>src/llm/fallback_llm_service.py</code>) which delegates to the configured LLM service (<code>src/llm/gemini_service.py</code> or the fallback <code>groq_service.py</code>).</li><li>Intent routing selects an agent (<code>src/agents/base_agent.py → _load_agents</code>). The chosen agent’s <code>process()</code> accesses required services (e.g., <code>OrderService.get_order_status_by_id</code>) and returns a response string.</li><li>The response is sent back through Gradio to the browser.</li></ol>
+<p>Key blast‑radius nodes:</p>
+<ul><li><code>src/core/conversation.handle_message</code> – called from 7 places, touches state and agent loading.</li><li><code>src/llm/fallback_llm_service.determine_intent</code> – called from 4 places, performs the only outbound network call (LLM API).</li><li><code>src/services/order_service.format_order_details</code> – used in 6 callers, central to order‑status output.</li></ul>
+<p>No circular import cycles were detected; the import graph is shallow (63 edges, 0 cycles). The most connected module is <code>src/core/conversation</code> (instability 0.75), indicating it is a change hotspot.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/ecommerce-chatbot.git
+cd ecommerce-chatbot
+
+# 2. Create a venv and activate it
+python3 -m venv venv
+source venv/bin/activate   # Windows: .\venv\Scripts\activate
+
+# 3. Install the fast installer (optional) and dependencies
+pip install uv
+uv pip install -r requirements.txt   # or: pip install -r requirements.txt
+
+# 4. Provide a Gemini API key (copy .env.example → .env and fill GEMINI_API_KEY)
+cp .env.example .env
+
+# 5. Launch the Gradio UI
+python app.py          # starts Flask‑style init, then Gradio server</code></pre>
+<p>The UI is reachable at <code>http://127.0.0.1:7860</code>. No additional configuration files are required beyond the <code>.env</code> key.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A customer types “Where is my order #AB12CD34EF56GH78IJ90KL12MN34OP56?” → the message reaches <code>handle_message</code>, the LLM tags it as <em>order_status</em>, the <code>OrderStatusAgent</code> queries <code>OrderService</code>, and the bot replies with a formatted status. If the user asks for a human hand‑off, <code>HumanRepAgent</code> records contact info via <code>ContactService</code> and confirms escalation.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – <code>gradio@5.22.0</code> has CVE‑2026‑27167. Fix: upgrade to the patched version and add a lockfile.</li><li><strong>High</strong> – <code>python-dotenv@1.0.1</code>, <code>pytest@7.4.0</code>, <code>bleach@6.2.0</code> each carry published advisories. Fix: upgrade and commit a lockfile.</li><li><strong>Medium</strong> – Enable Dependabot/Renovate; pin Docker base image by digest; add a dependency‑scan step in CI; move <code>data/cached_orders.csv</code> (7.9 MB) to Git LFS; set <code>persist-credentials: false</code> on checkout; add a non‑root <code>USER</code> in Dockerfile; set workflow <code>timeout-minutes</code>.</li><li><strong>Low</strong> – Add job timeouts to GitHub Actions workflow.</li></ul>
+<p>Additional measured findings: deep nesting (max depth 8) in <code>src/llm/interface.py</code>, <code>human_rep_agent.py</code>, <code>gemini_service.py</code>; high branching density in <code>src/core/config.py</code>, <code>src/db/database.py</code>, <code>src/services/order_service.py</code>; duplicated 6‑line blocks across LLM service files. All issues stem from static analysis and include concrete fix suggestions.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Ari provides a clear, modular chatbot that ties LLM intent detection to concrete e‑commerce services, with a lightweight Flask/Gradio front‑end. The codebase is functional but suffers from outdated, vulnerable dependencies and several maintainability hotspots (deep nesting, duplicated LLM logic). It is suitable for teams that need a quick prototype and are willing to invest in dependency hygiene and refactoring before production deployment.</p>
             </div>
 
             

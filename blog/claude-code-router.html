@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 14, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,13 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Claude Code is a capable coding agent, but it is locked to Anthropic&#39;s models. Teams that want to route requests to cheaper or specialized models (DeepSeek, Ollama, GLM, etc.) have to abandon the tool or build a custom proxy. This project removes that constraint by turning Claude Code into a router that can forward requests to any provider while keeping the familiar CLI workflow.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>claude-code-router (CCR) is a two-part system: a CLI (packages/cli/src/cli.ts) and a core server (packages/core/src/api/routes.ts). The CLI installs a wrapper that intercepts Claude Code&#39;s API calls and redirects them to a local server. The server then routes each request to a configured provider based on rules you define, transforms the request/response payloads as needed, and returns the result.</p><p>The routing logic lives in packages/core/src/plugins/ — there&#39;s a plugin-manager.ts for extension, token-speed.ts for token accounting, and an output system (output-manager.ts) that can send results to console, temp files, or webhooks. The CLI adds operational commands like /model for runtime switching and ccr model for terminal-based management, all documented in docs/docs/cli/.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>npm install -g @anthropic-ai/claude-code
-npm install -g @musistudio/claude-code-router</p><h3 class="post-h" id="configuration">Configuration</h3><p>Create ~/.claude-code-router/config.json. Key sections per the README: PROXYURL (optional proxy), APIKEY (auth secret, forces host to 127.0.0.1 if unset), HOST, LOG/LOGLEVEL, and NONINTERACTIVEMODE for CI environments. Provider credentials go under provider-specific keys in the same file — see docs/docs/server/config/providers.md for the full schema.</p><h3 class="post-h" id="running-it">Running it</h3><p>Start the server with ccr start, then run claude as normal. The router intercepts requests automatically. Use /model inside Claude Code to switch providers on the fly, or ccr model from the terminal. GitHub Actions integration is supported via the NONINTERACTIVEMODE flag.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team standardized on Claude Code but wants to cut API costs. They configure two routes: background refactoring tasks go to DeepSeek via OpenRouter, while complex architecture discussions stay on Anthropic&#39;s flagship model. A transformer in packages/core/src/plugins/ normalizes DeepSeek&#39;s response format so Claude Code never notices the difference. The /model command lets a developer force a specific provider mid-session when they hit a tricky bug.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No lockfile in docs/package.json; Docusaurus builds are not reproducible.
-Med – Only 3 test files across the entire repo, and none visible in the core routing/plugin logic (packages/core/src/). The routing table is the highest-risk code and is untested.
-Low – A full backup directory (docs/i18n/zh-CN/docusaurus-plugin-content-docs.backup.20260101_205603/) is committed to the repo. Dead weight and confusing.
-Low – No LICENSE file in the repo despite a badge in the README pointing to one. Verify before adopting.
-Low – The custom-router.example.js in the root suggests a plugin API, but the docs for it (docs/docs/server/advanced/custom-router.md) are not in the English current docs set.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a pragmatic tool for teams already invested in Claude Code who want provider flexibility without abandoning the CLI. The architecture is clean (CLI/server separation, plugin-based output handlers), but the lack of tests on the core routing logic is a real risk for a tool that sits between your editor and your models. Worth adopting for internal use; treat it as infrastructure you&#39;ll need to monitor, not as a set-and-forget dependency.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers using <strong>Claude Code</strong> need a way to route requests to different LLM providers, apply request/response transformations, and manage models from the command line. Without a router they must edit Claude Code’s config manually or write ad‑hoc scripts, which is error‑prone and hard to version.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>claude-code-router</code> sits between Claude Code and the underlying model APIs. It reads a JSON config (<code>~/.claude-code-router/config.json</code>) and, based on the request type, selects a provider (OpenRouter, Gemini, Ollama, etc.) and applies a transformer chain. The core logic lives in <strong><code>packages/core/src</code></strong> (transformers, plugin manager, server) while the CLI front‑end lives in <strong><code>packages/cli/src</code></strong>. The documentation site (<code>docs/src/pages/index.tsx</code>) and the example presets (<code>examples/*.json</code>) illustrate typical usage.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry point</strong> – the CLI is launched via <code>packages/cli/src/cli.ts</code> (<code>main</code> function, line 99).</li><li><code>main</code> parses arguments (via <code>@inquirer/prompts</code>) and calls <code>run</code> in <code>packages/cli/src/utils/index.ts</code> (line 186).</li><li><code>run</code> creates a readline interface, then invokes <code>getServer</code> from <code>packages/server/src/index.ts</code>.</li><li><code>getServer</code> constructs an Express app (<code>packages/core/src/server.ts:createApp</code>) and registers routes from <code>packages/core/src/api/routes.ts</code>.</li><li>When a Claude Code request arrives, the route handler calls <code>registerNamespace</code> → <code>initialize</code> → <code>registerDefaultTransformersInternal</code> (see the call chain <code>start → registerNamespace → initialize → registerDefaultTransformersInternal</code>). This iterates <code>Object.values(Transformers)</code> and triggers each transformer (e.g., <code>packages/core/src/transformer/anthropic.transformer.ts</code>, <code>openai.responses.transformer.ts</code>).</li><li>The selected transformer calls the underlying model SDK (10 distinct functions across the repo, e.g., <code>post</code> in <code>packages/server/src/index.ts</code>). These are the only outward‑facing calls: they perform HTTP requests to provider endpoints.</li><li>After the model response returns, the transformer chain may modify the payload before the server sends it back to Claude Code.</li></ol>
+<p><strong>Blast‑radius hotspots</strong> – <code>packages/core/src/types/llm.ts</code> and <code>packages/core/src/types/transformer.ts</code> are imported by 17 other modules each, making them high‑impact “hub” modules. The import cycle among <code>packages/core/src/types/llm.ts</code>, <code>packages/core/src/types/transformer.ts</code>, and <code>packages/cli/src/utils/index.ts</code> adds instability (instability = 1). The most‑connected functions (<code>cn</code>, <code>delete</code>, <code>post</code>) are called from dozens of places, so changes there ripple widely.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Install Claude Code (global)
+npm install -g @anthropic-ai/claude-code
+
+# 2. Install the router (global)
+npm install -g @musistudio/claude-code-router
+
+# 3. Create a config (example path shown in README)
+cat &gt; ~/.claude-code-router/config.json &lt;&lt;'EOF'
+{
+  "PROXY_URL": "http://127.0.0.1:7890",
+  "LOG": true,
+  "LOG_LEVEL": "debug",
+  "APIKEY": "your-secret-key",
+  "HOST": "127.0.0.1"
+}
+EOF
+
+# 4. Start the router server (CLI command)
+ccr start   # implemented in packages/cli/src/cli.ts
+
+# 5. Switch models from Claude Code
+/model gpt-4   # routed through the `/model` command handled by the transformer chain</code></pre>
+<p>All commands are documented under <code>docs/docs/cli/commands/</code> and the example presets (<code>examples/simple-preset-example.json</code>) show how to declare provider‑specific settings.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline can run unit tests, then invoke <code>ccr start</code> in a Docker container (see <code>packages/server/Dockerfile</code>). A GitHub Action can call <code>ccr model list</code> to verify that the correct provider is selected before deploying code generation steps. Because the router logs both server‑level (<code>pino</code> files) and application‑level events, operators can audit which model answered a given request.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses version tags (<code>@v4</code>, <code>@v3</code>). Replace with 40‑char commit SHAs to avoid supply‑chain attacks.</li><li><strong>High – No test suite</strong> – 157 source files, 0 test files. Add at least one test per public entry point and run them in CI.</li><li><strong>Medium – Enable Dependabot</strong> – No <code>dependabot.yml</code>; add to keep dependencies patched.</li><li><strong>Medium – Use lockfile in CI</strong> – Workflows run <code>npm install</code>; switch to <code>npm ci</code> (or <code>pnpm install --frozen-lockfile</code>).</li><li><strong>Medium – Pin Docker base image</strong> – <code>node:20-alpine</code> should be referenced by digest.</li><li><strong>Medium – Add vulnerability scan</strong> – No dependency‑review step; integrate <code>osv-scanner</code> or <code>dependency-review-action</code>.</li><li><strong>Medium – Checkout without persisting credentials</strong> – Add <code>persist-credentials: false</code> to the checkout step.</li><li><strong>Medium – Run as non‑root</strong> – Dockerfile lacks a non‑root <code>USER</code>.</li><li><strong>Low – Job timeouts</strong> – <code>.github/workflows/docker-publish.yml</code> omits <code>timeout-minutes</code>.</li><li><strong>Low – Repository conventions</strong> – Missing <code>.editorconfig</code>, <code>.gitattributes</code>, and formatter config.</li></ul>
+<p>Additional observations: the repo includes a full Docusaurus site, Docker support, and CI, but lacks automated tests and some hardening best practices identified above.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>claude-code-router</code> provides a concrete, extensible way to route Claude Code requests across multiple LLM providers and apply custom transformations, with a clear CLI and server architecture. However, the lack of tests, the presence of import cycles, and several security‑hardening gaps mean the codebase needs prudent review before production deployment. It is suitable for teams comfortable tweaking TypeScript monorepos and willing to add the missing test and hardening steps.</p>
             </div>
 
             

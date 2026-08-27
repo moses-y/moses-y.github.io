@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 27, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -81,7 +81,30 @@
 
             <div class="post-content" id="post-content">
                 
-                <p>A spy satellite simulator in your browser, except the data is real. Live open source spatial intelligence on a photorealistic 3D globe.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+                <p><strong>The Problem</strong> Operators and analysts spend most of their time stitching together dozens of web‑pages, APIs, and ad‑hoc visualisers to get a situational picture of live air, sea and ground activity. The UI is fragmented, the data pipelines are hidden, and any customisation requires digging through a maze of loosely‑connected scripts. The result is high cognitive load and brittle workflows.</p>
+<p><strong>What This Does</strong> <em>God’s Eye View</em> delivers a single, browser‑based 3‑D globe that streams real‑time public feeds (ADS‑B, AIS, OpenSky, public CCTV, seismic data) and renders them with photorealistic aircraft models and sensor‑style visual filters. Core logic lives under <code>src/</code> – e.g. <code>src/data/flights.js</code>, <code>src/data/aisLiveVessels.js</code>, and <code>src/data/cctv.js</code> fetch and normalise each feed. Rendering orchestration lives in <code>src/renderGovernor.js</code>, while annotation handling is in <code>src/annotations/annotationEngine.js</code>. The public assets (models, SVG icons, GIF demos) are in <code>public/</code> and <code>docs/media/</code>.</p>
+<p><strong>How It Is Wired</strong></p>
+<ol><li><strong>Bootstrap</strong> – <code>index.html</code> loads the Vite bundle generated from <code>src/main.js</code>.</li><li><strong>Application start</strong> – <code>src/main.js</code> creates the Three.js scene, camera (<code>src/camera.js</code>) and registers the render loop via <code>src/renderGovernor.js</code>.</li><li><strong>Data ingestion</strong> – the render loop calls the <em>data manager</em> (e.g. <code>src/data/flights.js</code>, <code>src/data/aisLiveVessels.js</code>) which each import their respective adapters (<code>src/data/aisStreamAdapter.js</code>, <code>src/data/adsbLolFallback.js</code>). These modules poll public endpoints defined in <code>config/</code> JSON files and expose a normalized stream of contacts.</li><li><strong>Rendering</strong> – <code>renderGovernor</code> is the hub (26 inbound imports, 0 outbound) and decides which overlay to draw. It pulls in <code>src/overlays/worldOverlay.js</code> (the most‑connected overlay, 17 dependents) and dispatches to specialised renderers (<code>src/cockpitTracking.js</code>, <code>src/cockpitVisionPolicy.js</code>).</li><li><strong>Interaction</strong> – UI actions funnel through <code>src/annotations/*</code> which resolve GeoJSON, screen‑space, or hybrid annotations and feed back to the render loop. Voice control is wired via <code>src/cctvFocusPolicy.js</code> and related request modules.</li><li><strong>Export / share</strong> – URL serialisation is performed in <code>src/annotations/worldAnnotationRenderer.js</code>, allowing a full state (camera, layers, target) to be bookmarked.</li></ol>
+<p>The import graph shows <strong>no circular dependencies</strong> and 348 internal modules, but <code>renderGovernor</code> and several data files (flights, militaryFlights) have the highest <em>instability</em> scores, meaning changes there propagate widely.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/gods-eye-view.git
+cd gods-eye-view
+
+# 2. Install dependencies (npm is declared in package.json)
+npm ci
+
+# 3. Provide required API keys – copy the template and fill values
+cp .env.example .env   # keys for OpenSky, Google Maps, etc. are documented in the file
+
+# 4. Start the development server (Vite)
+npm run dev            # serves index.html on http://localhost:5173</code></pre>
+<p>The <code>scripts/run-unit-tests.mjs</code> script runs the 156 test files; invoke it with <code>node scripts/run-unit-tests.mjs</code>. Documentation for each data source lives in <code>DATA_SOURCES.md</code>.</p>
+<p><strong>Real‑World Use</strong> A security‑operations centre could embed the globe in an internal portal, replace the default OpenSky key in <code>.env</code> with a privileged feed, and add a custom overlay that highlights aircraft within a no‑fly zone. The centre would import <code>src/data/groundFloor.js</code> to pull live ground‑traffic data, then call <code>renderGovernor.toggleOverlay('militaryHud')</code> to activate the tactical HUD for analysts.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>High – No CI/CD</strong> – 349 source files, no GitHub Actions or other pipeline. Add a workflow that runs <code>npm run build</code> and the unit‑test script on every push/PR.</li><li><strong>Medium – Dependabot missing</strong> – Only one manifest (<code>package.json</code>). Add <code>.github/dependabot.yml</code> to keep dependencies current.</li><li><strong>Medium – Large binaries in repo</strong> – Files such as <code>docs/media/start‑here/military-cockpit-dense-google-3d.gif</code> (8.2 MB) and other GIFs &gt;5 MB inflate clone size. Move them to Git LFS or external storage.</li></ul>
+<p>Additional static‑analysis findings (high cognitive load in <code>src/overlays/worldOverlay.js</code>, deep nesting in <code>src/data/flights.js</code>, duplicated shell snippets in <code>scripts/*.sh</code>) indicate refactoring opportunities but are not part of the formal health audit.</p>
+<p><strong>The Bottom Line</strong> <em>God’s Eye View</em> provides a functional, data‑rich 3‑D globe with a clear separation between data ingestion, rendering, and annotation. It is usable out‑of‑the‑box, but the codebase suffers from oversized hub modules and lacks automated testing pipelines, which raises maintenance risk for teams planning extensive customisation. It is a solid foundation for visual intelligence work, provided the consumer invests in CI, dependency automation, and modest refactoring.</p>
             </div>
 
             
@@ -107,10 +130,62 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Architecture</span>
+                    <p class="an-note">Top-level areas of the codebase, sized by module count. Arrows show how many imports cross from one area into another.</p>
+                    <div class="mermaid">graph TD
+  g0[&quot;src&lt;br/&gt;297 modules&quot;]
+  g1[&quot;scripts&lt;br/&gt;45 modules&quot;]
+  g2[&quot;tools&lt;br/&gt;5 modules&quot;]
+  g1 --&gt;|14| g0
+  g0 --&gt;|6| g1</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 348, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_src_renderGovernor[&quot;renderGovernor&quot;]
+  n1_src_data_groundFloor[&quot;groundFloor&quot;]
+  n2_src_overlays_worldOverlay[&quot;worldOverlay&quot;]
+  n3_src_data_pickRegistry[&quot;pickRegistry&quot;]
+  n4_src_data_flights[&quot;flights&quot;]
+  n5_src_data_contextStore[&quot;contextStore&quot;]
+  n6_src_data_manager[&quot;manager&quot;]
+  n7_src_celestialRing[&quot;celestialRing&quot;]
+  n8_src_data_geoid[&quot;geoid&quot;]
+  n9_src_data_militaryFlights[&quot;militaryFlights&quot;]
+  n7_src_celestialRing --&gt; n0_src_renderGovernor
+  n4_src_data_flights --&gt; n3_src_data_pickRegistry
+  n4_src_data_flights --&gt; n1_src_data_groundFloor
+  n4_src_data_flights --&gt; n8_src_data_geoid
+  n4_src_data_flights --&gt; n5_src_data_contextStore
+  n4_src_data_flights --&gt; n0_src_renderGovernor
+  n6_src_data_manager --&gt; n0_src_renderGovernor
+  n9_src_data_militaryFlights --&gt; n3_src_data_pickRegistry
+  n9_src_data_militaryFlights --&gt; n1_src_data_groundFloor
+  n9_src_data_militaryFlights --&gt; n8_src_data_geoid
+  n9_src_data_militaryFlights --&gt; n5_src_data_contextStore
+  n9_src_data_militaryFlights --&gt; n0_src_renderGovernor
+  n2_src_overlays_worldOverlay --&gt; n7_src_celestialRing</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>3</strong> of 11 declared dependencies are a major version behind. Resolved 11 of 11 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>vite</code></td>
+                            <td>^6.0.0</td><td>8.2.1</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>satellite.js</code></td>
+                            <td>^6.0.2</td><td>7.1.0</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>puppeteer</code></td>
+                            <td>^24.37.5</td><td>25.7.0</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
@@ -126,7 +201,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:50%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">349 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">1 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">8 occurrences</span></div><div class="loc">docs/media/start-here/military-cockpit-dense-google-3d.gif</div><div class="ev">8 blobs over 5MB: military-cockpit-dense-google-3d.gif 8.2MB, hero-open-source-reveal.gif 6.2MB, 07-helicopter-loops.gif 6.0MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 

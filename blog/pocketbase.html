@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,32 +80,56 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running-it">Running it</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams often need a turnkey backend that handles authentication, file storage, and realtime subscriptions without the overhead of provisioning a separate database or API gateway. PocketBase addresses this by bundling an embedded SQLite database, a REST‑ish API, and realtime WebSocket support into a single Go binary.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>PocketBase provides an embedded SQLite database with realtime subscriptions (core/db.go, core/events.go). The API layer lives in apis/ – recordcrud.go implements CRUD operations, recordauth.go handles password, OTP, and OAuth2 flows, and middlewares/ adds CORS, gzip, and rate‑limit handling. The admin UI is built into the binary (cmd/serve.go), and the project ships as a standalone executable or as a Go library (core/app.go). Files and user management are baked in, so you can spin up a functional backend by running one command.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Prebuilt executable: Download the appropriate archive from the Releases page, extract, and run</p><p>./pocketbase serve
-Go library: Create a new module, then use the minimal example from the README (cmd/serve.go pattern):</p><p>package main</p><p>import (
-    &quot;log&quot;
-    &quot;github.com/pocketbase/pocketbase&quot;
-    &quot;github.com/pocketbase/pocketbase/core&quot;
-)</p><p>func main() {
-    app := pocketbase.New()
-    app.OnServe().BindFunc(func(se core.ServeEvent) error {
-        se.Router.GET(&quot;/hello&quot;, func(re core.RequestEvent) error {
-            return re.String(200, &quot;Hello world!&quot;)
-        })
-        return se.Next()
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a single‑file‑style backend that supplies realtime SQLite storage, file handling, user management and an admin UI without wiring together a full‑stack framework. Maintaining such a compact stack manually is error‑prone and forces duplicated glue code for authentication, CRUD, and subscriptions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository is a <strong>portfolio of ten self‑contained projects</strong> that together implement the PocketBase platform. Core server logic lives in <code>core/</code> (e.g., <code>core/base.go</code>, <code>core/collection_model.go</code>), API handlers in <code>apis/</code> (e.g., <code>apis/record_auth.go</code>), and the admin UI in <code>ui/</code> (Svelte/Vite). The Go entry points are <code>cmd/serve.go</code> (binary <code>pocketbase serve</code>) and the example app <code>examples/base/main.go</code>.</p>
+<p>Key files:</p>
+<ul><li><code>pocketbase.go</code> – factory (<code>New</code>, <code>Start</code>) that builds the application object.</li><li><code>core/base.go</code> – defines <code>NewBaseApp</code>, the central hub for hooks, logger, and transaction info; called from 91 other files.</li><li><code>apis/serve.go</code> – <code>Serve</code> function (line 59) wires HTTP router, middlewares, and realtime hub; reaches 232 functions.</li><li><code>ui/vite.config.js</code> &amp; <code>ui/package.json</code> – compile the Svelte admin UI.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <strong><code>examples/base/main.go:19</code></strong> (<code>main</code>). It creates the app with <code>pocketbase.New()</code> (defined in <code>pocketbase.go</code>) and registers a custom route via <code>app.OnServe().BindFunc</code>. The call chain is:</p>
+<ol><li><code>main → pocketbase.New()</code> → <code>core/base.NewBaseApp</code> (via <code>core/base.go</code>).</li><li><code>app.Start()</code> → <strong><code>apis/serve.go:Serve</code></strong> (the server bootstrap).</li><li><code>Serve</code> registers middlewares, the realtime hub, and the CRUD APIs, then calls <code>Run</code>.</li></ol>
+<p><strong><code>Run</code></strong> is the most‑invoked function (303 call sites) and ultimately triggers the HTTP listener.</p>
+<p>The <strong>internal call graph</strong> shows a hub:</p>
+<ul><li><code>core/base.go</code> (119 functions, 5 types) is the widest‑impact module – any change here ripples to 91 callers.</li><li><code>core/collection_model.go</code> (34 functions, 3 types) creates collections and registers collection‑level hooks, referenced by 79 files.</li></ul>
+<p>Filesystem touches are short and explicit:</p>
+<ul><li><code>main → MustRegister → Register → registerMigrations → filesContent</code> reads migration files via <code>os.ReadFile</code>.</li><li><code>Serve → Close</code> writes a lock file (<code>w.open</code>).</li></ul>
+<p>No circular import edges were detected, so the call flow is acyclic. The most‑connected functions (<code>Run</code>, <code>NewTestApp</code>, <code>Cleanup</code>, <code>New</code>, <code>Collection</code>) have the highest blast radius because they are invoked from dozens of test utilities and production code.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the upstream repository
+git clone https://github.com/moses-y/pocketbase
+cd pocketbase
+
+# Build the Go binary (example app)
+go build ./examples/base
+
+# Run the server (default port 8090)
+./base serve</code></pre>
+<p>The UI can be rebuilt with the bundled npm toolchain:</p>
+<pre data-lang="bash"><code>cd ui
+npm ci          # reads ui/package-lock.json
+npm run dev     # starts Vite dev server (defined in ui/package.json)</code></pre>
+<p><strong>Configuration</strong> – the server reads environment variables from <code>ui/.env</code> (currently committed, see health notes). No other mandatory config files are required for a basic run.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A typical microservice might embed PocketBase to provide a lightweight data store with realtime push to a web client:</p>
+<pre data-lang="go"><code>app := pocketbase.New()
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+    se.Router.GET("/metrics", func(re *core.RequestEvent) error {
+        return re.JSON(200, map[string]any{"uptime": time.Since(start)})
     })
-    if err := app.Start(); err != nil {
-        log.Fatal(err)
-    }
-}</p><p>Run go mod init myapp &amp;&amp; go mod tidy, then go run main.go serve. To build a statically linked binary: CGOENABLED=0 go build.</p><h3 class="post-h" id="configuration">Configuration</h3><p>Configuration is exposed through command‑line flags and environment variables defined in cmd/serve.go (e.g., --dir, --http-address). No separate config.yaml is required for a basic deployment.</p><h3 class="post-h" id="running-it">Running it</h3><p>Standalone: ./pocketbase serve (entry point cmd/serve.go).  
-Go framework: go run main.go serve after the minimal main.go above.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A mobile team can prototype a client‑server app in hours: PocketBase’s embedded realtime channel pushes new records to iOS/Android clients via the JavaScript or Dart SDKs. Example workflow – after pocketbase serve, a Dart client subscribes to a collection:</p><p>final pb = PocketBase(&#39;http://127.0.0.1:8090&#39;);
-final stream = pb.collection(&#39;records&#39;).subscribe();
-stream.listen((record) {
-  print(&#39;New record: ${record.id}&#39;);
-});</p><p>This eliminates the need to set up a separate Firebase or Supabase project for early‑stage prototypes.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Tests &amp; CI: 87 test files exist; GitHub Actions workflow (release.yaml) runs on every push, providing basic regression coverage.  
-License &amp; Metadata: LICENSE.md and CHANGELOG.md are present; a .goreleaser.yaml configures releases.  
-Pre‑v1.0 risk: The README warns that full backward compatibility is not guaranteed before v1.0.0, so breaking changes may appear in future releases.  
-Code structure: The repo is well‑organized into core/, apis/, and cmd/, with clear separation of database, API, and entry‑point concerns. No obvious missing error‑handling patterns were found in the reviewed files, though the extensive auth surface (apis/recordauth_*.go) warrants attention when customizing flows.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>PocketBase delivers a compelling, single‑file realtime backend for solo developers and small teams that need quick user‑auth, file, and subscription capabilities without managing external services. Its Go‑native design, solid test suite, and active CI make it reliable for prototypes and internal tools, but the pre‑v1.0 status means breaking changes are possible—organizations building long‑term products should monitor the roadmap or pin to a specific release tag.</p>
+    return se.Next()
+})
+log.Fatal(app.Start())</code></pre>
+<p>The admin UI (<code>ui/dist</code>) can be served from the same binary, giving internal users a ready‑made dashboard.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis):</strong></p>
+<ul><li><strong>HIGH – Deep nesting</strong> (51 locations, e.g., <code>apis/realtime.go</code>).</li><li><strong>HIGH – Duplicated code blocks</strong> (≈1 100 repeats across 258 files).</li><li><strong>HIGH – Oversized test files</strong> (up to 1 532 lines).</li></ul>
+<p><strong>Code‑health audit:</strong></p>
+<ul><li><strong>HIGH</strong> – GitHub Actions pinned to tags (<code>.github/workflows/release.yaml</code>).</li><li><strong>HIGH</strong> – Committed <code>.env</code> files (<code>ui/.env</code>, <code>ui/.env.development</code>).</li><li><strong>MEDIUM</strong> – No explicit <code>permissions</code> for <code>GITHUB_TOKEN</code>.</li><li><strong>MEDIUM</strong> – No Dependabot or Renovate config.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>MEDIUM</strong> – No pre‑commit secret gate.</li><li><strong>LOW</strong> – Missing job <code>timeout-minutes</code>.</li><li><strong>LOW</strong> – Missing repository convention files (<code>.editorconfig</code>, formatter config).</li></ul>
+<p>All issues are reported directly from the analysis; recommended fixes are outlined in the audit.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>PocketBase delivers a compact, Go‑native backend with realtime SQLite and a built‑in admin UI, suitable for small‑to‑medium services that value a single‑binary deployment. The codebase is functional but suffers from high cognitive load (deep nesting, duplication) and several security‑hygiene gaps (committed env, unpinned CI actions). Teams comfortable with Go and willing to invest in refactoring and hardening can adopt it; otherwise consider a more actively maintained fork or upstream version.</p>
             </div>
 
             
@@ -135,6 +159,22 @@ Code structure: The repo is well‑organized into core/, apis/, and cmd/, with c
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>4</strong> of 64 declared dependencies are a major version behind. Resolved 23 of 64 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@sveltejs/vite-plugin-svelte</code></td>
+                            <td>^3.0.1</td><td>7.3.0</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>vite</code></td>
+                            <td>^5.0.11</td><td>8.2.1</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>svelte</code></td>
+                            <td>^4.0.0</td><td>5.56.9</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>svelte-spa-router</code></td>
+                            <td>^4.0.0</td><td>5.1.1</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">

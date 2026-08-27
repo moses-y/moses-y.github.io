@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 15, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,15 +80,38 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Teams running analytics workloads on Modal often need a way to visualize the data they process. Standing up a BI tool like Metabase typically means provisioning a separate server, managing its lifecycle, and wiring it into existing infrastructure. This repo packages Metabase as a serverless Modal app, so the BI layer runs alongside the compute it visualizes.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>modal-metabase deploys the Metabase JAR as a Modal function. The core logic lives in app/main.py, which defines the Modal app and its entry point. The bin/deploy-modal script handles the deployment, and bin/install bootstraps the environment with uv.</p><p>The pyproject.toml declares the Modal dependency, and uv.lock pins the dependency tree for reproducible installs. The README explicitly warns this is a proof of concept, not tuned for production. It recommends provisioning a separate Postgres database and setting environment variables per Metabase&#39;s official docs.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install uv, then run bin/install to create a virtual environment and install dependencies.</p><p>Configuration: No config file exists in the repo. The README directs you to Metabase&#39;s environment variable documentation for database and connection settings. You set these at deploy time, likely via Modal secrets or environment variables, though the repo gives no explicit mechanism.</p><p>Running it: Deploy with bin/deploy-modal, then visit the URL printed by the deploy command. The README shows the expected format: https://YOURMODALPROFILE--modal-metabase-metabase.modal.run.</p><p>git clone https://github.com/anthonycorletti/modal-metabase.git &amp;&amp; cd modal-metabase
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Data‑science teams often spin up Metabase manually, juggling cloud credentials, container builds, and networking. The result is a fragmented setup that is slow to provision and hard to keep in sync with the rest of the ML stack.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository packages a minimal Metabase deployment that runs on <strong>Modal</strong>. The core logic lives in <code>app/main.py</code>, where a <code>metabase</code> function builds a Modal container, pulls the Metabase JAR, and launches it. Supporting scripts (<code>bin/install</code>, <code>bin/deploy-modal</code>) automate environment preparation and the Modal deployment command. The <code>README.md</code> walks a user through cloning, installing <code>uv</code>, and invoking the two bin scripts to get a live Metabase instance.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at the <strong>entry point</strong> <code>app/main.py</code>. The file defines a single function, <code>metabase</code>, which:</p>
+<ol><li>Calls <code>modal.Image.from_dockerhub</code> (via the <code>modal</code> SDK) to create a container image.</li><li>Executes an <strong>external command</strong> (<code>subprocess.run</code>) that runs the <code>java -jar metabase.jar</code> command inside the container.</li><li>Performs an <strong>outbound HTTP request</strong> (using <code>requests</code>) to fetch the Metabase JAR from its public URL.</li></ol>
+<p>No other Python modules import <code>app/main.py</code>; the internal import graph contains only <code>app/__init__.py</code> (empty) and <code>app/main.py</code>, so the call chain is linear. The external command and network call constitute the only side‑effects outside the repository. Because the function catches a bare <code>except</code>, any exception from the download or subprocess is silently swallowed, which inflates the blast radius of failures.</p>
+<p>The bin scripts are thin wrappers:</p>
+<ul><li><code>bin/install</code> creates a virtual environment with <code>uv</code> and runs <code>uv sync</code> based on <code>pyproject.toml</code>.</li><li><code>bin/deploy-modal</code> sources the environment and runs <code>modal run app.main:metabase</code>.</li></ul>
+<p>No Dockerfile or CI configuration is present, so the build and test steps are not automated beyond the manual <code>uv</code> workflow.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the repo
+git clone https://github.com/moses-y/modal-metabase &amp;&amp; cd modal-metabase
+
+# 2. Install uv (if not already installed)
+#    Follow https://docs.astral.sh/uv/getting-started/installation/
+
+# 3. Install dependencies and activate the venv
 bin/install
 source .venv/bin/activate
-bin/deploy-modal</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A data engineering team runs nightly ETL jobs on Modal that write results to a warehouse. They deploy this Metabase app once, point it at the warehouse via environment variables, and give analysts a URL to build dashboards against the fresh data. The Metabase instance stays warm on Modal&#39;s infrastructure, so it&#39;s available on demand without a dedicated server.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No tests: No test files exist. The app is a thin wrapper around Metabase&#39;s JAR, so the risk is low, but there&#39;s no automated verification that the Modal function deploys correctly.
-Med – No CI/CD: No .github/ or CI config. Deploys are manual via bin/deploy-modal. A regression in the Modal API or Metabase version would go unnoticed until deploy time.
-Med – No LICENSE: Usage and redistribution rights are unclear. This matters if you plan to fork or embed it in a product.
-Low – No lockfile for Python deps: uv.lock exists, which is good. The warning is about the absence of a pinned Metabase version; the JAR version is not specified in the repo, so behavior can drift between deploys.
-Low – Untested production path: The README&#39;s own warning is the honest assessment. The default H2 database is fine for a demo but will not survive container restarts.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a minimal, working proof of concept for running Metabase on Modal. It does one thing and does it simply, with clear setup instructions. It is not production-ready out of the box — you need a real database, pinned versions, and a CI gate before relying on it. Suitable for a quick demo or internal tooling, not a customer-facing analytics platform.</p>
+
+# 4. Deploy to Modal
+bin/deploy-modal</code></pre>
+<p>After deployment, open the URL printed by Modal (pattern: <code>https://&lt;profile&gt;--modal-metabase-metabase.modal.run</code>). The Metabase UI will appear and can be configured with environment variables as described in the Metabase documentation.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science team can add this repo to their ML pipeline repo, version‑control the <code>bin</code> scripts, and invoke <code>bin/deploy-modal</code> from a CI job (once CI is added). The resulting Metabase instance can point at the team’s PostgreSQL warehouse, providing a low‑friction analytics front‑end that lives in the same cloud region as the model serving workloads.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Medium – Broad exception handling</strong> – <code>app/main.py</code> uses a bare <code>except</code>, swallowing all errors.</li><li><strong>Medium – Enable Dependabot or Renovate</strong> – <code>pyproject.toml</code> is the only manifest; no bot is configured to keep dependencies up‑to‑date.</li><li><strong>Medium – Outbound request lacks timeout</strong> – The <code>requests.get</code> call in <code>app/main.py</code> has no <code>timeout=</code> argument, risking hangs.</li><li><strong>Medium – No test suite</strong> – Repository contains no <code>tests/</code> directory or test files.</li><li><strong>Medium – No CI pipeline</strong> – No <code>.github/workflows/</code> or other CI configuration.</li><li><strong>Medium – No LICENSE file</strong> – Legal reuse terms are undefined.</li><li><strong>Medium – No lockfile</strong> – <code>uv.lock</code> is present but not referenced; <code>pyproject.toml</code> lists <code>modal &gt;=0.72</code> while the current major is 1.5.4, leaving the project a major version behind.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a quick‑start Metabase on Modal with minimal code and clear deployment scripts, making it suitable for proof‑of‑concepts or internal demos. However, the lack of tests, CI, proper exception handling, timeout safeguards, and up‑to‑date dependency management limits its readiness for production use. Teams should treat it as a scaffold and augment it with testing, CI, licensing, and tighter error handling before adopting it in a critical workflow.</p>
             </div>
 
             

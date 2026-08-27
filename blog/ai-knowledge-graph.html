@@ -79,34 +79,36 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#ai-powered-knowledge-graph-generator-technical-b">AI‑Powered Knowledge Graph Generator – Technical Briefing</a><a href="#repository-snapshot">Repository snapshot</a><a href="#high-level-architecture">High‑level architecture</a><a href="#installation-execution">Installation &amp; execution</a><a href="#clone-install">Clone &amp; install</a><a href="#configure-llm-access">Configure LLM access</a><a href="#generate-a-graph">Generate a graph</a><a href="#key-code-artifacts">Key code artifacts</a><a href="#observed-gaps-risk-assessment">Observed gaps &amp; risk assessment</a><a href="#bottom-line">Bottom line</a></nav>
-                <h3 class="post-h" id="ai-powered-knowledge-graph-generator-technical-b">AI‑Powered Knowledge Graph Generator – Technical Briefing</h3><h3 class="post-h" id="repository-snapshot">Repository snapshot</h3><p>Total files: 26  
-Primary language: Python (14 files) with supporting TOML, HTML, Markdown.  
-Package manager: pip (also uv lock file present).  
-Entry points: generate-graph.py (CLI wrapper) and src/knowledgegraph/main.py (core workflow).  
-Core configuration: config.toml; build metadata in pyproject.toml and requirements.txt.</p><h3 class="post-h" id="high-level-architecture">High‑level architecture</h3><p>generate-graph.py ──► src/knowledgegraph/main.py
-                     │
-                     ├─► src/knowledgegraph/llm.py          # LLM API wrapper (OpenAI‑compatible)
-                     ├─► src/knowledgegraph/textutils.py    # Chunking logic
-                     ├─► src/knowledgegraph/entitystandardization.py
-                     ├─► src/knowledgegraph/prompts/.py    # Prompt templates
-                     ├─► src/knowledgegraph/visualization.py
-                     └─► src/knowledgegraph/templates/graphtemplate.html
-Chunking – textutils.py splits the input document per config.toml (chunksize, overlap).  
-Extraction – llm.py sends each chunk to the configured LLM, using prompt files (entityprompts.py, inferenceprompts.py).  
-Standardization – entitystandardization.py optionally normalizes entity strings via a secondary LLM call.  
-Inference – main.py merges SPO triples, runs optional transitive inference (applytransitive).  
-Visualization – visualization.py renders the final graph into knowledgegraph.html using graphtemplate.html.</p><h3 class="post-h" id="installation-execution">Installation &amp; execution</h3><h3 class="post-h" id="clone-install">Clone &amp; install</h3><p>git clone https://github.com/robert-mcdermott/ai-knowledge-graph.git
+            <div class="post-content" id="post-content">
+                
+                <p><strong>Problem</strong> Processing long, unstructured documents to extract structured knowledge is tedious and error‑prone. Manual curation of subject‑predicate‑object (SPO) triples does not scale, and visualizing the resulting graph requires ad‑hoc scripts.</p>
+<p><strong>What This Does</strong> <code>ai-knowledge-graph</code> turns a plain‑text file into an interactive knowledge graph. It chunks the input (<code>src/knowledge_graph/text_utils.chunk_text</code>), sends each chunk to a configurable LLM, resolves and standardizes entities (<code>src/knowledge_graph/entity_standardization.standardize_entities</code>), infers additional relationships (<code>src/knowledge_graph/entity_standardization.infer_relationships</code>), and finally renders an HTML graph (<code>src/knowledge_graph/visualization.visualize_knowledge_graph</code>). The LLM endpoint is supplied via <code>config.toml</code>; any OpenAI‑compatible service (Ollama, Azure, Anthropic, etc.) works.</p>
+<p><strong>How It Is Wired</strong></p>
+<ol><li><strong>Entry point</strong> – <code>generate-graph.py</code> (root) parses CLI options and loads <code>config.toml</code>.</li><li>It imports <code>src/knowledge_graph/main.main</code> and calls it with the input path.</li><li><code>main</code> (line 200) orchestrates the pipeline:   - <code>process_text_in_chunks</code> (line 90) reads the file, splits it (<code>chunk_text</code>), and iterates over chunks. - For each chunk <code>process_with_llm</code> (line 19) builds a prompt (<code>src/knowledge_graph/prompts.get_prompt</code>) and calls <code>call_llm</code> in <code>src/knowledge_graph/llm.py</code>. - <code>call_llm</code> performs a single <code>requests.post</code> network request – the only outbound call in the repo. - The JSON response is parsed by <code>extract_json_from_text</code>. - Collected SPO triples feed <code>standardize_entities</code> (entity_standardization) which normalizes text, limits predicate length (<code>limit_predicate_length</code>), and may invoke additional LLM calls (<code>_resolve_entities_with_llm</code>). - <code>infer_relationships</code> expands the graph using community detection (<code>_identify_communities</code>) and several inference helpers (<code>_infer_relationships_with_llm</code>, <code>_apply_transitive_inference</code>, etc.). - The final triple set is handed to <code>visualize_knowledge_graph</code>, which loads <code>src/knowledge_graph/templates/graph_template.html</code> and writes the output HTML (<code>json_to_html.py</code> assists with a minimal conversion).</li></ol>
+<p>The most connected module is <code>src/knowledge_graph/main</code> (imports six others, called from two places) and <code>src/knowledge_graph/config</code> is a pure leaf (imports none, imported by three). No circular imports were detected.</p>
+<p><strong>How To Use It</strong></p>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/ai-knowledge-graph
 cd ai-knowledge-graph
-pip install -r requirements.txt          # or: uv sync   (uv.lock present)</p><h3 class="post-h" id="configure-llm-access">Configure LLM access</h3><p>Edit config.toml → [llm] section (model, apikey, baseurl)</p><h3 class="post-h" id="generate-a-graph">Generate a graph</h3><p>python generate-graph.py \
+
+# Install dependencies (Python 3.11+)
+pip install -r requirements.txt        # or: uv sync
+
+# Edit the configuration (API key, model, etc.)
+#   – file: config.toml
+#   – example section shown in README
+
+# Run the generator
+python generate-graph.py \
     --input data/industrial-revolution.txt \
-    --output industrial-revolution-kg.html</p><p>The same command works with the uv runner (uv run generate-graph.py …). The --test flag produces a demo using the bundled data/industrial-revolution.txt.</p><h3 class="post-h" id="key-code-artifacts">Key code artifacts</h3><div class="table-scroll"><table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody><tr><td>generate-graph.py</td><td>CLI parser; forwards arguments to src/knowledgegraph/main.py.</td></tr><tr><td>src/knowledgegraph/config.py</td><td>Loads config.toml with tomllib; provides typed config objects.</td></tr><tr><td>src/knowledgegraph/llm.py</td><td>Thin wrapper around httpx for chat completions; respects maxtokens &amp; temperature.</td></tr><tr><td>src/knowledgegraph/prompts/.py</td><td>Centralised prompt strings; easy to swap or extend.</td></tr><tr><td>src/knowledgegraph/visualization.py</td><td>Converts triplet list to JSON and injects into graphtemplate.html.</td></tr><tr><td>src/knowledgegraph/templates/graphtemplate.html</td><td>Stand‑alone HTML+JS (Vis.js) for interactive display.</td></tr></tbody></table></div><h3 class="post-h" id="observed-gaps-risk-assessment">Observed gaps &amp; risk assessment</h3><p>Testing – Medium – No tests/ directory or pytest fixtures; core functions (textutils.chunk, entitystandardization.standardize) are exercised only via manual runs.  
-CI/CD – Medium – No .github/workflows/ or other pipeline definitions; builds are not automatically validated.  
-Dependency lock – Low – requirements.txt is present but no requirements.lock; reproducibility relies on the uv.lock which is not used by default pip.  
-Error handling – Low – LLM calls in llm.py raise generic Exception on non‑200 responses; callers do not retry or fallback, which can cause abrupt termination on transient API errors.  
-Input validation – Low – CLI accepts any --input path; main.py assumes UTF‑8 text and does not guard against binary files.  
-Security – Low – API keys are stored in plain config.toml; no guidance for environment‑variable injection or secret management.</p><p>Documentation – README covers purpose, quick‑start, and CLI flags. The docs/index.html mirrors the demo visualization but adds no developer guide. Inline docstrings are sparse; function signatures are self‑explanatory but lack type hints in several modules (visualization.py).</p><h3 class="post-h" id="bottom-line">Bottom line</h3><p>The repository delivers a functional end‑to‑end pipeline for extracting and visualizing SPO triples from arbitrary text, with a clear separation of concerns (chunking, LLM interaction, standardization, inference, rendering). It is suitable for prototypes, research demos, or small‑team projects that can manage the missing test suite and manual CI. Teams requiring production‑grade reliability should add automated tests, a CI workflow, and stronger secret handling before integration.</p>
+    --output industrial-revolution-kg.html</code></pre>
+<p>Optional flags (<code>--no-standardize</code>, <code>--no-inference</code>, <code>--debug</code>, <code>--test</code>) are documented in the CLI help (<code>generate-graph --help</code>). The script can also be installed in editable mode (<code>pip install -e .</code>) and invoked as <code>generate-graph</code>.</p>
+<p><strong>Real‑World Use</strong> A data‑science team can embed this step in an ETL pipeline: after ingesting raw reports, a nightly job runs <code>generate-graph.py</code> to produce a searchable HTML graph that downstream analysts explore in a browser. The LLM endpoint can be switched from a local Ollama model to a managed OpenAI service by editing only <code>config.toml</code>.</p>
+<p><strong>Code Health &amp; Issues</strong></p>
+<ul><li><strong>HIGH – No test suite</strong> – 14 source files, zero tests. Fix: add unit tests for each public function and a CI step that runs them.</li><li><strong>HIGH – No CI workflow</strong> – repository lacks <code>.github/workflows</code> or other CI config. Fix: add a GitHub Actions workflow that installs dependencies and runs the test suite on push and pull request.</li><li><strong>MEDIUM – No Dependabot/Renovate</strong> – manifests (<code>pyproject.toml</code>, <code>requirements.txt</code>) exist but no update bot. Fix: commit <code>.github/dependabot.yml</code> covering the Python ecosystem.</li></ul>
+<p>Additional measured findings:</p>
+<ul><li>Broad <code>except:</code> blocks in <code>src/knowledge_graph/llm.py</code> and <code>src/knowledge_graph/visualization.py</code> swallow errors; replace with specific exception handling.</li><li>Deep nesting (up to 8 levels) in <code>entity_standardization.py</code> and <code>llm.py</code>; refactor with early returns or helper functions.</li><li>Small duplicated logic across <code>entity_standardization.py</code> and <code>main.py</code>; extract to a shared utility.</li></ul>
+<p><strong>The Bottom Line</strong> The repository delivers a functional end‑to‑end LLM‑driven knowledge‑graph pipeline with a clear CLI and configurable LLM back‑end. However, the lack of tests, CI, and precise error handling makes it risky for production use without additional engineering effort. It is best suited for prototyping or internal tooling where rapid iteration outweighs the current maintenance gaps.</p>
             </div>
 
             
