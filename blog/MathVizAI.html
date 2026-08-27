@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 16, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,27 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Creating high‑quality educational math videos is labor‑intensive: it requires solving the problem, writing a script, coding precise animations, generating natural narration, and synchronizing everything. Teams that need many videos (e.g., online courses, tutoring platforms) spend weeks per topic.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>MathVizAI automates the entire pipeline. The core orchestrator lives in pipeline/orchestrator.py, which sequentially invokes:</p><p>Solver – pipeline/solver.py uses an LLM (via utils/llmclient.py) to produce a step‑by‑step proof.  
- Evaluator – pipeline/evaluator.py validates the proof and, on failure, triggers a retry loop.  
- Script Writer – pipeline/scriptwriter.py transforms the proof into a conversational narration script.  
- Visual Developer – pipeline/videogenerator.py queries the vector store in VectorStore/ (FAISS indexes) and builds a Manim script (pipeline/videogenerator.py → pipeline/videorenderer.py).  
- Audio &amp; Sync – pipeline/ttsgenerator.py calls Microsoft VibeVoice; pipeline/videosynchronizer.py aligns audio with the rendered animation.</p><p>All assets (intro/outro clips, branding, sample videos) are stored under assets/. The “Golden Set” of curated Manim examples lives in goldenset/ and is indexed for retrieval‑augmented generation.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Install Python deps
-python -m venv .venv
-source .venv/bin/activate
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Manual creation of high‑quality mathematical videos is time‑consuming and requires expertise in both proof writing and animation. Teams that need large libraries of instructional content must repeatedly hire subject‑matter experts, scriptwriters, and animators, which drives cost and slows release cycles.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>MathVizAI</code> is an end‑to‑end pipeline that receives a math problem and produces a polished video, complete with narrated audio and Manim‑generated visuals. The repository is a portfolio of four self‑contained projects:</p>
+<ul><li><strong>golden_set</strong> – 51 Python files that store curated “golden” Manim examples (e.g., <code>_2015_complex_multiplication_article.py</code>). These files are the source of the Retrieval‑Augmented Generation (RAG) vector store.</li><li><strong>pipeline</strong> – 10 modules that orchestrate the multi‑agent workflow (<code>pipeline/orchestrator.py</code>, <code>pipeline/solver.py</code>, <code>pipeline/evaluator.py</code>, <code>pipeline/video_generator.py</code>, etc.).</li><li><strong>utils</strong> – 5 helper modules (<code>utils/file_manager.py</code>, <code>utils/llm_client.py</code>, <code>utils/RateLimiter.py</code>, …) that wrap LLM calls, file I/O, and rate‑limiting.</li><li><strong>src</strong> – a single entry point (<code>main.py</code>) that wires the orchestration together.</li></ul>
+<p>Key files: <code>config.py</code> (hub module imported by 13 others), <code>pipeline/orchestrator.py</code> (high instability, imports 11 other modules), and <code>pipeline/video_generator.py</code> (deep nesting, 8‑level indentation).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>main.py</code></strong> (line 19). <code>main()</code> imports the <code>PipelineOrchestrator</code> from <code>pipeline/orchestrator.py</code> and calls its <code>run()</code> method, which triggers the following high‑impact call chain (counts are resolved static edges):</p>
+<ol><li><strong><code>construct</code></strong> (in many golden‑set classes) → <code>play</code> (351 callers) → Manim rendering.</li><li><strong><code>generate_single_audio</code></strong> (via <code>self.model.generate</code> in <code>utils/llm_client.py</code>) → external TTS service (Microsoft VibeVoice).</li><li><strong><code>embed</code></strong> (in <code>embedding.py</code>) → vector store lookup (<code>_get_repo_store</code> called from 8 places) → retrieval of relevant golden‑set snippets.</li></ol>
+<p>The <strong>hub module</strong> <code>config.py</code> is imported by 13 other modules; any change here has a wide blast radius. <code>pipeline/orchestrator.py</code> imports 11 downstream modules, making it the most unstable component (instability 0.92). The most frequently called functions—<code>play</code>, <code>get_center</code>, <code>rotate</code>, <code>get_points</code>—are defined in the golden‑set animation classes; they collectively drive the visual output.</p>
+<p>No circular dependencies were detected, but deep nesting (max 8 levels) appears in <code>utils/llm_client.py</code>, <code>pipeline/video_generator.py</code>, and <code>pipeline/tts_generator.py</code>, increasing cognitive load for future maintainers. Broad <code>except:</code> blocks in <code>pipeline/video_renderer.py</code>, <code>embedding.py</code>, and <code>pipeline/video_synchronizer.py</code> swallow errors, reducing resilience.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/MathVizAI
+cd MathVizAI
+
+# Install Python dependencies
 pip install -r requirements.txt
-Provide required keys
-cp .env.example .env
-edit .env to add:
-OPENAIAPIKEY, VIBEVOICEAPIKEY, TAVILYAPIKEY, etc.
-Run the pipeline
-python main.py --problem &quot;Compute the Taylor series of e^x up to x^4&quot;</p><p>main.py parses the CLI argument, builds a PipelineOrchestrator (imported from pipeline/orchestrator.py), and runs the full workflow. Output videos appear in the assets/branding/ directory or the current working folder.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A MOOC provider could script nightly batch jobs that read a CSV of problem statements, invoke main.py for each entry, and push the resulting MP4 files to a CDN. The provider only needs to maintain the environment variables and ensure the FAISS indexes in VectorStore/ stay up‑to‑date.</p><p>from pipeline.orchestrator import PipelineOrchestrator</p><p>orchestrator = PipelineOrchestrator()
-for prob in [&quot;Pythagorean proof&quot;, &quot;Fourier series of square wave&quot;]:
-    orchestrator.run(problem=prob, output_dir=&quot;videos/&quot;)</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No unit or integration tests – repository lacks any tests/ folder; core functions in pipeline/.py are untested.  
-Med – No CI/CD pipeline – no .github/workflows/ or similar; builds are not automatically verified.  
-Low – No lockfile – requirements.txt pins versions loosely; reproducible environments depend on PyPI state.  
-Low – Sparse documentation – only README.md and two prompt files; functions such as store.py lack docstrings, making onboarding slower.  
-Low – Potential runtime failures – .env.example lists required keys but the code does not validate their presence before API calls, which could raise uncaught exceptions.</p><p>No obvious security secrets are committed; the license file is present.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>MathVizAI delivers a complete, modular workflow for auto‑generating math explanation videos, with clear separation of solving, scripting, animation, and audio. However, the lack of tests, CI, and a lockfile means the codebase is not production‑ready without additional engineering effort. It is best suited for teams that can allocate resources to harden the pipeline and maintain the required API credentials.</p>
+
+# Copy example env and fill in any required keys (e.g., API tokens)
+cp .env.example .env   # edit .env as needed
+
+# Run the pipeline on a single problem
+python main.py</code></pre>
+<p><em>The README does not specify additional CLI flags or sub‑commands; the above reflects the only concrete entry point (<code>main.py</code>).</em> If the repository later adds a configuration file for model credentials, they should be placed in <code>.env</code> as indicated by the example file.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A university’s online learning platform could invoke <code>main.py</code> for each new homework problem submitted by instructors. The platform would store the generated MP4 files (produced by the Manim <code>play</code> calls) alongside the original problem text, then embed the video URL in the course’s LMS. The same pipeline can be scheduled nightly to batch‑process a backlog of problems, feeding the vector store with new golden examples as they are created.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – No test suite</strong> – 74 source files, no tests.</li><li><strong>High – No CI/CD workflow</strong> – repository lacks <code>.github/workflows</code> or other CI config.</li><li><strong>Medium – No dependency lockfile</strong> – only <code>requirements.txt</code>; reproducible builds are not guaranteed.</li><li><strong>Medium – Large binaries not LFS‑tracked</strong> – <code>VectorStore/3b1b_videos/index.faiss</code> (67 MB) and related blobs exceed 5 MB.</li></ul>
+<p>Additional measured findings (not repeated): deep nesting in three modules, duplicated 6‑line blocks across 28 golden‑set files, oversized files (&gt; 1 900 lines) in the golden‑set, and file handles opened without context managers.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>MathVizAI</code> provides a compelling proof‑of‑concept for fully automated math video generation, with a clear modular pipeline and a reusable “golden set” RAG component. However, the codebase suffers from a lack of tests, CI, and proper binary handling, and several modules are overly complex. It is suitable for teams prepared to invest in refactoring and adding an engineering safety net before using it in production.</p>
             </div>
 
             

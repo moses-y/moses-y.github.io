@@ -6,7 +6,7 @@
 
 ## What the numbers say
 
-- 23 of the 61 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
+- 22 of the 61 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
 - All 167 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
@@ -44,7 +44,7 @@ Keeper: **openskills** (B+, 82.5). Mean grade across the 15 audited members is 7
 
 Crosses a domain boundary: 12 Web & Interfaces, 2 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
@@ -61,22 +61,22 @@ Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63.
 | OpenContext | Web & Interfaces | JavaScript | C- 56.4 | 242 |
 | whoami | Web & Interfaces | TypeScript | C- 56.2 | 316 |
 | anywhere-agents | AI & Data | Python | C- 55.8 | 291 |
+| opencode | Web & Interfaces | TypeScript | C- 53.5 | 2755 |
 | Maestro | Web & Interfaces | TypeScript | C- 53.3 | 1456 |
-| opencode | Web & Interfaces | TSX | C- 51.9 | 200 |
 
 ### c003 - 6 repositories
 
 Crosses a domain boundary: 3 Agent Skills & Plugins, 2 Web & Interfaces, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is 66.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is 66.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.3 | 212 |
 | marketplace | Agent Skills & Plugins | Shell | B 78.4 | 351 |
 | everything-claude-code | Agent Skills & Plugins | JavaScript | B- 74.8 | 795 |
+| claude-code-router | Web & Interfaces | TypeScript | C- 56.3 | 352 |
 | agentic-flow | Web & Interfaces | TypeScript | C- 56.2 | 4455 |
-| claude-code-router | Web & Interfaces | TypeScript | C- 53.5 | 200 |
 | career-ops | Systems & Infra | Go | C- 53.3 | 99 |
 
 ### c004 - 5 repositories
@@ -155,27 +155,16 @@ Keeper: **postgres** (C+, 65.4). Mean grade across the 3 audited members is 58.3
 | git | Systems & Infra | Shell | C- 59.5 | 4739 |
 | node | Web & Interfaces | JavaScript | C- 50 | 48185 |
 
-### c017 - 2 repositories
-
-Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **AionUi** (C-, 51.9). Mean grade across the 2 audited members is 47.3. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **AionUi** | AI & Data | Python | C- 51.9 | 200 |
-| Claude-Cowork | Web & Interfaces | TypeScript | D 42.7 | 44 |
-
 ### c020 - 2 repositories
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **CodeGraphContext** (C-, 56.7). Mean grade across the 2 audited members is 51.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **CodeGraphContext** (C-, 56.7). Mean grade across the 2 audited members is 53.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **CodeGraphContext** | AI & Data | Python | C- 56.7 | 981 |
-| codegraph-rust | Systems & Infra | Rust | D 45.9 | 200 |
+| codegraph-rust | Systems & Infra | Rust | C- 50.9 | 369 |
 
 ### c023 - 2 repositories
 
@@ -333,7 +322,7 @@ Keeper: **Manta** (B+, 82.2). Mean grade across the 3 audited members is 65.6. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Manta** | Web & Interfaces | JSX | B+ 82.2 | 374 |
-| invoice-builder | Web & Interfaces | TypeScript | C 64.1 | 200 |
+| invoice-builder | Web & Interfaces | TypeScript | C 64.1 | 509 |
 | invoicerr | Web & Interfaces | TypeScript | C- 50.6 | 335 |
 
 ### c008 - 3 repositories
@@ -392,6 +381,17 @@ Keeper: **daily_stock_analysis** (C-, 58.4). Mean grade across the 2 audited mem
 | --- | --- | --- | --- | --- |
 | **daily_stock_analysis** | AI & Data | Python | C- 58.4 | 925 |
 | retail-analytics | AI & Data | Python | C- 58 | 118 |
+
+### c017 - 2 repositories
+
+All 2 in Web & Interfaces.
+
+Keeper: **AionUi** (C-, 51.9). Mean grade across the 2 audited members is 47.3. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **AionUi** | Web & Interfaces | TypeScript | C- 51.9 | 723 |
+| Claude-Cowork | Web & Interfaces | TypeScript | D 42.7 | 44 |
 
 ### c018 - 2 repositories
 
