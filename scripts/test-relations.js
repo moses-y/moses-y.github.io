@@ -16,6 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { describe, RECORD } = require('./lib-schema.js');
 const {
   cluster, communities, stackEdges, packageSets, CLUSTER_AT
@@ -300,6 +301,57 @@ if (report && clusters) {
     fs.readFileSync(llms, 'utf8').indexOf('/data/clusters.md') !== -1);
 } else {
   console.log('  skip  data/clusters.md not built');
+}
+
+console.log('the skill can still read the files it ships against');
+
+/*
+ * .claude/skills/query-repo-estate is a consumer that lives outside scripts/,
+ * so nothing else in this suite would notice it breaking. It reads field names
+ * out of the built files - and it already broke once during development by
+ * reading `sim` where the kin files write `similarity`, which produced a clean
+ * exit and a column of "undefined". Exit code alone is not enough, so these
+ * assert on the output.
+ */
+const SKILL = path.join(ROOT, '.claude', 'skills', 'query-repo-estate', 'estate.mjs');
+function estate(argv) {
+  return execFileSync(process.execPath, [SKILL].concat(argv, ['--local']),
+    { cwd: ROOT, encoding: 'utf8' });
+}
+
+if (fs.existsSync(SKILL) && clusters && index) {
+  const sample = clusters.clusters[0].keeper;
+  try {
+    const kin = estate(['kin', String(sample.id)]);
+    check('the skill prints both provenance levels for a neighbourhood',
+      /EXTRACTED/.test(kin) && /INFERRED/.test(kin));
+    check('the skill reads the similarity field the kin files actually write',
+      !/undefined/.test(kin), 'a field name drifted');
+
+    const group = estate(['cluster', String(sample.id)]);
+    check('the skill finds the cluster a keeper belongs to',
+      group.indexOf(sample.name) !== -1);
+    check('the skill names the clustering method from the file, not a hardcoded one',
+      !clusters.method || group.indexOf(clusters.method) !== -1);
+    check('the skill refuses to call a cluster a set of duplicates',
+      /not duplicates/.test(group));
+
+    const shown = estate(['show', String(sample.id)]);
+    check('the skill decodes single-letter keys into schema descriptions',
+      /GitHub repository id/.test(shown));
+    check('the skill cuts a description at a sentence, not at an abbreviation',
+      !/, e {2,}/.test(shown));
+  } catch (err) {
+    check('the skill runs against the built data', false, String(err.message).slice(0, 90));
+  }
+
+  // An unknown repository has to fail loudly. Exiting 0 with no output would
+  // read as "nothing is like this", which is a different and wrong answer.
+  let exited = 0;
+  try { estate(['kin', 'definitely-not-a-repository-name']); } catch (e) { exited = e.status; }
+  check('an unknown repository is an error, not an empty answer', exited === 1, String(exited));
+} else {
+  console.log('  skip  skill or built data not present');
 }
 
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');

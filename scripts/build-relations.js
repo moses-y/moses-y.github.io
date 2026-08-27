@@ -95,6 +95,18 @@ function writeLlmsTxt(index, gradesFile, manifest, sample) {
     '- [Dependencies](' + SITE + '/data/deps.json): declared dependencies per repository by ecosystem.',
     '- [Search](' + SITE + '/data/search.json): inverted index, token to position in the index records.',
     '',
+    // Listing the files is not enough. An agent that arrives here still has to
+    // guess an order, and the expensive guess - parse the index - is the
+    // obvious one. So the cheap path is written out as steps.
+    '## Answering a question with these files',
+    '',
+    '1. Resolve a repository to its numeric id once, from /data/index.json or /data/search.json. Ids are stable across renames.',
+    '2. Fetch ' + SITE + '/data/kin/<id>.json, about 1 KB. It carries both edge types with their provenance, so "what else is like this" costs one small request rather than a parse of the ' + Math.round(fs.statSync(path.join(OUT, 'index.json')).size / 1024) + ' KB index.',
+    '3. Repeat step 2 for any neighbour id. Traversal never needs the index again.',
+    '4. For a group rather than a neighbour, /data/clusters.json names the keeper; /data/clusters.md is the same thing as prose.',
+    '',
+    'Prefer a neighbour that appears in both the stack and semantic lists of a kin file: the extracted edge corroborates the inferred one, which is the strongest signal here that a repository is a usable starting point.',
+    '',
     '## Pages',
     '',
     '- [Projects](' + SITE + '/projects.html): every repository with its measured facts.',
