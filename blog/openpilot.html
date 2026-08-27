@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 30, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,40 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Modern vehicles ship with driver assistance systems that are locked down by the manufacturer. Users cannot extend, modify, or improve them. openpilot replaces that closed system with an open-source, self-driving stack that runs on a dedicated device (comma 3X) and interfaces with the car&#39;s existing sensors and controls via a harness.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>openpilot is a robotics operating system that upgrades the driver assistance system in 300+ supported cars. It reads vehicle state through cereal/car.capnp, processes it through the selfdrive/ and common/ modules, and outputs control commands back to the car. The cereal/ directory defines the message schemas; common/ holds shared utilities (params, logging, transformations, filtering); docs/ contains the integration and safety documentation.</p><p>The build system is SCons (SConstruct, selfdrive/SConscript) with Docker images (Dockerfile.openpilot, Dockerfile.openpilotbase) for reproducible builds. CI runs through GitHub Actions (.github/workflows/tests.yaml) and a Jenkins pipeline (Jenkinsfile). The repo uses git submodules (opendbc, rednose, msgq) for car definitions, Kalman filtering, and messaging.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Install on a comma 3X device by entering openpilot.comma.ai as the custom software URL during device setup. For development, clone the repo and build with Docker.</p><p>Configuration: No environment variables required for basic use. Car-specific definitions live in the opendbc submodule. For development, pyproject.toml declares Python dependencies; install with pip or uv.</p><p>Running it: The device runs openpilot automatically on boot. For development, the entry point is launchopenpilot.sh:</p><p>On a comma device or Linux with the proper setup
-./launchopenpilot.sh</p><p>The repo does not document a local development run command outside the device. The README only provides the device install command: bash &lt;(curl -fsSL openpilot.comma.ai).</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A user installs openpilot on a comma 3X, plugs it into a supported car via the harness, and the system handles longitudinal and lateral control on highways. The docs/CARS.md file lists supported vehicles. For developers, the workflow is: modify a car port in opendbc, rebuild with SCons, run the test suite (common/tests/, cereal/messaging/tests/), and submit a PR. CI runs model validation and hardware-in-the-loop tests before merge.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med - No dependency lockfile - pyproject.toml declares dependencies but no lockfile exists, so builds are not fully reproducible across time. The Docker images mitigate this for the device, but local dev environments may drift.
-Low - Large monorepo with submodules - opendbc, rednose, and msgq are git submodules. A shallow clone or a missing --recursive flag breaks the build. The .gitmodules file exists but there is no documented fallback.
-Low - Safety-critical code with limited test coverage - selfdrive/ contains only 2 files in this snapshot, suggesting the core driving logic may live in submodules or generated code. The visible tests cover utilities and messaging, not the full driving stack.
-Good - CI and documentation are present - 20 test files, 35 doc files, and a full GitHub Actions workflow set indicate a mature project. The docs/SAFETY.md and docs/DEBUGGINGSAFETY.md files show explicit attention to the safety-critical nature of the code.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>openpilot is a serious, well-maintained open-source project with real-world deployment on thousands of vehicles. The codebase is large and modular, but the lack of a lockfile and the reliance on submodules make local development setup non-trivial. It is best suited for developers already familiar with the comma ecosystem or those willing to invest time in the build system. For end users, the device-based install is straightforward.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Vehicle‑level driver‑assist software must run on low‑latency embedded hardware, stay in sync with a large fleet of car models, and expose a UI that can be updated without reflashing the whole system. Maintaining such a codebase is difficult because many modules share state, the build environment is mixed (Python + C/C++), and secret material has been committed to the repo.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>openpilot</code> is a collection of ten self‑contained projects that together form a robotics‑focused OS for driver assistance.</p>
+<ul><li><strong><code>selfdrive/</code></strong> (552 files) implements the core perception, planning and control loops; UI callbacks live in <code>selfdrive/ui/layouts/</code> and <code>selfdrive/ui/mici/</code>.</li><li><strong><code>system/</code></strong> (212 files) provides hardware abstraction (<code>system/hardware/</code>), sensor drivers (<code>system/sensord/</code>), and the UI application (<code>system/ui/lib/application.py</code>).</li><li><strong><code>tools/</code></strong> (264 files) contains utilities such as the video‑clip UI (<code>tools/clip/run.py</code>) and data‑recording helpers (<code>tools/lib/logreader.py</code>).</li><li><strong><code>cereal/</code></strong> defines the Cap’n‑Proto messaging schema and the runtime bridge (<code>cereal/messaging/__init__.py</code>).</li><li>Supporting code lives in <code>common/</code>, <code>third_party/</code>, <code>scripts/</code> and a small <code>release/</code> package.</li></ul>
+<p>Key entry points are:</p>
+<ul><li><code>tools/clip/run.py::main</code> – a CLI that launches the clip UI.</li><li><code>selfdrive/ui/layouts/main.py::_on_bookmark_clicked</code> – UI callback invoked from the main screen.</li><li><code>system/sensord/sensors/i2c_sensor.py::init</code> – sensor driver initialisation used by the hardware stack.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at the <strong>CLI entry</strong> <code>python tools/clip/run.py</code>. The <code>main</code> function (line 270) creates a window (<code>init_window</code>) and immediately spawns a subprocess via <code>subprocess.Popen</code> (external command). From there the call chain follows:</p>
+<ul><li><code>main → init_window → new_message → get_build_metadata</code> – reads the file <code>build_metadata_path</code> (filesystem I/O).</li><li>UI widgets (<code>system/ui/widgets/__init__.py</code>) are imported by <strong>236 other modules</strong>, making <code>cereal/__init__</code> the biggest hub; any change there ripples through the whole codebase.</li><li>The <code>SubMaster</code> class (used 32 times) and <code>LogReader</code> (32 times) are central to the messaging layer; both participate in a <strong>circular import</strong> (<code>selfdrive/ui/ui_state.py ↔ tools/lib/logreader.py</code>), which raises the risk of import‑time side effects.</li><li>The most frequently invoked internal functions are <code>sleep</code> (108 callers), <code>new_message</code> (92 callers) and <code>which</code> (85 callers). These are low‑level utilities that many higher‑level components depend on.</li></ul>
+<p>External effects are limited to a handful of paths:</p>
+<div class="table-scroll"><table><thead><tr><th>Effect</th><th>Shortest traced path</th></tr></thead><tbody><tr><td>Subprocess launch</td><td><code>main → init_window → subprocess.Popen</code></td></tr><tr><td>Filesystem write</td><td><code>start → create_dirs → os.mkdir</code></td></tr><tr><td>Network call</td><td><code>_on_settings_clicked → reboot → subprocess.check_output</code> (calls a system script that contacts the car)</td></tr><tr><td>Cryptographic use</td><td><code>new_message → get_build_metadata → read_text</code> (reads a signed metadata file)</td></tr></tbody></table></div>
+<p>The import graph contains <strong>996 internal modules</strong> with <strong>4 circular dependencies</strong> and an average instability of <strong>0.02</strong> for the most connected modules, indicating a relatively stable core but a few high‑impact “hub” files.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone the forked repository
+git clone https://github.com/moses-y/openpilot.git
+cd openpilot
+
+# 2. Build the development container (Dockerfile uses a mutable tag; see health notes)
+docker build -f Dockerfile.openpilot -t openpilot-dev .
+
+# 3. Install Python dependencies (no lockfile, so versions are not pinned)
+pip install -e .</code></pre>
+<p>Run the example UI:</p>
+<pre data-lang="bash"><code>python tools/clip/run.py</code></pre>
+<p>The UI will start a window and expose the clip‑editing interface. For full vehicle integration the system expects the hardware services defined in <code>system/hardware/</code> and the sensor drivers under <code>system/sensord/</code>; those are started by the device’s init scripts (not part of the source tree).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A fleet operator can flash a comma 3X device with the released image (<code>openpilot.comma.ai</code>). The device boots, executes the <code>system/ui/lib/application.py</code> entry point, which reads the messaging schema from <code>cereal/</code>, subscribes to CAN messages via <code>SubMaster</code>, and drives the actuation loop in <code>selfdrive/</code>. UI updates (e.g., lane‑keep assist toggles) flow through the callbacks in <code>selfdrive/ui/layouts/main.py</code>.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Critical</strong> – Private key <code>system/hardware/tici/id_rsa</code> committed. Must rotate and purge from history.</li><li><strong>Critical</strong> – CI workflow <code>.github/workflows/mici_raylib_ui_preview.yaml</code> exposes <code>CI_ARTIFACTS_DEPLOY_KEY</code> to fork‑triggered runs. Move secret usage to a <code>workflow_run</code> job.</li><li><strong>High</strong> – GitHub Actions not pinned to commit SHAs; risk of supply‑chain compromise.</li><li><strong>High</strong> – <code>continue-on-error</code> on correctness steps masks failures.</li><li><strong>High</strong> – Direct push to default branch in CI (<code>git push … --force</code>). Use PR workflow instead.</li><li><strong>Medium</strong> – No least‑privilege <code>GITHUB_TOKEN</code> permissions declared.</li><li><strong>Medium</strong> – Dependabot not configured; no automated security updates.</li><li><strong>Medium</strong> – Docker base image uses mutable <code>latest</code> tag; pin by digest.</li><li><strong>Medium</strong> – No dependency‑vulnerability scan in CI.</li><li><strong>Medium</strong> – No pre‑commit secret‑leak gate.</li></ul>
+<p>Additional static findings: 21 instances of deep nesting (max indent 18), 2 files opening resources without a context manager, 2 import‑cycle members, and several oversized modules (&gt;600 lines). These increase cognitive load and maintenance risk.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>openpilot</code> provides a functional, modular stack for automotive driver assistance, but the codebase suffers from high‑impact hub modules, a few circular imports, and serious secret‑management lapses. It is suitable for teams that need the existing vehicle‑level capabilities and are prepared to enforce stricter CI/security hygiene before extending the platform.</p>
             </div>
 
             
@@ -95,18 +123,18 @@ Good - CI and documentation are present - 20 test files, 35 doc files, and a ful
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">4<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">200<span> files</span></div>
+                        <div class="an-score">1,612<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Python</span><i style="width:100%"></i><b>56</b></li><li><span>Markdown</span><i style="width:54%"></i><b>30</b></li><li><span>YAML</span><i style="width:41%"></i><b>23</b></li><li><span>Shell</span><i style="width:39%"></i><b>22</b></li><li><span>C/C++ Header</span><i style="width:23%"></i><b>13</b></li><li><span>JSON</span><i style="width:5%"></i><b>3</b></li>
+                            <li><span>Python</span><i style="width:100%"></i><b>525</b></li><li><span>C/C++ Header</span><i style="width:71%"></i><b>374</b></li><li><span>Shell</span><i style="width:12%"></i><b>63</b></li><li><span>Markdown</span><i style="width:10%"></i><b>52</b></li><li><span>YAML</span><i style="width:5%"></i><b>24</b></li><li><span>C</span><i style="width:2%"></i><b>13</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span></p>
+                        <p class="an-fw"><span>Django</span><span>Docker</span><span>ONNX</span><span>pandas</span></p>
                     </div>
                 </div>
 
@@ -174,7 +202,7 @@ Good - CI and documentation are present - 20 test files, 35 doc files, and a ful
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Dependencies declared without a lockfile - non-reproducible builds <code>pyproject.toml</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>system/hardware/tici/id_rsa</code></span></li>
                     </ul>
                 </div>
 

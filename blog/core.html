@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 8, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,11 +80,50 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>AI conversations suffer from context loss. Each new chat starts with &quot;let me give you some context&quot; as critical decisions, preferences, and insights disappear between sessions. Existing tools create silos—memory doesn&#39;t persist across applications, and associations between ideas go unrecorded. This forces users to re-establish context repeatedly, wasting mental cycles on information already provided.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>CORE positions itself as a &quot;digital brain&quot; that organizes episodes into topics and creates associations between them. The codebase is a React/TypeScript application with 186 files in apps/webapp/app/, featuring a conversation system (apps/webapp/app/components/conversation/), bullMQ queue/worker infrastructure (apps/webapp/app/bullmq/), and graph visualization components (apps/webapp/app/components/graph/). Queue management lives at apps/webapp/app/bullmq/queues/index.ts and apps/webapp/app/bullmq/workers/index.ts, suggesting background job processing for memory operations. The graph module includes clustering visualization and filtering capabilities, indicating a topological approach to memory organization. Integration points exist for API keys, OAuth, and MCP (Model Context Protocol) authentication, positioning this as middleware between AI tools and memory storage.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: No root-level package.json is visible in the file listing, but the React setup implies npm or pnpm dependencies within apps/webapp/. The .env.example file at the root and apps/webapp/.env.example (implied by the .env.example presence) would configure environment variables.</p><p>Configuration: Environment variables likely reside in .env.example at the root level and apps/webapp/.env.example. The .github/workflows/build-docker-image.yml suggests Docker-based deployment is supported.</p><p>Running it: The Docker workflow indicates docker build and docker run are the primary deployment mechanisms. No CLI entry point or main.ts is evident in the file structure—usage appears to be through the web application at apps/webapp/app/.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A developer working across Cursor, Claude, and other AI tools could integrate CORE as a persistent memory layer. Instead of each session starting fresh, the AI would query CORE&#39;s topic-organized memory to surface relevant prior decisions, code patterns, or project context. The bullMQ queue system would handle async memory operations—indexing new conversations, updating associations, or fetching context—without blocking the AI response cycle. The graph visualization components (apps/webapp/app/components/graph/graph.tsx, apps/webapp/app/components/graph/graph-clustering.tsx) could help users audit what memories are active and how concepts connect.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>[Medium/SDLC] No test files detected - repository-wide. No tests directories, no test configuration beyond ESLint/Prettier. This means memory logic, queue processing, and API routes have no automated verification.
-[Medium] No root-level package manager configuration - the root has .npmrc but no package.json at the top level. Dependency management and install commands are ambiguous without exploring apps/webapp/package.json.
-[Low] GitHub Actions workflows present (.github/workflows/build-docker-image.yml, .github/workflows/submit.yml) but no evidence of test execution or linting in CI. Linting exists (apps/webapp/.eslintrc, apps/webapp/.prettierrc) but may not run on pull requests.
-[Low] License file present (LICENSE) but no SECURITY.md policies beyond the standalone SECURITY.md at root—typical for open-source projects but worth verifying contribution guidelines.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a functional React memory-agent framework with bullMQ integration and graph visualization, suitable for developers who need persistent AI context across sessions. The absence of tests and ambiguous root-level packaging are the primary barriers to production use. Teams comfortable with Docker-based deployment and TypeScript React patterns can extract value quickly, but the untested codepaths and missing dependency clarity at the repo root warrant vetting before commitment.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers building AI‑augmented applications need a persistent “brain” that can store conversational context, retrieve relevant episodes, and trigger actions across many tools. Without a unified store, each app maintains its own silo, forcing developers to duplicate memory logic and lose coherence when users switch between services.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>core</code> implements a <strong>memory agent</strong> that persists “episodes” in Neo4j, indexes them in a vector store, and exposes a React‑based UI for exploration and management. The main server lives under <code>apps/webapp/</code> and is bootstrapped by the Vite config <code>apps/webapp/vite.config.ts</code>. UI components such as <code>apps/webapp/app/components/conversation/*.tsx</code> render chat streams, while <code>apps/webapp/app/components/graph/*.tsx</code> visualise topic graphs. Integration adapters (e.g., <code>integrations/github/</code>, <code>integrations/discord/</code>) provide plug‑ins that push and pull episode data via the core services.</p>
+<p>Key files:</p>
+<ul><li><code>apps/webapp/app/bullmq/queues/index.ts</code> – registers background queues.</li><li><code>apps/webapp/app/bullmq/workers/index.ts</code> – starts workers that ingest new messages.</li><li><code>apps/webapp/app/services/logger.service.ts</code> – centralised logging used by most modules.</li><li><code>packages/providers/src/graph/neo4j/index.ts</code> – thin wrapper around Neo4j driver used by the ingestion pipeline.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts when Vite launches the server defined in <code>apps/webapp/app/entry.server.tsx</code>. The server imports <code>apps/webapp/app/bullmq/start-workers.ts</code>, which in turn loads the queue definitions from <code>apps/webapp/app/bullmq/queues/index.ts</code>. Each queue enqueues a job that eventually reaches a worker defined in <code>apps/webapp/app/bullmq/workers/index.ts</code>.</p>
+<p>A typical ingestion flow:</p>
+<ol><li><strong>API endpoint</strong> (<code>apps/webapp/app/components/api/index.ts</code>) receives a POST with a new message.</li><li>It calls <code>apps/webapp/app/trigger/ingest/ingest.ts</code> (part of an import cycle; see health section).</li><li><code>ingest.ts</code> creates a BullMQ job via <code>apps/webapp/app/bullmq/connection.ts</code>.</li><li>The worker (<code>apps/webapp/app/bullmq/workers/index.ts</code>) processes the job, invoking <code>apps/webapp/app/lib/utils.ts</code> for payload normalization and then <code>packages/providers/src/graph/neo4j/core.ts</code> to persist the episode.</li><li>After storage, the worker pushes the episode’s embedding to the vector store (code located in <code>packages/providers/src/vector-store/</code>).</li></ol>
+<p><strong>Blast‑radius hubs</strong> – modules with the highest inbound imports:</p>
+<div class="table-scroll"><table><thead><tr><th>Hub module</th><th class="num">Ca (importers)</th><th class="num">Ce (imports)</th><th class="num">Instability</th></tr></thead><tbody><tr><td><code>apps/webapp/app/components/ui/index.ts</code></td><td class="num">25</td><td class="num">6</td><td class="num">0.19</td></tr><tr><td><code>apps/webapp/app/lib/utils.ts</code></td><td class="num">25</td><td class="num">0</td><td class="num">0</td></tr><tr><td><code>apps/webapp/app/components/icons/types.tsx</code></td><td class="num">22</td><td class="num">0</td><td class="num">0</td></tr></tbody></table></div>
+<p>These files are touched by many downstream components; any change here will affect dozens of UI paths.</p>
+<p><strong>Circular imports</strong> – 11 modules participate in cycles; e.g., <code>packages/emails/src/transports/index.ts</code> ↔ <code>apps/webapp/app/trigger/utils/queue.ts</code>. Such cycles increase cognitive load and risk of runtime errors when refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/core
+cd core
+
+# Install dependencies (pnpm is the declared package manager)
+pnpm install
+
+# Copy example env and fill secrets
+cp .env.example .env
+# Edit .env (or hosting/docker/.env) with:
+#   NEO4J_PASSWORD, POSTHOG_PROJECT_KEY, MAGIC_LINK_SECRET, etc.
+
+# Run locally (Vite dev server)
+pnpm dev   # starts the webapp on http://localhost:5173
+
+# Or build and run the Docker image
+docker build -t core .
+docker run -p 3000:3000 --env-file .env core</code></pre>
+<p>The UI is reachable at the server’s root. API calls are routed through <code>apps/webapp/app/components/api/</code> and background processing is handled by the BullMQ workers started automatically on server start.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS product that offers AI‑assisted customer support can embed the Core SDK (found under <code>packages/providers/</code>) in its backend. When a support ticket arrives, the service posts the ticket text to Core’s <code>/api/v1/ingest</code> endpoint. Core stores the episode in Neo4j, creates an embedding, and makes it searchable for future tickets. The product’s UI then uses <code>apps/webapp/app/components/graph/graph-client.tsx</code> to display related past tickets, enabling agents to surface prior resolutions instantly.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p><strong>Measured findings (static analysis)</strong></p>
+<ul><li><strong>HIGH/clarity</strong> – Hub modules (e.g., <code>apps/webapp/app/components/ui/index.ts</code>) have 25+ dependents; keep them stable.</li><li><strong>HIGH/soundness</strong> – 11 import cycles (e.g., <code>packages/emails/src/transports/index.ts</code>). Break cycles by extracting shared types.</li><li><strong>HIGH/cognitive_load</strong> – Deep nesting (max depth 6) in several components; refactor with early returns.</li><li><strong>HIGH/cognitive_load</strong> – Oversized files (&gt; 1 k lines) such as <code>apps/webapp/app/components/onboarding/provider-config.tsx</code>. Split by responsibility.</li><li><strong>HIGH/clarity</strong> – Repeated 6‑line blocks across &gt; 200 files; extract helpers.</li><li><strong>MEDIUM/resilience</strong> – Empty <code>catch {}</code> blocks in two files; add logging or rethrow.</li><li><strong>MEDIUM/cognitive_load</strong> – High branching density in three utility files; consider strategy tables.</li></ul>
+<p><strong>Code‑health audit (severity‑ranked)</strong></p>
+<ul><li><strong>CRITICAL</strong> – Committed credentials in <code>hosting/docker/.env</code> (MAGIC_LINK_SECRET, NEO4J_PASSWORD, POSTHOG_PROJECT_KEY). Rotate and remove from repo.</li><li><strong>HIGH</strong> – <code>.env</code> is tracked despite <code>.gitignore</code>; <code>git rm --cached hosting/docker/.env</code> and rotate keys.</li><li><strong>HIGH</strong> – GitHub Actions use tag references; pin each action to a SHA.</li><li><strong>HIGH</strong> – No test suite; add tests for each public entry point and run them in CI.</li><li><strong>HIGH</strong> – Wildcard CORS (<code>"*"</code> in <code>apps/webapp/server.ts</code>); replace with explicit origins.</li><li><strong>MEDIUM</strong> – GITHUB_TOKEN permissions not declared; add least‑privilege scopes.</li><li><strong>MEDIUM</strong> – Dependabot not configured; add <code>.github/dependabot.yml</code>.</li><li><strong>MEDIUM</strong> – No dependency‑vulnerability gate; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>MEDIUM</strong> – No pre‑commit secret scan; install a hook (e.g., <code>detect-secrets</code>).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>core</code> provides a full‑stack memory‑agent with a React UI, Neo4j backing, and extensible integration points, making it a solid foundation for AI‑driven apps. However, the repository currently ships live credentials, lacks automated tests, and contains several high‑impact architectural smells (hub modules, import cycles). Addressing the health issues and adding a test suite should be priority steps before adopting it in production.</p>
             </div>
 
             
@@ -130,6 +169,30 @@
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>45</strong> of 120 declared dependencies are a major version behind. Resolved 116 of 120 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>cross-env</code></td>
+                            <td>^7.0.3</td><td>10.1.0</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>nanoid</code></td>
+                            <td>3.3.8</td><td>6.0.1</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>ollama-ai-provider-v2</code></td>
+                            <td>1.5.1</td><td>4.0.1</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>react-resizable-panels</code></td>
+                            <td>^1.0.9</td><td>4.12.2</td>
+                            <td class="beh">3 major</td></tr><tr><td><code>@ai-sdk/amazon-bedrock</code></td>
+                            <td>3.0.47</td><td>5.0.66</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>openai</code></td>
+                            <td>^5.12.2</td><td>7.4.0</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>@ai-sdk/anthropic</code></td>
+                            <td>^3.0.9</td><td>4.0.39</td>
+                            <td class="beh">1 major</td></tr><tr><td><code>@ai-sdk/google</code></td>
+                            <td>^3.0.6</td><td>4.0.44</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">

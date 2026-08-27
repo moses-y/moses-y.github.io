@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 4, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,28 +80,41 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#build-deploy">Build / Deploy</a><a href="#backend">Backend</a><a href="#frontend">Frontend</a><a href="#running-the-app">Running the App</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Freelancers need a lightweight way to issue quotes, convert them to invoices, collect signatures, and track payments without juggling separate tools or manual PDFs. The process is error‑prone and time‑consuming when done with spreadsheets and generic document editors.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>invoicerr delivers a self‑hosted web app that covers the full quote‑to‑payment lifecycle. The backend lives in backend/ (NestJS, Prisma) and starts at backend/src/main.ts. It provides REST endpoints for clients, invoices, quotes, signatures, webhooks, and a plugin system (backend/src/plugins/). The frontend is a React SPA under frontend/, bootstrapped from frontend/index.html and compiled from the TSX components in frontend/src/components/. Dockerfiles and a docker-compose.yml enable a single‑command deployment that spins up the API, a PostgreSQL database (or SQLite locally), and the UI.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone
-git clone https://github.com/Impre-visible/invoicerr.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Freelancers often juggle client details, quote creation, invoice generation, payment tracking, and contract signatures using separate tools. Switching between spreadsheets, email, and ad‑hoc PDF generators creates manual errors and delays payment collection.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>invoicerr</code> delivers a single‑stack web app that covers the full billing lifecycle.</p>
+<ul><li><strong>Backend</strong> – A NestJS API (<code>backend/src/main.ts</code>) provides REST endpoints for clients, quotes, invoices, receipts, recurring invoices, webhooks, and a plugin system (<code>backend/src/plugins/**</code>). Database access is centralized in <code>backend/src/prisma/prisma.service.ts</code> (Prisma ORM, SQLite/PostgreSQL).</li><li><strong>Frontend</strong> – A React/Vite UI (<code>frontend/src/pages/(app)/invoices/index.tsx</code>, <code>frontend/src/pages/(app)/quotes/index.tsx</code>) consumes the API, offers a drag‑and‑drop form modal (<code>frontend/src/components/form-modal.tsx</code>), and renders PDFs via the <code>backend/src/utils/pdf.ts</code> helpers.</li><li><strong>Plugins</strong> – Pluggable signing (<code>documenso</code>) and storage (local/S3) providers live under <code>backend/src/plugins/signing/**</code> and <code>backend/src/plugins/storage/**</code>, enabling custom token‑based signatures and file uploads without code changes.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry</strong> – <code>backend/src/main.ts</code> calls <code>bootstrap()</code> which creates the NestJS <code>AppModule</code>.</li><li><strong>Core hub</strong> – <code>backend/src/app.module.ts</code> imports 22 other modules (instability 0.92), making it the primary wiring point.</li><li><strong>Database</strong> – Most API handlers delegate to <code>PrismaService</code> (<code>findMany</code>, <code>create</code>, <code>update</code>). Example path: <code>bootstrap → AppModule → InvoicesController → InvoicesService → PrismaService.create</code> writes an invoice row (<code>prisma.invoice.create</code>).</li><li><strong>Webhooks</strong> – <code>WebhookDispatcherService</code> (imported by 15 modules) receives events, looks up <code>Webhook</code> records via Prisma, and forwards to driver classes (<code>discord.driver.ts</code>, <code>slack.driver.ts</code>). The dispatcher’s <code>dispatch</code> method is called 32 times across the codebase.</li><li><strong>Plugins</strong> – <code>backend/src/plugins/index.ts</code> lazily loads signing/storage plugins via <code>getProviderByType</code>. The Documenso signing flow (<code>documenso.ts</code>) authenticates, requests a signature, and processes a webhook that updates the related quote (<code>handleWebhook → PrismaService.update</code>).</li><li><strong>Frontend → Backend</strong> – <code>frontend/src/hooks/use-fetch.ts</code> supplies <code>authenticatedFetch</code>, <code>useGet</code>, and <code>useSse</code>. UI pages call <code>useGet</code> (14 callers) to fetch lists, and <code>useSse</code> (8 callers) to stream real‑time invoice status updates.</li><li><strong>Hotspots</strong> – The most connected module (<code>backend/src/app.module.ts</code>) touches 2 importers and 22 imports, meaning changes there have the widest blast radius. A circular import exists among three settings components (<code>frontend/src/pages/(app)/settings/_components/...</code>), increasing the risk of breakage when refactoring.</li></ol>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo (exact URL required)
+git clone https://github.com/moses-y/invoicerr.git
 cd invoicerr
-Copy example env files
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env   # if needed
-Edit backend/.env (or docker‑compose env block) with real values:
-DATABASEURL, APPURL, SMTP, JWTSECRET</p><h3 class="post-h" id="build-deploy">Build / Deploy</h3><p>Docker (recommended) – the repo ships a ready‑made image and compose file.</p><p>docker compose up -d        # builds backend, frontend and DB</p><p>Local development – Node 20+ is required.</p><h3 class="post-h" id="backend">Backend</h3><p>cd backend
-npm ci                       # installs deps from backend/package.json
-npm run start:dev            # runs NestJS (backend/src/main.ts)</p><h3 class="post-h" id="frontend">Frontend</h3><p>cd ../frontend
+
+# Build &amp; run with Docker (recommended)
+docker compose up -d          # uses docker-compose.yml / Dockerfile
+# Application will be reachable at http://localhost
+
+# Local development (Node 20+, npm)
+# Backend
+cd backend
+npm ci                         # installs from backend/package-lock.json
+npm run start:dev             # starts NestJS server (reads .env.example)
+
+# Frontend
+cd ../frontend
 npm ci
-npm run dev                  # starts React dev server (vite/webpack)</p><h3 class="post-h" id="running-the-app">Running the App</h3><p>API reachable at http://localhost:3000 (default NestJS port).  
-UI served at http://localhost (Docker maps port 80).  
-Swagger/OpenAPI docs are auto‑generated by NestJS (/api if enabled).</p><p>All configurable values are documented in the README and the .env.example files.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A freelancer signs up, creates a client record (POST /clients), drafts a quote (POST /quotes), and sends the generated PDF link via the built‑in email service (SMTP). The client opens the link, signs using the Documenso provider (backend/src/plugins/signing/providers/documenso/), and the backend records the signature status. Once signed, the quote can be promoted to an invoice (POST /invoices), and a payment webhook (e.g., Slack) notifies the freelancer automatically (backend/src/modules/webhooks/drivers/slack.driver.ts).</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Bugs / Risks  
-Med – Default JWT secret – backend/src/lib/auth.ts falls back to a hard‑coded secret if JWTSECRET is unset; could be exploited in production.  
-Med – Prisma binary limitation – README notes lack of linux/arm/v7 support; deployments on 32‑bit ARM will fail.  
-SDLC &amp; Code Violations  
-Low – Secrets in repo – .env.example contains placeholder credentials but no real secrets; acceptable.  
-Low – License clarity – Both LICENSE (MIT‑style) and LICENSE.COMMERCIAL.md are present; users must read both to understand permitted use.  
-Low – Test coverage – 7 test files exist (backend/test/ and e2e), but core plugin logic (src/plugins/) lacks dedicated unit tests.  
-Low – CI – GitHub Actions for CodeQL, Cypress, Docker build, and publish are configured (.github/workflows/), showing a decent CI pipeline.</p><p>Overall, the repo includes linting (.eslintrc.js), formatting (.prettierrc), and a Prisma migration history, indicating disciplined development practices.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>invoicerr is a well‑structured, Docker‑ready invoicing platform that covers quote creation, signing, and payment tracking out of the box. It is suitable for solo freelancers or small agencies that can host their own instance and are comfortable managing environment variables and a PostgreSQL/SQLite database. The main concerns are the fallback JWT secret and limited ARM support; addressing these will make the solution production‑ready for a broader audience.</p>
+npm run dev                    # Vite dev server on http://localhost:5173</code></pre>
+<p>Required environment variables are documented in <code>backend/.env.example</code> and <code>frontend/.env.example</code> (e.g., <code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>SMTP_*</code>). Replace the example values before starting.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A freelancer creates a new client via the UI (<code>frontend/src/pages/(app)/clients</code>). The form posts to <code>POST /clients</code> (handled by <code>ClientsController</code>). A quote is drafted, sent to the Documenso signing provider (<code>documenso.ts</code>), and a webhook updates the quote status (<code>handleWebhook</code>). Once signed, the quote is converted to an invoice (<code>InvoicesService.createInvoice</code>), emailed (<code>MailService.sendMail</code>), and payment status is tracked through the <code>Payments</code> module.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Pin GitHub Actions to commit SHAs (<code>.github/workflows/*</code>).</li><li><strong>High</strong> – Remove committed <code>.env.test</code> and rotate its secrets (<code>backend/.env.test</code>, <code>frontend/.env.test</code>).</li><li><strong>Medium</strong> – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions (<code>.github/workflows/cypress.yml</code>).</li><li><strong>Medium</strong> – Enable Dependabot or Renovate for dependency updates.</li><li><strong>Medium</strong> – Pin Docker base images by digest (<code>Dockerfile</code>).</li><li><strong>Medium</strong> – Add a dependency‑vulnerability scan step in CI.</li><li><strong>Medium</strong> – Add a pre‑commit secret‑leak gate.</li><li><strong>Medium</strong> – Set <code>persist-credentials: false</code> on checkout steps.</li><li><strong>Medium</strong> – Run container as non‑root (<code>USER</code> directive missing).</li><li><strong>Low</strong> – Set <code>timeout-minutes</code> on workflow jobs (<code>.github/workflows/codeql.yml</code>).</li></ul>
+<p>Additional static findings: deep nesting (max depth 14) in several TSX and service files, a four‑module import cycle in the settings UI, and duplicated 6‑line code blocks across 74 files.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>invoicerr</code> offers a complete, Docker‑ready invoicing stack built on familiar React/NestJS/Prisma tech, with a flexible plugin architecture. However, the codebase exhibits high cognitive load, some circular imports, and several security‑hygiene gaps that should be addressed before production deployment. It is best suited for teams comfortable refactoring TypeScript and willing to tighten CI/CD and dependency management.</p>
             </div>
 
             

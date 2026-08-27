@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>January 31, 2026</span>
-                    <span>3 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,17 +80,65 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Programmatic CAD automation typically means fighting proprietary APIs, scripting UIs, or writing one-off scripts that break when the design changes. Onshape has a REST API, but using it directly requires significant boilerplate for authentication, document navigation, and feature creation. An MCP server bridges that gap: it exposes CAD operations as tools that LLM-based coding assistants like Claude Code can call directly, turning natural-language requests into real geometry operations.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>onshape-mcp is a Model Context Protocol server that wraps Onshape&#39;s REST API into a set of callable tools. The core server (onshapemcp/server.py) registers tools that map to API client functions in onshapemcp/api/ — documents, part studios, edges, variables — and builder modules in onshapemcp/builders/ that handle parametric operations like extrude.py, fillet.py, sketch.py, and gear.py. The fork adds gear generation and edge-query capabilities beyond the base project.</p><p>The codebase is cleanly separated: API layer (api/), feature builders (builders/), tool registration (tools/), and the server entry point. Tests live in tests/ with 18 test files, and documentation in docs/ covers setup, features, and testing. A uv.lock file is present, suggesting uv is the intended package manager.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup — Install with pip or uv:
-git clone https://github.com/clarsbyte/onshape-mcp.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Teams that need to drive Onshape CAD models from scripts must repeatedly re‑implement REST calls, handle authentication, and manually construct feature geometry. The result is duplicated effort, fragile code, and slow iteration on parametric designs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>onshape_mcp</code> implements a lightweight Model Context Protocol (MCP) server that translates concise JSON commands into the full Onshape REST workflow. Core capabilities live in:</p>
+<ul><li><strong>API layer</strong> – <code>onshape_mcp/api/*.py</code> (e.g., <code>client.py</code>, <code>documents.py</code>, <code>partstudio.py</code>, <code>variables.py</code>) wraps authentication, request building, and response parsing.</li><li><strong>Feature builders</strong> – <code>onshape_mcp/builders/*.py</code> (e.g., <code>extrude.py</code>, <code>sketch.py</code>, <code>gear.py</code>, <code>thicken.py</code>) expose Python objects that emit the JSON payload required for each CAD operation.</li><li><strong>Server</strong> – <code>onshape_mcp/server.py</code> hosts a JSON‑RPC endpoint (<code>call_tool</code>, <code>list_tools</code>, <code>main_stdio</code>) that receives commands from a client (Claude Code, CLI, etc.) and routes them through the builders and API.</li></ul>
+<p>The repository also ships a test suite (<code>tests/</code>) and extensive markdown docs that describe each tool and the quick‑start flow.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution begins at <code>onshape_mcp/server.py:2100</code> in the <code>main</code> function, which creates an SSE (Server‑Sent Events) app and hands control to the <code>call_tool</code> dispatcher (<code>onshape_mcp/server.py:697</code>).</p>
+<ul><li><code>call_tool</code> is the hub: 33 callers invoke it, and it reaches 46 distinct functions, making it the highest‑blast‑radius node. Its responsibilities include:</li><li>Selecting the appropriate builder (e.g., <code>ExtrudeBuilder</code>, <code>SketchBuilder</code>, <code>ThickenBuilder</code>) based on the <code>"tool"</code> field.</li><li>Converting user‑supplied units via <code>to_meters</code>.</li><li>Invoking the builder’s <code>build</code> method, which returns a JSON feature description.</li><li>Sending the feature to Onshape through <code>self.client.post</code> (network call).</li></ul>
+<ul><li>The API client (<code>onshape_mcp/api/client.py</code>) is instantiated once per server run; its <code>post</code> method ultimately calls <code>requests.post</code> (outside the repo). This is the sole outbound network touch, routed from <code>call_tool → add_feature → self.client.post</code>.</li></ul>
+<ul><li>Builder modules have low fan‑in (e.g., <code>ExtrudeBuilder</code> is called from 19 places) and modest depth (max 8 levels of nesting). The most connected internal module is <code>onshape_mcp/server</code> (imports 11 other modules, called by 2).</li></ul>
+<ul><li>No circular imports were detected, so the import graph is stable. However, the large monolithic <code>server.py</code> (≈1,900 lines) and deep nesting in several builders increase cognitive load and risk of regression.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the fork you will work with
+git clone https://github.com/moses-y/onshape-mcp
 cd onshape-mcp
-pip install -e .</p><p>Configuration — Set environment variables, either in your shell or a .env file:
-export ONSHAPEACCESSKEY=&quot;youraccesskey&quot;
-export ONSHAPESECRETKEY=&quot;yoursecretkey&quot;</p><p>Running — Start the server with:
-python -m onshapemcp.server</p><p>Then configure Claude Code (or any MCP client) by adding the server to ~/.claude/mcp.json with the absolute path to your Python executable and the API keys in the env block. Verify it works by asking Claude to list your Onshape documents.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A mechanical engineer using Claude Code for design automation could say: &quot;Create a 20-tooth spur gear with module 2 in my current document.&quot; The MCP server translates that into calls to creategear in onshapemcp/builders/gear.py, which constructs the sketch and extrude features via the Onshape API. The same pattern applies to parametric families — change a variable in an Onshape variable table via onshapemcp/api/variables.py and regenerate the part without touching the UI.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med — No LICENSE file — Usage and redistribution rights are unclear. This matters for any commercial deployment.
-Low — Dependencies without a lockfile — pyproject.toml and requirements.txt declare dependencies but no pinned versions. The uv.lock file exists, so using uv sync would resolve this.
-Low — Test coverage is incomplete — 18 test files exist, but tests/builders/ only covers extrude.py, sketch.py, and thicken.py. The gear and fillet builders lack direct test coverage.
-Low — Docs exceed code maturity — 12 documentation files for 29 Python files suggests heavy process documentation relative to implementation size. Some docs (e.g., NEXTSTEPSGEOMETRYREFERENCES.md) read as planning notes rather than user guides.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A functional MCP server for Onshape with a sensible module layout and genuine test coverage. The fork adds useful parametric features (gears, edge queries) on top of a solid base. It&#39;s a practical tool for teams already using Claude Code or similar MCP clients for CAD automation, but the missing license and incomplete builder tests mean it&#39;s not yet production-grade. Best suited for internal tooling or as a reference implementation rather than a distributable product.</p>
+
+# Create a clean virtual environment (Python 3.10+ required)
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+
+# Install the package in editable mode
+pip install -e .
+
+# Provide Onshape credentials (required by onshape_mcp/api/client.py)
+export ONSHAPE_ACCESS_KEY="YOUR_ACCESS_KEY"
+export ONSHAPE_SECRET_KEY="YOUR_SECRET_KEY"</code></pre>
+<p>Run the server (the documented CLI entry point):</p>
+<pre data-lang="bash"><code>python -m onshape_mcp.server</code></pre>
+<p>The server now listens for JSON‑RPC calls. A typical client payload looks like:</p>
+<pre data-lang="json"><code>{
+  "tool": "extrude",
+  "sketchId": "sketch-abc123",
+  "depth": 10,
+  "units": "mm"
+}</code></pre>
+<p>The server will route this through <code>call_tool → ExtrudeBuilder.build → client.post</code>, creating an extrude feature in the targeted Part Studio.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI pipeline for a mechanical‑design library can invoke the MCP server to generate test parts automatically:</p>
+<pre data-lang="python"><code>import requests, json, os
+
+payload = {
+    "tool": "gear",
+    "module": 2,
+    "teeth": 24,
+    "center": [0, 0],
+    "planeId": "plane-xyz"
+}
+resp = requests.post("http://localhost:8000/rpc", json=payload, headers={
+    "Authorization": f"Bearer {os.getenv('ONSHAPE_ACCESS_KEY')}"
+})
+print(resp.json())</code></pre>
+<p>The response contains the Onshape feature ID, which downstream scripts can query for geometry validation or export to STEP.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin third‑party GitHub Actions</strong> – <code>.github/workflows/test.yml</code> uses <code>codecov/codecov-action@v3</code>. Replace the tag with a commit SHA.</li><li><strong>High – Add a LICENSE</strong> – No license file; legal reuse is undefined.</li><li><strong>High – Remove <code>continue-on-error</code></strong> – The correctness step in the workflow masks failing tests. Delete the flag.</li><li><strong>Medium – Declare least‑privilege <code>GITHUB_TOKEN</code> permissions</strong> – Workflow lacks a <code>permissions:</code> block. Add <code>contents: read</code>.</li><li><strong>Medium – Enable Dependabot or Renovate</strong> – No automated dependency updates; add <code>.github/dependabot.yml</code>.</li><li><strong>Medium – Gate PRs with a dependency‑vulnerability scan</strong> – No scan step; integrate <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Set <code>persist-credentials: false</code> on checkout</strong> – Prevents accidental token leakage during post‑install scripts.</li><li><strong>Medium – Set <code>timeout-minutes</code> on jobs</strong> – Prevents runaway CI runs.</li><li><strong>Medium – Broad exception handling</strong> – <code>onshape_mcp/api/client.py</code> and <code>documents.py</code> catch generic <code>Exception</code>. Narrow to specific error types.</li><li><strong>High – Deep nesting</strong> – <code>server.py</code>, <code>builders/extrude.py</code>, <code>builders/sketch.py</code> have indentation depth ≥ 8, making logic hard to follow. Refactor with early returns.</li><li><strong>High – Oversized files</strong> – <code>server.py</code> (≈1,886 lines) and <code>tests/test_server.py</code> are too large for a single responsibility; split into logical modules.</li><li><strong>High – Duplicated code blocks</strong> – Repeated 6‑line snippets across several builders; extract shared helpers.</li></ul>
+<p>No lockfile is present, so builds are not reproducible across environments.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>onshape-mcp</code> delivers a functional bridge between Python scripts and Onshape’s REST API, with a clear separation between API wrappers, geometry builders, and the JSON‑RPC server. It is usable today, but the monolithic server, deep nesting, and duplicated builder logic increase maintenance risk. Adding a license, tightening CI security, and refactoring the large modules would make the project production‑ready for teams that need automated, programmatic CAD generation.</p>
             </div>
 
             

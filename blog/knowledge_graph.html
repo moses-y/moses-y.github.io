@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 6, 2026</span>
-                    <span>4 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Jupyter Notebook</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,24 +80,29 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <p>Here&#39;s my analysis of the knowledgegraph repo based on the provided structure and briefing rules.</p><h3 class="post-h" id="the-problem">The Problem</h3><p>This repo addresses the pain point of converting arbitrary text corpora into structured knowledge graphs for downstream Graph-Augmented Generation (GRAG) or question-answering use cases. The author notes that traditional RAG using vector databases is a &quot;new and improved&quot; approach, and this project provides a local, no-GPT alternative for building KG from PDFs or text files. The core problem: text-to-graph conversion typically requires either expensive API calls or complex, fragile NER pipelines. This repo attempts to solve that by localizing the entire pipeline.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The repository implements a text-to-knowledge graph pipeline using Ollama-hosted LLMs (specifically Mistral 7B Instruct). Key files and their roles:
-extractgraph.ipynb - The primary notebook implementing the chunk-concept-extract-relate workflow. It splits text into chunks, extracts concepts per chunk via LLM, and assigns edge weights based on co-occurrence (W1) and contextual proximity (W2).
-helpers/prompts.py - Likely contains the LLM prompting logic for concept extraction.
-helpers/dfhelpers.py - Dataframe utilities, probably for managing the chunk/concept/edge data structures.
-ollama/client.py - Ollama API client wrapper.
-dataoutput/ - Contains generated outputs for three sample datasets: cureus, OrfPathHealth, and MediumArticles. Each has chunks.csv, concepts.csv, and graph.csv outputs.
-oldnotebooks/ - Four legacy notebooks (conceptgraph.ipynb, extractconcepts.ipynb, relationships.ipynb, zefyr.ipynb) suggesting iterative development.</p><p>The pipeline follows a flowchart: text split → concept extraction (W1) → contextual proximity edges (W2) → graph construction → visualization/query.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: 
-Install Ollama and pull the Mistral 7B Instruct model. The README explicitly states this is a &quot;no-GPT approach&quot; using local LLMs.
-Install dependencies via poetry install (pyproject.toml and poetry.lock are present).
-No Docker compose or Makefile detected, but a dockerfile exists at root.</p><p>Configuration: 
-The Ollama model name and endpoint would be configured in ollama/client.py or via environment variables (not explicitly named in the structure, but standard for Ollama wrappers). No .env file detected, but environment.yml exists at root.</p><p>Running it: 
-The entry point is extractgraph.ipynb. The README references it directly: &quot;To generate a graph this the notebook you have to tweak.&quot; No CLI script or main.py detected—execution is via Jupyter.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A researcher or engineer has a PDF (e.g., the datainput/cureus-0015-00000040274.pdf or datainput/INDIA NON JUDICIAL.pdf) and wants to extract a knowledge graph without sending data to OpenAI. The workflow: load the PDF, run extractgraph.ipynb, output graph.csv and concepts.csv. This graph can then be loaded into a Neo4j instance or a GRAG pipeline where the graph serves as a structured retriever over raw text chunks. The author notes this enables &quot;Graph Retrieval Augmented Generation (GRAG)&quot;—using the graph as a retrover rather than a vector DB.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>No test files detected - untested code paths repository-wide. The notebook has no automated test coverage; any LLM prompt change could break concept extraction.
-No CI/CD pipeline - no automated build/test gate. .github/ only has FUNDING.yml; no workflows for linting, testing, or Docker builds.
-No LICENSE file - unclear usage/redistribution rights at root. This is a legal risk if the client wants to internalize or modify the code.
-Notebook-dependent execution - no main.py or CLI entry point. The only executable artifact is extractgraph.ipynb, which requires a Jupyter environment. This limits integration into CI/CD or production pipelines.
-Legacy notebooks clutter - four old notebooks in oldnotebooks/ suggest the pipeline has evolved without cleanup. The current extractgraph.ipynb may have diverged from the earlier extract_concepts.ipynb and relationships.ipynb.
-No input validation - the pipeline accepts PDFs/text but has no schema validation on output graph.csv structure. If the LLM output format changes, the downstream graph construction could silently break.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>This is a functional, locally-run text-to-knowledge-graph pipeline suited for solo researchers or prototyping GRAG pipelines without API costs. The use of Ollama + Mistral 7B Instruct is a pragmatic choice for budget-constrained environments. However, the lack of a license, test coverage, and a production-grade entry point (notebook-only) limits its viability for organizational adoption. It&#39;s best suited as a proof-of-concept or internal tooling artifact rather than a shipped product.</p><p>If you need a GRAG retriever prototype and have budget constraints, this works. For anything approaching production or team collaboration, you&#39;ll want to extract the notebook logic into a Python package, add input validation, and address the licensing gap.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Extracting structured knowledge from unstructured text usually means heavy NLP pipelines, NER models, and graph databases. This repo offers a cheaper path: use a local LLM (Mistral 7B via Ollama) to extract concepts and relationships from text chunks, then assemble a queryable knowledge graph for Graph-Augmented Generation or Q&amp;A.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The pipeline splits a corpus into chunks, asks an LLM to extract concepts and relations per chunk, then builds a graph where edges represent either explicit LLM-derived relations or contextual proximity between concepts in the same chunk. The heavy lifting lives in three modules: <code>helpers/prompts.py</code> (LLM prompts), <code>helpers/df_helpers.py</code> (DataFrame transformations), and <code>ollama/client.py</code> (a thin Ollama API wrapper).</p>
+<p>The main workflow is <code>extract_graph.ipynb</code>. Supporting notebooks in <code>old_notebooks/</code> show earlier iterations. Sample data lives in <code>data_input/</code> (PDFs, text) and <code>data_output/</code> (generated CSVs).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>extract_graph.ipynb</code>, which calls into the helper modules. The call graph is small: 4 internal modules, 2 import edges, 17 resolved call edges, no cycles. The three most-called functions are <code>generate</code> (called from 3 places), <code>graphPrompt</code> (2), and <code>extractConcepts</code> (2) — these are the blast-radius points; changing their signatures breaks most of the pipeline.</p>
+<p>The data flow is: <code>documents2Dataframe</code> → <code>df2ConceptsList</code> → <code>extractConcepts</code> → <code>generate</code> (network call to Ollama) → <code>concepts2Df</code> → <code>df2Graph</code> → <code>graphPrompt</code> → <code>generate</code> → <code>graph2Df</code>. Nine functions make outbound network calls — all through <code>ollama/client.py</code>. One function reads/writes files.</p>
+<p>The wiring is simple and changeable: <code>helpers/df_helpers.py</code> is pure DataFrame logic with no external calls, so it's easy to test in isolation. <code>ollama/client.py</code> is the only network boundary and carries the most risk: deep nesting (indentation depth 7) and no timeouts on any of its 9 outbound calls.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/knowledge_graph
+cd knowledge_graph
+poetry install
+ollama pull mistral:7b-openorca</code></pre>
+<p>Open <code>extract_graph.ipynb</code> and run it. The notebook expects an Ollama server running locally; no API keys are required. The README documents this as a no-GPT, fully local setup. The <code>dockerfile</code> and <code>environment.yml</code> provide container/conda alternatives, but the notebook is the real entry point.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>For a document corpus (e.g., medical literature, as in <code>data_input/cureus/</code>), you'd run the notebook to produce <code>graph.csv</code>, then load it into a graph database or use it as a retriever for RAG. The output CSVs in <code>data_output/</code> are the contract — chunks, concepts, and edges — so downstream systems can consume them without touching the extraction code.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 2 medium findings. <code>helpers/prompts.py</code> uses broad exception handling that swallows errors indiscriminately — catch specific exceptions instead. <code>ollama/client.py</code> has deeply nested control flow (depth 7) and 9 outbound calls with no timeout, so a stalled Ollama peer can hold a worker indefinitely — pass <code>timeout=</code> on every call.</p>
+<p>SDLC gaps: no tests, no CI, no license file, no Dependabot/Renovate config. Dependencies are stale — <code>pypdf</code> is 3 majors behind, <code>langchain</code> 1 major behind. A 19.4MB PDF in <code>assets/</code> bloats every clone; move it to LFS or object storage.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A practical, working demonstration of LLM-based knowledge graph extraction with a clean three-module core and no external API costs. It's a notebook-driven prototype, not a library — no tests, no CI, no packaging for reuse. Fork it for experimentation or as a reference implementation, but productionize the Ollama client and add tests before relying on it.</p>
             </div>
 
             

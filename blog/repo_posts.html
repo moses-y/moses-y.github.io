@@ -60,8 +60,8 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 7, 2026</span>
-                    <span>3 min read</span>
-                    <span class="post-language">HTML</span>
+                    <span>5 min read</span>
+                    
                     <span class="post-type">fork</span>
                 </div>
                 <h1>repo posts</h1>
@@ -80,14 +80,47 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#local-development">Local development</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Tracking interesting open-source repositories is fragmented. Starring repos on GitHub gives you a flat list with no context, and manual curation doesn&#39;t scale. This project solves that by generating a curated, self-hosted showcase site with posts, related-content links, and an RSS feed — automatically.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>repoposts is a Jekyll static site stored under docs/ that publishes curated posts about notable GitHub repositories. Each post in docs/posts/ follows a YYYY-MM-DD-owner-repo.md naming convention and includes a screenshot and description. The site uses the Minimal theme with a custom layout override in docs/layouts/default.html.</p><p>The pipeline is automation-heavy. GitHub Actions workflows handle the recurring work: generate-related-min.yml computes related posts using embeddings stored in docs/data/embeddings.npz and writes results to docs/data/related.json. A separate workflow (rss-smoke.yml) validates the feed. The site deploys via GitHub Pages on push to main.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repo and run the Jekyll site locally with bundle exec jekyll serve from the docs/ directory. The docs/Gemfile.lock pins dependencies; the Makefile may have convenience targets, though the README doesn&#39;t document them.</p><p>Configuration: Site settings live in docs/config.yml. No environment variables are required for local development. For CI, the workflows in .github/workflows/ handle deployment and data generation automatically.</p><p>Running it: Push to main to trigger the Pages deploy. The site is live at https://tom-doerr.github.io/repoposts/. The related-data workflow runs every 30 minutes on a schedule. To add content, create a new post in docs/posts/ following the existing naming pattern.</p><h3 class="post-h" id="local-development">Local development</h3><p>cd docs
-bundle install
-bundle exec jekyll serve</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>A team maintaining an internal list of useful open-source tools could fork this repo and replace the posts with their own curated set. The embeddings-based related-posts feature gives readers a way to discover similar tools without manual tagging. The RSS feed (feed.xml) lets subscribers track new additions. The automated workflows mean the site stays current with minimal manual intervention.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>The repo is structurally sound: it has CI, a license, and a lockfile. The workflows are well-named and cover the core operations (build, related-data generation, RSS validation, image compression).
-Med - Embedded binary data in git - docs/_data/embeddings.npz is a NumPy archive committed to the repo. This bloats the repository and creates merge conflicts on regeneration. It should be generated at build time or stored in a separate artifact store.
-Low - No test coverage for the data pipeline - The workflows run, but there&#39;s only one test file. The embedding computation and related-post generation have no unit tests, so regressions would surface only at runtime.
-Low - Hardcoded paths and schedules - The 30-minute cron in generate-related-min.yml is reasonable, but the embedding refresh strategy (compute only missing neighbors) could fail silently if the data format changes.
-Low - No contribution path for content - The README explicitly rejects repo suggestions via Issues/PRs. This is intentional, but it means the content quality depends entirely on the maintainer&#39;s curation process.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A well-executed, automated content pipeline for a curated GitHub showcase. The embeddings-based related-posts feature is a genuine differentiator. It&#39;s not a general-purpose tool — it&#39;s a specific solution for one maintainer&#39;s workflow. Fork it if you want a similar setup for your own curated list, but expect to adapt the data pipeline to your needs.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Maintaining a static blog that automatically enriches posts with related‑content data and search indexes can become brittle when the CI pipelines do not actually run tests, use mutable action versions, or expose overly‑privileged tokens. The repo also ships large binary blobs that bloat every clone.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository builds a Jekyll site under <code>docs/</code> (see <code>docs/_posts/</code>, <code>docs/assets/</code>, <code>docs/_layouts/</code>). On every push that touches <code>docs/_posts/**</code> a workflow <em>Generate Related Data</em> recomputes a lightweight related‑post graph and updates <code>docs/assets/search-index.json</code>. A scheduled workflow runs every 30 minutes, loads pre‑computed embeddings from <code>docs/_data/embeddings.npz</code>, computes missing neighbours, and writes <code>docs/_data/related.json</code> and <code>docs/_data/status.json</code>. The final site is deployed to GitHub Pages by the workflow <strong>Deploy Jekyll site</strong>.</p>
+<p>Key files:</p>
+<ul><li><code>.github/workflows/generate-related-min.yml</code> – scheduled data generation.</li><li><code>.github/workflows/e2e-semantic.yml</code> – example end‑to‑end test workflow (currently empty of test steps).</li><li><code>docs/vendor/bundle/.../Dockerfile</code> – builds a Docker image used by the generation jobs.</li><li>Large data blobs in <code>docs/_data/</code> (<code>related.json</code>, <code>embeddings.f32</code>) that exceed 5 MiB each.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point:</strong> a push to <code>main</code> or the scheduled cron triggers the GitHub Actions defined in <code>.github/workflows/*.yml</code>.</p>
+<p><strong>Workflow flow (Generate Related Data):</strong></p>
+<ol><li><code>actions/checkout@v3</code> pulls the repo.</li><li><code>docker/build-push-action</code> (or a custom Docker step) builds the image defined in <code>docs/vendor/bundle/.../Dockerfile</code>.</li><li>Inside the container a Ruby script (part of the Jekyll site or a custom plugin) reads <code>docs/_data/embeddings.npz</code>, computes neighbour vectors, and writes <code>related.json</code> and <code>status.json</code>.</li><li>The workflow commits the updated JSON files back to the repo using <code>git</code> (the token from <code>GITHUB_TOKEN</code>).</li></ol>
+<p><strong>Deploy Jekyll site workflow:</strong></p>
+<ol><li>Checkout.</li><li>Set up Ruby (<code>ruby/setup-ruby</code>).</li><li>Run <code>bundle install</code> and <code>bundle exec jekyll build</code>.</li><li>Push the generated <code>_site/</code> directory to the <code>gh-pages</code> environment via the built‑in Pages deployment action.</li></ol>
+<p><strong>Permissions &amp; token usage:</strong> All workflows rely on the default <code>GITHUB_TOKEN</code>. No explicit <code>permissions:</code> block is present, so the token inherits repository defaults (full write). The checkout step retains the token in <code>.git/config</code>, exposing it to any later <code>npm</code>/<code>gem</code> post‑install script.</p>
+<p><strong>Docker image:</strong> <code>Dockerfile</code> in <code>docs/vendor/bundle/...</code> starts from <code>ruby:$RUBY_VERSION-slim</code> and runs Jekyll commands as root, with no non‑root <code>USER</code> directive.</p>
+<p><strong>Data handling:</strong> Large files (<code>related.json</code> ≈ 20 MiB, <code>embeddings.f32</code> ≈ 20 MiB) live directly in the Git history, causing every clone and CI checkout to transfer &gt; 40 MiB of binary data.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/repo_posts.git
+cd repo_posts
+
+# Install Ruby dependencies (requires Ruby 3.2)
+bundle install --path vendor/bundle
+
+# Build the site locally
+bundle exec jekyll build --source docs --destination _site
+
+# Serve locally for preview
+bundle exec jekyll serve --source docs --destination _site --watch</code></pre>
+<p><em>No explicit configuration files</em> (e.g., <code>config.yml</code>) are present; the site relies on Jekyll defaults and the <code>docs/_config.yml</code> that ships with the Minimal theme. To trigger the data‑generation pipeline locally you would need to run the same Docker image used in the workflow, but the repo does not provide a ready‑made CLI script.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A marketing team could host a curated blog where each article automatically shows “related posts” based on vector similarity. A nightly CI job updates the similarity graph without manual intervention, and the published site reflects the latest relationships immediately after each push.</p>
+<pre data-lang="yaml"><code># Example snippet that could be added to a downstream repo
+on:
+  schedule:
+    - cron: "*/30 * * * *"</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – Pin third‑party GitHub Actions to a commit SHA</strong> – <code>.github/workflows/*</code> uses <code>stefanzweifel/git-auto-commit-action@v5</code>. Replace <code>@v5</code> with a 40‑character SHA and keep the version comment.</li><li><strong>High – Make CI invoke the test suite it has</strong> – <code>.github/workflows/*</code> contain four test files but no <code>run: bundle exec rake test</code> (or similar). Add a test step to the existing workflow.</li><li><strong>Medium – Declare least‑privilege permissions for GITHUB_TOKEN</strong> – <code>.github/workflows/e2e-semantic.yml</code> lacks a <code>permissions:</code> block. Add <code>permissions: contents: read</code> and widen only where needed.</li><li><strong>Medium – Pin the container base image by digest</strong> – Dockerfile in <code>docs/vendor/bundle/...</code> uses <code>ruby:$RUBY_VERSION-slim</code>. Replace with <code>ruby@sha256:&lt;digest&gt;</code>.</li><li><strong>Medium – Move large binaries to Git LFS or external storage</strong> – <code>docs/_data/related.json</code> and <code>embeddings.f32</code> each exceed 5 MiB. Track them with LFS or fetch from object storage in a setup step.</li><li><strong>Medium – Set <code>persist-credentials: false</code> on checkout</strong> – <code>.github/workflows/e2e-semantic.yml</code> keeps the token in <code>.git/config</code>. Add <code>with: persist-credentials: false</code>.</li><li><strong>Medium – Add a non‑root USER to the image</strong> – Dockerfile lacks a <code>USER</code> directive. Create an unprivileged user and switch to it before <code>CMD</code>.</li><li><strong>Low – Set <code>timeout-minutes</code> on workflow jobs</strong> – <code>.github/workflows/e2e-semantic.yml</code> defines no job timeout. Add a reasonable <code>timeout-minutes:</code> (e.g., 30).</li></ul>
+<p>Additional hygiene gaps: no LICENSE file, no README describing onboarding, no test suite executed by CI, and no Dockerfile at the repository root.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a functional Jekyll‑based blog with automated related‑post updates, but its CI pipelines are insecure and untested, and the repository is bloated with large binary assets. It is suitable for teams that need a quick static‑site showcase and are willing to tighten CI security, add proper testing, and offload large data files to LFS or external storage.</p>
             </div>
 
             
@@ -97,18 +130,18 @@ Low - No contribution path for content - The README explicitly rejects repo sugg
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">6<span>/7</span></div>
+                        <div class="an-score">1<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="no"><span aria-hidden="true">&#10007;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="no"><span aria-hidden="true">&#10007;</span>README</li><li class="no"><span aria-hidden="true">&#10007;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">57,806<span> files</span></div>
+                        <div class="an-score">0<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Markdown</span><i style="width:100%"></i><b>14605</b></li><li><span>HTML</span><i style="width:97%"></i><b>14123</b></li><li><span>Ruby</span><i style="width:2%"></i><b>274</b></li><li><span>Java</span><i style="width:0%"></i><b>51</b></li><li><span>C/C++ Header</span><i style="width:0%"></i><b>48</b></li><li><span>C</span><i style="width:0%"></i><b>46</b></li>
+                            
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Flask</span><span>FastAPI</span><span>Express</span><span>Rails</span><span>Spring</span><span>Laravel</span><span>Docker</span><span>PyTorch</span><span>TensorFlow</span><span>OpenCV</span><span>Transformers</span><span>YOLO</span><span>ONNX</span><span>LangChain</span><span>Vector store</span><span>Spark</span><span>Airflow</span><span>MLflow</span><span>CUDA</span><span>Neo4j</span></p>
+                        
                     </div>
                 </div>
 
@@ -117,12 +150,17 @@ Low - No contribution path for content - The README explicitly rejects repo sugg
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">22 declared dependencies, none a major version behind. Resolved 0 of 22 against the registry.</p>
+                    
+                </div>
 
                 
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>docs/_posts/2025-09-07-external-secrets-external-secrets.md, docs/_site/2025/09/07/external-secrets-external-secrets.html, docs/vendor/bundle/ruby/3.2.0/gems/eventmachine-1.2.7/tests/dhparam.pem</code></span></li>
+                        <li><span class="an-sev sev-medium">Medium</span><span>No LICENSE file - unclear usage/redistribution rights <code>root</code></span></li><li><span class="an-sev sev-low">Low</span><span>No README - onboarding and intent are undocumented <code>root</code></span></li>
                     </ul>
                 </div>
 

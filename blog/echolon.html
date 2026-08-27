@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 7, 2026</span>
-                    <span>3 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,18 +80,45 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#install-dependencies">Install dependencies</a><a href="#configuration">Configuration</a><a href="#running-the-app">Running the app</a><a href="#packaging">Packaging</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Developers need a desktop API client that works offline, stores data locally, and lets teams version collections with Git. Existing tools either require cloud accounts or lack deep Git integration, forcing ad‑hoc export/import workflows.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>echolon is an Electron‑based application that bundles a React UI (core/renderer/App.tsx) with a Node backend (core/main/.ts). The backend implements request handling (core/main/httpRequest.ts), Git operations (core/main/git.ts), and mock server support (core/main/mockServer.ts). UI components for collections, environments, and response viewers live under core/renderer/components/, while modal dialogs for Git commits, settings, and imports are in core/renderer/components/modals/. The project is organized as a single npm package (core/package.json) with Vite as the bundler.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>Clone the repo and enter the Electron project
-git clone https://github.com/echolon-app/echolon.git
-cd echolon/core</p><h3 class="post-h" id="install-dependencies">Install dependencies</h3><p>npm ci</p><p>npm ci is preferred because a lockfile (core/package-lock.json) is present.</p><h3 class="post-h" id="configuration">Configuration</h3><p>No mandatory config files are shipped. Optional environment variables for code signing are documented in the README (e.g., CSCLINK, CSCKEYPASSWORD). If you plan to use AWS SigV4 or S3 uploads, the modules core/main/awsSigV4.ts and core/main/s3Upload.ts expect AWS credentials in the usual environment variables (AWSACCESSKEYID, AWSSECRETACCESS_KEY).</p><h3 class="post-h" id="running-the-app">Running the app</h3><p>Development mode (hot reload)
-npm run dev</p><p>The dev script launches Vite’s dev server and starts Electron, using core/main/index.ts as the Electron main process entry point.</p><h3 class="post-h" id="packaging">Packaging</h3><p>Build installers for all platforms
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers need a self‑hosted API client that works offline, integrates with Git for version‑controlled collections, and supports multiple protocols (HTTP, WebSocket, etc.). Existing tools (Postman, Insomnia) rely on cloud sync or lack deep Git integration, forcing teams to manage request definitions manually.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>echolon</code> is an Electron‑based desktop app that stores collections, environments, and request history locally (see <code>core/main/fileStorage.ts</code>). Git operations (clone, commit, push) are wrapped in <code>core/main/git.ts</code>, letting teams treat their workspace like any other code repo. The UI lives in <code>core/renderer/</code> – for example <code>core/renderer/App.tsx</code> boots the React tree, while <code>core/renderer/components/panels/CenterPanel/ResponseViewer.tsx</code> renders responses with syntax highlighting.</p>
+<p>Importers (<code>core/renderer/services/SpecImporter.ts</code>) can ingest OpenAPI or Postman files, turning them into native collections. Request execution is handled by <code>core/renderer/services/RequestService.ts</code> (function <code>execute</code>), which builds a request (<code>buildUrl</code>, <code>buildHeaders</code>, <code>buildBody</code>) and dispatches it via the Electron‑provided <code>browserFetch</code> bridge.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – The Electron main process starts at <code>core/main/index.ts</code> (line 28). It creates the app window, registers IPC handlers (<code>preload.ts</code>), and calls <code>init</code> in <code>core/main/git.ts</code> (line 103) to initialise the Git client and local storage.</p>
+<p><strong>Core flow for a request</strong></p>
+<ol><li>UI component (<code>RequestCard.tsx</code>) triggers <code>useRequest</code> → <code>execute</code> (<code>core/renderer/services/RequestService.ts:379</code>).</li><li><code>execute</code> calls <code>buildUrl</code>, <code>buildHeaders</code>, <code>buildBody</code> (each referenced &gt;30 times across the codebase).</li><li>The assembled request is sent through the Electron bridge to <code>browserFetch</code>, which ultimately invokes the native <code>fetch</code> API (network outbound).</li></ol>
+<p><strong>Filesystem interaction</strong> – <code>core/main/fileStorage.ts</code> (75 functions) is the only module that reads/writes persisted data (e.g., <code>writeJsonFile</code> during <code>init</code>). Calls to it originate from 14 other files, making it a high‑blast‑radius storage hub.</p>
+<p><strong>Git integration</strong> – <code>core/main/git.ts</code> (28 functions) performs network calls (<code>git.fetch</code>) and file writes (repo init). It is imported by 9 modules, so any change here impacts version‑control features across the app.</p>
+<p><strong>Service hubs</strong> – The import graph shows three highly unstable modules:</p>
+<ul><li><code>core/renderer/components/ui/index</code> (imports 25 others, instability 0.96)</li><li><code>core/renderer/services/index</code> (imports 18, instability 0.95)</li><li><code>core/renderer/contexts/index</code> (imports 15, instability 0.94)</li></ul>
+<p>These act as “hub” modules; modifications ripple widely and increase merge risk.</p>
+<p><strong>Unmapped wiring</strong> – No circular dependencies were detected, but many UI panels (e.g., <code>ResponseViewer.tsx</code>, <code>RequestCard.tsx</code>) exhibit deep nesting (up to 10 levels) and oversized files (over 1500 lines), which hampers readability and future refactoring.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/echolon
+cd echolon/core
+
+# Install dependencies (Node 18+ required)
+npm install
+
+# Run the development server (Electron window)
+npm run dev</code></pre>
+<p>To build distributables:</p>
+<pre data-lang="bash"><code># All platforms
 npm run package:all
-Or a single platform, e.g. macOS
-npm run package:mac</p><p>Packaging scripts invoke electron-builder configured in core/electron-builder.yml.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A team can keep a Git repository of their collections.json (managed by the Git panel in core/renderer/components/panels/GitPanel/). Developers clone the repo, run npm run dev, and have a fully functional API client that automatically syncs changes via the built‑in Git client. Requests can be mocked locally with core/main/mockServer.ts for integration testing without external dependencies.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No automated tests – No .test.* files; code paths (e.g., request handling, Git ops) are unverified.  
-Medium – No CI pipeline – Repository lacks .github/workflows or other CI configs; releases rely on manual runs.  
-Low – Limited error handling – Functions such as core/main/httpRequest.ts and core/main/git.ts have minimal try/catch blocks, increasing risk of uncaught runtime errors.  
-Low – Potential security exposure – AWS and S3 helper modules are present, but the repo does not enforce credential validation; developers must ensure environment variables are not committed.  
-Low – Documentation gaps – README covers basic setup but omits detailed configuration for optional features (e.g., mock server TLS, custom auth plugins).</p><p>No license issues (MIT present) and linting is enforced via .eslintrc.json.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>echolon delivers a functional, self‑hosted API client with strong Git integration and offline capability, suitable for teams that prefer local‑first tooling. The codebase is well‑structured but lacks tests and CI, so adopting it will require adding quality‑gate processes. It is a solid foundation for developers comfortable extending Electron/React projects.</p>
+
+# macOS only
+npm run package:mac</code></pre>
+<p>No additional configuration files are required for a basic run. Optional code‑signing variables are documented in the README (e.g., <code>CSC_LINK</code>, <code>CSC_KEY_PASSWORD</code>).</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A team stores its collection JSON in a Git repo (<code>/my-workspace</code>). Each developer runs the Electron app, edits requests, and commits changes via the built‑in Git UI. Because the data lives locally, work continues offline; once back online, <code>git push</code> synchronises the collection with teammates, preserving a full history of request evolution.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High – CI missing</strong> – 205 source files, no GitHub Actions workflow.</li><li><strong>Medium – Dependabot absent</strong> – 5 manifest files, no update bot.</li><li><strong>Medium – Large binaries</strong> – <code>core/tests/GitHub v3 REST API.postman_collection.json</code> (9 MB) and <code>Asana.postman_collection.json</code> (6.7 MB) should be moved to Git LFS or external storage.</li><li><strong>Medium – Test coverage</strong> – 1 test file vs 205 source files (0.5 % coverage).</li><li><strong>Low – Repository conventions</strong> – No <code>.editorconfig</code>, <code>.gitattributes</code>, or formatter config.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>echolon</code> delivers a fully local, Git‑backed API client with a rich Electron UI, but the codebase suffers from high cognitive load (deeply nested, oversized components) and minimal automation (no CI, sparse tests). It is suitable for teams comfortable managing a monolithic Electron project and willing to invest in refactoring and CI setup.</p>
             </div>
 
             

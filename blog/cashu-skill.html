@@ -80,16 +80,43 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Cashu ecash wallets are typically operated through interactive CLIs or mobile apps, which makes them inaccessible to autonomous AI agents that need to send, receive, and manage Bitcoin payments programmatically. An agent that wants to pay an invoice or issue a payment token needs a simple, scriptable interface—not a REPL or a GUI.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>cashu-skill is a Node.js CLI wrapper around the coco-cashu-core library that exposes Cashu wallet operations as discrete, single-purpose commands. The entry point is cli/wallet.mjs, which dispatches to subcommands for balance checks, token sending/receiving, Lightning invoice creation and payment, mint management, and seed-based restoration. State persists to SQLite at ~/.cashu-wallet/wallet.db with a seed file for recovery.</p><p>The cli/package.json declares the runtime dependencies and requires Node.js &gt;= 18 with ES modules. The README.md and SKILL.md document the command surface and agent-facing conventions. This is a fork of cashubtc/cashu-skill, which carries 25 stars upstream.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup: Clone the repo, then cd cli &amp;&amp; npm install. There is no lockfile, so builds are not fully reproducible.</p><p>Configuration: No environment variables are required. The wallet seeds itself on first run and stores data in ~/.cashu-wallet. To add a mint:</p><p>node cli/wallet.mjs add-mint &lt;mint-url&gt;</p><p>Running it: All operations go through the single entry point:</p><p>node cli/wallet.mjs balance
-node cli/wallet.mjs invoice 1000
-node cli/wallet.mjs send 500
-node cli/wallet.mjs receive &lt;cashu-token&gt;
-node cli/wallet.mjs pay-invoice &lt;bolt11&gt;</p><p>The README documents npm test as a balance check, but there is no test runner configured—that command would fail.</p><h3 class="post-h" id="real-world-use">Real-World Use</h3><p>An AI agent that manages a Lightning node&#39;s spending capacity could use this to automate payouts. For example, a customer-support agent that needs to refund an order could invoke node cli/wallet.mjs pay-invoice &lt;bolt11&gt; with the refund invoice, then log the transaction via history. The agent&#39;s orchestration layer would parse the CLI&#39;s stdout for success/failure and amounts, keeping the wallet logic isolated from the agent&#39;s decision-making code.</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Med – No tests: The repo has zero test files. The README even admits &quot;No test runner.&quot; Payment code with untested paths is a liability.
-Med – No CI: No .github/ or CI config exists, so nothing gates regressions or dependency changes.
-Low – No lockfile: cli/package.json declares dependencies but no package-lock.json, so npm install can produce different trees across machines and time.
-Low – Single-file CLI: Everything lives in cli/wallet.mjs. It works for a small tool, but error handling and command parsing are likely tangled in one file, which will complicate maintenance as commands grow.
-Low – No license: The repo has a LICENSE file, so this is likely fine—verify it&#39;s not an empty placeholder.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>A practical, minimal wrapper that gives AI agents a clean command interface to Cashu ecash. The design is sound for the use case, but the missing tests and CI are real gaps for anything beyond a personal tool. Suitable for developers who want to prototype agent payments or run a small, self-hosted wallet; not ready for production payment infrastructure without adding test coverage and a proper build pipeline.</p>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Agents that need to handle Cashu ecash tokens require a programmatic way to create, receive, melt and track balances without building the plumbing from scratch. Existing tools are either GUI‑only or tightly coupled to a specific framework, leaving developers to re‑implement token handling, SQLite persistence, and Lightning‑mint interactions.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The repository supplies a minimal Node.js CLI that wraps the <strong>coco‑cashu‑core</strong> library. The entry script <strong><code>cli/wallet.mjs</code></strong> parses sub‑commands (<code>balance</code>, <code>receive</code>, <code>send</code>, <code>invoice</code>, etc.) and maps them to core API calls. Persistent state lives in a SQLite file at <strong><code>~/.cashu-wallet/wallet.db</code></strong> plus a plain‑text <strong><code>seed.txt</code></strong> for the wallet seed. The surrounding files – <strong><code>README.md</code></strong>, <strong><code>SKILL.md</code></strong>, <strong><code>LICENSE</code></strong> – document usage and licensing; <strong><code>cli/package.json</code></strong> declares the runtime dependencies.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ul><li><strong>Entry point</strong> – <code>node cli/wallet.mjs &lt;command&gt;</code> (as shown in the README).</li><li><strong>Command dispatch</strong> – <code>wallet.mjs</code> reads <code>process.argv</code>, then routes to a large <code>switch</code>/<code>if‑else</code> block (101 branch points over 317 lines). Each branch calls a helper that directly invokes the <strong>coco‑cashu‑core</strong> API (e.g., <code>createInvoice</code>, <code>receiveToken</code>, <code>payInvoice</code>).</li><li><strong>External effects</strong> –</li><li><strong>Filesystem</strong> – reads/writes <code>~/.cashu-wallet/wallet.db</code> via the core library’s SQLite layer; reads <code>seed.txt</code> for seed material.</li><li><strong>Network</strong> – contacts Lightning mints using HTTP calls encapsulated in the core library (no custom networking code in this repo).</li><li><strong>Module graph</strong> – only one internal module (<code>wallet.mjs</code>) and no import edges; therefore the CLI is a self‑contained command dispatcher. The lack of internal dependencies means any change to command logic touches the single file, giving it the widest blast radius.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/cashu-skill
+cd cashu-skill/cli
+
+# Install runtime dependencies
+npm install
+
+# Show balance
+node wallet.mjs balance
+
+# Create a Lightning invoice for minting
+node wallet.mjs invoice 1000
+
+# Receive a token string
+node wallet.mjs receive &lt;token&gt;</code></pre>
+<p>No additional configuration files are present; the CLI expects the SQLite DB and <code>seed.txt</code> to be created automatically in <code>~/.cashu-wallet</code> on first run. The README lists all supported sub‑commands.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>An AI‑driven personal finance agent could invoke the CLI to top‑up a user’s Cashu wallet after a successful Lightning payment:</p>
+<pre data-lang="js"><code>const { execSync } = require('child_process');
+function topUp(amount) {
+  const invoice = execSync(`node wallet.mjs invoice ${amount}`).toString();
+  // send invoice to Lightning node, wait for payment, then:
+  execSync(`node wallet.mjs receive ${invoiceToken}`);
+}</code></pre>
+<p>The agent only needs to call the CLI; all token bookkeeping and persistence are handled by the wallet script.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – <em>Lockfile missing</em> – <code>cli/package.json</code> has no accompanying <code>package-lock.json</code> or <code>pnpm-lock.yaml</code>. This permits divergent dependency trees between development and production.</li><li><strong>Medium</strong> – <em>Dependabot not configured</em> – No <code>.github/dependabot.yml</code>; security updates to <code>coco‑cashu‑core</code> or transitive packages will not be auto‑suggested.</li><li><strong>Medium</strong> – <em>High branching density</em> – <code>cli/wallet.mjs</code> contains 101 branch points in 317 lines, making the command dispatcher hard to test and maintain. Refactor into a strategy table or separate command modules.</li><li><strong>SDLC observations</strong> – No test suite, no CI/CD pipeline, and no Dockerfile. The repository does include a LICENSE file.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The Cashu‑skill repo delivers a functional, single‑file CLI for Cashu token management, suitable for quick integration or prototyping. However, the monolithic command parser, lack of lockfile, and absent testing/CI infrastructure raise maintenance and security concerns. It is best used by teams comfortable extending the CLI or embedding it in a larger, tested automation framework.</p>
             </div>
 
             

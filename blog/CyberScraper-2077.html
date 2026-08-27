@@ -80,30 +80,33 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-to-use-it">How To Use It</a><a href="#setup">Setup</a><a href="#configuration">Configuration</a><a href="#running">Running</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Many organizations need to extract structured data from public websites, often behind bot‑detectors, captchas, or even .onion services. Building a custom scraper that can bypass these protections, handle dynamic content, and produce clean exports is time‑consuming and error‑prone.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>CyberScraper‑2077 combines a Streamlit front‑end (app/streamlitwebscraperchat.py) with a set of Python scrapers (src/scrapers/). The core logic lives in src/httpclient.py, src/models.py, and the LLM prompt handling in src/prompts.py.</p><p>AI‑driven parsing is implemented in src/ollamamodels.py and src/models.py, which call OpenAI, Gemini, or local Ollama models to transform raw HTML into JSON/CSV/etc.  
- Dynamic page rendering is handled by src/scrapers/playwrightscraper.py, while Tor support lives under src/scrapers/tor/ (e.g., tormanager.py, torscraper.py).  
- Export utilities (src/utils/googlesheetsutils.py) and caching (src/utils/errorhandler.py) are wired into the Streamlit UI.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><h3 class="post-h" id="setup">Setup</h3><p>git clone https://github.com/itsOwen/CyberScraper-2077.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Extracting structured data from arbitrary web pages usually means writing per-site selectors that break when the target changes. CyberScraper-2077 replaces that with an LLM that reads the page and returns the fields you asked for, in the format you specify.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>A Streamlit app (<code>app/streamlit_web_scraper_chat.py</code>) that takes a URL and a prompt, scrapes the page via Playwright or Tor, and sends the content to OpenAI, Gemini, or a local Ollama model for extraction. Results export as JSON, CSV, HTML, SQL, or Excel, and can upload to Google Sheets via <code>src/utils/google_sheets_utils.py</code>.</p>
+<p>The scraper layer lives in <code>src/scrapers/</code>: <code>base_scraper.py</code> defines the abstract contract, <code>playwright_scraper.py</code> handles browser automation with stealth settings, and <code>tor/</code> provides onion routing via <code>tor_manager.py</code> and <code>tor_scraper.py</code>. Extraction logic sits in <code>src/web_extractor.py</code>, which handles URL normalization, content fetching, and token counting.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>main.py:415</code>, which reaches 81 functions. The UI layer calls <code>process_message</code>, which routes through <code>process_with_progress</code> → <code>process_query</code> → <code>_chat_without_content</code>, ending in a model inference call (<code>self.model.generate</code>). The Ollama path is <code>main → list_ollama_models → list_models</code>, which makes a network call via <code>session.get</code>.</p>
+<p>The hub is <code>src/web_extractor.py</code> (Ca 2, Ce 8, instability 0.8) — 25 functions that everything routes through. <code>src/utils/error_handler.py</code> is the stable core (Ca 7, Ce 0, instability 0): seven modules import it, it imports nothing. <code>_extract_json_from_markdown</code> is called from 6 places, so changing its signature breaks the most code. <code>src/scrapers/playwright_scraper.py</code> carries the heaviest load: 27 functions, 694 lines, and it launches an external browser process.</p>
+<p>No import cycles detected, which keeps refactoring tractable. The main risk is <code>playwright_scraper.py</code> — oversized, deeply nested (indentation depth 8), and called from 3 other files.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/CyberScraper-2077.git
 cd CyberScraper-2077
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+virtualenv venv &amp;&amp; source venv/bin/activate
 pip install -r requirements.txt
-playwright install</p><h3 class="post-h" id="configuration">Configuration</h3><p>Set the required API keys in the environment before launching:</p><p>export OPENAIAPIKEY=&quot;your-openai-key&quot;
-export GOOGLEAPIKEY=&quot;your-gemini-key&quot;
-Optional for Google Sheets uploads
-export GOOGLESHEETSCREDENTIALS=&quot;/path/to/credentials.json&quot;</p><p>The Streamlit UI reads these variables at runtime (see app/utils.py for loading logic).</p><h3 class="post-h" id="running">Running</h3><p>Local development:  
-streamlit run app/streamlitwebscraperchat.py</p><p>The UI invokes src/webextractor.py which selects the appropriate scraper class (Playwright, Tor, etc.) based on user input.</p><p>Docker*:  
-docker build -t cyberscraper .
-docker run -e OPENAIAPIKEY=... -e GOOGLEAPIKEY=... -p 8501:8501 cyberscraper</p><p>The Dockerfile copies the source tree, installs requirements.txt, and runs the Streamlit entry point.</p><h3 class="post-h" id="real-world-use">Real‑World Use</h3><p>A market‑research team could schedule a daily run (via cron or a CI job) that launches the Docker container, points the scraper at a competitor’s product catalog, and pushes the resulting CSV to a shared Google Sheet. Example snippet for automation:</p><p>docker run --rm \
-  -e OPENAIAPIKEY=$OPENAIAPIKEY \
-  -e GOOGLEAPIKEY=$GOOGLEAPIKEY \
-  cyberscraper \
-  python src/webextractor.py --url &quot;https://example.com/products&quot; --output sheet</p><h3 class="post-h" id="code-health-issues">Code Health &amp; Issues</h3><p>Medium – No automated tests – repository lacks any tests/ directory or pytest configuration. Untested code paths increase regression risk.  
-Medium – No CI/CD pipeline – .github/ contains only issue templates and funding info; no GitHub Actions or other CI config.  
-Low – No lockfile – dependencies are listed only in requirements.txt; reproducible builds depend on PyPI state.  
-Low – Potential secret leakage – README mentions environment variables but no .env.example or guidance on secure storage.  
-Low – Limited documentation – three Markdown docs exist, but no explicit API reference for scraper classes; developers must read source files.  
-Low – Docker build assumes host‑level network access – Tor usage may require additional capabilities not documented in Dockerfile.</p><p>No obvious security‑critical bugs are visible, but the lack of input validation in src/scrapers/base_scraper.py could allow malformed URLs to trigger unexpected errors.</p><h3 class="post-h" id="the-bottom-line">The Bottom Line</h3><p>CyberScraper‑2077 offers a ready‑made, AI‑augmented scraping stack with Tor and Streamlit integration, suitable for teams that need rapid prototyping of complex extraction tasks. However, the absence of tests, CI, and a lockfile means the codebase requires additional engineering effort to reach production‑grade reliability. It is a good fit for small‑to‑medium projects where the AI‑driven parsing value outweighs the operational overhead of adding proper testing and CI pipelines.</p>
+playwright install
+export OPENAI_API_KEY="your-api-key-here"
+export GOOGLE_API_KEY="your-api-key-here"
+python main.py</code></pre>
+<p>Requires Python 3.10+. For Ollama, install Ollama locally and select a model in the UI. A <code>Dockerfile</code> exists for containerized runs, but the README notes the captcha-bypass feature doesn't work under Docker.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A data analyst scraping a product page: paste the URL, ask for "price, name, and availability," and get a CSV back. The Tor path (<code>src/scrapers/tor/</code>) handles <code>.onion</code> sites with automatic circuit setup, so the same workflow extends to sources that block datacenter IPs. The caching layer (LRU + custom dict) reduces redundant LLM calls for repeated queries.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (measured, not opinion) found 11 issues: 2 high, 9 medium. High: deep nesting (depth 8) in <code>src/ollama_models.py</code>, <code>src/scrapers/playwright_scraper.py</code>, and <code>src/web_extractor.py</code>. Medium: oversized <code>playwright_scraper.py</code> (694 lines), broad exception handling in <code>src/scrapers/tor/utils.py</code> and <code>main.py</code>, duplicated blocks across <code>base_scraper.py</code> and <code>playwright_scraper.py</code>, and high branching density in <code>src/web_extractor.py</code> (112 branch points over 393 lines).</p>
+<p>SDLC gaps: no test files, no CI, no lockfile (<code>requirements.txt</code> unpinned), Dockerfile uses a mutable <code>python:3.12-slim-bookworm</code> tag and runs as root, and no Dependabot. Any change ships with zero regression signal.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Functionally interesting — LLM-driven extraction beats brittle selectors, and the Tor support is a differentiator. But it's a fork with no tests, no CI, and a 694-line core module that needs splitting before it's safe to extend. Use it for prototyping scraping workflows, not for production data pipelines.</p>
             </div>
 
             

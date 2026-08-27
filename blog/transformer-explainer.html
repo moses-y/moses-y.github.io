@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>February 1, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Svelte</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,12 +80,29 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                
-                <h3 class="post-h" id="the-problem">The Problem</h3><p>Understanding how transformer models like GPT-2 process text is typically abstract, requiring Python runtimes, PyTorch graphs, or paper-reading to grasp internal mechanics. This repo addresses that by providing an in-browser, interactive visualization that lets users type text and watch how attention, embeddings, and MLPs transform tokens in real time.</p><h3 class="post-h" id="what-this-does">What This Does</h3><p>The core is a Svelte-based UI (src/components/) that renders GPT-2 internals alongside a live model loaded from ONNX chunks in static/model-v2/. Components like Attention.svelte, AttentionMatrix.svelte, and QKV.svelte break down the query-key-value computation, while Mlp.svelte and LinearSoftmax.svelte visualize the feed-forward and softmax stages. State is managed via src/store/index.ts, and example prompts are defined in src/constants/examples/index.js. Styling is handled by Tailwind (tailwind.config.js, src/styles/), and the whole app is bootstrapped with Vite (vite.config.ts). Python utilities under src/utils/model/ (model.py, exporttoonnx.py, quantize.py) handle model conversion and chunking, but the runtime execution stays in the browser.</p><h3 class="post-h" id="how-to-use-it">How To Use It</h3><p>Setup  
-git clone https://github.com/poloclub/transformer-explainer.git
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Understanding how transformer LLMs like GPT work internally is genuinely hard—the math (attention, embeddings, layer norm) is abstract and buried behind framework APIs. This tool makes it concrete by running a live GPT-2 model in the browser and letting you watch each internal operation as it predicts the next token.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>An interactive visualization tool that runs a real GPT-2 model in-browser via ONNX. You type text, and it shows, step by step, how embeddings, attention, MLP layers, and softmax produce the next-token probability distribution.</p>
+<p>The UI is SvelteKit with Tailwind. Each transformer stage has its own component in <code>src/components/</code>: <code>Attention.svelte</code>, <code>Embedding.svelte</code>, <code>QKV.svelte</code>, <code>Mlp.svelte</code>, <code>LinearSoftmax.svelte</code>, <code>Sampling.svelte</code>, <code>Temperature.svelte</code>. Popover components in <code>src/components/Popovers/</code> explain each operation, and <code>src/components/textbook/</code> holds guided tutorial pages. It also ships a research paper (arXiv 2408.04619, IEEE VIS 2024).</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts in <code>src/routes/+page.svelte</code>. All state flows through <code>src/store/index.ts</code>, the central Svelte store that coordinates the model, inputs, and UI. The model itself is a chunked ONNX GPT-2 in <code>static/model-v2/gpt2.onnx.part0</code> through <code>.part62</code>, fetched by <code>src/utils/fetchChunks.js</code>. The Python scripts in <code>src/utils/model/</code> (<code>model.py</code>, <code>export_to_onnx.py</code>, <code>quantize.py</code>, <code>chunk.py</code>) generated and split that model.</p>
+<p>The module graph is small and clean: 25 internal modules, 6 import edges, zero circular dependencies. The most-connected modules are <code>tailwind.config</code> (imported by 3 files) and <code>src/utils/animation.ts</code> (imported by 2, itself imports 1)—animation is the shared utility most components depend on for transitions. No module carries a wide blast radius; the risk is concentrated in the two oversized components instead.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>Per the README, prerequisites are Node.js 20+ and NPM 10+. No environment variables or config files are required.</p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/transformer-explainer
 cd transformer-explainer
 npm install
-npm run dev</p><p>Per the README, this starts the Vite dev server at http://localhost:5173. No environment variables or secret keys are required;</p>
+npm run dev</code></pre>
+<p>Then open <a href="http://localhost:5173." rel="noopener">http://localhost:5173.</a></p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>This fits in teaching and onboarding: ML courses, conference demos, or a team getting familiar with transformer internals. A lecturer can fork it, add custom example inputs in <code>src/constants/examples/</code>, and demonstrate attention patterns live. It is also a reference implementation for anyone building similar model-visualization tools.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Measured static analysis (not opinion) found 32 findings: 12 high, 20 medium. The high findings are deep nesting (max indentation depth 9 across <code>Attention.svelte</code>, <code>Embedding.svelte</code>, <code>InputForm.svelte</code>) and 243 duplicated 6-line code blocks across 23 files. The medium findings are two oversized files—<code>Sankey.svelte</code> and <code>article/Article.svelte</code> at 645 lines each.</p>
+<p>SDLC gaps from the structure: no test files anywhere, no CI configuration, and no dependency-update bot. The repository also carries 63 blobs over 5MB—the ONNX model parts are 10MB each—which bloats every clone and CI checkout. 19 of 39 declared dependencies are behind their current major version, with <code>@sveltejs/adapter-auto</code> and <code>@sveltejs/vite-plugin-svelte</code> four majors behind.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>A solid, well-documented educational tool that works as described and is easy to run. It is not production code: add tests, a CI build step, and move the ONNX model files to Git LFS before treating it as anything but a demo or teaching aid.</p>
             </div>
 
             
