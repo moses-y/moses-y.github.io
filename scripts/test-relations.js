@@ -219,5 +219,54 @@ if (fs.existsSync(llms)) {
   }
 }
 
+console.log('the cluster report says what clusters.json says');
+
+/*
+ * A prose report is the easiest file in the pipeline to let rot: it renders
+ * fine when it is describing a build from three weeks ago, and nothing about
+ * reading it reveals that. So the assertions are all agreement assertions -
+ * the report is only allowed to contain figures the source file also contains.
+ * The last one is the important one. Prose is where a hedge gets dropped for
+ * being wordy, and "duplicates" is the specific word that would turn an
+ * inferred grouping into an instruction to delete a repository.
+ */
+const report = fs.existsSync(path.join(DATA, 'clusters.md'))
+  ? fs.readFileSync(path.join(DATA, 'clusters.md'), 'utf8') : null;
+
+if (report && clusters) {
+  const cross = clusters.clusters.filter(c => c.crossDomain);
+  const covered = clusters.clusters.reduce((s, c) => s + c.size, 0);
+
+  check('the report counts the groups the file contains',
+    report.indexOf(clusters.clusters.length + ' groups covering ' + covered) !== -1);
+  check('the report advertises the threshold that was used',
+    report.indexOf('at least ' + clusters.threshold) !== -1);
+  check('every group appears in the report',
+    clusters.clusters.every(c => report.indexOf('### ' + c.id + ' -') !== -1));
+  check('every clustered repository is named',
+    clusters.clusters.every(c => c.members.every(m => report.indexOf(m.name) !== -1)));
+  check('the cross-domain count agrees with the file',
+    report.indexOf(cross.length + ' of the ' + clusters.clusters.length + ' groups cross') !== -1);
+  check('the report carries the provenance of what it describes',
+    /INFERRED/.test(report) && /single-link/.test(report));
+  // The word is allowed exactly once, in the sentence that forbids the reading.
+  check('the report warns against reading a group as duplicates',
+    /never as a list of duplicates to delete/.test(report));
+  check('the report makes no bare duplicate claim',
+    !/\b(are|these are) duplicates\b/i.test(report));
+  // Conditional on the data, not on the wording: as grading catches up the
+  // ungraded rows disappear, and an assertion that demands the phrase would
+  // then fail on an estate that had got better rather than worse.
+  const anyUngraded = clusters.clusters.some(c => c.ungraded > 0);
+  check('an unaudited member reads as unaudited, not as a bad grade',
+    !anyUngraded || /\| not audited \|/.test(report),
+    anyUngraded ? 'ungraded members exist but none rendered' : 'none ungraded');
+  check('llms.txt points at the report',
+    fs.existsSync(llms) &&
+    fs.readFileSync(llms, 'utf8').indexOf('/data/clusters.md') !== -1);
+} else {
+  console.log('  skip  data/clusters.md not built');
+}
+
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');
 process.exit(fail ? 1 : 0);

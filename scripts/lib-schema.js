@@ -61,6 +61,7 @@ const TOP = {
 const COMPANIONS = [
   ['data/index.json', 'This file. Every repository, one lean record each, plus the similarity edges.'],
   ['data/clusters.json', 'Repositories grouped into clusters of near-duplicate work, with the grade of each member and which one is the keeper.'],
+  ['data/clusters.md', 'The same clusters as prose: which group crosses a domain, which member is the keeper, and how much of each group has never been audited. For a reader who wants the argument rather than the records.'],
   ['data/kin/<id>.json', 'One repository\'s neighbourhood: nearest semantic kin and repositories sharing its dependency stack. One small fetch per hop, so walking the graph does not require parsing this file.'],
   ['data/grades.json', 'Deterministic grade per audited repository across eight weighted categories. No model is involved.'],
   ['data/hygiene.json', 'Raw audit findings by severity, the input to grades.json.'],

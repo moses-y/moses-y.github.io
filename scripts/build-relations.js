@@ -27,6 +27,7 @@ const {
   CLUSTER_AT, MAX_DF_SHARE, MIN_STACK, KIN_LIMIT
 } = require('./lib-relations.js');
 const { SITE } = require('./lib-schema.js');
+const { render } = require('./lib-cluster-report.js');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'data');
@@ -87,6 +88,7 @@ function writeLlmsTxt(index, gradesFile, manifest, sample) {
     '- [Index](' + SITE + '/data/index.json): all ' + index.total + ' repositories with language, domain, kind, capabilities, hygiene severities and semantic coordinates, plus ' + (index.links || []).length + ' similarity edges. Large - prefer the neighbourhood files below for traversal.',
     '- [Relations manifest](' + SITE + '/data/relations.json): edge types, thresholds and counts for the relation layer.',
     '- [Clusters](' + SITE + '/data/clusters.json): ' + manifest.counts.clusters + ' groups of near-duplicate work covering ' + manifest.counts.clusteredRepositories + ' repositories, each with member grades and which one is the keeper.',
+    '- [Cluster report](' + SITE + '/data/clusters.md): the same ' + manifest.counts.clusters + ' groups written out as prose, cross-domain ones first, each with its keeper and how much of it is unaudited. Read this instead of clusters.json if you want the argument rather than the records.',
     '- [Neighbourhood](' + SITE + '/data/kin/' + sample + '.json): one file per repository id, about 1 KB each: nearest semantic kin and repositories sharing its dependency stack, with the shared packages named. Fetch ' + SITE + '/data/kin/<id>.json to walk from one repository to its neighbours without loading the index.',
     '- [Grades](' + SITE + '/data/grades.json): ' + graded + ' graded repositories, mean ' + gradesFile.mean + ', with the per-category score, weight and the findings charged against each.',
     '- [Hygiene](' + SITE + '/data/hygiene.json): the raw audit findings behind the grades.',
@@ -285,11 +287,16 @@ function main() {
     }
   };
 
-  fs.writeFileSync(path.join(OUT, 'clusters.json'), JSON.stringify({
+  const clustersFile = {
     generated: manifest.generated,
     threshold: CLUSTER_AT,
     clusters: clusters
-  }));
+  };
+  fs.writeFileSync(path.join(OUT, 'clusters.json'), JSON.stringify(clustersFile));
+
+  // The same clusters as sentences. Written from the object above rather than
+  // read back from disk, so the two can never describe different builds.
+  fs.writeFileSync(path.join(OUT, 'clusters.md'), render(clustersFile));
   fs.writeFileSync(path.join(OUT, 'relations.json'), JSON.stringify(manifest, null, 2));
 
   // Pages serves files, not directory listings, so the advertised example has
@@ -307,6 +314,7 @@ function main() {
   console.log('  stack edges        ' + withStack + ' of ' + depSets.size +
     ' repositories that declare dependencies');
   console.log('  data/clusters.json ' + kb(path.join(OUT, 'clusters.json')) + ' KB');
+  console.log('  data/clusters.md   ' + kb(path.join(OUT, 'clusters.md')) + ' KB');
   console.log('  data/kin/          ' + written + ' files, ' +
     (kinBytes / 1024).toFixed(0) + ' KB total, ' +
     (kinBytes / Math.max(1, written) / 1024).toFixed(1) + ' KB each');
