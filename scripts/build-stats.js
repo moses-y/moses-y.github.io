@@ -87,6 +87,16 @@ console.log('reports.json:', reports.length, 'reports');
 function pipelineStats() {
   const all = fs.readdirSync(__dirname).filter(n => n.endsWith('.js'));
   const suites = all.filter(n => /^test-.*\.js$/.test(n));
+
+  // The scan is the claim. If the suites ever stop living beside this file -
+  // a move to tests/, a rename - readdirSync returns them no longer and the
+  // count falls to zero, which the home page would publish as a measured
+  // figure with the same confidence as a real one. Nothing downstream can
+  // tell "no suites ran" from "no assertions hold", so refuse here.
+  if (suites.length === 0) {
+    throw new Error('no test-*.js suites found beside build-stats.js - ' +
+      'assertion count would publish as 0; fix the discovery path, do not ship the figure');
+  }
   const okLine = /^\s*ok\s/gm;
   let assertions = 0;
 
@@ -102,6 +112,11 @@ function pipelineStats() {
       out = e.stdout || '';
     }
     assertions += (out.match(okLine) || []).length;
+  }
+
+  if (assertions === 0) {
+    throw new Error(suites.length + ' suites ran and reported no assertions at all - ' +
+      'that is a broken harness, not a measurement');
   }
 
   const G = require('./lib-grade.js');

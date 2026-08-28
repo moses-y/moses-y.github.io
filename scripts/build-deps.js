@@ -21,6 +21,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { mapLimit } = require('./lib-net.js');
 const { parseManifest, isParseable } = require('./lib-manifest.js');
 
 const argv = process.argv.slice(2);
@@ -119,6 +120,29 @@ async function main() {
   if (DRY) { console.log('  (dry run, stopping)'); return; }
 
   const batch = pending.slice(0, BUDGET);
+
+  /*
+   * The manifest reads were serial with a fixed 60 ms sleep between them,
+   * against raw.githubusercontent.com - which is not on the REST rate limit, as
+   * build-hygiene.js already notes in its own comment. That was ~360 requests
+   * each paying a round trip plus a sleep nothing asked for. They are all
+   * independent, so they are fetched up front, 6 at a time, and the loop below
+   * is unchanged except that it reads from the map instead of awaiting.
+   */
+  const manifestJobs = [];
+  for (const f of batch) {
+    const parts = String(f.url || '').split('/');
+    const owner = parts[3], repo = parts[4];
+    if (!owner || !repo) continue;
+    const ms = (((f.knowledgeGraph || {}).dependencies) || []).filter(isParseable).slice(0, 3);
+    for (const m of ms) manifestJobs.push({ key: f.id + '::' + m, owner, repo, m });
+  }
+  const manifestText = new Map();
+  const texts = await mapLimit(manifestJobs, 6, async (j) => {
+    try { return await ghRaw(j.owner, j.repo, j.m); } catch (e) { return null; }
+  });
+  manifestJobs.forEach((j, i) => manifestText.set(j.key, texts[i]));
+
   let fetched = 0, failed = 0;
   for (const f of batch) {
     const parts = String(f.url || '').split('/');
@@ -128,13 +152,12 @@ async function main() {
     const found = {};
     for (const m of manifests) {
       try {
-        const txt = await ghRaw(owner, repo, m);
+        const txt = manifestText.get(f.id + '::' + m);
         if (!txt) { failed++; continue; }
         const pkgs = parseManifest(m, txt);
         if (pkgs.length) found[ecosystemOf(m)] = (found[ecosystemOf(m)] || []).concat(pkgs);
         fetched++;
       } catch (e) { failed++; }
-      await sleep(60);
     }
     // Recorded even when empty, so an unreadable repo is not retried every run.
     deps.repos[f.id] = {};
@@ -170,16 +193,20 @@ async function main() {
   const toResolve = ranked
     .filter(([k]) => /^(npm|pypi):/.test(k) && !registry[k])
     .slice(0, REG_BUDGET);
+  // registry.npmjs.org and pypi.org both tolerate far more than one request
+  // every 50 ms; that sleep paced against a limit neither service imposes.
   let resolved = 0;
-  for (const [key] of toResolve) {
-    const [eco, name] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-    try {
-      const info = eco === 'npm' ? await resolveNpm(name) : await resolvePypi(name);
-      registry[key] = info || { v: null, d: '', t: null };
-      if (info) resolved++;
-    } catch (e) { registry[key] = { v: null, d: '', t: null }; }
-    await sleep(50);
-  }
+  const infos = await mapLimit(toResolve, 6, async (entry) => {
+    const key = entry[0];
+    const eco = key.slice(0, key.indexOf(':'));
+    const name = key.slice(key.indexOf(':') + 1);
+    try { return await (eco === 'npm' ? resolveNpm(name) : resolvePypi(name)); }
+    catch (e) { return null; }
+  });
+  toResolve.forEach((entry, i) => {
+    registry[entry[0]] = infos[i] || { v: null, d: '', t: null };
+    if (infos[i]) resolved++;
+  });
   console.log(`  registry entries resolved this run: ${resolved} (cache: ${Object.keys(registry).length})`);
 
   deps.generated = new Date().toISOString();

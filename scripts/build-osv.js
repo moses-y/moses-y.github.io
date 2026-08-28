@@ -37,6 +37,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { mapLimit } = require('./lib-net.js');
 
 const argv = process.argv.slice(2);
 const numArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? parseInt(argv[i + 1], 10) : d; };
@@ -210,15 +211,22 @@ async function main() {
   // budgeted separately and the backlog drains over runs like everything else.
   const needed = new Set();
   for (const ids of Object.values(store.queries)) for (const id of ids) if (!store.vulns[id]) needed.add(id);
-  let fetched = 0;
-  for (const id of needed) {
-    if (fetched >= DETAILS) break;
+  // Independent lookups by id, so they overlap. osv.dev imposes no meaningful
+  // limit on /vulns/, and awaiting 150 of them one at a time was most of this
+  // stage's wall clock for no reason the service asks for.
+  const wantIds = Array.from(needed).slice(0, DETAILS);
+  let asked2 = 0;
+  const details = await mapLimit(wantIds, 8, async (id) => {
     const v = await getJson(API + '/vulns/' + encodeURIComponent(id));
-    if (!v) continue;
-    store.vulns[id] = summarise(v);
+    process.stdout.write('\r  advisories ' + (++asked2) + '/' + wantIds.length);
+    return v;
+  });
+  let fetched = 0;
+  wantIds.forEach((id, k) => {
+    if (!details[k]) return;
+    store.vulns[id] = summarise(details[k]);
     fetched++;
-    process.stdout.write(`\r  advisories ${fetched}/${Math.min(needed.size, DETAILS)}`);
-  }
+  });
   if (fetched) console.log('');
 
   /*

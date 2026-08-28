@@ -65,8 +65,16 @@ function inputsFor(id) {
     const load = p => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return null; } };
     const sym = load(path.join('data', 'symbols-status.json'));
     const hyg = load(path.join('data', 'hygiene.json'));
-    let hygVersion = 0;
-    try { hygVersion = require('./lib-hygiene.js').CHECKS_VERSION; } catch (e) { hygVersion = 0; }
+    // Fails closed. This used to swallow the error and leave hygVersion at 0,
+    // which makes every audited repo compare `entry.v >= 0` - true - so every
+    // article reads as current and ~1,300 of them regenerate against a version
+    // nothing computed. A sibling module that will not load is a broken tree,
+    // not a degraded input, and it must stop the run rather than quietly
+    // change what the whole estate is graded against.
+    const hygVersion = require('./lib-hygiene.js').CHECKS_VERSION;
+    if (typeof hygVersion !== 'number') {
+      throw new Error('lib-hygiene exports no numeric CHECKS_VERSION; article versions would be meaningless');
+    }
     inputs = { sym, hyg, hygVersion };
   }
   const key = String(id);

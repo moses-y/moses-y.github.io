@@ -187,6 +187,30 @@ function cosineSimilarity(a, b) {
 }
 
 // UMAP down to 3 dimensions (the graph is 3D) plus top-K cosine neighbors.
+/*
+ * Deterministic by seed. UMAP is stochastic, and given no random option umap-js
+ * falls back to Math.random - so every run produced entirely different coordinates
+ * for all 1,440 repositories. Those coordinates are stored in forks.json, which
+ * meant ~8,600 lines of the ~9,000-line diff this pipeline committed every two
+ * hours were pure noise: the same estate, re-projected. The layout also drifted
+ * under anyone watching the graph page, and the similarity links derived from it
+ * churned into index.json, clusters.json and all 1,425 kin shards.
+ *
+ * mulberry32 over a fixed constant. The projection is still a projection - the
+ * seed does not make it more true - but the same inputs now produce the same map,
+ * which is the property every other stage in this pipeline already promises.
+ */
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const UMAP_SEED = 0x5EED1E;
+
 function computeUmapAndKnn(forks, cache) {
   const embedded = forks.filter(f => Array.isArray(cache[f.id]?.vector));
   if (embedded.length < 5) {
@@ -215,7 +239,8 @@ function computeUmapAndKnn(forks, cache) {
   const umap = new UMAP({
     nComponents: EMBED_DIMS,
     nNeighbors: Math.max(2, Math.min(15, embedded.length - 1)),
-    minDist: 0.1
+    minDist: 0.1,
+    random: seededRandom(UMAP_SEED)
   });
   const coords = umap.fit(vectors);
 

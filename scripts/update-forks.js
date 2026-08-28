@@ -44,6 +44,7 @@ const { CONFIG, LLM_API_KEY, modelRateLimits, EMBED_MODEL } = require('./lib-con
 const { cleanArticle } = require('./lib-text.js');
 const { fetchReadme, fetchRepoTree, fetchRepos, fetchRepoDetails,
   generateFallbackSummary } = require('./lib-github.js');
+const { mapLimit } = require('./lib-net.js');
 const { generateBlogArticle } = require('./lib-article.js');
 const { deriveLanguage, domainOf, classifyArtifact, deriveCapabilities, enrichFork } = require('./lib-classify.js');
 const { buildKnowledgeGraph, formatKnowledgeGraph } = require('./lib-knowledge-graph.js');
@@ -140,9 +141,35 @@ async function main() {
   let kgGeneratedCount = 0;
   const kgBatchLimit = CONFIG.kgBatchSize;
 
+  /*
+   * `topics` and `parent` are the only two fields this refresh exists to
+   * update, and both change on the order of never. Asking GitHub for all ~1,330
+   * of them, one awaited request at a time, was the largest single block of
+   * wall clock in the run and spent a quarter of the hourly REST quota to
+   * rewrite values that were already correct.
+   *
+   * So: ask only about repositories whose upstream updated_at has moved since
+   * the stored copy, and ask about those 8 at a time. A repository nothing has
+   * touched keeps the topics and parent already on disk. This is the same
+   * resume-from-what-was-committed discipline the rest of the pipeline uses.
+   */
+  const detailsNeeded = hasArticle.map(({ repo, existing }) =>
+    (existing && existing.updatedAt === formatDate(repo.updated_at) &&
+     Array.isArray(existing.topics) && 'parent' in existing) ? null : repo);
+
+  const refreshCount = detailsNeeded.filter(Boolean).length;
+  console.log(`Repo detail refresh: ${refreshCount} of ${hasArticle.length} changed upstream`);
+
+  const detailsList = await mapLimit(detailsNeeded, 8, async (repo) => {
+    if (!repo) return null;
+    // fetchRepoDetails already returns `repo` unchanged on failure rather than
+    // throwing, so one unreachable repository cannot end the run.
+    return fetchRepoDetails(repo);
+  });
+
   for (let i = 0; i < hasArticle.length; i++) {
     const { repo, existing } = hasArticle[i];
-    const detailed = await fetchRepoDetails(repo);
+    const detailed = detailsList[i] || { topics: existing.topics, parent: existing.parent };
 
     let knowledgeGraph = existing.knowledgeGraph;
 

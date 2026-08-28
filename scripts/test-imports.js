@@ -95,16 +95,34 @@ function bundleUnits() {
   }));
 }
 
+// Recursive, and loud about a directory it cannot read. This walk is the input
+// to every assertion below, so a silent `continue` on a missing directory turns
+// the whole suite green while it checks nothing - which is precisely the failure
+// it was written to catch. It is also why the walk recurses: the moment these
+// files live in subdirectories, a flat readdir would check only what is left at
+// the top and still pass.
+function walk(dir, out) {
+  for (const n of fs.readdirSync(dir)) {
+    if (n === 'node_modules' || n.charAt(0) === '.') continue;
+    const p = path.join(dir, n);
+    const st = fs.statSync(p);
+    if (st.isDirectory()) walk(p, out);
+    else if (st.isFile() && n.endsWith('.js')) out.push(p);
+  }
+  return out;
+}
+
 function jsFiles() {
   const out = [];
   for (const d of DIRS) {
-    let names = [];
-    try { names = fs.readdirSync(d); } catch (e) { continue; }
-    for (const n of names) {
-      if (!n.endsWith('.js')) continue;
-      const p = path.join(d, n);
-      if (fs.statSync(p).isFile()) out.push(p);
+    if (!fs.existsSync(d)) {
+      throw new Error('test-imports: source directory "' + d + '" does not exist - ' +
+        'nothing would be checked; update DIRS to match the tree');
     }
+    walk(d, out);
+  }
+  if (out.length === 0) {
+    throw new Error('test-imports: found no .js files under ' + DIRS.join(', '));
   }
   return out;
 }

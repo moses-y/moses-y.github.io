@@ -28,6 +28,7 @@ const path = require('path');
 const hygiene = require('./lib-hygiene.js');
 require('./checks-hygiene.js');            // registers the checks
 const runtime = require('./checks-runtime.js');
+const { mapLimit } = require('./lib-net.js');
 
 const argv = process.argv.slice(2);
 const numArg = (f, d) => { const i = argv.indexOf(f); return i > -1 ? parseInt(argv[i + 1], 10) : d; };
@@ -77,14 +78,21 @@ async function fetchRaw(name, filePath) {
 // read budget impossible to reason about - so the files a repo needs are
 // resolved up front, in one pass, and handed over as a map.
 async function prefetch(name, ctxTree, wanted) {
-  const map = new Map();
-  let n = 0;
+  // The paths are chosen up front and none of the reads depends on another, so
+  // awaiting them one at a time cost this stage its whole time budget: 80 repos
+  // x 20 reads was 1,600 strictly serial round trips, and --max-seconds cut the
+  // run off long before --budget did. Selection stays exactly as it was - the
+  // priority order in pathsToRead is what decides which 20 paths are worth a
+  // slot - only the fetching overlaps.
+  const take = [];
   for (const p of wanted) {
-    if (n >= READS) break;
+    if (take.length >= READS) break;
     if (!ctxTree.has(p)) continue;
-    n++;
-    map.set(p, await fetchRaw(name, p));
+    take.push(p);
   }
+  const bodies = await mapLimit(take, 6, p => fetchRaw(name, p));
+  const map = new Map();
+  take.forEach((p, i) => map.set(p, bodies[i]));
   return map;
 }
 
@@ -108,7 +116,10 @@ function workflowScore(path, size) {
 function pathsToRead(files) {
   const has = re => files.filter(f => re.test(f.path));
   const ordered = [];
-  const push = arr => { for (const p of arr) if (!ordered.includes(p)) ordered.push(p); };
+  // A Set alongside the array: `ordered.includes` was a linear scan per candidate
+  // path, and the ordering it protects is load-bearing, so the array stays.
+  const seen = new Set();
+  const push = arr => { for (const p of arr) if (!seen.has(p)) { seen.add(p); ordered.push(p); } };
 
   // 1. Anything secret-shaped, because a confirmed credential is the finding
   //    that most deserves a slot.
@@ -141,10 +152,13 @@ function pathsToRead(files) {
   //    the running process" is a judgement about names and depth that belongs
   //    next to the rules that depend on it. It goes last: a confirmed credential
   //    or a workflow that ships is worth a slot ahead of a settings module.
+  // One pass to index, rather than a full scan of the repo's file list on every
+  // sizeOf call. On a 10k-file repo that was ~500k comparisons per repository.
+  const sizeByPath = new Map(files.map(f => [f.path, f.size || 0]));
   const shim = {
     tree: files,
     find: re => files.map(f => f.path).filter(p => re.test(p)),
-    sizeOf: p => { const f = files.find(x => x.path === p); return f ? (f.size || 0) : 0; }
+    sizeOf: p => sizeByPath.get(p) || 0
   };
   push(runtime.selectPaths(shim));
 
