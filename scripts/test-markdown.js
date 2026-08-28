@@ -95,5 +95,31 @@ check('an article with a table reports markdown', hasMarkdown('| a | b |\n| - | 
 check('empty input is safe', renderMarkdown(''), '');
 check('null input is safe', renderMarkdown(null), '');
 
+/* ---- attribute break-out ------------------------------------------------
+ * The link rules put a captured URL inside href="...". escapeHtml covered
+ * &, < and > but not quotes, so a URL carrying one closed the attribute and
+ * everything after it became markup. The input is a model's prose about
+ * someone else's repository, which is two removes from anything trusted.
+ */
+
+check('a double quote in a link URL cannot close the attribute',
+  renderMarkdown('[x](https://a.com/" onmouseover="alert(1))'), lacks('"https://a.com/"'));
+check('it is escaped rather than dropped',
+  renderMarkdown('[x](https://a.com/" onmouseover="alert(1))'), got => got.includes('&quot;'));
+check('a single quote in a link URL is escaped too',
+  renderMarkdown("[x](https://a.com/' onmouseover='alert(1))"), got => got.includes('&#39;'));
+check('a bare URL carrying a quote is escaped as well',
+  renderMarkdown('see https://a.com/"onmouseover="alert(1) here'), lacks('/"onmouseover'));
+check('no rendered attribute is left unterminated',
+  renderMarkdown('[x](https://a.com/" onmouseover="alert(1))'),
+  got => (got.match(/"/g) || []).length % 2 === 0);
+
+// The escaping must not cost the ordinary cases their rendering.
+check('an ampersand in a query string still renders as a link',
+  renderMarkdown('[docs](https://example.com/a?b=1&c=2)'),
+  got => got.includes('href="https://example.com/a?b=1&amp;c=2"'));
+check('a quote inside a fenced block survives as text',
+  renderMarkdown('```js\nconst a = "x";\n```'), got => got.includes('&quot;x&quot;'));
+
 console.log(fail ? `\n  ${fail} failures` : '\n  renderer correct, and refuses everything it should');
 process.exit(fail ? 1 : 0);
