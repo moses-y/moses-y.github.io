@@ -34,13 +34,13 @@ const path = require('path');
 const GROUPS = [
   {
     name: 'code brain',
-    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'code-brain.js'],
-    provides: ['CBDom', 'CBData', 'CBPanel', 'GraphShell', 'GraphGrade', 'KGTraverse']
+    files: ['index-record.js', 'cb-dom.js', 'cb-data.js', 'cb-panel.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'code-brain.js'],
+    provides: ['IndexRecord', 'CBDom', 'CBData', 'CBPanel', 'GraphShell', 'GraphGrade', 'KGTraverse']
   },
   {
     name: 'semantic map',
-    files: ['kg-data.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'knowledge-graph.js'],
-    provides: ['KGData', 'GraphShell', 'GraphGrade', 'KGTraverse']
+    files: ['index-record.js', 'kg-data.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'knowledge-graph.js'],
+    provides: ['IndexRecord', 'KGData', 'GraphShell', 'GraphGrade', 'KGTraverse']
   }
 ];
 
@@ -256,6 +256,51 @@ for (const group of GROUPS) {
   }
   console.log(`  home page figures: ${spans.length} spans, all written; ` +
     `${stats.forked} of ${stats.repos} forked, pipeline ${p.scripts} scripts / ${p.assertions} assertions`);
+}
+
+/*
+ * Both graph pages read the lean index, not forks.json.
+ *
+ * forks.json is 7.1 MB gzipped against the index's 187 KB, and the two pages
+ * fetched it for months because the decoder for the index lived inside a bundle
+ * they do not load. forks.json remains as a fallback, so the failure this guards
+ * against is silent: a page that reverts to the full feed still works, and
+ * nobody notices seven megabytes until someone measures a page load.
+ */
+{
+  for (const page of ['code-brain.html', 'knowledge-graph.html']) {
+    const html = fs.readFileSync(page, 'utf8');
+    if (html.indexOf('assets/js/index-record.js') === -1) {
+      fail++;
+      console.log(`FAIL  ${page} does not load index-record.js`);
+    }
+  }
+  for (const file of ['code-brain.js', 'knowledge-graph.js']) {
+    const src = fs.readFileSync(path.join('assets', 'js', file), 'utf8');
+    if (src.indexOf('IndexRecord.loadEstate') === -1) {
+      fail++;
+      console.log(`FAIL  ${file} no longer loads the estate through the lean index`);
+    }
+    // The fallback belongs in index-record.js. A direct fetch here means the
+    // controller went back to the full feed as its primary source.
+    if (/fetch\(\s*['"]forks\.json/.test(src)) {
+      fail++;
+      console.log(`FAIL  ${file} fetches forks.json directly again`);
+    }
+  }
+
+  // The repositories with no primary language resolve theirs from the file
+  // census instead. Drop that from the index and Code Brain's language layer
+  // loses them into a null bucket without saying so.
+  const idx = JSON.parse(fs.readFileSync(path.join('data', 'index.json'), 'utf8'));
+  const missing = idx.repos.filter(r => !r.l);
+  const withCensus = missing.filter(r => r.L);
+  if (missing.length && withCensus.length !== missing.length) {
+    fail++;
+    console.log(`FAIL  ${missing.length - withCensus.length} records have neither a language nor a census`);
+  }
+  console.log(`  lean index: both graph pages read it, ${withCensus.length} of ` +
+    `${missing.length} language-less records carry a file census`);
 }
 
 console.log(fail ? `\n  ${fail} unreachable name(s)` : '\n  every name in the graph pages resolves');

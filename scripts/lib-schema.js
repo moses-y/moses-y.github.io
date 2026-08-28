@@ -41,7 +41,8 @@ const RECORD = {
   r: ['integer|absent', 'Estimated read time of the briefing, in minutes.'],
   z: ['string|absent', 'Last update, already formatted for display.'],
   p: ['object|absent', 'Upstream parent for a fork: {n: full name, u: URL, s: stars}.'],
-  u: ['number[3]|absent', 'UMAP projection of a neural embedding (nvidia/nv-embedqa-e5-v5) of the description, topics, languages, frameworks and generated summary, 4 decimal places. INFERRED, not measured: the only field in a record that a model produced. The same space `links` is drawn from, so two repositories close in `u` are probably close in meaning.']
+  u: ['number[3]|absent', 'UMAP projection of a neural embedding (nvidia/nv-embedqa-e5-v5) of the description, topics, languages, frameworks and generated summary, 4 decimal places. INFERRED, not measured: the only field in a record that a model produced. The same space `links` is drawn from, so two repositories close in `u` are probably close in meaning.'],
+  L: ['object|absent', 'File count by language, present only on the records where `l` is null. EXTRACTED from the file census. Both graph pages derive a repository\'s language from `l` and fall back to the largest entry here, so carrying it for these records alone is what lets them read this file instead of the 7 MB feed.']
 };
 
 const TOP = {

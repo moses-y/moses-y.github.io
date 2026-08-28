@@ -508,28 +508,12 @@
         }
 
         // Lean index records use short keys to keep the file small. This restores the
-        // field names the renderers use, so nothing downstream had to change.
+        // field names the renderers use. The decoder itself lives in
+        // assets/js/index-record.js, because the graph pages need it too and do
+        // not load this bundle; keeping a second copy here is how the two would
+        // drift.
         function expandIndexRecord(r) {
-            const c = r.c || '00000';
-            return {
-                id: r.i, name: r.n, displayName: r.t,
-                description: r.d, summary: null,
-                url: 'https://github.com/moses-y/' + r.n,
-                language: r.l, domain: r.g, kind: r.k,
-                stars: r.s, type: r.y ? 'original' : 'fork',
-                image: r.m, readTime: r.r || 2, updatedAt: r.z,
-                parent: r.p ? { name: r.p.n, url: r.p.u, stars: r.p.s } : null,
-                topics: [], umap: r.u, hasArticle: !!r.a, findings: r.x,
-                v: r.v,     // audit severities; undefined (unaudited) is not 0 (clean)
-                knowledgeGraph: {
-                    totalFiles: r.f,
-                    codeHealth: {
-                        hasTests: c[0] === '1', hasLicense: c[3] === '1',
-                        committedSecrets: c[4] === '1' ? 1 : 0
-                    },
-                    hasCI: c[1] === '1', hasDocker: c[2] === '1'
-                }
-            };
+            return window.IndexRecord.expand(r);
         }
 
 /* projects */

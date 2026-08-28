@@ -27,7 +27,7 @@
         fetch('structure/reports.json').then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; })
             .then(function (list) { (list || []).forEach(function (r) { reportSet[String(r.id)] = r; }); });
 
-        fetch('forks.json').then(function (r) { return r.json(); }).then(build)
+        IndexRecord.loadEstate().then(build)
             .catch(function (e) {
                 // On the page, not only the console: a build error used to read as
                 // "could not load graph data", pointing at the network and hiding

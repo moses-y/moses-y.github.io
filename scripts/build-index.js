@@ -99,6 +99,19 @@ function main() {
     if (f.updatedAt) rec.z = f.updatedAt;
     if (f.parent) rec.p = { n: f.parent.name, u: f.parent.url, s: f.parent.stars || 0 };
     if (Array.isArray(f.umap)) rec.u = f.umap.map(v => +v.toFixed(4));
+    /*
+     * The file census by language, carried only for the 82 repositories that
+     * have no primary language of their own. Both graph pages derive a
+     * repository's language from `l` and fall back to this census when it is
+     * null, so without it those 82 would land in a null bucket and Code Brain's
+     * language layer would be visibly wrong for 6% of the estate.
+     *
+     * Carrying it for all 1,440 would cost 32 KB gzipped; carrying it only
+     * where the fallback actually fires costs 0.6 KB. That difference is the
+     * whole reason the graph pages can read this file instead of forks.json,
+     * which is 7.1 MB gzipped.
+     */
+    if (!rec.l && kg.languages) rec.L = kg.languages;
     return rec;
   });
 

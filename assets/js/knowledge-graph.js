@@ -42,8 +42,7 @@
             nCount: document.getElementById('n-count')
         };
 
-        fetch('forks.json')
-            .then(function (r) { return r.json(); })
+        IndexRecord.loadEstate()
             .then(build)
             .catch(function (e) {
                 el.loading.innerHTML = '<div>Could not load graph data.</div>';
