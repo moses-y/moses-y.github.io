@@ -100,8 +100,42 @@
                     + '<span class="fc-go">See them &rarr;</span></a>';
             }).join('');
 
-            const hr = document.getElementById('hero-repos');
-            if (hr) hr.textContent = n.toLocaleString('en-US');
+            // The headline counts the forks, not the estate: the sentence is
+            // "codebases I did not write", and a handful of these are mine.
+            // `p` is the parent repository, present only on a fork.
+            const forked = R.filter(r => r.p).length;
+            setNum('hero-forks', forked);
+            setNum('hero-forked', forked);
+            setNum('hero-total', n);
+        }
+
+        function setNum(id, value) {
+            const el = document.getElementById(id);
+            if (el && typeof value === 'number') el.textContent = value.toLocaleString('en-US');
+        }
+
+        /*
+         * The pipeline describes itself in prose on the home page - how many
+         * scripts, checks, axes and assertions it runs - and those were typed
+         * in. build-stats.js now counts them from the files they describe, so
+         * the paragraph cannot quietly go stale the way the repository count
+         * did. Left alone when stats.json is unreachable: the markup ships the
+         * last known figures, which is better than a paragraph full of dashes.
+         */
+        var STAGE_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six',
+                           'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+
+        function renderPipelineStats(pipeline) {
+            const stages = document.querySelectorAll('.pipeline-stages > li').length;
+            const word = document.getElementById('pl-stages');
+            if (word && STAGE_WORDS[stages]) word.textContent = STAGE_WORDS[stages];
+            if (!pipeline) return;
+            setNum('pl-scripts', pipeline.scripts);
+            setNum('pl-suites', pipeline.suites);
+            setNum('pl-assertions', pipeline.assertions);
+            setNum('pl-checks', pipeline.checks);
+            setNum('pl-axes', pipeline.axes);
+            setNum('hero-scripts', pipeline.scripts);
         }
 
         // Draws the estate behind the hero from the umap coordinates already in the
@@ -202,6 +236,14 @@
             if (stats) {
                 deepStats.modulesMapped = stats.modulesMapped;
                 deepStats.findings = stats.findings;
+            }
+            renderPipelineStats(stats && stats.pipeline);
+            // The fork split is in stats.json too, and is the fallback for when
+            // the index does not load but the aggregate does.
+            if (stats && !(forks && forks.forks && forks.forks.length)) {
+                setNum('hero-forks', stats.forked);
+                setNum('hero-forked', stats.forked);
+                setNum('hero-total', stats.repos);
             }
             renderStats();
         }

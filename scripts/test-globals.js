@@ -196,5 +196,60 @@ for (const group of GROUPS) {
   console.log(`  shared chrome: graph-shell.css holds ${shell.size} rules, neither page repeats one`);
 }
 
+/*
+ * The home page states figures about the estate and about the pipeline itself,
+ * and the failure this guards against has already happened once: the hero
+ * asserted 1,331 repositories for long enough that the real number passed it by
+ * more than a hundred, with the same confidence as a measured one.
+ *
+ * So every such figure is a span filled from stats.json, and the two ways that
+ * arrangement can rot are a span nothing writes and a writer for a span that no
+ * longer exists. Both are checked, in both directions.
+ */
+{
+  const html = fs.readFileSync('index.html', 'utf8');
+  const js = fs.readFileSync(path.join('assets', 'js', 'site.js'), 'utf8');
+
+  // Spans only. The hero also has a #hero-map canvas, which is a drawing
+  // surface rather than a figure and is filled by drawHeroMap.
+  const spans = [...html.matchAll(/<span id="((?:hero|pl)-[a-z]+)"/g)].map(m => m[1]);
+  const written = new Set([...js.matchAll(/setNum\('((?:hero|pl)-[a-z]+)'/g)].map(m => m[1]));
+  // pl-stages is filled from the length of the stage list rather than from
+  // stats.json, because the number it states is the list.
+  written.add('pl-stages');
+
+  for (const id of spans) {
+    if (!written.has(id)) {
+      fail++;
+      console.log(`FAIL  index.html has #${id} but nothing in site.js writes it`);
+    }
+  }
+  for (const id of written) {
+    if (id !== 'pl-stages' && spans.indexOf(id) === -1) {
+      fail++;
+      console.log(`FAIL  site.js writes #${id}, which index.html no longer has`);
+    }
+  }
+
+  // The figures themselves have to be present and countable, or the page falls
+  // back to whatever was typed into the markup without saying so.
+  const stats = JSON.parse(fs.readFileSync('stats.json', 'utf8'));
+  const p = stats.pipeline || {};
+  for (const key of ['scripts', 'suites', 'assertions', 'checks', 'axes']) {
+    if (!(p[key] > 0)) {
+      fail++;
+      console.log(`FAIL  stats.json pipeline.${key} is missing or zero`);
+    }
+  }
+  // The split the headline depends on. If these stop adding up, "codebases I
+  // did not write" is counting repositories that were written here.
+  if (stats.original + stats.forked !== stats.repos) {
+    fail++;
+    console.log(`FAIL  original + forked (${stats.original} + ${stats.forked}) != repos (${stats.repos})`);
+  }
+  console.log(`  home page figures: ${spans.length} spans, all written; ` +
+    `${stats.forked} of ${stats.repos} forked, pipeline ${p.scripts} scripts / ${p.assertions} assertions`);
+}
+
 console.log(fail ? `\n  ${fail} unreachable name(s)` : '\n  every name in the graph pages resolves');
 process.exit(fail ? 1 : 0);
