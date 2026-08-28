@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>August 27, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Shell</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,25 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>llm d is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running LLM inference on Kubernetes at production scale means fighting the same battles repeatedly: routing requests to the right replica, keeping KV cache hot across multi-turn conversations, serving models too large for one accelerator, and keeping multi-tenant traffic stable. Each team re-solves these by hand. <code>llm-d</code> packages the solutions as tested, benchmarked recipes so you don't rediscover them.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>llm-d</code> is a CNCF sandbox project (founded by Red Hat, Google Cloud, IBM Research, CoreWeave, NVIDIA) that sits above model servers like vLLM and SGLang. It provides orchestration and optimization patterns for intelligent routing, tiered KV-cache management, prefill/decode disaggregation for huge models, and SLO-aware autoscaling. The bulk of the repo is <code>guides/</code> (740 files) — "well-lit path" recipes with Helm charts and benchmarks — plus <code>docker/</code> (37 files) building CPU, CUDA, ROCm, and XPU container images.</p>
+<p>This is a fork (<code>moses-y/llm-d</code>) of the upstream project with 4252 stars. It is not a library you import; it is a collection of deployable patterns, CI pipelines, and Docker build scripts.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>There is no central application entry point. Execution starts in the GitHub Actions workflows (<code>.github/workflows/</code>, 142 files) — nightly e2e runs like <code>nightly-e2e-pd-disaggregation-gke-acc-gpu-vllm-x.yaml</code> invoke shell verification scripts under <code>.github/scripts/e2e/</code> and <code>.github/scripts/nightly-e2e-verification/</code>. Those scripts (e.g. <code>verify.py</code>, <code>verify_helpers.py</code>) drive cluster checks and report results via <code>consolidate-status-*.yaml</code> workflows.</p>
+<p>The import graph shows 16 internal Python modules with <strong>0 import edges</strong> — the Python code is effectively disconnected, not a package. The real "wiring" is shell orchestration and YAML. <code>docker/scripts/cuda/builder/*.sh</code> (build-ucx, build-nvshmem, build-nixl) are the deepest logic, assembling accelerator libraries into images. The widest blast radius is <code>scripts/guide.py</code> (1133 lines), the oversized generator for guide content — a change there ripples across every generated guide.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>The README points to the documentation site (<code>llm-d.ai/docs/well-lit-paths</code>) for recipes and Helm charts, but the excerpt documents no explicit install commands. Evidence present: a <code>Makefile</code>, <code>docker/Dockerfile.cpu</code>/<code>.cuda</code>/<code>.rocm</code>/<code>.xpu</code>, and <code>requirements.txt</code> files in guide subdirectories. Clone with <code>git clone https://github.com/moses-y/llm-d</code>, then build an image (e.g. <code>docker build -f docker/Dockerfile.cuda .</code>) or follow a guide's Helm instructions. A lockfile is absent, so dependency installs are not reproducible.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team serving Llama 3.1 70B on AMD MI300X deploys the optimized-baseline guide's Helm chart, adds the prefix-cache-aware router from the intelligent-routing theme, and the README's cited benchmarks show 3x output throughput and 2x faster TTFT versus round-robin. For a multi-tenant cluster, the flow-control guide protects tenants while the SLO-aware autoscaling templates (in <code>guides/workload-autoscaling/slo-aware/</code>) scale on inference signals.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis found 22 issues (4 high, 18 medium) across 6 kinds. High: deep nesting (max indentation depth 8) in <code>e2e-validate-scale-event.sh</code>, <code>verify_helpers.py</code>, and <code>plot_run.py</code>; and 111 duplicated 6-line blocks across 16 shell files. Medium: broad exception handling in <code>plot_run.py</code> and <code>lint-dockerfile-envvars.py</code>, high branching density (49 branch points over 162 lines in <code>e2e-validate-scale-event.sh</code>), and the oversized <code>scripts/guide.py</code>.</p>
+<p>The CI audit adds: <strong>High</strong> — third-party GitHub Actions pinned to mutable tags (<code>dorny/paths-filter@v4</code>, etc.), a known secret-leak vector; <strong>High</strong> — 5 test files exist but no workflow invokes them; <strong>High</strong> — <code>continue-on-error</code> on a correctness step in <code>build-image.yaml</code> line 188. <strong>Medium</strong> — <code>ubuntu:22.04</code> base image unpinned by digest in <code>Dockerfile.cpu</code>; no non-root <code>USER</code>. <strong>Low</strong> — workflow jobs lack <code>timeout-minutes</code>. Tests and CI exist; no committed secrets; license present.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The guide content and benchmark data are the real value — genuinely useful, vendor-backed recipes. The code surface is thin and the CI has real correctness gaps (unpinned actions, tests never run). Use it as a reference for production inference patterns, not as a codebase to extend.</p>
             </div>
 
             
