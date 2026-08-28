@@ -149,7 +149,10 @@ async function main() {
    * rewrite values that were already correct.
    *
    * So: ask only about repositories whose upstream updated_at has moved since
-   * the stored copy, and ask about those 8 at a time. A repository nothing has
+   * the stored copy, and ask about those 8 at a time. The comparison is at DAY
+   * precision, because that is what formatDate stores - two pushes on the same
+   * day refresh once. For two fields that change on the order of never, that is
+   * the right trade; it would not be for anything time-sensitive. A repository nothing has
    * touched keeps the topics and parent already on disk. This is the same
    * resume-from-what-was-committed discipline the rest of the pipeline uses.
    */
