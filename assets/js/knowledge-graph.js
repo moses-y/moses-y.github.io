@@ -126,21 +126,7 @@
                 .linkDirectionalParticleSpeed(0.006)
                 .onBackgroundClick(clearFocus);
 
-            // force-graph sizes itself from the window, but the canvas lives in a grid
-            // cell that is narrower than the viewport. Left alone the canvas was
-            // 1440x757 inside a 1060x701 box, so every pointer coordinate was offset:
-            // clicks selected the wrong node and zoom/pan felt wrong. Drive the size
-            // from the container and keep it in step.
-            (function () {
-                var box = document.getElementById('graph');
-                function fitCanvas() {
-                    var r = box.getBoundingClientRect();
-                    if (r.width > 0 && r.height > 0) Graph.width(r.width).height(r.height);
-                }
-                fitCanvas();
-                if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(box);
-                window.addEventListener('resize', fitCanvas);
-            })();
+            GraphShell.fitToContainer(Graph, document.getElementById('graph'));
 
 
             (function () {
@@ -276,13 +262,7 @@
             }
 
             function flyTo(node) {
-                var dist = node.kind === 'repo' ? 120 : 220;
-                var d = Math.hypot(node.x || 1, node.y || 1, node.z || 1) || 1;
-                var r = 1 + dist / d;
-                Graph.cameraPosition(
-                    { x: (node.x || 0) * r, y: (node.y || 0) * r, z: (node.z || 0) * r },
-                    node, 1400
-                );
+                GraphShell.flyTo(Graph, node, node.kind === 'repo' ? 120 : 220, 1400);
             }
 
             var neighborIdx = 0;

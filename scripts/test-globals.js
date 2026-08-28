@@ -34,13 +34,13 @@ const path = require('path');
 const GROUPS = [
   {
     name: 'code brain',
-    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'kg-traverse.js', 'code-brain.js'],
-    provides: ['CBDom', 'CBData', 'CBPanel', 'KGTraverse']
+    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'graph-shell.js', 'kg-traverse.js', 'code-brain.js'],
+    provides: ['CBDom', 'CBData', 'CBPanel', 'GraphShell', 'KGTraverse']
   },
   {
     name: 'semantic map',
-    files: ['kg-data.js', 'kg-traverse.js', 'knowledge-graph.js'],
-    provides: ['KGData', 'KGTraverse']
+    files: ['kg-data.js', 'graph-shell.js', 'kg-traverse.js', 'knowledge-graph.js'],
+    provides: ['KGData', 'GraphShell', 'KGTraverse']
   }
 ];
 
@@ -137,6 +137,55 @@ for (const group of GROUPS) {
     }
   }
   console.log(`  ${group.name}: ${group.files.join(', ')}`);
+}
+
+/*
+ * The other way these two pages rot. Their stylesheets were copies of each
+ * other that drifted, and 39 rules were still byte-identical in both - which is
+ * how a control written against .cg-btn landed in the file its page does not
+ * load and silently did nothing. Those rules now live in graph-shell.css. This
+ * fails if a page stylesheet reintroduces one verbatim, which is the exact
+ * shape the duplication took the first time.
+ */
+{
+  const cssRules = file => {
+    const s = fs.readFileSync(path.join('assets', 'css', file), 'utf8');
+    const out = new Map();
+    let i = 0, depth = 0, start = 0, sel = null;
+    while (i < s.length) {
+      if (s[i] === '{') { if (!depth) sel = s.slice(start, i); depth++; }
+      else if (s[i] === '}') {
+        depth--;
+        if (!depth) {
+          const body = s.slice(start + sel.length, i + 1);
+          out.set(sel.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+            body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim());
+          start = i + 1;
+        }
+      }
+      i++;
+    }
+    return out;
+  };
+
+  const shell = cssRules('graph-shell.css');
+  for (const page of ['code-brain.css', 'knowledge-graph.css']) {
+    const own = cssRules(page);
+    for (const [sel, body] of own) {
+      if (shell.has(sel) && shell.get(sel) === body) {
+        fail++;
+        console.log(`FAIL  ${page} repeats ${sel} verbatim from graph-shell.css`);
+      }
+    }
+  }
+  for (const page of ['code-brain.html', 'knowledge-graph.html']) {
+    const html = fs.readFileSync(page, 'utf8');
+    if (html.indexOf('assets/css/graph-shell.css') === -1) {
+      fail++;
+      console.log(`FAIL  ${page} does not load graph-shell.css`);
+    }
+  }
+  console.log(`  shared chrome: graph-shell.css holds ${shell.size} rules, neither page repeats one`);
 }
 
 console.log(fail ? `\n  ${fail} unreachable name(s)` : '\n  every name in the graph pages resolves');
