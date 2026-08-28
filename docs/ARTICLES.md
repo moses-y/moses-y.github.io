@@ -154,3 +154,78 @@ any prompt work.
 A1 + A2 are the bulk of the visible change and cost no model calls. A6 is the
 expensive irreversible one and must not be triggered as a side effect of editing
 a prompt.
+
+---
+
+# Grounded assessment, and how it is checked
+
+## A correction
+
+An earlier draft of this document argued against letting the model assess
+architecture at all, on the grounds that it would violate lib-article.js:92.
+That was wrong, and the prompt already contradicts it. lib-article.js:110 asks
+for "The Bottom Line - your honest take in 2-3 sentences", :116 asks for "a
+measured, honest assessment", and :105 permits SDLC observations beyond the
+measured block "but only where the file structure is evidence for them".
+
+The constraint at :92 forbids inventing a FACT - an edge, a path, an effect.
+It has never forbidden INTERPRETING facts. The real line is not fact versus
+judgement. It is CITED versus UNCITED.
+
+## Make citation mechanical
+
+The reason groundedness cannot be checked today is that the facts have no ids.
+Give every fact in the bundle a stable id at assembly time:
+
+  F<n>  audit / deep finding      M<n>  hub module
+  E<n>  entry point               P<n>  traced path
+  S<n>  symbol                    D<n>  dependency
+  Q<n>  percentile vs the estate
+
+Require prose to cite them. Then "is this grounded?" becomes a set operation:
+every cited id resolves, and every number quoted matches the value at that id.
+That belongs in test-quality.js and costs no model calls on 1,440 articles.
+
+Most of the judging does not need a model. Mechanise first; spend calls only on
+what is left.
+
+## Where a judge earns its place
+
+What survives mechanisation is: does the INTERPRETATION follow from the cited
+fact? "47 cycles [M4], so the module boundaries were never enforced" - the
+number is checkable, the inference is not.
+
+Design against the known failure modes:
+
+  Self-preference   Models favour their own family's output. update-forks
+                    already rotates 3 models (lib-config.js:41) - judge with a
+                    DIFFERENT one than wrote the article. Free.
+  Verbosity/assent  An open "rate 1-10" collects inflated agreement. Ask a
+                    CLOSED question per claim: does this follow from the cited
+                    fact - yes / no / overreaches? Overreach is the failure mode
+                    that matters and it is nameable.
+  Blind judging     Give the judge the FACT BUNDLE, not just the article.
+                    Otherwise it is a second opinion on prose style.
+  Cost              Judge only new or changed articles, on the cheap model.
+                    Route failures into the retry path that already exists
+                    (lib-article.js:43) with the objection appended - a
+                    groundedness failure has the same shape as a truncation.
+
+## The bundle is context, so engineer it as context
+
+lib-facts.js currently assembles prose blocks meant to be read. If this is the
+model's context, it should be structured for one: stable ids, a consistent
+schema per evidence class, and the EXTRACTED / INFERRED tag inline.
+
+That tagging also resolves the assessment question honestly. A grounded
+assessment is safe the moment it is LABELLED INFERRED beside EXTRACTED evidence,
+because the reader can see which is which. That is better than banning it.
+
+The vocabulary already exists, is tested (test-relations.js:226-243), and
+appears in zero articles.
+
+  [ ] Assign ids at bundle assembly (lib-facts.js)
+  [ ] Require citations in the prompt; render them as anchors to the evidence
+  [ ] Mechanical citation resolver in test-quality.js - ids resolve, numbers match
+  [ ] Judge pass for interpretation only, different model family, closed question
+  [ ] EXTRACTED / INFERRED labelling per section

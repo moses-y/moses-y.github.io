@@ -127,6 +127,15 @@ is the only part still shaped like a blog.
            Update lib-quality.js:30-32 in the SAME commit: two reasoning-leak
            regexes hard-code the current prompt scaffold.
   [ ] B.6  Pilot 20-30 repos via data/article-rewrite.json, built for this
+  [ ] B.6b Fact ids + mechanical citation resolver. Assign F/M/E/P/S/D/Q ids
+           at bundle assembly; require prose to cite them; verify ids resolve and
+           quoted numbers match, in test-quality.js. NO model calls.
+  [ ] B.6c Judge pass for INTERPRETATION only - different model family than the
+           writer (the 3-model rotation gives this free), fed the fact bundle,
+           asked a closed per-claim question (follows / no / overreaches).
+           Failures route into the existing retry path.
+  [ ] B.6d EXTRACTED / INFERRED labelling per section, so a grounded assessment
+           is honest by disclosure rather than banned.
   [ ] B.7  Bump ARTICLE_VERSION to 3. ~1,331 calls, ~12 days of cron.
            EXPENSIVE AND IRREVERSIBLE - never as a side effect of a prompt edit.
 
