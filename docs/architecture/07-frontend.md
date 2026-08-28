@@ -83,10 +83,10 @@ All three lists in one table; the numeric prefix is the concatenation order.
 
 `tokens.css` (98 lines) is prepended ahead of `00-base.css`.
 
-### The 450-line cap
+### The 500-line cap
 
 `.githooks/pre-commit` refuses any staged `.js`, `.css`, `.html`, `.sh`, `.yml`
-or `.yaml` file over `MAX_LINES=450`. Generated output is exempt by path -
+or `.yaml` file over `MAX_LINES=500`. Generated output is exempt by path -
 `assets/css/site.css`, `assets/js/site.js`, `index.html`,
 `assets/css/blog-post.css`, and everything under `blog/`, `data/`, `structure/`,
 `Resume/`, `images/` and `node_modules/`. A grandfathered baseline lives in

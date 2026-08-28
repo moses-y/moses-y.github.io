@@ -136,7 +136,7 @@ flowchart TD
     E -- no --> F[node --check on staged JS]
     F --> G{size ratchet}
     G -- "in loc-baseline.txt and grew" --> GF[BLOCKED]
-    G -- "no baseline and over 450 lines" --> GF
+    G -- "no baseline and over 500 lines" --> GF
     G -- ok --> OK[commit proceeds]
 ```
 
@@ -172,7 +172,7 @@ without running `scripts/build-bundles.js` would publish the old stylesheet, bec
 serves what is committed and no build runs before it. The hook calls
 `build-bundles.js --check` and reports the `STALE` lines.
 
-**Size.** `MAX_LINES=450`. Generated and vendored paths are exempt -- `blog/`, `data/`,
+**Size.** `MAX_LINES=500`. Generated and vendored paths are exempt -- `blog/`, `data/`,
 `structure/`, `node_modules/`, `Resume/`, `images/`, the top-level generated JSON and XML
 files, `assets/css/blog-post.css`, and `assets/css/site.css`, `assets/js/site.js` and
 `index.html` as build-bundles output, plus `*.db`, images, `*.min.*` and
@@ -182,7 +182,7 @@ exists: it catches the failure that actually matters for a committed artefact.
 **The ratchet.** A hard cap was unenforceable because twelve files were already over it
 when the rule landed. `.githooks/loc-baseline.txt` is a tab-separated `length<TAB>path`
 table read by `awk`; a file listed there may shrink but never grow past its recorded
-length, while an unlisted file is held to the flat 450. Note that the file is currently
+length, while an unlisted file is held to the flat 500. Note that the file is currently
 empty -- zero lines -- so nothing is grandfathered at present and every non-exempt file is
 held to the flat cap.
 

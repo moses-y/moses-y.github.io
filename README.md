@@ -197,7 +197,7 @@ assets/
   partials/index/ the home page's sources (index.html is generated)
   css/site/       stylesheet partials (site.css is generated)
   js/site/        script partials (site.js is generated)
-.githooks/        pre-commit: secret scan, 450-line file cap, bundle freshness
+.githooks/        pre-commit: secret scan, 500-line file cap, bundle freshness
 .claude/skills/   the estate CLI and the browser driver
 ```
 

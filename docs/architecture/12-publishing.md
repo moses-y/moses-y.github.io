@@ -229,7 +229,7 @@ overlap. `INDEX_CSS` (`lib-blog-index-css.js`) is still inlined into
 ### The line cap, corrected
 
 The stylesheet modules are **not** exempt from the line cap; the opposite is
-true. `.githooks/pre-commit` applies `MAX_LINES=450` to `*.css` and `*.js`
+true. `.githooks/pre-commit` applies `MAX_LINES=500` to `*.css` and `*.js`
 alike. `.githooks/loc-baseline.txt` exists to grandfather already-oversized
 files at their recorded length and permit them only to shrink, but it is
 currently empty (0 bytes), so nothing is exempt and the cap applies flat. The CSS was
