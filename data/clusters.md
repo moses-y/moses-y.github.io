@@ -736,4 +736,4 @@ Keeper: **awesome-agents** (C+, 68.1). Mean grade across the 2 audited members i
 
 ---
 
-Generated from data/clusters.json built 2026-08-27. Regenerate with `node scripts/build-relations.js`.
+Generated from data/clusters.json built 2026-08-28. Regenerate with `node scripts/build-relations.js`.
