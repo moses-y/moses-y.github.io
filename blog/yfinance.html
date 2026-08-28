@@ -90,8 +90,8 @@
 <h3 id="how-it-is-wired">How It Is Wired</h3>
 <p>Execution typically starts with user code that imports <code>yfinance</code> and creates a <code>Ticker</code>:</p>
 <pre data-lang="python"><code>from yfinance import Ticker
-ts = Ticker("AAPL")
-df = ts.history(period="1mo")</code></pre>
+ts = Ticker(&quot;AAPL&quot;)
+df = ts.history(period=&quot;1mo&quot;)</code></pre>
 <ul><li><strong>Entry point</strong> – <code>yfinance/__init__.py</code> re‑exports <code>Ticker</code>, <code>download</code>, and helper functions. It is the hub module (36 inbound imports, 16 outbound) and sits in a circular import chain with <code>yfinance/data.py</code> and <code>yfinance/_http.py</code>.</li><li><strong>Call flow</strong> – <code>Ticker.__init__</code> (in <code>ticker.py</code>) builds a <code>YfData</code> object (<code>yfinance/data.py</code>). Subsequent calls such as <code>history()</code> delegate to <code>Base.history</code> (<code>base.py</code>), which invokes <code>_lazy_load_price_history</code>. That method eventually calls <code>_fetch_and_parse</code> in <code>_http.py</code>, which performs the HTTP GET, applies retry logic (<code>_is_transient_error</code>), and parses CSV/JSON into pandas structures.</li><li><strong>Blast radius</strong> – The hub (<code>__init__</code>) and base (<code>base.py</code>) modules are the widest impact points: 74 call sites reference <code>Ticker</code>, and <code>history</code> is invoked from 43 locations. Changing their signatures will ripple through most of the library and the test suite.</li><li><strong>Cycles &amp; nesting</strong> – The import cycle (<code>__init__</code> ↔ <code>data</code> ↔ <code>_http</code>) adds maintenance friction; deep nesting (max depth 8) appears in <code>const.py</code>, <code>exceptions.py</code>, and <code>utils.py</code>, making the control flow harder to follow.</li><li><strong>External touch</strong> – Only file I/O occurs in <code>yfinance/scrapers/quote.py</code> (raw CSV open without a context manager). No database or network sockets are opened directly by the library; all network traffic is encapsulated in <code>_http.py</code>.</li></ul>
 <h3 id="how-to-use-it">How To Use It</h3>
 <pre data-lang="bash"><code># Clone and install
@@ -102,20 +102,20 @@ pip install -e .   # reads requirements.txt and setup.cfg</code></pre>
 <pre data-lang="python"><code>from yfinance import download, Ticker
 
 # Bulk download
-df = download(["MSFT", "GOOG"], start="2023-01-01", end="2023-12-31")
+df = download([&quot;MSFT&quot;, &quot;GOOG&quot;], start=&quot;2023-01-01&quot;, end=&quot;2023-12-31&quot;)
 
 # Single ticker
-ticker = Ticker("TSLA")
-prices = ticker.history(period="5d")</code></pre>
+ticker = Ticker(&quot;TSLA&quot;)
+prices = ticker.history(period=&quot;5d&quot;)</code></pre>
 <p>The <code>download</code> helper lives in <code>yfinance/__init__.py</code>; <code>Ticker</code> lives in <code>yfinance/ticker.py</code>.</p>
 <h3 id="real-world-use">Real‑World Use</h3>
 <p>A quant team can embed the library in a nightly ETL job:</p>
 <pre data-lang="python"><code>import pandas as pd
 from yfinance import download
 
-symbols = ["AAPL", "AMZN", "NVDA"]
-prices = download(symbols, period="1d", interval="1m")
-prices.to_parquet("s3://data/market/quotes.parquet")</code></pre>
+symbols = [&quot;AAPL&quot;, &quot;AMZN&quot;, &quot;NVDA&quot;]
+prices = download(symbols, period=&quot;1d&quot;, interval=&quot;1m&quot;)
+prices.to_parquet(&quot;s3://data/market/quotes.parquet&quot;)</code></pre>
 <p>The call chain is <code>download → _http._fetch_and_parse → pandas.read_csv</code>, yielding a DataFrame ready for downstream analysis.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
 <p><em>Measured static analysis (71 modules, 178 import edges, 26 cycles):</em></p>

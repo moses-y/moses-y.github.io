@@ -87,7 +87,7 @@
 <p>PowerMem is a persistent memory system for AI agents, exposed through a Python SDK (<code>src/powermem/</code>), a CLI (<code>pmem</code>), an HTTP API server with a React dashboard (<code>src/server/</code>, <code>dashboard/</code>), and an MCP server. The core <code>memory.py</code> module handles the orchestration: it auto-configures providers, manages the underlying store, and exposes <code>add</code>, <code>search</code>, <code>delete</code>, and <code>list</code> operations.</p>
 <p>The repository also contains a set of self-contained projects beyond the core library: a Go-based Claude Code plugin (<code>apps/claude-code-plugin/</code>), a TypeScript VS Code extension (<code>apps/vscode-extension/</code>), a LOCOMO benchmark suite (<code>benchmark/locomo/</code>), and a benchmark server (<code>benchmark/server/main.py</code>). These are independent projects sharing the core memory design, not one monolith.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>Execution starts in <code>src/powermem/cli/main.py</code> at the <code>memory</code> function. From there, the shortest path to an external effect is <code>memory -&gt; delete_all</code>, which makes a network call via <code>self.client.get</code>—three hops from entry to leaving the process. The benchmark server (<code>benchmark/server/main.py</code>) starts at <code>reset</code> and reaches <code>delete_col</code>, hitting the database via <code>self.connection.execute</code> in two hops. The CLI's <code>cli</code> function reaches <code>_install_shell_completion</code>, which writes to the filesystem via <code>os.makedirs</code>.</p>
+<p>Execution starts in <code>src/powermem/cli/main.py</code> at the <code>memory</code> function. From there, the shortest path to an external effect is <code>memory -&gt; delete_all</code>, which makes a network call via <code>self.client.get</code>—three hops from entry to leaving the process. The benchmark server (<code>benchmark/server/main.py</code>) starts at <code>reset</code> and reaches <code>delete_col</code>, hitting the database via <code>self.connection.execute</code> in two hops. The CLI&#39;s <code>cli</code> function reaches <code>_install_shell_completion</code>, which writes to the filesystem via <code>os.makedirs</code>.</p>
 <p>The call graph shows clear hot spots. <code>search</code> is called from 132 distinct places, <code>delete_all</code> from 57, and <code>PGVectorStore</code> from 50—these are the functions with the widest blast radius. The module graph confirms this: <code>src/powermem/core/memory.py</code> has 18 imports and is depended on by 4 modules, with an instability score of 0.82. The <code>src/server/models/errors.py</code> module is a hub with 15 dependents and zero imports—stable but high-churn risk. The CLI modules (<code>main.py</code>, <code>commands/config.py</code>, <code>commands/interactive.py</code>) participate in a circular import cycle, which will complicate any refactoring.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
 <p><strong>Setup:</strong></p>
@@ -96,16 +96,16 @@ cd powermem
 pip install -e .</code></pre>
 <p><strong>Configuration:</strong> Copy <code>.env.example</code> to <code>.env</code> and set LLM and embedding credentials. The default database is SQLite. Run <code>pmem config init</code> for interactive setup.</p>
 <p><strong>Running it:</strong></p>
-<pre data-lang="bash"><code>pmem memory add "User prefers dark mode" --user-id user123
-pmem memory search "preferences" --user-id user123
+<pre data-lang="bash"><code>pmem memory add &quot;User prefers dark mode&quot; --user-id user123
+pmem memory search &quot;preferences&quot; --user-id user123
 powermem-server --host 0.0.0.0 --port 8000</code></pre>
 <h3 id="real-world-use">Real-World Use</h3>
 <p>A customer-support agent that needs to remember user preferences across sessions:</p>
 <pre data-lang="python"><code>from powermem import Memory, auto_config
 
 memory = Memory(config=auto_config())
-memory.add("User prefers dark mode and dislikes phone calls", user_id="user123")
-results = memory.search("communication preferences", user_id="user123")</code></pre>
+memory.add(&quot;User prefers dark mode and dislikes phone calls&quot;, user_id=&quot;user123&quot;)
+results = memory.search(&quot;communication preferences&quot;, user_id=&quot;user123&quot;)</code></pre>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
 <p>Static analysis found 168 findings (40 high, 128 medium). The most significant:</p>
 <ul><li><strong>High - Deep nesting (33 occurrences)</strong> - <code>src/server/utils/metrics.py</code>, <code>src/powermem/core/memory.py</code> (indentation depth 8); fix with early returns/guard clauses.</li><li><strong>High - Oversized files (8)</strong> - <code>src/powermem/core/memory.py</code> at 1662 lines; split by responsibility.</li><li><strong>High - Duplicated code blocks</strong> - 1885 repeated 6-line blocks across 165 files, notably in <code>apps/vscode-extension/src/writers/</code> (claude.ts, cursor.ts, codex.ts); extract shared helpers.</li><li><strong>High - Import cycle members (6)</strong> - <code>src/powermem/cli/main.py</code> and its commands; break the cycle.</li><li><strong>Medium - Broad exception handling (10)</strong> - <code>src/powermem/utils/utils.py</code>, <code>config_loader.py</code>; catch specific exceptions.</li><li><strong>High - Unsafe CI/CD practices</strong> - Third-party GitHub Actions pinned to tags (<code>docker/setup-qemu-action@v3</code>), no lockfile for <code>pyproject.toml</code>, no least-privilege token permissions, no dependency scan.</li></ul>

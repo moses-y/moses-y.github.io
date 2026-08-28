@@ -87,10 +87,10 @@
 <p>SphereSfM is a fork of COLMAP (itself forked from <code>json87/SphereSfM</code>) that adds a <code>SPHERE</code> camera model, a spherical feature extractor, and a <code>sphere_cubic_reprojector</code> for converting reconstructions to cubic format for dense matching. The core changes live in <code>src/</code> (411 files) alongside the COLMAP codebase, with the spherical logic integrated into the existing feature extraction and mapping stages.</p>
 <p>The repo ships with three test datasets (campus parterre, campus building, urban street) and a Dockerfile for containerized builds. A <code>README.md</code> documents a six-step CLI workflow from database creation through cubic conversion.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>The pipeline is the standard COLMAP sequence, modified at two points. Entry is <code>colmap database_creator</code>, then <code>feature_extractor</code> with <code>--ImageReader.camera_model SPHERE</code> and <code>--ImageReader.camera_params "1,3520,1760"</code> (focal length, width, height). The spherical camera model is registered in <code>src/</code> alongside the existing models. Feature matching via <code>spatial_matcher</code> uses POS data when available, falling back to vocabulary-tree matching. The <code>mapper</code> runs incremental SfM with <code>--Mapper.sphere_camera 1</code> and camera parameters held fixed (<code>--Mapper.ba_refine_focal_length 0</code>). Finally, <code>sphere_cubic_reprojecer</code> converts the sparse model for downstream dense matching.</p>
+<p>The pipeline is the standard COLMAP sequence, modified at two points. Entry is <code>colmap database_creator</code>, then <code>feature_extractor</code> with <code>--ImageReader.camera_model SPHERE</code> and <code>--ImageReader.camera_params &quot;1,3520,1760&quot;</code> (focal length, width, height). The spherical camera model is registered in <code>src/</code> alongside the existing models. Feature matching via <code>spatial_matcher</code> uses POS data when available, falling back to vocabulary-tree matching. The <code>mapper</code> runs incremental SfM with <code>--Mapper.sphere_camera 1</code> and camera parameters held fixed (<code>--Mapper.ba_refine_focal_length 0</code>). Finally, <code>sphere_cubic_reprojecer</code> converts the sparse model for downstream dense matching.</p>
 <p>The import graph shows 22 internal Python modules with zero import edges—the Python scripts in <code>scripts/python/</code> are standalone utilities (build, bundler conversion, database handling). The C++ core is where the real control flow lives, but the static analysis did not map C++ call graphs. No hub modules or cycles were detected in the Python layer.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
-<p><strong>Setup</strong>: Build requires CUDA 11.7 and the COLMAP dependency stack. The <code>docker/Dockerfile</code> pins <code>nvcr.io/nvidia/cuda:11.7.0-devel-ubuntu22.04</code>; <code>docker/build.sh</code> and <code>docker/quick-start.sh</code> handle the container build. Native builds follow COLMAP's CMake flow (<code>CMakeLists.txt</code> at root, <code>cmake/</code> for helper modules).</p>
+<p><strong>Setup</strong>: Build requires CUDA 11.7 and the COLMAP dependency stack. The <code>docker/Dockerfile</code> pins <code>nvcr.io/nvidia/cuda:11.7.0-devel-ubuntu22.04</code>; <code>docker/build.sh</code> and <code>docker/quick-start.sh</code> handle the container build. Native builds follow COLMAP&#39;s CMake flow (<code>CMakeLists.txt</code> at root, <code>cmake/</code> for helper modules).</p>
 <p><strong>Configuration</strong>: No environment variables. Camera parameters, POS data, and masks are passed as CLI flags to <code>feature_extractor</code>.</p>
 <p><strong>Running it</strong> (verbatim from <code>README.md</code>):</p>
 <pre data-lang="sh"><code>colmap database_creator --database_path ./colmap/database.db
@@ -98,7 +98,7 @@ colmap feature_extractor \
   --database_path ./colmap/database.db \
   --image_path ./images \
   --ImageReader.camera_model SPHERE \
-  --ImageReader.camera_params "1,3520,1760" \
+  --ImageReader.camera_params &quot;1,3520,1760&quot; \
   --ImageReader.single_camera 1 \
   --ImageReader.camera_mask_path ./camera_mask.png \
   --ImageReader.pose_path ./POS.txt
@@ -119,14 +119,14 @@ colmap mapper \
 colmap gui --database_path ./colmap/database.db --image_path ./images --import_path ./colmap/sparse/0
 colmap sphere_cubic_reprojecer --image_path ./images --in...</code></pre>
 <h3 id="real-world-use">Real-World Use</h3>
-<p>A street-level survey captures 2,000 ERP images from a vehicle-mounted Insta360. The team runs the five-step CLI workflow, using GPS-derived POS data for spatial matching. The resulting sparse reconstruction is converted to cubic format and fed into COLMAP's dense matching stage, producing a 3D mesh of building facades without manual camera calibration.</p>
+<p>A street-level survey captures 2,000 ERP images from a vehicle-mounted Insta360. The team runs the five-step CLI workflow, using GPS-derived POS data for spatial matching. The resulting sparse reconstruction is converted to cubic format and fed into COLMAP&#39;s dense matching stage, producing a 3D mesh of building facades without manual camera calibration.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
 <p>Static analysis (350 findings: 246 high, 104 medium) reports one dominant issue:</p>
 <ul><li><strong>High - Deep nesting (x60)</strong> - <code>lib/LSD/lsd.c</code>, <code>lib/PoissonRecon/MultiGridOctreeData.h</code>, <code>lib/PoissonRecon/PlyFile.cpp</code> reach max indentation depth 11; control flow is hard to follow. Fix: early returns and extracted inner blocks.</li></ul>
 <p>Additional SDLC observations from the audit:</p>
 <ul><li><strong>High - No CI pipeline</strong> - 79 source files, no workflow in <code>.github/</code> or <code>.azure-pipelines/</code> (the latter has build configs but they are not wired as gates). Every change merges unbuilt.</li><li><strong>High - No build gate for Docker image</strong> - <code>docker/Dockerfile</code> exists but no workflow validates it.</li><li><strong>Medium - Unpinned base image</strong> - <code>docker/Dockerfile</code> uses <code>nvcr.io/nvidia/cuda:11.7.0-devel-ubuntu22.04</code> without a digest; builds are non-reproducible.</li><li><strong>Medium - No timeout on outbound calls</strong> - <code>scripts/python/build.py</code> makes requests without <code>timeout=</code>.</li><li><strong>Medium - Test coverage is minimal</strong> - 3 test files against 277 source files (ratio 0.011).</li></ul>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p>SphereSfM is a functional research-grade extension of COLMAP for spherical imagery, with working datasets and documented commands. It inherits COLMAP's build complexity, adds no CI, and ships with negligible test coverage—treat it as a reference implementation rather than production software. Teams needing spherical SfM should evaluate it against COLMAP's native support before committing.</p>
+<p>SphereSfM is a functional research-grade extension of COLMAP for spherical imagery, with working datasets and documented commands. It inherits COLMAP&#39;s build complexity, adds no CI, and ships with negligible test coverage—treat it as a reference implementation rather than production software. Teams needing spherical SfM should evaluate it against COLMAP&#39;s native support before committing.</p>
             </div>
 
             

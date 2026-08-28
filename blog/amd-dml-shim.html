@@ -82,26 +82,26 @@
             <div class="post-content numbered" id="post-content">
                 <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Fine-tuning LLMs on AMD GPUs typically requires Linux and ROCm. Windows users with AMD cards are locked out of mainstream training stacks like Axolotl, which hard-depend on <code>torch.cuda</code>. This shim makes Windows + AMD viable by intercepting PyTorch's CUDA checks and routing compute to DirectML instead.</p>
+<p>Fine-tuning LLMs on AMD GPUs typically requires Linux and ROCm. Windows users with AMD cards are locked out of mainstream training stacks like Axolotl, which hard-depend on <code>torch.cuda</code>. This shim makes Windows + AMD viable by intercepting PyTorch&#39;s CUDA checks and routing compute to DirectML instead.</p>
 <h3 id="what-this-does">What This Does</h3>
 <p><code>dml_shim.py</code> is a Python interception layer that spoofs CUDA availability to PyTorch. It patches <code>torch._C._cuda_init()</code> to a no-op, forces <code>cuda.is_available()</code> to return <code>True</code>, and redirects device calls to <code>privateuseone:0</code>, which maps to DirectML. Training software never sees the difference.</p>
 <p>The <code>patches/apply_all_patches.sh</code> script automates the <code>sed</code> edits to <code>torch/cuda/__init__.py</code> that neutralize the CUDA initialization and device checks. The README documents manual verification steps.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>The internal call graph is minimal: 1 internal module, 0 import edges, no circular dependencies. <code>dml_shim</code> has <code>Ca=0</code> (nothing imports it) and <code>Ce=0</code> (it imports nothing internally) — it's a standalone patch.</p>
+<p>The internal call graph is minimal: 1 internal module, 0 import edges, no circular dependencies. <code>dml_shim</code> has <code>Ca=0</code> (nothing imports it) and <code>Ce=0</code> (it imports nothing internally) — it&#39;s a standalone patch.</p>
 <p><strong>Entry point:</strong> Python startup via <code>sitecustomize.py</code>, which imports <code>dml_shim</code>. The shim hooks <code>torch.cuda</code> functions at import time. The critical path is:</p>
 <ol><li><code>sitecustomize.py</code> imports <code>dml_shim</code></li><li><code>dml_shim</code> patches <code>torch._C._cuda_init()</code> → <code>pass</code></li><li><code>dml_shim</code> patches <code>_cuda_setDevice()</code> → <code>pass</code></li><li><code>dml_shim</code> forces <code>cuda.is_available()</code> → <code>True</code></li><li>Device calls route to <code>privateuseone:0</code> (DirectML)</li></ol>
-<p><strong>What it touches outside itself:</strong> PyTorch's CUDA module internals, DirectML runtime, and <code>sitecustomize.py</code>. The blast radius is contained — only <code>dml_shim.py</code> (Python) and <code>apply_all_patches.sh</code> (Shell) carry logic.</p>
+<p><strong>What it touches outside itself:</strong> PyTorch&#39;s CUDA module internals, DirectML runtime, and <code>sitecustomize.py</code>. The blast radius is contained — only <code>dml_shim.py</code> (Python) and <code>apply_all_patches.sh</code> (Shell) carry logic.</p>
 <p><strong>File-by-file map:</strong></p>
 <ul><li><code>dml_shim.py</code> — the interception layer; owns all the CUDA spoofing logic</li><li><code>patches/apply_all_patches.sh</code> — applies the <code>sed</code> patches to <code>torch/cuda/__init__.py</code></li><li><code>README.md</code> — setup and verification instructions</li></ul>
 <h3 id="how-to-use-it">How To Use It</h3>
 <p><strong>Setup</strong> (from README, verbatim):</p>
 <pre data-lang="bash"><code>pip install torch==2.4.1 torchvision==0.19.1 torch-directml
 # Copy dml_shim.py to site-packages, add import to sitecustomize.py
-sed -i 's/torch._C._cuda_init()/pass/' path/to/torch/cuda/__init__.py
-sed -i 's/torch._C._cuda_setDevice(device)/pass/' path/to/torch/cuda/__init__.py
-sed -i 's/if device &lt; 0 or device &gt;= device_count():/if False:/' path/to/torch/cuda/__init__.py</code></pre>
+sed -i &#39;s/torch._C._cuda_init()/pass/&#39; path/to/torch/cuda/__init__.py
+sed -i &#39;s/torch._C._cuda_setDevice(device)/pass/&#39; path/to/torch/cuda/__init__.py
+sed -i &#39;s/if device &lt; 0 or device &gt;= device_count():/if False:/&#39; path/to/torch/cuda/__init__.py</code></pre>
 <p><strong>Running it:</strong></p>
-<pre data-lang="bash"><code>python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"</code></pre>
+<pre data-lang="bash"><code>python3 -c &quot;import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))&quot;</code></pre>
 <p>Expected output: <code>True</code> and your AMD card name.</p>
 <p><strong>Configuration:</strong> No config files or env vars. The shim is activated by the <code>sitecustomize.py</code> import.</p>
 <h3 id="real-world-use">Real-World Use</h3>
@@ -111,7 +111,7 @@ sed -i 's/if device &lt; 0 or device &gt;= device_count():/if False:/' path/to/t
 <ul><li><strong>Medium — No test files</strong> — untested code paths — repository-wide</li><li><strong>Medium — No CI/CD pipeline</strong> — no automated build/test gate — <code>.github/</code> or CI config</li><li><strong>Medium — No LICENSE file</strong> — unclear usage/redistribution rights — root</li></ul>
 <p>The README claims MIT license, but no LICENSE file is committed. The repo is 3 files total; no dependency lockfile, Dockerfile, or secrets detected.</p>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p>This is a pragmatic hack that works for a narrow use case: Windows + AMD + Axolotl. It's fragile — it patches PyTorch internals at runtime and relies on specific torch versions. Use it for a quick experiment, not production. The missing LICENSE file is a real blocker for redistribution.</p>
+<p>This is a pragmatic hack that works for a narrow use case: Windows + AMD + Axolotl. It&#39;s fragile — it patches PyTorch internals at runtime and relies on specific torch versions. Use it for a quick experiment, not production. The missing LICENSE file is a real blocker for redistribution.</p>
             </div>
 
             

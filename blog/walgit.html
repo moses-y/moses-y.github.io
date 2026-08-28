@@ -82,37 +82,37 @@
             <div class="post-content numbered" id="post-content">
                 <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Git hosting breaks down at scale because packfiles are large binary blobs laid out for local reads, not network access. Every operation is a random walk over gigabytes, which is why NFS-backed repos fail at large hosts and why GitHub's Spokes requires strict replication with a database and three-phase commit. walgit targets the monorepo-on-small-machines case: repositories larger than the machine serving them.</p>
+<p>Git hosting breaks down at scale because packfiles are large binary blobs laid out for local reads, not network access. Every operation is a random walk over gigabytes, which is why NFS-backed repos fail at large hosts and why GitHub&#39;s Spokes requires strict replication with a database and three-phase commit. walgit targets the monorepo-on-small-machines case: repositories larger than the machine serving them.</p>
 <h3 id="what-this-does">What This Does</h3>
 <p>walgit is a Rust git server that treats an S3/GCS bucket as the source of truth and every local disk as a disposable cache. A push is written as an immutable object to the bucket, then made visible via a compare-and-swap on a tiny manifest — that CAS is the consensus mechanism, so no leader, no quorum, no database. Any instance can accept a push; two racing instances cannot both win.</p>
-<p>The implementation adds three things on top of Cursor's Continuity architecture (documented verbatim in <code>docs/reference/cursor-git-at-any-scale.md</code>): a remote reader that serves refs and web pages via HTTP range requests when packs won't fit locally, a history pack that keeps commits/trees local while blobs stay in the bucket, and bundle-uri so fresh clones are static files served by the bucket or a CDN. The server also includes Git LFS, a JSON API with an SDK, per-repo push policy, webhooks, and a browsing UI.</p>
+<p>The implementation adds three things on top of Cursor&#39;s Continuity architecture (documented verbatim in <code>docs/reference/cursor-git-at-any-scale.md</code>): a remote reader that serves refs and web pages via HTTP range requests when packs won&#39;t fit locally, a history pack that keeps commits/trees local while blobs stay in the bucket, and bundle-uri so fresh clones are static files served by the bucket or a CDN. The server also includes Git LFS, a JSON API with an SDK, per-repo push policy, webhooks, and a browsing UI.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
 <p>Execution starts in <code>crates/walgit-cli/src/bin/walgit.rs</code> (and <code>walgit-server.rs</code> for the server binary). The CLI dispatches to <code>serve.rs</code>, which boots the HTTP server in <code>crates/walgit-server/src/lib.rs</code>. From there, requests flow through <code>web/api.rs</code> (JSON API), <code>web/v1.rs</code> (git smart HTTP), and <code>smart.rs</code> (protocol handling). The critical path for a push is: <code>receive.rs</code> in <code>walgit-git</code> ingests the pack, <code>walgit-wal</code> writes it to the bucket via <code>store_proto.rs</code>, and the CAS manifest update happens in <code>walgit-store/src/coord.rs</code>.</p>
 <p>The widest blast radius is in <code>walgit-store/src/coord.rs</code> — it owns the CAS that is the entire consistency story. A bug there corrupts the source of truth. Second is <code>walgit-wal/src/publish.rs</code>, which controls visibility of new objects. The <code>walgit-git/src/receive.rs</code> path handles protocol correctness and has the most integration tests (10 test files under <code>crates/walgit-git/tests/</code>).</p>
 <p>The <code>web/</code> React frontend is separate; it talks to the JSON API in <code>web/api.rs</code> and the SDK in <code>web/sdk/repos.ts</code>. The <code>walgit-proto</code> crate generates protobuf types used by the store layer. Deployment is a single binary with <code>compose.yaml</code> and <code>Containerfile</code> for containerized runs.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
 <p>The README documents the full flow. Setup is one binary pointed at a bucket:</p>
-<pre data-lang="sh"><code>cat &gt; walgit.toml &lt;&lt;'EOF'
+<pre data-lang="sh"><code>cat &gt; walgit.toml &lt;&lt;&#39;EOF&#39;
 [server]
-listen = "0.0.0.0:8080"
-public_url = "https://git.example.com"
+listen = &quot;0.0.0.0:8080&quot;
+public_url = &quot;https://git.example.com&quot;
 auto_create_on_push = true
 [server.auth]
-mode = "token"
+mode = &quot;token&quot;
 anonymous_read = false
-tokens = [{ principal = "me", token_env = "WALGIT_TOKEN_ME", write = true }]
+tokens = [{ principal = &quot;me&quot;, token_env = &quot;WALGIT_TOKEN_ME&quot;, write = true }]
 [store]
-backend = "s3"
-bucket = "my-walgit"
+backend = &quot;s3&quot;
+bucket = &quot;my-walgit&quot;
 [store.s3]
-endpoint = "https://s3.us-east-1.amazonaws.com"
-region = "us-east-1"
+endpoint = &quot;https://s3.us-east-1.amazonaws.com&quot;
+region = &quot;us-east-1&quot;
 EOF
 
 WALGIT_TOKEN_ME=$(openssl rand -hex 24) walgit serve --config walgit.toml</code></pre>
 <p>Build with <code>cargo build --release</code> (Rust toolchain pinned in <code>rust-toolchain.toml</code>, Nix flake and <code>justfile</code> also present). Example configs live at <code>walgit.example.toml</code> and <code>walgit.standalone.toml</code>.</p>
 <h3 id="real-world-use">Real-World Use</h3>
-<p>A team with a monorepo too large for any single CI runner's disk. Push to <code>https://git.example.com/acme/app.git</code> — the repo auto-creates. CI clones via <code>bundle-uri</code>, pulling a static file from the bucket or CDN instead of hitting the server. Multiple walgit instances behind a load balancer all serve the same repos with no coordination; kill them all and the bucket still holds everything.</p>
+<p>A team with a monorepo too large for any single CI runner&#39;s disk. Push to <code>https://git.example.com/acme/app.git</code> — the repo auto-creates. CI clones via <code>bundle-uri</code>, pulling a static file from the bucket or CDN instead of hitting the server. Multiple walgit instances behind a load balancer all serve the same repos with no coordination; kill them all and the bucket still holds everything.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
 <ul><li><strong>Med</strong> — No measured static analysis has run on this repo; the following comes from structure only. The <code>walgit-server</code> crate is large (30+ source files) and handles auth, TLS, LFS, SSE, and web UI — a wide surface for a single binary. Test coverage is strong (32 test files across all crates), CI exists (<code>.github/workflows/pages.yml</code>), and the license is present. The <code>web/</code> frontend has its own <code>pnpm-lock.yaml</code> and lint config, suggesting a separate build pipeline from the Rust core.</li></ul>
 <h3 id="the-bottom-line">The Bottom Line</h3>

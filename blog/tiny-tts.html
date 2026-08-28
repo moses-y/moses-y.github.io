@@ -87,20 +87,20 @@
 <p>TinyTTS is a full text-to-speech stack: text normalization, grapheme-to-phoneme conversion, acoustic modeling, and waveform synthesis in one model. The Python package (<code>tiny_tts/</code>) handles training and inference; the <code>npm-package/</code> directory offers pure Node.js inference via ONNX Runtime with zero Python dependency.</p>
 <p>The repo includes ONNX exports (<code>onnx/</code>), a pre-trained checkpoint (<code>checkpoints/G.pth</code>), sample audio (<code>samples/</code>), and benchmark scripts comparing against Piper, Kokoro, and other small TTS models.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>Execution starts at two entry points. The Python API path: <code>synthesize_audio</code> in <code>app.py:19</code> reaches 19 functions, routing through <code>speak</code> in <code>tiny_tts/__init__.py</code>, which calls the model's <code>infer</code> method. The CLI path: <code>main</code> in <code>benchmark_onnx.py:70</code> reaches 28 functions, routing through <code>synthesize</code> in <code>tiny_tts/infer.py</code> to the same <code>model.infer</code> call. Both paths leave the process in two hops: entry → synthesis function → model inference.</p>
+<p>Execution starts at two entry points. The Python API path: <code>synthesize_audio</code> in <code>app.py:19</code> reaches 19 functions, routing through <code>speak</code> in <code>tiny_tts/__init__.py</code>, which calls the model&#39;s <code>infer</code> method. The CLI path: <code>main</code> in <code>benchmark_onnx.py:70</code> reaches 28 functions, routing through <code>synthesize</code> in <code>tiny_tts/infer.py</code> to the same <code>model.infer</code> call. Both paths leave the process in two hops: entry → synthesis function → model inference.</p>
 <p>The module graph shows no circular dependencies across 30 internal modules and 47 import edges. <code>tiny_tts/nn/__init__.py</code> is the hub (7 importers, 0 dependencies); <code>tiny_tts/utils/config.py</code> similarly serves 6 importers. The widest blast radius sits in <code>tiny_tts/nn/commons.py</code> — its <code>flatten_pad_shape</code> is called from 7 places, <code>insert_blanks</code> from 4. <code>tiny_tts/infer.py</code> is the most unstable core module (instability 0.6), importing 6 modules while being imported by 4.</p>
 <p>File responsibilities: <code>tiny_tts/nn/modules.py</code> owns the neural network layers (25 functions, 12 classes); <code>tiny_tts/models/synthesizer.py</code> builds the model (649 lines, 20 functions); <code>tiny_tts/text/english.py</code> handles phonemization (9 functions); <code>tiny_tts/infer_onnx.py</code> provides the ONNX inference path. The filesystem effects are minimal: <code>benchmark.py</code> and <code>benchmark_onnx.py</code> read/write files; no database or network calls exist in the traced paths.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
 <pre data-lang="bash"><code># Python
 pip install tiny-tts
-tiny-tts --checkpoint G.pth --text "Hello world" --device cpu
+tiny-tts --checkpoint G.pth --text &quot;Hello world&quot; --device cpu
 
 # Node.js
 npm install tiny-tts</code></pre>
 <p>Python API:</p>
 <pre data-lang="python"><code>from tiny_tts import TinyTTS
 tts = TinyTTS()
-tts.speak("Hello, this is a test.", output_path="hello.wav", speed=1.0)</code></pre>
+tts.speak(&quot;Hello, this is a test.&quot;, output_path=&quot;hello.wav&quot;, speed=1.0)</code></pre>
 <p>The ONNX model auto-downloads from HuggingFace on first npm use. Source installs require <code>torch</code>, <code>torchaudio</code>, <code>soundfile</code>, <code>g2p-en</code>, <code>transformers</code>, <code>numba</code> per <code>requirements.txt</code>.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
 <p>Static analysis found 8 issues (1 high, 7 medium). The high-severity finding: 21 duplicated 6-line code blocks across 6 files including <code>tiny_tts/__init__.py</code>, <code>tiny_tts/infer.py</code>, and <code>tiny_tts/models/synthesizer.py</code> — extract shared helpers. Medium findings: deep nesting (depth 6) in <code>tiny_tts/models/synthesizer.py</code> and <code>tiny_tts/alignment/core.py</code>; <code>synthesizer.py</code> at 649 lines; <code>setup.py</code> opens files without context managers.</p>
