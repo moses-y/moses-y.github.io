@@ -27,7 +27,7 @@ So I fork what looks interesting — across AI, web, systems and mobile — and 
 the thing that reads it for me. What I am after is not the code but the judgement in
 it: how real systems get designed, shipped and kept alive.
 
-That is why the estate is mostly other people's work, and why it has to be measured
+That is why the estate is mostly open source work, and why it has to be measured
 rather than described. When the code is not yours, a claim about it is only worth
 publishing if it traces back to a check that actually ran.
 
