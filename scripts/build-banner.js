@@ -106,7 +106,7 @@ function main() {
     `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="1.9" fill="${p.c}"/>`
   ).join('');
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(forked.toLocaleString('en-US'))} codebases I did not write">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Glossa - static analysis over ${esc(forked.toLocaleString('en-US'))} forks">
   <defs>
     <linearGradient id="scrim" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="${GROUND}" stop-opacity="0.97"/>
@@ -124,10 +124,10 @@ function main() {
   <rect width="${W}" height="${H}" fill="url(#scrim)"/>
   <rect x="64" y="84" width="72" height="3" fill="url(#rule)"/>
   <text x="64" y="70" fill="${MUTED}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="3.4">MOSES YEBEI</text>
-  <text x="64" y="150" fill="${INK}" font-family="Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" font-size="52" font-weight="600">${esc(forked.toLocaleString('en-US'))} codebases I did not write.</text>
-  <text x="64" y="196" fill="${MUTED}" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="19">A static-analysis pipeline that reads open source, so I can study how</text>
-  <text x="64" y="224" fill="${MUTED}" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="19">real systems are designed, shipped and kept alive.</text>
-  <text x="64" y="284" fill="${MUTED}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="0.6">${scripts} scripts &#183; ${assertions} assertions &#183; no model in the scoring path</text>
+  <text x="64" y="152" fill="${INK}" font-family="Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" font-size="58" font-weight="600">Glossa</text>
+  <text x="64" y="196" fill="${MUTED}" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="19">Reads a repository, writes the gloss. Static analysis over ${esc(forked.toLocaleString('en-US'))} forks,</text>
+  <text x="64" y="224" fill="${MUTED}" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="19">so a model can write the briefing from facts and nothing else.</text>
+  <text x="64" y="284" fill="${MUTED}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="0.6">${scripts} scripts &#183; ${assertions} assertions &#183; prose from the model, never a number</text>
   <text x="64" y="306" fill="#6B5D51" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" letter-spacing="0.6">every dot is a repository at its own coordinate in the semantic map</text>
 </svg>
 `;

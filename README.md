@@ -1,4 +1,4 @@
-![1,417 codebases I did not write — a static-analysis pipeline that reads open source](assets/img/banner.svg)
+![Glossa — reads a repository, writes the gloss](assets/img/banner.svg)
 
 <p align="center">
   <a href="https://github.com/moses-y/moses-y.github.io/actions/workflows/update-forks.yml"><img alt="pipeline" src="https://img.shields.io/github/actions/workflow/status/moses-y/moses-y.github.io/update-forks.yml?branch=master&label=pipeline&style=flat-square&color=C08457"></a>
@@ -12,7 +12,9 @@
 > Every number in this README is read live from the pipeline's own output. If one
 > of them is embarrassing, it is embarrassing on the front page.
 
-**[moses-y.github.io](https://moses-y.github.io)** — the site, and the pipeline that writes it.
+**Glossa** — it reads a repository and writes the gloss.
+A *gloss* is commentary bound to a source text; that is what a briefing here is.
+Live at **[moses-y.github.io](https://moses-y.github.io)**.
 
 ---
 
@@ -24,8 +26,8 @@ places where a design started costing its authors something. It is just complete
 unreadable at the rate any one person reads.
 
 So I fork what looks interesting — across AI, web, systems and mobile — and I built
-the thing that reads it for me. What I am after is not the code but the judgement in
-it: how real systems get designed, shipped and kept alive.
+Glossa to read it for me. What I am after is not the code but the judgement in it:
+how real systems get designed, shipped and kept alive.
 
 That is why the estate is mostly open source work, and why it has to be measured
 rather than described. When the code is not yours, a claim about it is only worth
@@ -33,20 +35,24 @@ publishing if it traces back to a check that actually ran.
 
 ## What it does
 
-Seven stages. Each writes a file the next one reads, so any number on the site can
+Eight stages. Each writes a file the next one reads, so any number on the site can
 be walked back to the check that produced it.
 
 | # | Stage | What it does | Emits |
 |---|-------|--------------|-------|
 | 01 | **Census** | Enumerates every repository and its facts — language, size, licence, lockfile, last push | `forks.json` |
-| 02 | **Structure** | Walks the file tree and parses sources into a module graph: imports, edges, cycles, depth | `structure/<id>.deep.json` |
-| 03 | **Supply** | Resolves dependency manifests, then matches them against the OSV advisory database | `data/deps.json`, `data/osv.json` |
-| 04 | **Hygiene** | 62 checks across CI, tests, secrets, runtime and supply chain, each a finding with a severity and a count | `data/hygiene.json` |
-| 05 | **Grade** | Charges those findings to 8 weighted axes. Deterministic — the same inputs grade identically | `data/grades.json` |
-| 06 | **Meaning** | Embeds each repository, draws semantic and dependency-derived edges, clusters by modularity | `data/relations.json`, `data/clusters.json` |
-| 07 | **Publish** | Emits a declared schema and an `llms.txt` traversal protocol | `data/schema.json`, `llms.txt` |
+| 02 | **Briefing** | A model writes the article from the extracted facts alone — the prompt forbids naming an edge, path or effect that is not in them | `blog/<slug>.html` |
+| 03 | **Structure** | Walks the file tree and parses sources into a module graph: imports, edges, cycles, depth | `structure/<id>.deep.json` |
+| 04 | **Supply** | Resolves dependency manifests, then matches them against the OSV advisory database | `data/deps.json`, `data/osv.json` |
+| 05 | **Hygiene** | 62 checks across CI, tests, secrets, runtime and supply chain, each a finding with a severity and a count | `data/hygiene.json` |
+| 06 | **Grade** | Charges those findings to 8 weighted axes. Deterministic — the same inputs grade identically | `data/grades.json` |
+| 07 | **Meaning** | Embeds each repository, draws semantic and dependency-derived edges, clusters by modularity | `data/relations.json`, `data/clusters.json` |
+| 08 | **Publish** | Emits a declared schema and an `llms.txt` traversal protocol | `data/schema.json`, `llms.txt` |
 
-No model sits in the scoring path. Embeddings inform the *map*, never the grade.
+A model writes prose, never a number. Every figure in a briefing comes from a check
+that ran; embeddings inform the *map*, never the grade. That separation is the whole
+design — it is what makes a generated article about someone else's repository worth
+publishing at all.
 
 Symbols come from [tree-sitter](https://tree-sitter.github.io/) across Python,
 TypeScript, JavaScript, Go and Rust; the semantic layer from
@@ -141,7 +147,7 @@ grades it was derived from, or a figure on the home page that nothing writes.
 ## Layout
 
 ```
-scripts/          55 build scripts + 11 test suites
+scripts/          56 build scripts + 11 test suites
   lib-*.js        the pure parts: grading, relations, clustering, schema
   checks-*.js     the 62 hygiene checks, one file per family
   build-*.js      the stages, in the order above
