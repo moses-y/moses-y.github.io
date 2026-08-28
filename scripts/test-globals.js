@@ -303,5 +303,36 @@ for (const group of GROUPS) {
     `${missing.length} language-less records carry a file census`);
 }
 
+/*
+ * Symbols are read per repository, not from a flat global index.
+ *
+ * data/symbols-index.json was 97 MB of concatenated per-repo files, parsed
+ * whole and regrouped by id to answer a question about one repository. It also
+ * drifted from its own source: seven repositories had symbol files that never
+ * reached it. Reintroducing it would be easy and would look like an
+ * optimisation, so the shape is asserted rather than left to memory.
+ */
+{
+  const facts = fs.readFileSync(path.join('scripts', 'lib-facts.js'), 'utf8');
+  const builder = fs.readFileSync(path.join('scripts', 'build-symbols.js'), 'utf8');
+  for (const [name, src] of [['lib-facts.js', facts], ['build-symbols.js', builder]]) {
+    if (src.indexOf("'symbols-index.json'") !== -1) {
+      fail++;
+      console.log(`FAIL  ${name} refers to symbols-index.json again`);
+    }
+  }
+  if (facts.indexOf("path.join('data', 'symbols', key + '.json')") === -1) {
+    fail++;
+    console.log('FAIL  lib-facts no longer reads symbols per repository');
+  }
+  if (fs.existsSync(path.join('data', 'symbols-index.json'))) {
+    fail++;
+    console.log('FAIL  data/symbols-index.json is back on disk');
+  }
+  const n = fs.existsSync(path.join('data', 'symbols'))
+    ? fs.readdirSync(path.join('data', 'symbols')).filter(f => f.endsWith('.json')).length : 0;
+  console.log(`  symbols: read per repository from ${n} files, no flat index`);
+}
+
 console.log(fail ? `\n  ${fail} unreachable name(s)` : '\n  every name in the graph pages resolves');
 process.exit(fail ? 1 : 0);

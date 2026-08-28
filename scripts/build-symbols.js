@@ -11,7 +11,7 @@
  * Source is fetched as a tarball (one request per repo, ~1.7MB and ~9s measured)
  * rather than per-file blobs, extracted to a temp dir, parsed, and deleted.
  *
- * Emits data/symbols/<repoId>.json and a compact global data/symbols-index.json.
+ * Emits data/symbols/<repoId>.json, one file per repository.
  *
  * Usage:
  *   node scripts/build-symbols.js --budget 20      # repos per run
@@ -45,7 +45,6 @@ const TOKEN = process.env.GITHUB_TOKEN;
 const SYMBOLS_VERSION = 3;
 
 const OUT_DIR = path.join('data', 'symbols');
-const INDEX_FILE = path.join('data', 'symbols-index.json');
 const STATUS_FILE = path.join('data', 'symbols-status.json');
 const MAX_FILE = 400_000;                // a 400KB+ source file is generated, not written
 const MAX_NOTEBOOK = 25 * 1024 * 1024;   // outputs inflate notebooks enormously
@@ -415,21 +414,26 @@ async function main() {
   }
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 
-  // Compact global index: enough to search and locate, not to reconstruct.
-  // The same pass records which extraction version produced each repo's file,
-  // because article generation needs to know whether a repo's call graph exists
-  // yet without opening 41 MB of symbol data to find out.
-  const all = [];
+  // Records which extraction version produced each repo's file, because article
+  // generation needs to know whether a repo's call graph exists yet without
+  // opening 41 MB of symbol data to find out.
+  //
+  // This pass also wrote a flat global index of every symbol - 1.26 million
+  // entries, 97 MB - which lib-facts then read and grouped back by repository to
+  // answer a question about one repository. It was undoing a split this file had
+  // just performed, so it is no longer written; lib-facts reads
+  // data/symbols/<id>.json directly. The index had also gone stale against its
+  // own source, and seven repositories were missing from it.
+  let symbolCount = 0;
   const status = {};
   for (const f of fs.readdirSync(OUT_DIR)) {
     if (!f.endsWith('.json')) continue;
     try {
       const j = JSON.parse(fs.readFileSync(path.join(OUT_DIR, f), 'utf8'));
-      for (const s of j.symbols) all.push([s.n, s.k === 'class' ? 1 : 0, j.id, s.f, s.l]);
+      symbolCount += j.symbols.length;
       status[j.id] = j.v || 1;
     } catch (e) { /* skip unreadable */ }
   }
-  fs.writeFileSync(INDEX_FILE, JSON.stringify({ generated: new Date().toISOString(), n: all.length, s: all }));
   fs.writeFileSync(STATUS_FILE, JSON.stringify({ v: SYMBOLS_VERSION, repos: status }));
 
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
@@ -437,7 +441,7 @@ async function main() {
   console.log(`  functions ${totalFns} | classes ${totalCls}`);
   const share = Object.entries(perLangCount).map(([k, n]) => `${k} ${n}`).join(', ');
   if (share) console.log(`  by language: ${share}`);
-  console.log(`  global index: ${all.length} symbols, ${(fs.statSync(INDEX_FILE).size / 1024).toFixed(0)} KB`);
+  console.log(`  ${symbolCount} symbols across ${Object.keys(status).length} repositories`);
   const left = candidates.length - batch.length;
   if (left > 0) console.log(`  ${left} repos remaining for the next run`);
 }

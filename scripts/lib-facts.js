@@ -9,7 +9,7 @@
  *
  * Four sources, all already on disk and all optional:
  *   structure/<id>.deep.json  module graph, coupling, cycles, ranked findings
- *   data/symbols-index.json   real function and class names with locations
+ *   data/symbols/<id>.json    real function and class names with locations
  *   data/deps.json            declared packages per repo
  *   data/registry.json        current published version per package
  *
@@ -41,21 +41,38 @@ function readJson(p, dflt) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return dflt; }
 }
 
-// The global symbol index is one flat array of 300k+ entries, so it is grouped
-// once per process rather than scanned per repo.
+/*
+ * One repository's functions and classes, read from the file that holds exactly
+ * that repository's functions and classes.
+ *
+ * This used to parse data/symbols-index.json - a single flat array of 1.26
+ * million entries, 97 MB - and group it by repository id, to answer a question
+ * about one repository. The grouping it performed was undoing a split that
+ * build-symbols had already done: data/symbols/<id>.json is the same symbols,
+ * already separated, already committed.
+ *
+ * So the index was a second copy of 181 MB of data, derived from it by
+ * concatenation, costing a 97 MB parse and a resident Map on every build. It is
+ * no longer written or read.
+ */
 function symbolsFor(id) {
-  if (SYMBOLS === null) {
-    SYMBOLS = new Map();
-    const idx = readJson(path.join('data', 'symbols-index.json'), null);
-    for (const s of (idx && idx.s) || []) {
-      const key = String(s[2]);
-      let e = SYMBOLS.get(key);
-      if (!e) { e = { fns: 0, classes: 0, names: [] }; SYMBOLS.set(key, e); }
-      if (s[1] === 1) e.classes++; else e.fns++;
-      if (e.names.length < MAX_SYMBOLS * 3) e.names.push(s[0]);
+  const key = String(id);
+  if (SYMBOLS === null) SYMBOLS = new Map();
+  if (SYMBOLS.has(key)) return SYMBOLS.get(key);
+
+  const j = readJson(path.join('data', 'symbols', key + '.json'), null);
+  let e = null;
+  if (j && Array.isArray(j.symbols)) {
+    e = { fns: 0, classes: 0, names: [] };
+    for (const s of j.symbols) {
+      if (s.k === 'class') e.classes++; else e.fns++;
+      // The same cap the flat index applied, kept so the sample of names an
+      // article draws on does not change with this file.
+      if (e.names.length < MAX_SYMBOLS * 3) e.names.push(s.n);
     }
   }
-  return SYMBOLS.get(String(id)) || null;
+  SYMBOLS.set(key, e);
+  return e;
 }
 
 const majorOf = v => {
