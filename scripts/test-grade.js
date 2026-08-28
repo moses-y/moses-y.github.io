@@ -177,5 +177,53 @@ check('an A has nothing above it', G.nextGrade(96) === null);
 check('repeats compound but stay capped',
   G.repeatFactor(1) === 1 && G.repeatFactor(5) > 1 && G.repeatFactor(10000) <= 1.6);
 
+/*
+ * data/grade-map.json is grades.json with everything explanatory stripped, so
+ * the graph pages can colour 1,433 nodes without fetching 2.9 MB. Being a
+ * second copy of the same numbers, it can silently disagree with the first -
+ * and the disagreement would show up as a wrong colour, which nobody would
+ * question.
+ */
+const fs2 = require('fs');
+const path2 = require('path');
+const DATA2 = path2.join(__dirname, '..', 'data');
+const full = (() => { try { return JSON.parse(fs2.readFileSync(path2.join(DATA2, 'grades.json'), 'utf8')); } catch (e) { return null; } })();
+const slim = (() => { try { return JSON.parse(fs2.readFileSync(path2.join(DATA2, 'grade-map.json'), 'utf8')); } catch (e) { return null; } })();
+
+if (full && slim) {
+  const ids = Object.keys(full.repos);
+  check('the slim map covers every graded repository',
+    Object.keys(slim.repos).length === ids.length,
+    Object.keys(slim.repos).length + ' vs ' + ids.length);
+  check('it reports the same headline figures',
+    slim.graded === full.graded && slim.mean === full.mean);
+
+  const wrong = ids.filter(id => {
+    const a = full.repos[id], b = slim.repos[id];
+    return !b || b[0] !== a.score || b[1] !== a.letter || b[2] !== (a.partial ? 1 : 0);
+  });
+  check('every score, letter and partial flag matches the full file',
+    wrong.length === 0, wrong.slice(0, 3).join(', '));
+
+  // The one thing a colour scale must not do. An id that is absent has not been
+  // audited, and the file has to say so where the mistake would be made.
+  check('the map states that an absent id is not a grade',
+    /not been audited, which is not a grade/.test(slim.note || ''));
+  check('it is small enough to be worth fetching for a colour',
+    fs2.statSync(path2.join(DATA2, 'grade-map.json')).size < 200 * 1024,
+    Math.round(fs2.statSync(path2.join(DATA2, 'grade-map.json')).size / 1024) + ' KB');
+
+  // The channel itself: unaudited must sit outside the ramp, not at its bad end.
+  const gg = fs2.readFileSync(path2.join(__dirname, '..', 'assets', 'js', 'graph-grade.js'), 'utf8');
+  const bandColors = [...gg.matchAll(/color: '(#[0-9A-Fa-f]{6})'/g)].map(m => m[1]);
+  const ungraded = (gg.match(/var UNGRADED = '(#[0-9A-Fa-f]{6})'/) || [])[1];
+  check('the unaudited colour is not one of the grade bands',
+    !!ungraded && bandColors.indexOf(ungraded) === -1, ungraded);
+  check('the legend says what unaudited means',
+    /not audited - not a grade/.test(gg));
+} else {
+  console.log('  skip  grades not built');
+}
+
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');
 process.exit(fail ? 1 : 0);

@@ -64,6 +64,7 @@ const COMPANIONS = [
   ['data/clusters.md', 'The same clusters as prose: which group crosses a domain, which member is the keeper, and how much of each group has never been audited. For a reader who wants the argument rather than the records.'],
   ['data/kin/<id>.json', 'One repository\'s neighbourhood: nearest semantic kin and repositories sharing its dependency stack. One small fetch per hop, so walking the graph does not require parsing this file.'],
   ['data/grades.json', 'Deterministic grade per audited repository across eight weighted categories. No model is involved.'],
+  ['data/grade-map.json', 'The same grades with the explanation removed: id -> [score, letter, partial]. About 37 KB against 2.9 MB, for a consumer that wants one number per repository rather than the reasoning. An id absent from it has not been audited, which is not a grade.'],
   ['data/hygiene.json', 'Raw audit findings by severity, the input to grades.json.'],
   ['data/deps.json', 'Declared dependencies per repository by ecosystem.'],
   ['data/search.json', 'Inverted index: token -> positions in index.json `repos`.']

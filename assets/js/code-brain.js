@@ -74,6 +74,13 @@
             // Legend = domains (the primary framing)
             function buildLegend() { CBData.buildLegend(g); }
             buildLegend();
+            // Grade replaces the domain colour rather than joining it. Same
+            // module and same legend as Code Graph.
+            var gradeOn = GraphGrade.attach({
+                button: document.getElementById('grade-toggle'), legend: el.legend,
+                offLabel: 'Colour by domain', restore: buildLegend,
+                onChange: function () { Graph.nodeColor(Graph.nodeColor()); }
+            });
             // ---- 3D graph ----
             var highlightNodes = new Set(), highlightLinks = new Set();
 
@@ -85,7 +92,8 @@
                 .nodeRelSize(2)
                 .nodeColor(function (n) {
                     if (highlightNodes.size && !highlightNodes.has(n.id)) return 'rgba(120,130,160,0.10)';
-                    return n.color;
+                    // gradeOn is assigned below, after the graph exists.
+                    return (gradeOn && gradeOn()) ? GraphGrade.colorOf(n) : n.color;
                 })
                 .nodeVisibility(function (n) { return n._vis !== false; })
                 .nodeOpacity(0.95)

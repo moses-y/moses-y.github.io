@@ -34,13 +34,13 @@ const path = require('path');
 const GROUPS = [
   {
     name: 'code brain',
-    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'graph-shell.js', 'kg-traverse.js', 'code-brain.js'],
-    provides: ['CBDom', 'CBData', 'CBPanel', 'GraphShell', 'KGTraverse']
+    files: ['cb-dom.js', 'cb-data.js', 'cb-panel.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'code-brain.js'],
+    provides: ['CBDom', 'CBData', 'CBPanel', 'GraphShell', 'GraphGrade', 'KGTraverse']
   },
   {
     name: 'semantic map',
-    files: ['kg-data.js', 'graph-shell.js', 'kg-traverse.js', 'knowledge-graph.js'],
-    provides: ['KGData', 'GraphShell', 'KGTraverse']
+    files: ['kg-data.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'knowledge-graph.js'],
+    provides: ['KGData', 'GraphShell', 'GraphGrade', 'KGTraverse']
   }
 ];
 
@@ -183,6 +183,14 @@ for (const group of GROUPS) {
     if (html.indexOf('assets/css/graph-shell.css') === -1) {
       fail++;
       console.log(`FAIL  ${page} does not load graph-shell.css`);
+    }
+    // Both pages offer the same second question of the same picture. One
+    // without the control is a page where the grade is invisible again.
+    for (const need of ['assets/js/graph-grade.js', 'id="grade-toggle"']) {
+      if (html.indexOf(need) === -1) {
+        fail++;
+        console.log(`FAIL  ${page} is missing ${need}`);
+      }
     }
   }
   console.log(`  shared chrome: graph-shell.css holds ${shell.size} rules, neither page repeats one`);

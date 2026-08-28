@@ -77,14 +77,19 @@
                 markActiveCard = KGData.renderRail(g, el, focusNode, data);
             }
 
-            // Legend (top languages by count)
-            Object.keys(langCounts).sort(function (a, b) { return langCounts[b] - langCounts[a]; })
-                .slice(0, 12).forEach(function (l) {
-                    var row = document.createElement('div');
-                    row.className = 'row';
-                    row.innerHTML = '<span class="dot" style="background:' + langColor(l) + '"></span>' + l + ' (' + langCounts[l] + ')';
-                    el.legend.appendChild(row);
-                });
+            // Legend (top languages by count). Named so the grade toggle can put
+            // it back when it hands the legend over and takes it away again.
+            function buildLangLegend() {
+                el.legend.innerHTML = '';
+                Object.keys(langCounts).sort(function (a, b) { return langCounts[b] - langCounts[a]; })
+                    .slice(0, 12).forEach(function (l) {
+                        var row = document.createElement('div');
+                        row.className = 'row';
+                        row.innerHTML = '<span class="dot" style="background:' + langColor(l) + '"></span>' + l + ' (' + langCounts[l] + ')';
+                        el.legend.appendChild(row);
+                    });
+            }
+            buildLangLegend();
 
             // ---- 3D graph ----
             var highlightNodes = new Set();
@@ -102,8 +107,11 @@
                 .nodeVal('val')
                 .nodeRelSize(2)
                 .nodeColor(function (n) {
-                    if (highlightNodes.size === 0) return n.color;
-                    return highlightNodes.has(n.id) ? n.color : 'rgba(120,130,160,0.12)';
+                    // gradeOn is assigned below, after the graph exists; the first
+                    // paint can reach this before then.
+                    var base = (gradeOn && gradeOn()) ? GraphGrade.colorOf(n) : n.color;
+                    if (highlightNodes.size === 0) return base;
+                    return highlightNodes.has(n.id) ? base : 'rgba(120,130,160,0.12)';
                 })
                 .nodeOpacity(0.95)
                 .nodeResolution(12)
@@ -260,6 +268,14 @@
             } else {
                 el.semantic.addEventListener('click', function () { setSemantic(!semanticOn); });
             }
+
+            // Grade replaces the language colour rather than joining it: two
+            // colour meanings on one node is no meaning at all.
+            var gradeOn = GraphGrade.attach({
+                button: document.getElementById('grade-toggle'), legend: el.legend,
+                offLabel: 'Colour by language', restore: buildLangLegend,
+                onChange: function () { Graph.nodeColor(Graph.nodeColor()); }
+            });
 
             function flyTo(node) {
                 GraphShell.flyTo(Graph, node, node.kind === 'repo' ? 120 : 220, 1400);

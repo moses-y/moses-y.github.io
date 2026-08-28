@@ -82,6 +82,30 @@ function main() {
     repos: grades
   }));
 
+  /*
+   * A slim sibling. grades.json is 2.9 MB because it carries every category,
+   * every weight and the evidence behind each point, which is right for the
+   * report and absurd for a page that wants one colour per node. This is the
+   * same numbers with everything explanatory removed: id -> [score, letter,
+   * partial]. `partial` is carried because a grade computed without
+   * module-level analysis has to be able to say so rather than being drawn as
+   * though it were fully measured.
+   */
+  const slim = {};
+  for (const id of ids) {
+    slim[id] = [grades[id].score, grades[id].letter, grades[id].partial ? 1 : 0];
+  }
+  fs.writeFileSync(path.join(path.dirname(OUT), 'grade-map.json'), JSON.stringify({
+    generated: new Date().toISOString(),
+    graded: ids.length,
+    mean: mean,
+    distribution: dist,
+    // Stated rather than implied: a reader must not treat an absent id as a bad
+    // grade, and this file is exactly where that mistake would be made.
+    note: 'id -> [score, letter, partial]. An id absent from this file has not been audited, which is not a grade.',
+    repos: slim
+  }));
+
   console.log('graded ' + ids.length + ' repositories (mean ' + mean + '), ' +
     skipped + ' not yet audited');
   console.log('  ' + Object.keys(dist).sort()
