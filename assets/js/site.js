@@ -340,12 +340,12 @@
                     + '<span class="fc-go">See them &rarr;</span></a>';
             }).join('');
 
-            // The headline counts the forks, not the estate: the sentence is
-            // "codebases I did not write", and a handful of these are mine.
-            // `p` is the parent repository, present only on a fork.
-            const forked = R.filter(r => r.p).length;
-            setNum('hero-forks', forked);
-            setNum('hero-forked', forked);
+            // The headline counts the whole estate - it is a claim about what
+            // the system reads. The fork split belongs to the paragraph below
+            // it, where it explains why the provenance rule exists. `p` is the
+            // parent repository, present only on a fork.
+            setNum('hero-repos', n);
+            setNum('hero-forked', R.filter(r => r.p).length);
             setNum('hero-total', n);
         }
 
@@ -481,7 +481,7 @@
             // The fork split is in stats.json too, and is the fallback for when
             // the index does not load but the aggregate does.
             if (stats && !(forks && forks.forks && forks.forks.length)) {
-                setNum('hero-forks', stats.forked);
+                setNum('hero-repos', stats.repos);
                 setNum('hero-forked', stats.forked);
                 setNum('hero-total', stats.repos);
             }
