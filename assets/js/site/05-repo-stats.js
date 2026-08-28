@@ -127,6 +127,13 @@
                     showFlagNotice(allProjects.length);
                 }
                 filteredProjects = [...allProjects];
+                // Display order is the reader's, not the file's. forks.json is
+                // now sorted by id - immutable - because sorting it by updatedAt
+                // made every upstream push reshuffle the file and produce a diff
+                // of pure relocation. 'recent' is still the default the sort
+                // control shows, so it has to actually be applied on first paint
+                // rather than inherited from however the data happened to arrive.
+                sortProjects();
                 if (container) {
                     renderFeaturedProjects(allProjects);
                     renderCurrentPage();

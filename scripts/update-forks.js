@@ -144,17 +144,15 @@ async function main() {
   /*
    * `topics` and `parent` are the only two fields this refresh exists to
    * update, and both change on the order of never. Asking GitHub for all ~1,330
-   * of them, one awaited request at a time, was the largest single block of
-   * wall clock in the run and spent a quarter of the hourly REST quota to
-   * rewrite values that were already correct.
+   * of them one awaited request at a time was the largest single block of wall
+   * clock in the run, spending a quarter of the hourly REST quota to rewrite
+   * values that were already correct.
    *
-   * So: ask only about repositories whose upstream updated_at has moved since
-   * the stored copy, and ask about those 8 at a time. The comparison is at DAY
-   * precision, because that is what formatDate stores - two pushes on the same
-   * day refresh once. For two fields that change on the order of never, that is
-   * the right trade; it would not be for anything time-sensitive. A repository nothing has
-   * touched keeps the topics and parent already on disk. This is the same
-   * resume-from-what-was-committed discipline the rest of the pipeline uses.
+   * So: ask only about repositories whose updated_at has moved since the stored
+   * copy, 8 at a time. The comparison is at DAY precision, since that is what
+   * formatDate stores: two pushes in one day refresh once, right for these.
+   * A repository nothing has touched keeps the topics and parent already on
+   * disk - the same resume discipline the rest of the pipeline uses.
    */
   const detailsNeeded = hasArticle.map(({ repo, existing }) =>
     (existing && existing.updatedAt === formatDate(repo.updated_at) &&
@@ -372,7 +370,11 @@ async function main() {
   console.log(`  Capabilities: ${rank(taxonomy.capabilities).slice(0, 6).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
 
   // Sort by updated date
-  forks.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  // By id, which is immutable. Sorting by updatedAt reshuffled the array
+  // whenever any of 1,440 upstreams was pushed to, so a run that changed
+  // nothing still relocated whole repository blocks. Display order belongs to
+  // the reader; the pages sort 1,440 records themselves in microseconds.
+  forks.sort((a, b) => a.id - b.id);
 
   console.log('\n=== Semantic Layer ===');
   let similarityLinks = [];

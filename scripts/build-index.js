@@ -150,15 +150,22 @@ function main() {
   fs.writeFileSync(path.join(OUT, 'schema.json'), JSON.stringify(describe(), null, 2));
 
   // ---- inverted index ---------------------------------------------------
-  // token -> positions in `repos`, so a query is a set intersection rather
-  // than a scan over every record.
+  // token -> repository IDS, so a query is a set intersection rather than a
+  // scan over every record.
+  //
+  // These were positions in the `repos` array, which made the search index a
+  // foreign key into a sort order. Any change to how forks.json is sorted
+  // silently repointed every posting at the wrong repository - and the sort
+  // was by updatedAt, which moves whenever anyone pushes anything. Ids are
+  // stable across renames and across sorts, which is what schema.json already
+  // claims about `i` and is the only thing a reader can safely join on.
   const postings = Object.create(null);
-  records.forEach((r, pos) => {
+  records.forEach((r) => {
     const seen = new Set();
     for (const tok of tokenize([r.n, r.t, r.d, r.l, r.k, r.g].join(' '))) {
       if (seen.has(tok)) continue;
       seen.add(tok);
-      (postings[tok] || (postings[tok] = [])).push(pos);
+      (postings[tok] || (postings[tok] = [])).push(r.i);
     }
   });
   // A token in almost every document cannot narrow anything and costs the most bytes.
@@ -167,7 +174,11 @@ function main() {
   for (const tok of Object.keys(postings)) {
     if (postings[tok].length > cap) { delete postings[tok]; dropped++; }
   }
-  fs.writeFileSync(path.join(OUT, 'search.json'), JSON.stringify({ n: records.length, t: postings }));
+  // v2 is declared, because a consumer written against positions would read
+  // ids as positions and silently return the wrong repositories rather than
+  // failing. There is no in-repo consumer today, but llms.txt points agents here.
+  fs.writeFileSync(path.join(OUT, 'search.json'),
+    JSON.stringify({ v: 2, n: records.length, keys: 'id', t: postings }));
 
   // ---- sitemap ----------------------------------------------------------
   // The old one listed 17 pages and none of the articles, so the largest body
