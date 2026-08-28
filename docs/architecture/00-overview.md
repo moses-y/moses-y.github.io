@@ -2,7 +2,7 @@
 
 **Status:** DERIVED - every figure read from the files listed below.
 
-**Sources:** `.github/workflows/update-forks.yml`, `scripts/update-forks.js`, `scripts/build-db.js`, `scripts/build-structure.js`, `scripts/build-analyze.js`, `scripts/build-stats.js`, `scripts/build-deps.js`, `scripts/build-symbols.js`, `scripts/build-hygiene.js`, `scripts/build-osv.js`, `scripts/build-grade.js`, `scripts/build-index.js`, `scripts/build-relations.js`, `scripts/build-banner.js`, `scripts/generate-blog-pages.js`, `scripts/generate-rss.js`, `README.md`, `index.html`, `forks.json`, `stats.json`, `data/relations.json`, `data/grades.json`, `data/hygiene.json`, `data/osv.json`, `data/deps.json`, `data/symbols-status.json`
+**Sources:** `.github/workflows/update-forks.yml`, `scripts/update-forks.js`, `scripts/build-structure.js`, `scripts/build-analyze.js`, `scripts/build-stats.js`, `scripts/build-deps.js`, `scripts/build-symbols.js`, `scripts/build-hygiene.js`, `scripts/build-osv.js`, `scripts/build-grade.js`, `scripts/build-index.js`, `scripts/build-relations.js`, `scripts/build-banner.js`, `scripts/generate-blog-pages.js`, `scripts/generate-rss.js`, `README.md`, `index.html`, `forks.json`, `stats.json`, `data/relations.json`, `data/grades.json`, `data/hygiene.json`, `data/osv.json`, `data/deps.json`, `data/symbols-status.json`
 
 Glossa reads GitHub repositories, extracts facts about them, and has a model write
 an article from those facts alone. The discipline the whole thing exists to hold is
@@ -42,7 +42,6 @@ flowchart TD
         UF --> FJ
     end
 
-    FJ --> DB["build-db.js"] --> FDB[("forks.db")]
     FJ --> BP["generate-blog-pages.js"] --> BLOG[("blog/*.html<br/>1,441 files")]
     BLOG --> RSS["generate-rss.js"] --> FEED[("feed.xml, atom.xml")]
 

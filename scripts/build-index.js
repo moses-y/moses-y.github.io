@@ -234,7 +234,7 @@ function main() {
   console.log(`  data/search.json   ${kb(OUT + '/search.json')} KB  (${gz(OUT + '/search.json')} KB gzipped)`);
   console.log(`  tokens indexed     ${Object.keys(postings).length} (${dropped} too common to keep)`);
   console.log(`  sitemap.xml        ${urls.length} urls (${articles.length} articles)`);
-  console.log(`  replaces           forks.json ${before} MB + forks.db on listing pages`);
+  console.log(`  replaces           forks.json ${before} MB on listing pages`);
 }
 
 

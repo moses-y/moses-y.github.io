@@ -212,7 +212,7 @@ function probe(url, expr, waitSel) {
 
 if (withPipeline) {
   console.log('# pipeline');
-  for (const s of ['build-db', 'generate-blog-pages', 'generate-rss', 'build-stats', 'build-index']) {
+  for (const s of ['generate-blog-pages', 'generate-rss', 'build-stats', 'build-index']) {
     const t0 = Date.now();
     try {
       execFileSync('node', ['scripts/' + s + '.js'], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 300000 });

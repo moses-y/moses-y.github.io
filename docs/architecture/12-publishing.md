@@ -1,5 +1,5 @@
 **Status:** DERIVED - every path and count measured from the repository.
-**Sources:** `scripts/generate-blog-pages.js`, `scripts/generate-rss.js`, `scripts/build-db.js`, `scripts/build-index.js`, `scripts/build-pages.js`, `scripts/lib-markdown.js`, `scripts/test-markdown.js`, `scripts/lib-blog-css.js`, `scripts/lib-blog-css-article.js`, `scripts/lib-blog-index-css.js`, `scripts/lib-blog-analysis.js`, `scripts/lib-blog-toc.js`, `scripts/lib-site-content.js`, `.githooks/pre-commit`, `.githooks/README.md`, `forks.json`, `blog/`, `insights/`, `assets/css/reader.css`, `assets/css/report.css`, `report.html`, `assets/js/reader.js`, `sitemap.xml`, `feed.xml`, `atom.xml`
+**Sources:** `scripts/generate-blog-pages.js`, `scripts/generate-rss.js`, `scripts/build-index.js`, `scripts/build-pages.js`, `scripts/lib-markdown.js`, `scripts/test-markdown.js`, `scripts/lib-blog-css.js`, `scripts/lib-blog-css-article.js`, `scripts/lib-blog-index-css.js`, `scripts/lib-blog-analysis.js`, `scripts/lib-blog-toc.js`, `scripts/lib-site-content.js`, `.githooks/pre-commit`, `.githooks/README.md`, `forks.json`, `blog/`, `insights/`, `assets/css/reader.css`, `assets/css/report.css`, `report.html`, `assets/js/reader.js`, `sitemap.xml`, `feed.xml`, `atom.xml`
 
 # 12 - Publishing
 
@@ -20,7 +20,6 @@ flowchart TD
 
     F --> GBP[generate-blog-pages.js]
     F --> RSS[generate-rss.js]
-    F --> DB[build-db.js]
     F --> IDX[build-index.js]
 
     GBP --> MD["lib-markdown.js<br/>escape, then whitelist"]
@@ -31,8 +30,6 @@ flowchart TD
 
     RSS --> FEED["feed.xml (RSS 2.0)<br/>20 items"]
     RSS --> ATOM["atom.xml (Atom 1.0)<br/>20 entries"]
-
-    DB --> SQLITE["forks.db<br/>sql.js export, FTS4"]
 
     IDX --> IJSON["data/index.json<br/>lean records"]
     IDX --> SJSON["data/search.json<br/>inverted index"]
@@ -54,8 +51,7 @@ The site is served by GitHub Pages: static files, no server, no build step at
 request time. Client-side rendering would mean every visitor downloading the
 article store before seeing a word. `build-index.js` records the size of that
 store in its own header comment - `forks.json` is measured there at 10.3 MB, of
-which 44% is article prose - and `forks.db` is 20.8 MB on disk as measured
-today. Pre-rendering moves that cost to build time and leaves each reader with
+which 44% is article prose (46.5 MB as measured today). Pre-rendering moves that cost to build time and leaves each reader with
 one small HTML file.
 
 The second reason is discovery. A crawler will not execute a fetch-and-render
@@ -163,15 +159,23 @@ descriptions are the raw stored summary truncated to 500 characters with an
 ellipsis - markdown is *not* rendered for the feed, only XML-escaped. Language
 and topics become `<category>` entries.
 
-## The database
+## The database, and why there no longer is one
 
-`build-db.js` builds an in-memory SQLite database with `sql.js` and exports it
-to `forks.db` (20.8 MB measured). Tables: `meta`, `repos`, `topics`,
-`knowledge_graphs`, plus an FTS4 virtual table `repos_fts` over name, display
-name, description and summary, and five indexes. Its purpose is queryable
-offline access to the whole estate. It is explicitly *not* the search path for
-the site: `build-index.js` exists precisely because listing pages were
-downloading both `forks.json` and this file.
+`build-db.js` built an in-memory SQLite database with `sql.js` and exported it
+to `forks.db` (20.8 MB measured, rewritten and committed every run). It was
+removed on 2026-08-29.
+
+It was fetched by nothing. There was no `sql.js` script tag, no `initSqlJs`, and
+no request for `forks.db` anywhere in `assets/js/` or any page - the only live
+references were the workflow that built and committed it, and two comments that
+claimed it was "already loaded". Its stated purpose was queryable offline access
+to the estate, but it was explicitly not the search path: `build-index.js` exists
+precisely because listing pages were downloading both `forks.json` and this file,
+and `data/search.json` (142 KB) had already replaced its FTS4 index at 0.3% of
+the size. Its `topics` table held two rows for 1,440 repositories, because GitHub
+forks do not inherit topics from upstream.
+
+Everything it contained was a lossy subset of `forks.json`. Nothing broke.
 
 ## Index, search and sitemap
 

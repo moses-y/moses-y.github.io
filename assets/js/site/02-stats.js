@@ -48,8 +48,10 @@
         //     they are always current and never depend on a precomputed snapshot.
         //   modules / findings         -> from stats.json, because they require reading
         //     the per-repo deep graphs (55+ files) which is too much to fetch client-side.
-        // forks.json gzips to ~750KB (smaller than the forks.db already loaded), so the
-        // extra fetch is cheap. stats.json values act as a fallback if forks.json fails.
+        // stats.json values act as a fallback if the index fetch fails. The old note
+        // here claimed forks.json gzips to ~750KB and that forks.db was already loaded;
+        // both were stale - it gzips to 7.42MB, and forks.db was removed as it was
+        // fetched by nothing.
         let deepStats = { repos: null, languages: null, filesAnalyzed: null, modulesMapped: null, findings: null };
         function renderStats() {
             const live = (typeof allProjects !== 'undefined' && allProjects.length) ? calculateStats(allProjects) : {};

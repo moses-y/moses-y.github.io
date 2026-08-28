@@ -6,8 +6,10 @@ description: Build, run, screenshot, smoke-test and regression-check the moses-y
 # Run moses-y.github.io
 
 A static GitHub Pages site plus a Node data pipeline. There is no build step and no
-framework: pages are hand-written HTML that fetch `/forks.json` (~10MB, 1275 repos) and
-`/forks.db` (~11MB, queried in-browser with sql.js) at runtime.
+framework: pages are hand-written HTML that fetch `/data/index.json` (~818KB, the lean
+index) and per-repo shards under `/data/` and `/structure/` at runtime. `forks.json` is
+no longer fetched by the pages, and `forks.db` has been removed - it was queried by
+nothing.
 
 Drive it with **`.claude/skills/run-moses-y-github-io/driver.mjs`**, a dependency-free
 Chrome DevTools Protocol client. `chromium-cli` is not installed here and Playwright is
@@ -30,7 +32,7 @@ caret ranges in the tracked `package.json`, which is what broke the CI pipeline 
 consecutive runs.
 
 ```bash
-npm install --no-save sql.js umap-js
+npm install --no-save umap-js
 ```
 
 ## Serve (required before driving anything)
@@ -159,7 +161,6 @@ Observed: `1` after the JavaScript chip, `1` after searching "agent".
 Offline stages. These read the committed `forks.json` and need no network or keys:
 
 ```bash
-node scripts/build-db.js             # forks.db          ~0.7s
 node scripts/generate-blog-pages.js  # 1275 blog pages   ~0.2s
 node scripts/generate-rss.js         # feed.xml, atom.xml
 node scripts/build-stats.js          # stats.json
@@ -168,7 +169,7 @@ node scripts/build-stats.js          # stats.json
 They rewrite tracked files. Reset after a smoke run:
 
 ```bash
-git checkout -- blog/ feed.xml atom.xml forks.db stats.json
+git checkout -- blog/ feed.xml atom.xml stats.json
 ```
 
 The online stage hits GitHub and NVIDIA and takes ~25 minutes cold (1275 repos, 40
@@ -197,7 +198,7 @@ no build; edit the HTML or `assets/js/site.js` and reload.
   cards and reports **"of 30 repos"** — a built-in fallback list. Over HTTP the same page
   reports **"of 1275 repos"**. Any conclusion drawn from `file://` is drawn from 30 fake
   repos. Always serve.
-- **`npm install sql.js umap-js` mutates tracked `package.json`**, bumping caret ranges
+- **`npm install umap-js` mutates tracked `package.json`**, bumping caret ranges
   when a dependency publishes. In CI that left the file unstaged and aborted
   `git pull --rebase`, failing 15 runs in a row while every run still did 20-35 minutes
   of work first. Use `--no-save`.
@@ -229,9 +230,9 @@ no build; edit the HTML or `assets/js/site.js` and reload.
   parser rejects, so `mermaidId()` rewrites them. Diagrams are capped at 10 nodes and 18
   edges: the real graphs reach 1459 modules and 5943 edges and Mermaid becomes
   unreadable long before that.
-- **First paint is slow.** `projects.html` pulls ~10MB of `forks.json` plus ~11MB of
-  `forks.db` through sql.js, and `sql-wasm.js` is a render-blocking script in `<head>`.
-  Allow a generous `wait:` budget on a cold cache.
+- **First paint.** `projects.html` pulls `data/index.json` (~818KB, ~195KB gzipped).
+  `report.html` is the heavy page: it still fetches the full `data/hygiene.json` and
+  `data/grades.json` to render one repository. Allow a generous `wait:` budget there.
 
 ## Troubleshooting
 

@@ -30,8 +30,7 @@ flowchart TD
     B --> C[npm install --no-save<br/>sql.js, umap-js, web-tree-sitter, tree-sitter-python]
     C --> D["restore embeddings cache<br/>key embeddings-run_id, restore-keys embeddings-"]
     D --> E["update-forks.js<br/>GITHUB_TOKEN + NVIDIA_API_KEY"]
-    E --> F[build-db.js]
-    F --> G[generate-blog-pages.js<br/>generate-rss.js]
+    E --> G[generate-blog-pages.js<br/>generate-rss.js]
     G --> H{{"budgeted build stage<br/>each step: cmd || note step"}}
     H --> I[commit and push]
     I --> J[build status line]
@@ -102,7 +101,7 @@ contributes whatever it produced, and the run still turns red.
 ## Committing to its own repository
 
 The workflow holds `permissions: contents: write`, configures a `GitHub Action` identity,
-stages a fixed list of paths -- `forks.json forks.db blog/ feed.xml atom.xml structure/
+stages a fixed list of paths -- `forks.json blog/ feed.xml atom.xml structure/
 stats.json data/ sitemap.xml sitemap.html llms.txt` -- discards everything unstaged with
 `git checkout -- .`, and commits with `[skip ci]` so the push does not retrigger the
 workflow. Because the branch can move under it, it does `git pull --rebase` before
