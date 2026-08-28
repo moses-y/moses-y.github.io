@@ -172,7 +172,7 @@ model-written text — the most expensive data here — had been searchable by n
 for t in scripts/test-*.js; do node "$t"; done
 ```
 
-188 assertions across 11 hermetic suites — no network, no `forks.json`, fixtures
+206 assertions across 12 hermetic suites — no network, no `forks.json`, fixtures
 only. They exist to catch the failures that would make a published claim false
 rather than merely wrong: a weight set that stops summing to 100 after a profile
 edit, a check that ships and is never charged to an axis, a grade that moves when
@@ -182,10 +182,11 @@ grades it was derived from, or a figure on the home page that nothing writes.
 ## Layout
 
 ```
-scripts/          58 build scripts + 11 test suites
+scripts/          58 build scripts + 12 test suites
   lib-*.js        the pure parts: grading, relations, clustering, schema
   lib-net.js      bounded concurrency + retry for the network stages
   lib-db.js       the state store and the one migration runner
+  lib-json.js     stable serialisation: sorted keys, skip-if-unchanged
   checks-*.js     the 62 hygiene checks, one file per family
   build-*.js      the stages, in the order above
 migrations/       numbered, forward-only SQL

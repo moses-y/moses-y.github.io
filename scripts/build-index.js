@@ -16,6 +16,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { writeStable } = require('./lib-json.js');
 const zlib = require('zlib');
 const { domainOf } = require('./lib-classify.js');
 const { describe } = require('./lib-schema.js');
@@ -142,12 +143,12 @@ function main() {
     links: (data.similarityLinks || []).map(l => [l.source, l.target, +(l.similarity || l.sim || 0).toFixed(3)]),
     repos: records
   };
-  fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(index));
+  const wroteIndex = writeStable(path.join(OUT, 'index.json'), index);
 
   // The key to the single letters above, written next to the file it describes
   // rather than left in this source. Cheap, and it is the difference between a
   // reader being able to use data/index.json and having to guess at it.
-  fs.writeFileSync(path.join(OUT, 'schema.json'), JSON.stringify(describe(), null, 2));
+  writeStable(path.join(OUT, 'schema.json'), describe(), { indent: 2 });
 
   // ---- inverted index ---------------------------------------------------
   // token -> repository IDS, so a query is a set intersection rather than a
@@ -177,8 +178,8 @@ function main() {
   // v2 is declared, because a consumer written against positions would read
   // ids as positions and silently return the wrong repositories rather than
   // failing. There is no in-repo consumer today, but llms.txt points agents here.
-  fs.writeFileSync(path.join(OUT, 'search.json'),
-    JSON.stringify({ v: 2, n: records.length, keys: 'id', t: postings }));
+  writeStable(path.join(OUT, 'search.json'),
+    { v: 2, n: records.length, keys: 'id', t: postings });
 
   // ---- sitemap ----------------------------------------------------------
   // The old one listed 17 pages and none of the articles, so the largest body

@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { grade } = require('./lib-grade.js');
+const { writeStable } = require('./lib-json.js');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'data', 'grades.json');
@@ -74,13 +75,13 @@ function main() {
     : 0;
 
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, JSON.stringify({
+  const wroteGrades = writeStable(OUT, {
     generated: new Date().toISOString(),
     graded: ids.length,
     mean: mean,
     distribution: dist,
     repos: grades
-  }));
+  });
 
   /*
    * A slim sibling. grades.json is 2.9 MB because it carries every category,

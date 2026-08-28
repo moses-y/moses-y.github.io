@@ -7,6 +7,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { writeStable } = require('./lib-json.js');
 const { execFileSync } = require('child_process');
 const { projectCount } = require('./lib-subprojects.js');
 const ROOT = path.join(__dirname, '..');
@@ -67,7 +68,7 @@ if (fs.existsSync(dir)) {
 }
 // Rank by findings, then by high-severity - the most interesting reports first.
 reports.sort((a, b) => (b.findings - a.findings) || (b.high - a.high));
-fs.writeFileSync(path.join(ROOT, 'structure', 'reports.json'), JSON.stringify(reports, null, 2));
+writeStable(path.join(ROOT, 'structure', 'reports.json'), reports, { indent: 2 });
 console.log('reports.json:', reports.length, 'reports');
 
 /*
@@ -151,5 +152,5 @@ const stats = {
   analyzedRepos,
   pipeline: pipelineStats()
 };
-fs.writeFileSync(path.join(ROOT, 'stats.json'), JSON.stringify(stats, null, 2));
+writeStable(path.join(ROOT, 'stats.json'), stats, { indent: 2 });
 console.log('stats.json:', JSON.stringify(stats));
