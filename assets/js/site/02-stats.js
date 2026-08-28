@@ -106,7 +106,6 @@
             // parent repository, present only on a fork.
             setNum('hero-repos', n);
             setNum('hero-forked', R.filter(r => r.p).length);
-            setNum('hero-total', n);
         }
 
         function setNum(id, value) {
@@ -243,7 +242,6 @@
             if (stats && !(forks && forks.forks && forks.forks.length)) {
                 setNum('hero-repos', stats.repos);
                 setNum('hero-forked', stats.forked);
-                setNum('hero-total', stats.repos);
             }
             renderStats();
         }
