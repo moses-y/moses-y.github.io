@@ -19,11 +19,23 @@ const NOTEBOOK = /\.ipynb$/i;
 const DATA = /\.(csv|tsv|xlsx|xls|parquet|db|sqlite|json)$/i;
 const DOC = /\.(pdf|docx|pptx|md|txt)$/i;
 
-// Directories that are shared scaffolding rather than a project of their own.
+/*
+ * Directories that are shared scaffolding rather than a project of their own.
+ *
+ * The second group is the one that matters for counting. A conventionally
+ * layered application has src/, api/, dashboard/ and notebooks/ sitting side by
+ * side, which looks exactly like four projects to a directory count -
+ * retail-analytics was detected as a collection of four on that basis. Those
+ * names are architecture, not projects, so a repository using them is one
+ * project however many of them it has.
+ */
 const NOT_A_PROJECT = new Set(['.github', '.vscode', '.idea', 'node_modules',
   'venv', '.venv', 'env', 'assets', 'images', 'img', 'static', 'public',
   'docs', 'doc', 'data', 'datasets', 'plots', 'figures', 'output', 'outputs',
-  'test', 'tests', '__pycache__', 'dist', 'build']);
+  'test', 'tests', '__pycache__', 'dist', 'build',
+  'src', 'lib', 'app', 'api', 'core', 'server', 'client', 'backend',
+  'frontend', 'web', 'ui', 'cli', 'scripts', 'notebooks', 'config',
+  'migrations', 'models', 'utils', 'common', 'internal', 'pkg', 'cmd']);
 
 function detectSubProjects(fileTree, opts) {
   const min = (opts && opts.minCode) || 1;
@@ -57,4 +69,26 @@ function isCollection(subProjects, totalFiles) {
   return inProjects >= (totalFiles || inProjects) * 0.5;
 }
 
-module.exports = { detectSubProjects, isCollection };
+/*
+ * How many distinct projects a repository holds. One, unless it is a shelf of
+ * them - and then it is the number on the shelf.
+ *
+ * Counting repositories understates the original work here, because
+ * Data-Science-Machine-Learning is 29 self-contained projects that happen to
+ * share a remote. Counting them individually is the truer figure, and it is the
+ * same reasoning the briefing already applies: describing that repository as
+ * one codebase says nothing, because there is no single thing to describe.
+ *
+ * Reads the stored subProjects rather than a file tree, so a count can be taken
+ * from forks.json without re-walking anything, and re-filters them through
+ * NOT_A_PROJECT so a set extended here takes effect before the next full crawl
+ * rewrites the stored lists.
+ */
+function projectCount(kg) {
+  if (!kg) return 1;
+  const subs = (kg.subProjects || [])
+    .filter(g => !NOT_A_PROJECT.has(String(g.name || '').toLowerCase()));
+  return isCollection(subs, kg.totalFiles) ? subs.length : 1;
+}
+
+module.exports = { detectSubProjects, isCollection, projectCount, NOT_A_PROJECT };

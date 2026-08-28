@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { projectCount } = require('./lib-subprojects.js');
 const ROOT = path.join(__dirname, '..');
 
 const NON_CODE = { Markdown:1, JSON:1, YAML:1, TOML:1, INI:1, XML:1, CSV:1, Text:1, SVG:1, Dockerfile:1, Makefile:1, HTML:1 };
@@ -115,10 +116,19 @@ function pipelineStats() {
 
 const stats = {
   repos: forks.length,
-  // Split out because "codebases I did not write" is a claim about the forks,
-  // not about the estate, and the two differ by the handful I did write.
+  // Split out because a claim about forks is not a claim about the estate, and
+  // the two differ by the handful I did write.
   original: forks.filter(f => !f.parent).length,
   forked: forks.filter(f => f.parent).length,
+  /*
+   * Projects, not repositories. Counting originals by repository understates
+   * them: one of mine is a shelf of 29 self-contained projects sharing a
+   * remote, and calling that one project is as wrong as calling it one
+   * codebase - which is the mistake that made its briefing say nothing and its
+   * grade an F about something other than code quality.
+   */
+  originalProjects: forks.filter(f => !f.parent)
+    .reduce((n, f) => n + projectCount(f.knowledgeGraph), 0),
   languages: langs.size,
   filesAnalyzed,
   modulesMapped,

@@ -247,6 +247,13 @@ for (const group of GROUPS) {
     fail++;
     console.log(`FAIL  original + forked (${stats.original} + ${stats.forked}) != repos (${stats.repos})`);
   }
+  // Projects expand collections, so the count can only rise. If it ever equals
+  // the repository count again, the sub-project detection has stopped firing
+  // and the figure has quietly become a different, smaller claim.
+  if (!(stats.originalProjects >= stats.original)) {
+    fail++;
+    console.log(`FAIL  originalProjects (${stats.originalProjects}) is below original repos (${stats.original})`);
+  }
   console.log(`  home page figures: ${spans.length} spans, all written; ` +
     `${stats.forked} of ${stats.repos} forked, pipeline ${p.scripts} scripts / ${p.assertions} assertions`);
 }
