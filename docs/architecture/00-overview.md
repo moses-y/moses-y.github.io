@@ -74,15 +74,25 @@ flowchart TD
 
     RELJ --> COMMIT["commit + push"]
     SVG --> COMMIT
-    FDB --> COMMIT
     FEED --> COMMIT
     SJ --> COMMIT
     SYM --> COMMIT
     DEPS --> COMMIT
 
+    RELJ --> STORE["build-store.js"] --> DB[("_.state/glossa.db_<br/>relational store<br/>NOT committed")]
+
     classDef budgeted stroke-dasharray: 5 3
     class BS,BA,BD,SY,HY,OSV budgeted
+    classDef uncommitted stroke-dasharray: 2 2,opacity:0.75
+    class STORE,DB uncommitted
 ```
+
+`build-store.js` sits at the end and feeds nothing yet. It loads the published JSON
+into a SQLite schema with enforced foreign keys, which is the only thing that checks
+those files agree with each other - the six denormalised copies had drifted before
+(`build-index.js:130-134` documents one case) and nothing could have caught it. The
+store is not committed and not served: a binary rewritten every two hours is the
+mistake `forks.db` made.
 
 The dashed boxes are the eventually-consistent part, and it is the property that
 shapes most of the diagram: one run does a slice, and the backlog drains over

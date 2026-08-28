@@ -100,8 +100,9 @@ node .claude/skills/query-repo-estate/estate.mjs report
 
 ## Running it
 
-Node 20 or newer; CI runs 24. Clone, install, then run whichever stage you want — each is independent
-and reads only what earlier stages wrote.
+**Node 22 or newer** — the state store uses `node:sqlite`, which is built in from 22.
+CI runs 24. Clone, install, then run whichever stage you want: each is independent and
+reads only what earlier stages wrote.
 
 ```bash
 npm install
@@ -115,6 +116,8 @@ node scripts/build-index.js
 node scripts/build-relations.js                        # embeddings, clusters, llms.txt
 node scripts/build-stats.js
 node scripts/build-banner.js                           # this README's banner
+
+node scripts/build-store.js --verify                   # relational store, from the JSON above
 ```
 
 Every network stage is budgeted, so a run costs a bounded number of requests and a
@@ -130,6 +133,38 @@ The site's `index.html`, `assets/css/site.css` and `assets/js/site.js` are **bui
 files**. Edit the partials in `assets/partials/index/`, `assets/css/site/` and
 `assets/js/site/`, then run `node scripts/build-bundles.js` — a hook refuses a commit
 where a partial changed and its bundle did not.
+
+## The state store
+
+```bash
+node scripts/build-store.js --verify   # core + reference data, then check the counts
+node scripts/build-store.js --deep     # also per-repo modules and symbols
+```
+
+`.state/glossa.db` is a SQLite database built from the published JSON. It is **not
+committed** — a binary rewritten every two hours is exactly the mistake the old
+`forks.db` made — and nothing reads it yet. It exists first as a check: loading six
+denormalised files into one schema with enforced foreign keys is the only thing that
+has ever verified they agree with each other.
+
+It also makes three relationships real that were nested objects pretending otherwise:
+
+| Was | Is | Why it mattered |
+|---|---|---|
+| `PROFILES` `{profile: {axis: weight}}` | `profile_weight` | the weights a repo was graded under were copied onto all 1,440 grade records |
+| `PENALTIES` `{check: [axis, cost]}` | `grade_charge` | a two-element array for a relationship, so a check charged to no axis was invisible |
+| `osv.json` nested packages | `advisory_affects` | "which repos does this advisory reach" needed a full scan and a manual join |
+
+Migrations are numbered, forward-only SQL under `migrations/`, applied in order at
+open. They replace four independent version constants — `DEPS_VERSION`,
+`SYMBOLS_VERSION`, `CHECKS_VERSION`, `ARTICLE_VERSION` — each stored under a different
+key and compared a different way. Per-row staleness stays a column, because it drives
+recompute rather than schema shape; conflating the two is what produced four systems
+instead of one.
+
+Migration 002 also restores full-text search over article prose. The old `forks.db`
+indexed summaries with FTS4; `data/search.json` never has, so the 7.3 MB of
+model-written text — the most expensive data here — had been searchable by nothing.
 
 ## Tests
 
@@ -147,10 +182,14 @@ grades it was derived from, or a figure on the home page that nothing writes.
 ## Layout
 
 ```
-scripts/          56 build scripts + 11 test suites
+scripts/          58 build scripts + 11 test suites
   lib-*.js        the pure parts: grading, relations, clustering, schema
+  lib-net.js      bounded concurrency + retry for the network stages
+  lib-db.js       the state store and the one migration runner
   checks-*.js     the 62 hygiene checks, one file per family
   build-*.js      the stages, in the order above
+migrations/       numbered, forward-only SQL
+.state/           glossa.db — build state, not committed, not served
 data/             published output — the data layer
 structure/        per-repository module graphs
 assets/

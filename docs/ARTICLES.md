@@ -229,3 +229,77 @@ appears in zero articles.
   [ ] Mechanical citation resolver in test-quality.js - ids resolve, numbers match
   [ ] Judge pass for interpretation only, different model family, closed question
   [ ] EXTRACTED / INFERRED labelling per section
+
+---
+
+# Three ideas the facts already support
+
+Not format changes. These are things the pipeline has measured all along and
+never said out loud. All three render deterministically, so they land on all
+1,440 articles with no ARTICLE_VERSION bump.
+
+## I. Complexity as located functions, never as a score
+
+Cyclomatic complexity is computable from the tree-sitter walk that already runs
+in build-symbols.js - counting decision points per function is the same pass,
+at near-zero marginal cost, and it is an EXTRACTED fact.
+
+But CC is the most-cited and least-reliable metric in static analysis. A
+30-branch switch scores terribly and reads fine; a 9-branch nested conditional
+with three escapes scores fine and is where the bugs live. Publishing
+"Maintainability Index: 62" about someone else's repository would be exactly
+the confident-but-hollow number this project exists to avoid.
+
+So: adopt it, and never as a repository-level score.
+
+  DO    "The five functions most likely to resist change" - ranked, each with
+        file:line and its actual branch count. A reader clicks and checks it in
+        ten seconds.
+  DONT  A single aggregate number, a grade, or a maintainability index. A
+        reader can only believe or disbelieve those.
+
+Same measurement, opposite epistemics. Depends on B.2 (symbol file/line), which
+has landed.
+
+## II. Percentiles against the estate
+
+1,440 repositories measured by identical checks is a corpus, and almost nobody
+generating repository documentation has one.
+
+  "47 import cycles"  - a number a reader cannot place.
+  "47 cycles - 94th percentile across 1,440 measured repositories,
+   where the median is 3"  - the same measurement, made meaningful.
+
+Still EXTRACTED. No model judgement, no speculation: a rank against a
+distribution already computed. One pass over data on disk.
+
+The honest caveat, stated once in Methods rather than per claim: the corpus is
+what was forked, not a random sample of software, so it is the 94th percentile
+OF THIS ESTATE. That is a limitation, not a disqualifier, and saying it is
+cheaper than pretending the corpus is universal.
+
+Cheapest high-value idea in this document.
+
+## III. Open with the reading order, not the problem
+
+Every article currently opens with "The Problem". For a developer landing cold
+the first question is not what problem this solves - it is WHERE DO I START
+READING.
+
+The bundle already answers that and never says it: entry points with file:line
+and reach counts, fan-in ranked, traced paths from entry to sink.
+
+  "Start at src/cli.py:42 - it reaches 88% of the codebase. The three functions
+   everything calls are parseConfig (src/config.py:19), loadPlugins
+   (src/plugins.py:64) and emit (src/io.py:12)."
+
+Derived, not guessed, and probably the most useful 60 seconds on the page. This
+is the "repo intro" the format has been missing.
+
+## Rejected, and why
+
+An LLM-written architecture verdict as a SEPARATE section. Not because the
+model may not assess - see the correction above, it already does and should -
+but because a standalone verdict floats free of the evidence. Interpretation
+belongs next to the fact it interprets, carrying its citation and its INFERRED
+label. A section called "Assessment" is where uncited claims go to hide.

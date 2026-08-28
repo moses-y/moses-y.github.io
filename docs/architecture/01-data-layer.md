@@ -213,3 +213,47 @@ a specific page opens one. Second, `data/symbols-index.json` (99,646.9 KB) is a
 single file that appears to hold what the 1,052 per-repository files in
 `data/symbols/` already carry. No consumer among the files read here fetches it;
 whether one elsewhere in the site does is unverified.
+
+## The relational store
+
+**Status:** BUILT, NOT YET AUTHORITATIVE.
+
+`.state/glossa.db` (`scripts/lib-db.js`, `scripts/build-store.js`) is a SQLite
+database loaded from the JSON described above. Node 22+ ships `node:sqlite`, so it
+costs no dependency; CI runs 24.
+
+The direction of travel is that the database becomes the system of record and these
+JSON files become a projection of it. Serving does not change: static files on a CDN
+are the cheapest and most available read path available, and replacing them with an
+origin would be a downgrade. The database sits behind the build, never in front of a
+reader.
+
+Three relationships in the JSON were many-to-many stored as nested objects, which is
+why the same fact ended up in six files with nothing able to verify they agreed:
+
+| JSON shape | Table | What it could not answer before |
+|---|---|---|
+| `PROFILES` `{profile: {axis: weight}}` | `profile_weight` | what weights was THIS repo graded under, without re-deriving them |
+| `PENALTIES` `{check: [axis, cost]}` | `grade_charge` | which checks cost the estate the most |
+| `osv.json` nested packages | `advisory_affects` | which repositories does this advisory reach |
+
+The first load found two modelling errors that JSON could not have surfaced.
+`grades.json` `audited` is a boolean meaning *whether*; `hygiene.json` `audited` is
+an ISO string meaning *when* - the same field name for two different things in two
+files. And materialising profile weights from the raw overrides gave sums of 90 to
+106, because `weightsFor()` renormalises to 100 and modelling it a second time
+reproduced exactly the drift the table exists to prevent.
+
+Tiering, which decides durability policy, is by rebuild cost rather than by kind:
+
+| Tier | Contents | Size | Rebuild |
+|---|---|---|---|
+| 1 | article prose, embeddings | 7.3 MB | ~1,331 model calls, ~12 days of cron |
+| 2 | modules, symbols, findings, grades, deps | 28.1 MB | free, from GitHub |
+| 3 | index, kin, clusters, search | ~1 MB | seconds |
+
+**Tier 1 must never live in evictable storage.** An eviction would cost the only
+asset that takes real money and two weeks to rebuild, while the 28 MB beside it
+rebuilds for nothing.
+
+See `docs/DATA-MODEL.md` for the full schema and entity diagrams.
