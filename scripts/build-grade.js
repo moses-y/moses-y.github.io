@@ -96,7 +96,7 @@ function main() {
   for (const id of ids) {
     slim[id] = [grades[id].score, grades[id].letter, grades[id].partial ? 1 : 0];
   }
-  fs.writeFileSync(path.join(path.dirname(OUT), 'grade-map.json'), JSON.stringify({
+  writeStable(path.join(path.dirname(OUT), 'grade-map.json'), {
     generated: new Date().toISOString(),
     graded: ids.length,
     mean: mean,
@@ -105,7 +105,7 @@ function main() {
     // grade, and this file is exactly where that mistake would be made.
     note: 'id -> [score, letter, partial]. An id absent from this file has not been audited, which is not a grade.',
     repos: slim
-  }));
+  });
 
   console.log('graded ' + ids.length + ' repositories (mean ' + mean + '), ' +
     skipped + ' not yet audited');
