@@ -55,5 +55,73 @@
         );
     }
 
-    global.GraphShell = { fitToContainer: fitToContainer, flyTo: flyTo };
+    /*
+     * Collapse the rail, and remember the choice.
+     *
+     * Both pages put the readout, the controls and the deck in one column
+     * beside the graph, which is a lot of screen to hold while reading a graph
+     * that wants all of it. Collapsing sets a class on the plate and the grid
+     * track does the rest - the canvas needs no resize call, because
+     * fitToContainer observes the stage and changing the track fires that
+     * observer.
+     *
+     * Self-starting rather than called from the page scripts: it needs nothing
+     * from them, and both were within a few lines of the file-size cap.
+     */
+    function initRailToggle() {
+        var plate = document.querySelector('.plate');
+        var btn = document.getElementById('rail-toggle');
+        if (!plate || !btn) return;
+        var KEY = 'graph-rail-collapsed';
+
+        function apply(off) {
+            plate.classList.toggle('rail-off', off);
+            btn.setAttribute('aria-expanded', off ? 'false' : 'true');
+            btn.title = off ? 'Show panel' : 'Hide panel';
+            btn.setAttribute('aria-label', btn.title);
+        }
+
+        // A browser with storage disabled must still get a working button.
+        var saved = false;
+        try { saved = localStorage.getItem(KEY) === '1'; } catch (e) {}
+        apply(saved);
+
+        btn.addEventListener('click', function () {
+            var off = !plate.classList.contains('rail-off');
+            apply(off);
+            try { localStorage.setItem(KEY, off ? '1' : '0'); } catch (e) {}
+        });
+    }
+
+    /*
+     * The plate is pinned below the fixed nav, and both pages had that offset
+     * written as 56px while the nav renders at 68 - so the readout header sat
+     * under the nav, clipped, on every load. Measuring it removes the guess and
+     * survives the nav changing height at a breakpoint.
+     */
+    function syncNavHeight() {
+        var nav = document.querySelector('nav.cg-nav');
+        if (!nav) return;
+        function set() {
+            // Ceil, not round: the nav measures 68.05px, and rounding down
+            // leaves the plate a sub-pixel under it.
+            var h = Math.ceil(nav.getBoundingClientRect().height);
+            if (h > 0) document.documentElement.style.setProperty('--nav-h', h + 'px');
+        }
+        set();
+        if (global.ResizeObserver) new global.ResizeObserver(set).observe(nav);
+        global.addEventListener('resize', set);
+    }
+
+    function boot() { syncNavHeight(); initRailToggle(); }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+
+    global.GraphShell = {
+        fitToContainer: fitToContainer, flyTo: flyTo, initRailToggle: initRailToggle
+    };
 })(window);
