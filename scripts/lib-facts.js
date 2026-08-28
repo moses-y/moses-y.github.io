@@ -68,7 +68,16 @@ function symbolsFor(id) {
       if (s.k === 'class') e.classes++; else e.fns++;
       // The same cap the flat index applied, kept so the sample of names an
       // article draws on does not change with this file.
-      if (e.names.length < MAX_SYMBOLS * 3) e.names.push(s.n);
+      //
+      // File and line are carried through now. They were already on disk -
+      // every record in data/symbols/<id>.json is {n, k, f, l} - and this
+      // function kept only the name, which is why the header above promises
+      // "names with locations" and the prompt could never deliver one.
+      // A symbol the model cannot locate is a symbol it cannot cite, and to a
+      // reader an uncitable fact is indistinguishable from an invented one.
+      if (e.names.length < MAX_SYMBOLS * 3) {
+        e.names.push({ n: s.n, k: s.k, f: s.f || null, l: s.l || null });
+      }
     }
   }
   SYMBOLS.set(key, e);
@@ -262,9 +271,24 @@ function factsFor(repo, kg) {
     out.push(`NAMED SYMBOLS (parsed with tree-sitter): ${sym.fns} functions, ${sym.classes} classes.`);
     // __init__ and __call__ appear in almost every file and say nothing about
     // what the repo does.
-    const names = [...new Set(sym.names)]
-      .filter(n => !/^__/.test(n)).slice(0, MAX_SYMBOLS);
-    if (names.length) out.push(`  Examples: ${names.join(', ')}`);
+    // Deduped by name, then rendered one per line as name (kind) - file:line,
+    // so a claim about a symbol can be checked against the repository rather
+    // than taken on trust.
+    const seen = new Set();
+    const picked = [];
+    for (const sm of sym.names) {
+      if (/^__/.test(sm.n) || seen.has(sm.n)) continue;
+      seen.add(sm.n);
+      picked.push(sm);
+      if (picked.length >= MAX_SYMBOLS) break;
+    }
+    if (picked.length) {
+      out.push('  Examples (name, kind, location):');
+      for (const sm of picked) {
+        const where = sm.f ? sm.f + (sm.l ? ':' + sm.l : '') : 'location not recorded';
+        out.push('    ' + sm.n + ' (' + sm.k + ') - ' + where);
+      }
+    }
   }
 
   // Some repos are a shelf of separate projects, not one codebase. Told to
