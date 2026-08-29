@@ -1,7 +1,7 @@
 # Generation
 
 **Status:** DERIVED for the code paths and limits; the trust argument is AUTHORED.
-**Sources:** `scripts/lib-article.js`, `scripts/lib-facts.js`, `scripts/lib-config.js`, `scripts/lib-knowledge-graph.js`, `scripts/lib-quality.js`, `scripts/lib-article-version.js`, `scripts/lib-github.js`, `scripts/update-forks.js`, `scripts/generate-blog-pages.js`, `scripts/test-quality.js`, `.github/workflows/update-forks.yml`, `blog/ATLAS.html`
+**Sources:** `src/lib/lib-article.js`, `src/lib/lib-facts.js`, `src/lib/lib-config.js`, `src/lib/lib-knowledge-graph.js`, `src/lib/lib-quality.js`, `src/lib/lib-article-version.js`, `src/lib/lib-github.js`, `src/stages/update-forks.js`, `src/site/generate-blog-pages.js`, `tests/test-quality.js`, `.github/workflows/update-forks.yml`, `blog/ATLAS.html`
 
 ## The separation
 
@@ -61,7 +61,7 @@ The two halves never mix. `factsFor` is pure of the model: it reads four JSON ar
 
 ## How a fact reaches the model
 
-`factsFor(repo, kg)` in `scripts/lib-facts.js` returns a prompt-ready block, or `''` when nothing has been measured — and the file's own comment insists absence is normal, because "analysis lags the feed by design". The block is assembled from labelled sections, each capped by a named constant (`MAX_HUBS` 8, `MAX_FINDINGS` 14, `MAX_SYMBOLS` 16, `MAX_STALE` 8, `MAX_PROJECTS` 18, `MAX_HYGIENE` 10, `MAX_FANIN` 12, `MAX_EDGES` 14). When a cap bites, the text says so — `... and N lower-ranked findings` — rather than truncating silently, because a silent truncation would let the model read an incomplete list as a complete one.
+`factsFor(repo, kg)` in `src/lib/lib-facts.js` returns a prompt-ready block, or `''` when nothing has been measured — and the file's own comment insists absence is normal, because "analysis lags the feed by design". The block is assembled from labelled sections, each capped by a named constant (`MAX_HUBS` 8, `MAX_FINDINGS` 14, `MAX_SYMBOLS` 16, `MAX_STALE` 8, `MAX_PROJECTS` 18, `MAX_HYGIENE` 10, `MAX_FANIN` 12, `MAX_EDGES` 14). When a cap bites, the text says so — `... and N lower-ranked findings` — rather than truncating silently, because a silent truncation would let the model read an incomplete list as a complete one.
 
 The section headers are themselves the contract, and the prompt names them back: `IMPORT GRAPH`, `MOST CONNECTED MODULES`, `MEASURED FINDINGS`, `INTERNAL CALL GRAPH`, `ENTRY POINTS`, `WHAT THIS CODE TOUCHES OUTSIDE ITSELF`, `WHAT EACH FILE IS RESPONSIBLE FOR`, `NAMED SYMBOLS`, `REPOSITORY HYGIENE (detected, do not contradict)`, `CODE HEALTH AUDIT`, `DECLARED DEPENDENCIES`.
 
@@ -73,7 +73,7 @@ Several sections exist because their absence produced a specific fabrication. Th
 
 ## What the prompt forbids
 
-Quoted verbatim from `scripts/lib-article.js`.
+Quoted verbatim from `src/lib/lib-article.js`.
 
 On wiring, in the `## How It Is Wired` section:
 
@@ -103,7 +103,7 @@ The clone URL is handed over with `(use this verbatim in any clone command)` —
 
 ## Configuration
 
-From `scripts/lib-config.js`, all overridable by environment variable:
+From `src/lib/lib-config.js`, all overridable by environment variable:
 
 | Setting | Default | Why |
 | --- | --- | --- |
@@ -184,7 +184,7 @@ The brokenness gate and the staleness gate are deliberately distinct, and `lib-q
 
 ## What is asserted
 
-`scripts/test-quality.js` runs hermetically against a stubbed `fetch` with a fixed three-model rotation (`model-a,model-b,model-c`) and no key or network. Each case scripts one reply per model and asserts both the returned article *and* how far the rotation got, "because 'returned something' would pass even if the retry never fired". It asserts that a clean article costs exactly one call; that `finish_reason=length`, a timeout, an under-floor article, a mid-sentence ending reported as `stop`, an empty article, and a network failure each advance to the next model and return its result; that a `ReferenceError` costs one call and returns `null`; that three timeouts stop after three distinct models rather than recursing; that a spent or unparseable budget stops the retry at one call; and that the default budget leaves the retry alone.
+`tests/test-quality.js` runs hermetically against a stubbed `fetch` with a fixed three-model rotation (`model-a,model-b,model-c`) and no key or network. Each case scripts one reply per model and asserts both the returned article *and* how far the rotation got, "because 'returned something' would pass even if the retry never fired". It asserts that a clean article costs exactly one call; that `finish_reason=length`, a timeout, an under-floor article, a mid-sentence ending reported as `stop`, an empty article, and a network failure each advance to the next model and return its result; that a `ReferenceError` costs one call and returns `null`; that three timeouts stop after three distinct models rather than recursing; that a spent or unparseable budget stops the retry at one call; and that the default budget leaves the retry alone.
 
 Note what is *not* asserted: no test checks that the model obeyed the prohibitions. The provenance separation is enforced structurally — by the model having no numbers of its own to offer — rather than by validating the prose afterwards. That is a deliberate design choice and also its honest limit. If a model stated a module count contradicting the `IMPORT GRAPH` block, nothing in the pipeline would currently notice.
 

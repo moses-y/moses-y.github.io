@@ -1,7 +1,7 @@
 /* GENERATED FILE - do not edit.
  *
- * Built by scripts/build-bundles.js from assets/js/site/
- * Edit the partials there and run: node scripts/build-bundles.js
+ * Built by src/site/build-bundles.js from assets/js/site/
+ * Edit the partials there and run: node src/site/build-bundles.js
  *
  * Concatenated, not separate scripts: these partials share one top-level scope.
  */

@@ -1,7 +1,7 @@
 # 10 — Embeddings: the vector pipeline
 
 **Status:** DERIVED - every parameter read from the files listed below.
-**Sources:** `scripts/lib-embeddings.js`, `scripts/build-relations.js`, `scripts/lib-relations.js`, `scripts/lib-config.js`, `package.json`, `.gitignore`, `.github/workflows/update-forks.yml`, `data/index.json`, `data/schema.json`
+**Sources:** `src/lib/lib-embeddings.js`, `src/stages/build-relations.js`, `src/lib/lib-relations.js`, `src/lib/lib-config.js`, `package.json`, `.gitignore`, `.github/workflows/update-forks.yml`, `data/index.json`, `data/schema.json`
 
 Glossa analyses 1,440 public repositories (`data/index.json`, `total: 1440`). The embedding
 subsystem answers one question and only one: **where does this repository sit relative to the
@@ -46,7 +46,7 @@ flowchart TD
 
 ## What text is embedded
 
-`buildEmbeddingText()` in `scripts/lib-embeddings.js` assembles, in order and only where present:
+`buildEmbeddingText()` in `src/lib/lib-embeddings.js` assembles, in order and only where present:
 the repository description; the generated summary passed through `stripMarkdown()` and truncated
 to 500 characters; `Primary language: <language>`; `Languages:` followed by the keys of
 `knowledgeGraph.languages`; `Frameworks:` followed by `knowledgeGraph.frameworks`; and `Topics:`

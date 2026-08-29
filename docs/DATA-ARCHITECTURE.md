@@ -68,7 +68,7 @@ Every file also carries its own generated timestamp, so ~10 files change every
 run whether or not any content did - 11 MB of git objects every two hours to
 record that the clock moved.
 
-Fix: scripts/lib-json.js exporting writeStable(path, obj): sort keys
+Fix: src/lib/lib-json.js exporting writeStable(path, obj): sort keys
 recursively, indent, and compare against disk with the timestamp field MASKED,
 skipping the write entirely when nothing else changed. Move generated to a
 sidecar.

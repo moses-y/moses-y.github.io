@@ -1,5 +1,5 @@
 **Status:** DERIVED - every budget, interval and pattern read from the files listed below.
-**Sources:** `.github/workflows/update-forks.yml`, `.github/workflows/sync-forks.yml`, `.githooks/pre-commit`, `.githooks/loc-baseline.txt`, `scripts/test-*.js`
+**Sources:** `.github/workflows/update-forks.yml`, `.github/workflows/sync-forks.yml`, `.githooks/pre-commit`, `.githooks/loc-baseline.txt`, `tests/test-*.js`
 
 # Automation and delivery
 
@@ -13,7 +13,7 @@ Two workflows run unattended.
 
 | Workflow | Trigger | Cron |
 | --- | --- | --- |
-| `update-forks.yml` | schedule, `workflow_dispatch`, `repository_dispatch` (`update-forks`), push to `master` touching `scripts/*.js` or the workflow itself | `0 */2 * * *` - every two hours |
+| `update-forks.yml` | schedule, `workflow_dispatch`, `repository_dispatch` (`update-forks`), push to `master` touching `src/**/*.js` or `tests/**/*.js` or the workflow itself | `0 */2 * * *` - every two hours |
 | `sync-forks.yml` | schedule, `workflow_dispatch` | `0 5 * * *` - daily at 05:00 UTC |
 
 `sync-forks.yml` is the smaller of the two. It fast-forwards every fork to its upstream
@@ -80,7 +80,7 @@ The build stage defines one function:
 note() { echo "$1" >> "$RUNNER_TEMP/failed-steps.txt"; echo "::error::$1 failed"; }
 ```
 
-and every command is written `node scripts/build-x.js ... || note build-x`.
+and every command is written `node src/stages/build-x.js ... || note build-x`.
 
 This exists because the whole stage previously ended in `|| true`. A crash in
 `build-symbols` was then indistinguishable from a clean pass: the run went green and the
@@ -122,11 +122,11 @@ Install it with `git config core.hooksPath .githooks`.
 flowchart TD
     S["staged files<br/>git diff --cached --name-only --diff-filter=ACM"] --> A{secret patterns<br/>in staged content?}
     A -- match --> AF[BLOCKED + key guidance]
-    A -- clean --> B{scripts/ or assets/js/ .js staged?}
+    A -- clean --> B{src/, tests/ or assets/js/ .js staged?}
     B -- yes --> B1[test-imports.js]
-    B1 --> C{scripts/*.js staged?}
+    B1 --> C{src/ or tests/ .js staged?}
     B -- no --> C
-    C -- yes --> C1["every scripts/test-*.js"]
+    C -- yes --> C1["every tests/test-*.js"]
     C1 --> D{"assets css/js site partials staged?"}
     C -- no --> D
     D -- yes --> D1[build-bundles.js --check]
@@ -156,11 +156,11 @@ On a match the hook prints its own guidance:
 That advice is printed *only* for an actual key match. It previously fired for every block,
 so a failing unit test was answered with a lecture about API keys.
 
-**Reachable references and unit tests.** `test-imports.js` runs when any `scripts/` or
+**Reachable references and unit tests.** `test-imports.js` runs when any `src/`, `tests/` or
 `assets/js/` JavaScript is staged, because a file referencing a name it no longer imports
 parses and loads fine and fails only on the branch that uses it -- two such references
 shipped in a split and surfaced days later when a model timed out in CI. When any
-`scripts/*.js` is staged the hook runs the whole `scripts/test-*.js` suite, since it takes
+`src/*.js` is staged the hook runs the whole `tests/test-*.js` suite, since it takes
 under half a second and being selective buys nothing. The suites are hermetic: eleven files
 -- classify, flow, globals, grade, imports, languages, manifest, markdown, quality,
 relations, runtime-checks -- each asserting against inline fixtures, with no network calls
@@ -168,7 +168,7 @@ anywhere in them. They existed before the hook ran them, which made them documen
 rather than guardrails.
 
 **Bundle freshness.** Editing `assets/css/site/`, `assets/js/site/` or `assets/partials/`
-without running `scripts/build-bundles.js` would publish the old stylesheet, because Pages
+without running `src/site/build-bundles.js` would publish the old stylesheet, because Pages
 serves what is committed and no build runs before it. The hook calls
 `build-bundles.js --check` and reports the `STALE` lines.
 

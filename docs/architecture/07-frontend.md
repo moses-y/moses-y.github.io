@@ -1,5 +1,5 @@
 **Status:** DERIVED - every file list and line count measured from the repository.
-**Sources:** `scripts/build-bundles.js`, `scripts/test-globals.js`, `.githooks/pre-commit`, `.githooks/loc-baseline.txt`, `assets/partials/index/`, `assets/css/site/`, `assets/js/site/`, `assets/css/tokens.css`, `assets/js/graph-shell.js`, `assets/css/graph-shell.css`, `assets/js/kg-traverse.js`, `assets/js/graph-grade.js`, `assets/js/kg-data.js`, `assets/js/cb-dom.js`, `assets/js/cb-data.js`, `assets/js/cb-panel.js`, `assets/js/knowledge-graph.js`, `assets/js/code-brain.js`, `knowledge-graph.html`, `code-brain.html`, `index.html`, `projects.html`, `report.html`, `blog/index.html`, `blog/ADR.html`
+**Sources:** `src/site/build-bundles.js`, `tests/test-globals.js`, `.githooks/pre-commit`, `.githooks/loc-baseline.txt`, `assets/partials/index/`, `assets/css/site/`, `assets/js/site/`, `assets/css/tokens.css`, `assets/js/graph-shell.js`, `assets/css/graph-shell.css`, `assets/js/kg-traverse.js`, `assets/js/graph-grade.js`, `assets/js/kg-data.js`, `assets/js/cb-dom.js`, `assets/js/cb-data.js`, `assets/js/cb-panel.js`, `assets/js/knowledge-graph.js`, `assets/js/code-brain.js`, `knowledge-graph.html`, `code-brain.html`, `index.html`, `projects.html`, `report.html`, `blog/index.html`, `blog/ADR.html`
 
 # 07 - Frontend
 
@@ -17,7 +17,7 @@ Three files in the repository are **generated**, not written:
 | `assets/css/site.css` | `assets/css/tokens.css` + `assets/css/site/` | 1 + 8 | 2,738 |
 | `assets/js/site.js` | `assets/js/site/` | 8 | 1,133 |
 
-`scripts/build-bundles.js` concatenates them. Editing an output directly is
+`src/site/build-bundles.js` concatenates them. Editing an output directly is
 wrong: the next rebuild discards the edit, and the pre-commit hook refuses a
 commit in which a partial changed and its bundle did not.
 
@@ -29,7 +29,7 @@ flowchart LR
     J["assets/js/site/<br/>00-nav … 07-extras"]
     H["assets/partials/index/<br/>00-head … 08-contact-footer"]
   end
-  B["scripts/build-bundles.js<br/>numeric sort, header banner"]
+  B["src/site/build-bundles.js<br/>numeric sort, header banner"]
   T --> B
   C --> B
   J --> B
@@ -197,7 +197,7 @@ genuinely differs stays in the page stylesheet.
 
 ## 3. What enforces the arrangement
 
-`scripts/test-globals.js` holds the whole thing together. The graph pages share
+`tests/test-globals.js` holds the whole thing together. The graph pages share
 state through `window` rather than modules, so a name that moves between files is
 invisible to `node --check` and fails only at runtime. It declares two `GROUPS`:
 
@@ -234,7 +234,7 @@ The same script carries three further guards:
   pipeline figures must all be non-zero, and `originalProjects` must not fall
   below `original`.
 
-`.githooks/pre-commit` runs the whole `scripts/test-*.js` suite when a script is
+`.githooks/pre-commit` runs the whole `tests/test-*.js` suite when a script is
 staged, and runs `build-bundles.js --check` whenever anything under
 `assets/css/site/`, `assets/js/site/` or `assets/partials/` is staged. That is
 the seam closed: a committed artifact can go stale, so editing a partial without

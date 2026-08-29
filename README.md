@@ -107,17 +107,17 @@ reads only what earlier stages wrote.
 ```bash
 npm install
 
-node scripts/build-structure.js --limit 150            # file trees for new repos
-node scripts/build-analyze.js --all --budget 40        # module graphs, budgeted
-node scripts/build-hygiene.js --budget 80              # the 62 checks
-node scripts/build-osv.js --budget 80                  # advisories
-node scripts/build-grade.js                            # pure join, no network
-node scripts/build-index.js
-node scripts/build-relations.js                        # embeddings, clusters, llms.txt
-node scripts/build-stats.js
-node scripts/build-banner.js                           # this README's banner
+node src/stages/build-structure.js --limit 150            # file trees for new repos
+node src/stages/build-analyze.js --all --budget 40        # module graphs, budgeted
+node src/stages/build-hygiene.js --budget 80              # the 62 checks
+node src/stages/build-osv.js --budget 80                  # advisories
+node src/stages/build-grade.js                            # pure join, no network
+node src/stages/build-index.js
+node src/stages/build-relations.js                        # embeddings, clusters, llms.txt
+node src/stages/build-stats.js
+node src/site/build-banner.js                           # this README's banner
 
-node scripts/build-store.js --verify                   # relational store, from the JSON above
+node src/stages/build-store.js --verify                   # relational store, from the JSON above
 ```
 
 Every network stage is budgeted, so a run costs a bounded number of requests and a
@@ -131,14 +131,14 @@ common key formats from being staged at all.
 
 The site's `index.html`, `assets/css/site.css` and `assets/js/site.js` are **built
 files**. Edit the partials in `assets/partials/index/`, `assets/css/site/` and
-`assets/js/site/`, then run `node scripts/build-bundles.js` — a hook refuses a commit
+`assets/js/site/`, then run `node src/site/build-bundles.js` — a hook refuses a commit
 where a partial changed and its bundle did not.
 
 ## The state store
 
 ```bash
-node scripts/build-store.js --verify   # core + reference data, then check the counts
-node scripts/build-store.js --deep     # also per-repo modules and symbols
+node src/stages/build-store.js --verify   # core + reference data, then check the counts
+node src/stages/build-store.js --deep     # also per-repo modules and symbols
 ```
 
 `.state/glossa.db` is a SQLite database built from the published JSON. It is **not
@@ -169,7 +169,7 @@ model-written text — the most expensive data here — had been searchable by n
 ## Tests
 
 ```bash
-for t in scripts/test-*.js; do node "$t"; done
+for t in tests/test-*.js; do node "$t"; done
 ```
 
 206 assertions across 12 hermetic suites — no network, no `forks.json`, fixtures
@@ -182,13 +182,13 @@ grades it was derived from, or a figure on the home page that nothing writes.
 ## Layout
 
 ```
-scripts/          58 build scripts + 12 test suites
-  lib-*.js        the pure parts: grading, relations, clustering, schema
-  lib-net.js      bounded concurrency + retry for the network stages
-  lib-db.js       the state store and the one migration runner
-  lib-json.js     stable serialisation: sorted keys, skip-if-unchanged
-  checks-*.js     the 62 hygiene checks, one file per family
-  build-*.js      the stages, in the order above
+src/              bucketed by what a file PRODUCES, not by what it is named
+  stages/         writes data/ and structure/ — the 8 pipeline stages
+  site/           writes HTML, CSS, feeds, the banner — everything served
+  lib/            pure: grading, relations, schema, net, db, json
+  checks/         the 62 hygiene checks, one file per family
+  tools/          operator utilities, not part of a run
+tests/            12 hermetic suites
 migrations/       numbered, forward-only SQL
 .state/           glossa.db — build state, not committed, not served
 data/             published output — the data layer
@@ -200,6 +200,12 @@ assets/
 .githooks/        pre-commit: secret scan, 500-line file cap, bundle freshness
 .claude/skills/   the estate CLI and the browser driver
 ```
+
+The bucket rule is deliberate. `lib-article.js` sounds like a renderer and is
+not — it is a generation library driven by `update-forks.js`, so it lives in
+`lib/`. `build-pages.js` and `build-bundles.js` sound like stages and are not:
+they write the site, so they live in `site/`. Naming a file after its shape
+tells you nothing about where it belongs; naming it after its output does.
 
 ## Licence
 

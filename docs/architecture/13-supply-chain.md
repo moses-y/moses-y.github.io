@@ -1,9 +1,9 @@
 # 13. Supply chain: dependencies, advisories and secrets
 
 **Status:** DERIVED - every count and ecosystem read from the files listed below.
-**Sources:** `scripts/build-deps.js`, `scripts/lib-manifest.js`, `scripts/build-osv.js`, `scripts/checks-supply.js`, `scripts/checks-osv.js`, `scripts/checks-secrets.js`, `scripts/lib-hygiene.js`, `scripts/build-hygiene.js`, `data/deps.json`, `data/registry.json`, `data/osv.json`, `data/relations.json`, `data/hygiene.json`, `.github/workflows/update-forks.yml`
+**Sources:** `src/stages/build-deps.js`, `src/lib/lib-manifest.js`, `src/stages/build-osv.js`, `src/checks/checks-supply.js`, `src/checks/checks-osv.js`, `src/checks/checks-secrets.js`, `src/lib/lib-hygiene.js`, `src/stages/build-hygiene.js`, `data/deps.json`, `data/registry.json`, `data/osv.json`, `data/relations.json`, `data/hygiene.json`, `.github/workflows/update-forks.yml`
 
-There is no `scripts/lib-deps.js` in this repository. Manifest parsing lives in `scripts/lib-manifest.js`, and that is the file read here.
+There is no `src/lib/lib-deps.js` in this repository. Manifest parsing lives in `src/lib/lib-manifest.js`, and that is the file read here.
 
 Two questions are answered by this subsystem. What does a repository *depend* on, and is any of it known-vulnerable. And what has a repository *leaked* - credentials committed to source control. They share the audit machinery in `lib-hygiene.js` but nothing else.
 

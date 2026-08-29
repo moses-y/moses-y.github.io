@@ -1,5 +1,5 @@
 **Status:** DERIVED - every figure measured from the files listed below.
-**Sources:** `data/` (all files, plus `data/kin/` and `data/symbols/`), `data/schema.json`, `data/relations.json`, `llms.txt`, `stats.json`, `forks.json` (size only), `structure/`, `scripts/build-index.js`, `scripts/build-relations.js`, `scripts/lib-schema.js`, `.claude/skills/query-repo-estate/estate.mjs`, `assets/js/kg-traverse.js`, `assets/js/graph-grade.js`.
+**Sources:** `data/` (all files, plus `data/kin/` and `data/symbols/`), `data/schema.json`, `data/relations.json`, `llms.txt`, `stats.json`, `forks.json` (size only), `structure/`, `src/stages/build-index.js`, `src/stages/build-relations.js`, `src/lib/lib-schema.js`, `.claude/skills/query-repo-estate/estate.mjs`, `assets/js/kg-traverse.js`, `assets/js/graph-grade.js`.
 
 # The published data layer
 
@@ -21,14 +21,14 @@ flowchart LR
   end
 
   subgraph build [Build stages]
-    BI["scripts/build-index.js"]
-    BG["scripts/build-grade.js"]
-    BR["scripts/build-relations.js"]
-    BH["scripts/build-hygiene.js"]
-    BD["scripts/build-deps.js"]
-    BSY["scripts/build-symbols.js"]
-    BST["scripts/build-structure.js"]
-    BS["scripts/build-stats.js"]
+    BI["src/stages/build-index.js"]
+    BG["src/stages/build-grade.js"]
+    BR["src/stages/build-relations.js"]
+    BH["src/stages/build-hygiene.js"]
+    BD["src/stages/build-deps.js"]
+    BSY["src/stages/build-symbols.js"]
+    BST["src/stages/build-structure.js"]
+    BS["src/stages/build-stats.js"]
   end
 
   subgraph pub [Published artifacts]
@@ -78,7 +78,7 @@ flowchart LR
   STR --> CB
 ```
 
-`scripts/lib-schema.js` is not a build stage. It holds the key and description
+`src/lib/lib-schema.js` is not a build stage. It holds the key and description
 table for the single-letter record keys, plus the companion-file list, and
 `build-index.js` writes its `describe()` output straight out as
 `data/schema.json`. The schema is emitted from the same module the builder uses,
@@ -200,8 +200,8 @@ published index, something visibly breaks.
 These are stale figures in source comments, not in emitted data. Recorded rather
 than silently corrected, since none of them was in scope to change here.
 
-- `scripts/build-index.js` header calls `forks.json` "10.3MB". Measured: 46,461,754 B (44.31 MB).
-- `scripts/lib-schema.js` and `estate.mjs` both describe the index as "774 KB". Measured: 796.8 KB. `llms.txt`, which is regenerated each build from a live `statSync`, says 797 KB and is current.
+- `src/stages/build-index.js` header calls `forks.json` "10.3MB". Measured: 46,461,754 B (44.31 MB).
+- `src/lib/lib-schema.js` and `estate.mjs` both describe the index as "774 KB". Measured: 796.8 KB. `llms.txt`, which is regenerated each build from a live `statSync`, says 797 KB and is current.
 - `assets/js/graph-grade.js` says "1,432 of 1,433 repositories". The current counts are 1,439 graded of 1,440, per `data/grade-map.json` and `data/relations.json`. The same comment's "396 repositories graded without module-level analysis" was not checked and is unverified here.
 
 Two things are surprising rather than wrong. First, the bulk of the published
@@ -218,7 +218,7 @@ whether one elsewhere in the site does is unverified.
 
 **Status:** BUILT, NOT YET AUTHORITATIVE.
 
-`.state/glossa.db` (`scripts/lib-db.js`, `scripts/build-store.js`) is a SQLite
+`.state/glossa.db` (`src/lib/lib-db.js`, `src/stages/build-store.js`) is a SQLite
 database loaded from the JSON described above. Node 22+ ships `node:sqlite`, so it
 costs no dependency; CI runs 24.
 

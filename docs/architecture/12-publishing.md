@@ -1,5 +1,5 @@
 **Status:** DERIVED - every path and count measured from the repository.
-**Sources:** `scripts/generate-blog-pages.js`, `scripts/generate-rss.js`, `scripts/build-index.js`, `scripts/build-pages.js`, `scripts/lib-markdown.js`, `scripts/test-markdown.js`, `scripts/lib-blog-css.js`, `scripts/lib-blog-css-article.js`, `scripts/lib-blog-index-css.js`, `scripts/lib-blog-analysis.js`, `scripts/lib-blog-toc.js`, `scripts/lib-site-content.js`, `.githooks/pre-commit`, `.githooks/README.md`, `forks.json`, `blog/`, `insights/`, `assets/css/reader.css`, `assets/css/report.css`, `report.html`, `assets/js/reader.js`, `sitemap.xml`, `feed.xml`, `atom.xml`
+**Sources:** `src/site/generate-blog-pages.js`, `src/site/generate-rss.js`, `src/stages/build-index.js`, `src/site/build-pages.js`, `src/lib/lib-markdown.js`, `tests/test-markdown.js`, `src/site/lib-blog-css.js`, `src/site/lib-blog-css-article.js`, `src/site/lib-blog-index-css.js`, `src/site/lib-blog-analysis.js`, `src/site/lib-blog-toc.js`, `src/site/lib-site-content.js`, `.githooks/pre-commit`, `.githooks/README.md`, `forks.json`, `blog/`, `insights/`, `assets/css/reader.css`, `assets/css/report.css`, `report.html`, `assets/js/reader.js`, `sitemap.xml`, `feed.xml`, `atom.xml`
 
 # 12 - Publishing
 
@@ -204,7 +204,7 @@ plus `index.html`. `insights/` holds **4** - 3 articles plus `index.html`.
 Both are generated. The distinction is the source, not the method: `blog/`
 pages are rendered from stored summaries in `forks.json`, while `insights/`
 pages are rendered by `build-pages.js` from prose hand-written into the `posts`
-array in `scripts/lib-site-content.js`. `build-pages.js` also owns
+array in `src/site/lib-site-content.js`. `build-pages.js` also owns
 `case-studies/` and the service pages, and its slugs are hand-authored strings
 (`rag-vs-fine-tuning`, `graphrag-and-graph-engineering`,
 `eu-ai-act-sme-compliance-checklist`) rather than derived from a title.

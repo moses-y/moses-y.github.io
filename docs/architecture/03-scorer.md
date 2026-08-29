@@ -1,5 +1,5 @@
 **Status:** DERIVED - every figure read from the files listed below or computed from them.
-**Sources:** `scripts/lib-grade.js`, `scripts/build-hygiene.js`, `scripts/build-grade.js`, `scripts/test-grade.js`, `scripts/checks-ci.js`, `scripts/checks-hygiene.js`, `scripts/checks-osv.js`, `scripts/checks-quality.js`, `scripts/checks-runtime.js`, `scripts/checks-secrets.js`, `scripts/checks-supply.js`, `data/grades.json`, `data/grade-map.json`, `data/hygiene.json`, `forks.json`
+**Sources:** `src/lib/lib-grade.js`, `src/stages/build-hygiene.js`, `src/stages/build-grade.js`, `tests/test-grade.js`, `src/checks/checks-ci.js`, `src/checks/checks-hygiene.js`, `src/checks/checks-osv.js`, `src/checks/checks-quality.js`, `src/checks/checks-runtime.js`, `src/checks/checks-secrets.js`, `src/checks/checks-supply.js`, `data/grades.json`, `data/grade-map.json`, `data/hygiene.json`, `forks.json`
 
 # The scorer
 
@@ -8,7 +8,7 @@ people's open source. A reader who opens forty of them cannot hold forty finding
 their head, so each audited repository carries one letter. The letter is only defensible if
 it is reproducible and if every point of it traces back to a check that actually ran.
 
-Nothing in the scorer calls a model or the network. `scripts/build-grade.js` is a join over
+Nothing in the scorer calls a model or the network. `src/stages/build-grade.js` is a join over
 files already on disk: `forks.json` for repository facts, `data/hygiene.json` for the audit,
 `structure/<id>.deep.json` for the module-level pass, `data/osv.json` for advisories.
 
@@ -131,7 +131,7 @@ finding is 25 base points multiplied by `repeatFactor(2)`, which is 1.18.
 
 ## The honesty properties
 
-These are the properties `scripts/test-grade.js` pins down, because each of them, if broken,
+These are the properties `tests/test-grade.js` pins down, because each of them, if broken,
 would turn the letter into a false claim rather than merely a wrong number.
 
 **An unaudited repository is skipped, not graded from defaults.** `build-grade.js` reads

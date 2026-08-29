@@ -2,7 +2,7 @@
 
 **Status:** DERIVED - every figure read from the files listed below.
 
-**Sources:** `.github/workflows/update-forks.yml`, `scripts/update-forks.js`, `scripts/build-structure.js`, `scripts/build-analyze.js`, `scripts/build-stats.js`, `scripts/build-deps.js`, `scripts/build-symbols.js`, `scripts/build-hygiene.js`, `scripts/build-osv.js`, `scripts/build-grade.js`, `scripts/build-index.js`, `scripts/build-relations.js`, `scripts/build-banner.js`, `scripts/generate-blog-pages.js`, `scripts/generate-rss.js`, `README.md`, `index.html`, `forks.json`, `stats.json`, `data/relations.json`, `data/grades.json`, `data/hygiene.json`, `data/osv.json`, `data/deps.json`, `data/symbols-status.json`
+**Sources:** `.github/workflows/update-forks.yml`, `src/stages/update-forks.js`, `src/stages/build-structure.js`, `src/stages/build-analyze.js`, `src/stages/build-stats.js`, `src/stages/build-deps.js`, `src/stages/build-symbols.js`, `src/stages/build-hygiene.js`, `src/stages/build-osv.js`, `src/stages/build-grade.js`, `src/stages/build-index.js`, `src/stages/build-relations.js`, `src/site/build-banner.js`, `src/site/generate-blog-pages.js`, `src/site/generate-rss.js`, `README.md`, `index.html`, `forks.json`, `stats.json`, `data/relations.json`, `data/grades.json`, `data/hygiene.json`, `data/osv.json`, `data/deps.json`, `data/symbols-status.json`
 
 Glossa reads GitHub repositories, extracts facts about them, and has a model write
 an article from those facts alone. The discipline the whole thing exists to hold is
@@ -17,7 +17,7 @@ stages: Census, Briefing, Structure, Supply, Hygiene, Grade, Meaning, Publish. T
 is the conceptual order, and it is not quite the execution order. Two differences,
 both real, both worth knowing before tracing a number:
 
-- **Census and Briefing are one process.** `scripts/update-forks.js` runs first and
+- **Census and Briefing are one process.** `src/stages/update-forks.js` runs first and
   alone in its workflow step; it enumerates the estate *and* writes the article, both
   into `forks.json`. There is no separate briefing script. `generate-blog-pages.js`
   runs later and renders the already-written prose into `blog/<slug>.html`.

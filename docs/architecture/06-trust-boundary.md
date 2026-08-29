@@ -2,7 +2,7 @@
 
 **Status:** AUTHORED - a design argument. Every rule is cross-referenced to the code that enforces it and the test that guards it.
 
-**Sources:** `llms.txt`, `data/relations.json`, `stats.json`, `scripts/lib-relations.js`, `scripts/lib-grade.js`, `scripts/build-grade.js`, `scripts/build-relations.js`, `scripts/lib-article.js`, `assets/js/graph-grade.js`, `.githooks/pre-commit`, `scripts/test-grade.js`, `scripts/test-relations.js`, `scripts/test-globals.js`
+**Sources:** `llms.txt`, `data/relations.json`, `stats.json`, `src/lib/lib-relations.js`, `src/lib/lib-grade.js`, `src/stages/build-grade.js`, `src/stages/build-relations.js`, `src/lib/lib-article.js`, `assets/js/graph-grade.js`, `.githooks/pre-commit`, `tests/test-grade.js`, `tests/test-relations.js`, `tests/test-globals.js`
 
 ## The problem this shape solves
 
@@ -22,7 +22,7 @@ names what the check saw.
 That is the whole design. It has one structural consequence: **provenance is a
 property of a fact, not of the site.** A site-wide honesty claim is the easiest
 thing here to get wrong, because nothing breaks when it stops being true - and
-it did go wrong once. `scripts/test-relations.js` records the incident in the
+it did go wrong once. `tests/test-relations.js` records the incident in the
 test that now prevents it:
 
 > llms.txt asserted that no language model produced any figure on the site,
@@ -78,7 +78,7 @@ Read the arrows, because they are the argument. Measured facts flow *into* the
 generated side: the article prompt is handed the call graph, the entry points,
 the responsibility map and the measured analysis block. Nothing flows back. A
 model may arrange, explain and judge; it may not supply a figure, a file path,
-an edge or a command. The prompt in `scripts/lib-article.js` says so directly:
+an edge or a command. The prompt in `src/lib/lib-article.js` says so directly:
 
 > Never invent an edge, a path or an effect that is not in those blocks; where
 > one is absent, say the wiring has not been mapped for this repository yet.
@@ -103,7 +103,7 @@ it is tagged `INFERRED`, the model is named, and `llms.txt` tells a reader to
 
 An axis with no module-level pass does not score well by default and does not
 score badly either. It takes a neutral score and raises a flag. In
-`scripts/lib-grade.js`:
+`src/lib/lib-grade.js`:
 
 ```js
 if (!t || !t.modules || t.modules < MIN_MODULES) {
@@ -120,7 +120,7 @@ between 'this is a C' and 'this is a C on incomplete evidence'."*
 
 ### 2. Unaudited is not a grade
 
-`scripts/build-grade.js` skips rather than scores:
+`src/stages/build-grade.js` skips rather than scores:
 
 ```js
 const audit = hygiene[id];
@@ -153,7 +153,7 @@ corroborates the inferred one."*
 ### 4. Coverage is reported against the denominator that makes it true
 
 Stack edges do not cover the estate and the text never implies they do.
-`scripts/build-relations.js` interpolates the real denominator rather than
+`src/stages/build-relations.js` interpolates the real denominator rather than
 typing a number:
 
 ```js
@@ -181,7 +181,7 @@ repositories. An absent grade means not yet audited, not a bad grade."
 | Provenance repeats in every 1 KB kin file | the kin builder writes a `provenance` object per file | `test-relations.js`: `'a neighbourhood restates provenance for a reader who fetched only it'` |
 | The model supplies no figures | prompt prohibitions in `lib-article.js` | **not guarded by a test** - see below |
 | Coverage stated against its real denominator | `build-relations.js` interpolates `counts.withDeclaredDependencies` | **not directly guarded** - only the cluster count string is asserted against `llms.txt` |
-| No key-shaped string may be committed | `.githooks/pre-commit` gate 1, matched against staged content | the hook itself; it also runs every `scripts/test-*.js` before allowing a commit |
+| No key-shaped string may be committed | `.githooks/pre-commit` gate 1, matched against staged content | the hook itself; it also runs every `tests/test-*.js` before allowing a commit |
 
 ## Where the rules are stated but not enforced
 
@@ -220,7 +220,7 @@ at all.
 
 It matches staged content rather than the working tree, *"so a key cannot slip
 in via `git add -p` on a file that looks clean on disk"*, and it runs the whole
-test suite on any staged `scripts/*.js` - which is what turns every assertion in
+test suite on any staged `src/*.js` - which is what turns every assertion in
 the table above from documentation into a gate. The hook's own comment names the
 distinction: the unit tests *"existed but nothing ran them ... which makes them
 documentation, not guardrails."*

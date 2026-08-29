@@ -18,7 +18,7 @@ immediately and proceed while Track A moves files underneath it.
   [x] Five fail-open sites hardened: lib-article-version.js swallow,
       build-stats.js zero-suite scan, test-imports.js non-recursive walk,
       pre-commit empty glob, CI path filter
-  [x] scripts/lib-net.js - bounded concurrency + retry with backoff
+  [x] src/lib/lib-net.js - bounded concurrency + retry with backoff
   [x] Concurrency applied: update-forks (8-wide + updated_at gate),
       build-hygiene prefetch (6), build-osv (8), build-deps (6, sleeps dropped)
   [x] Two O(n^2) fixes in build-hygiene: ordered.includes, sizeOf scan
@@ -44,7 +44,7 @@ two hours.
            update-forks.js:345. Client sorts at read time.
   [ ] 1.3  search.json emits ids, not array positions     (D3)
            build-index.js:158-165 - decouples the index from sort order
-  [ ] 1.4  scripts/lib-json.js writeStable()              (D4)
+  [ ] 1.4  src/lib/lib-json.js writeStable()              (D4)
            sorted keys, indent, skip-write-if-unchanged with the timestamp
            masked. Roll across all 15 write sites.
   [ ] 1.5  Move `generated` timestamps to a sidecar       (D4)

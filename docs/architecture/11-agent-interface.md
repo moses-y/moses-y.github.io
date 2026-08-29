@@ -1,7 +1,7 @@
 # 11. The agent interface
 
 **Status:** DERIVED - every size and record key measured from the published files.
-**Sources:** `llms.txt`, `data/schema.json`, `scripts/lib-schema.js`, `scripts/build-index.js`, `scripts/test-relations.js`, `data/relations.json`, `data/index.json`, `data/search.json`, `data/clusters.json`, `data/clusters.md`, `data/grade-map.json`, `data/kin/1004131322.json`, `data/kin/1324517271.json`, `.claude/skills/query-repo-estate/SKILL.md`, `.claude/skills/query-repo-estate/estate.mjs`
+**Sources:** `llms.txt`, `data/schema.json`, `src/lib/lib-schema.js`, `src/stages/build-index.js`, `tests/test-relations.js`, `data/relations.json`, `data/index.json`, `data/search.json`, `data/clusters.json`, `data/clusters.md`, `data/grade-map.json`, `data/kin/1004131322.json`, `data/kin/1324517271.json`, `.claude/skills/query-repo-estate/SKILL.md`, `.claude/skills/query-repo-estate/estate.mjs`
 
 Glossa publishes its analysis of the estate as static files whose *shape* is the
 query interface. There is no API and no server. Every read below is a plain GET
@@ -40,7 +40,7 @@ file: `clusters.json` for records, `clusters.md` for the same 61 groups as prose
 
 ## Record encoding
 
-Records use single-letter keys. `scripts/lib-schema.js` declares them in a
+Records use single-letter keys. `src/lib/lib-schema.js` declares them in a
 `RECORD` map and `describe()` emits `data/schema.json` from that same map, so the
 key list and its documentation cannot drift; `build-index.js` writes the schema
 next to the index it describes, in the same function that writes the index.
@@ -158,8 +158,8 @@ sufficient to read the index, this tool breaks first - which is the point. And a
 numeric argument short-circuits `resolve()` entirely, so `kin 1324517271` never
 opens the index while `kin openwiki` must.
 
-`scripts/test-relations.js` treats the skill as a consumer that lives outside
-`scripts/` and would otherwise break silently. Under the heading "the skill can
+`tests/test-relations.js` treats the skill as a consumer that lives outside
+`src/` and would otherwise break silently. Under the heading "the skill can
 still read the files it ships against" it executes `estate.mjs ... --local`
 against the built data and asserts on the *output*, not the exit code, because
 the failure it was written for was reading `sim` where the kin files write

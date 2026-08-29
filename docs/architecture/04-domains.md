@@ -1,5 +1,5 @@
 **Status:** DERIVED - every figure read from the files listed below or computed from them.
-**Sources:** `scripts/lib-classify.js`, `scripts/test-classify.js`, `scripts/lib-relations.js`, `scripts/build-relations.js`, `scripts/lib-subprojects.js`, `data/relations.json`, `data/clusters.json`, `data/deps.json`, `data/kin/`, `forks.json`
+**Sources:** `src/lib/lib-classify.js`, `tests/test-classify.js`, `src/lib/lib-relations.js`, `src/stages/build-relations.js`, `src/lib/lib-subprojects.js`, `data/relations.json`, `data/clusters.json`, `data/deps.json`, `data/kin/`, `forks.json`
 
 # Domains, kinds and clusters
 
@@ -21,7 +21,7 @@ how they are counted.
 
 ## Classification
 
-`enrichFork` in `scripts/lib-classify.js` runs three derivations over the knowledge graph
+`enrichFork` in `src/lib/lib-classify.js` runs three derivations over the knowledge graph
 that the census pass already built for each repository.
 
 ```mermaid

@@ -161,9 +161,9 @@ Observed: `1` after the JavaScript chip, `1` after searching "agent".
 Offline stages. These read the committed `forks.json` and need no network or keys:
 
 ```bash
-node scripts/generate-blog-pages.js  # 1275 blog pages   ~0.2s
-node scripts/generate-rss.js         # feed.xml, atom.xml
-node scripts/build-stats.js          # stats.json
+node src/site/generate-blog-pages.js  # 1275 blog pages   ~0.2s
+node src/site/generate-rss.js         # feed.xml, atom.xml
+node src/stages/build-stats.js          # stats.json
 ```
 
 They rewrite tracked files. Reset after a smoke run:
@@ -178,7 +178,7 @@ embedding batches). Keep the batch small unless you actually want articles writt
 ```bash
 export GITHUB_TOKEN=$(gh auth token)
 source ~/.nvidia-api-key            # exports NVIDIA_API_KEY; never inline the key
-BATCH_SIZE=2 KG_BATCH_SIZE=0 node scripts/update-forks.js
+BATCH_SIZE=2 KG_BATCH_SIZE=0 node src/stages/update-forks.js
 ```
 
 It overwrites `forks.json`. `git checkout -- forks.json` to undo.

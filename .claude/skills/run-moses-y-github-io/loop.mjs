@@ -212,11 +212,12 @@ function probe(url, expr, waitSel) {
 
 if (withPipeline) {
   console.log('# pipeline');
-  for (const s of ['generate-blog-pages', 'generate-rss', 'build-stats', 'build-index']) {
+  for (const s of ['src/site/generate-blog-pages.js', 'src/site/generate-rss.js',
+                   'src/stages/build-stats.js', 'src/stages/build-index.js']) {
     const t0 = Date.now();
     try {
-      execFileSync('node', ['scripts/' + s + '.js'], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 300000 });
-      console.log(`  ok   ${s.padEnd(22)} ${Date.now() - t0}ms`);
+      execFileSync('node', [s], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 300000 });
+      console.log(`  ok   ${s.split('/').pop().padEnd(26)} ${Date.now() - t0}ms`);
     } catch (e) {
       console.log(`  FAIL ${s}: ${(e.stderr || '').toString().split('\n')[0]}`);
       process.exitCode = 1;

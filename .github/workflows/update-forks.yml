@@ -10,11 +10,8 @@ on:
     branches:
       - master
     paths:
-      # Recursive. A flat 'scripts/*.js' stops matching the moment a library
-      # moves into a subdirectory, and CI silently stops running on the edits
-      # that matter most.
-      - 'scripts/**/*.js'
-      - 'scripts/*.js'
+      - 'src/**/*.js'
+      - 'tests/**/*.js'
       - '.github/workflows/update-forks.yml'
 
 permissions:
@@ -56,12 +53,12 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           BATCH_SIZE: ${{ vars.BATCH_SIZE || '10' }}
           EMBED_MODEL: ${{ vars.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5' }}
-        run: node scripts/update-forks.js
+        run: node src/stages/update-forks.js
 
       - name: Generate blog pages and RSS feeds
         run: |
-          node scripts/generate-blog-pages.js
-          node scripts/generate-rss.js
+          node src/site/generate-blog-pages.js
+          node src/site/generate-rss.js
 
       - name: Code Brain — file structures (new repos) + deep analysis (budgeted)
         env:
@@ -75,41 +72,41 @@ jobs:
           note() { echo "$1" >> "$RUNNER_TEMP/failed-steps.txt"; echo "::error::$1 failed"; }
 
           # Fill file/folder structures for any repos added since last run.
-          node scripts/build-structure.js --limit 150 || note build-structure
+          node src/stages/build-structure.js --limit 150 || note build-structure
           # Deep static analysis, incremental: a budget per run so giants + new forks
           # get absorbed over successive cron passes. Bump --max-files over time to
           # let ever-larger repos qualify. Skips repos already analyzed.
-          node scripts/build-analyze.js --all --budget 40 --max-files 2500 || note build-analyze
+          node src/stages/build-analyze.js --all --budget 40 --max-files 2500 || note build-analyze
           # Recompute the honest hero stats (repos, languages, files, modules, findings).
-          node scripts/build-stats.js || note build-stats
+          node src/stages/build-stats.js || note build-stats
           # Dependency extraction + registry resolution, budgeted so a run costs a
           # bounded number of requests and the 934-repo backlog drains over time.
-          node scripts/build-deps.js --budget 120 --registry 150 || note build-deps
+          node src/stages/build-deps.js --budget 120 --registry 150 || note build-deps
           # Symbol layer via tree-sitter, all five languages. Wall-clock bounded:
           # ~10s per repo, so a 300s slice drains ~30 repos. The backlog is 863
           # after adding TypeScript, JavaScript, Go and Rust, and candidates are
           # interleaved by language so no single language starves the others.
-          node scripts/build-symbols.js --lang all --budget 60 --max-seconds 300 || note build-symbols
+          node src/stages/build-symbols.js --lang all --budget 60 --max-seconds 300 || note build-symbols
           # Read-side build: the lean index, the search index and a sitemap that
           # includes every article. Must run after the pages exist.
           # Code-health audit: one tree request per repo plus a bounded number of
           # raw reads, budgeted so a run has a predictable ceiling.
-          node scripts/build-hygiene.js --budget 80 --max-seconds 240 || note build-hygiene
+          node src/stages/build-hygiene.js --budget 80 --max-seconds 240 || note build-hygiene
           # Named advisories for the declared dependencies. api.osv.dev is
           # unauthenticated and batches 100 packages per request, so the whole
           # estate is about 60 requests; the advisory descriptions are the part
           # that is one request each, hence the separate budget.
-          node scripts/build-osv.js --budget 80 --details 150 || note build-osv
+          node src/stages/build-osv.js --budget 80 --details 150 || note build-osv
           # The grade: a pure join over hygiene, the deep analysis and the
           # advisories, so it costs nothing and must run after all three.
-          node scripts/build-grade.js || note build-grade
-          node scripts/build-index.js || note build-index
+          node src/stages/build-grade.js || note build-grade
+          node src/stages/build-index.js || note build-index
           # The relation layer reads the index build-index just wrote, so it is
           # last. It also writes llms.txt, which quotes counts from both.
-          node scripts/build-relations.js || note build-relations
+          node src/stages/build-relations.js || note build-relations
           # The banner is drawn from data/index.json, so it runs after the
           # index exists rather than redrawing last run's estate.
-          node scripts/build-banner.js || note build-banner
+          node src/site/build-banner.js || note build-banner
 
       - name: Commit and push changes
         run: |

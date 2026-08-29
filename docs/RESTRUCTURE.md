@@ -88,7 +88,7 @@ A broken `require` throws loudly and is easy to fix. These do not:
            .claude/skills/run-moses-y-github-io/SKILL.md:162-165,180 and loop.mjs:218
            (CONSTRUCTED path 'scripts/'+s+'.js' — grep for the script name misses it)
 - [ ] 1.16 README:109-117,131,137,150 and docs/architecture/*.md "Sources:" manifests
-- [ ] 1.17 CAREFUL: build-bundles.js:71 writes "Built by scripts/build-bundles.js"
+- [ ] 1.17 CAREFUL: build-bundles.js:71 writes "Built by src/site/build-bundles.js"
            INTO the generated bundle header, and --check string-compares against disk.
            Changing that string makes all three bundles report STALE and fails the
            hook. Same for lib-cluster-report.js:170, asserted on by test-relations.js.
