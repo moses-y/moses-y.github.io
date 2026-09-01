@@ -68,7 +68,7 @@ Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63.
 
 Crosses a domain boundary: 3 Agent Skills & Plugins, 2 Web & Interfaces, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is 66.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is 67. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is
 | everything-claude-code | Agent Skills & Plugins | JavaScript | B- 74.8 | 795 |
 | claude-code-router | Web & Interfaces | TypeScript | C- 56.3 | 352 |
 | agentic-flow | Web & Interfaces | TypeScript | C- 56.2 | 4455 |
-| career-ops | Systems & Infra | Go | C- 53.3 | 99 |
+| career-ops | Systems & Infra | Go | C- 54.2 | 99 |
 
 ### c004 - 5 repositories
 
