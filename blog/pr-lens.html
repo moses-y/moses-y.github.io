@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>September 3, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,27 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>Review code 100X faster. Lens draws every PR as animated architecture and data-flow diagrams, inside the pull request itself. Use it as a GitHub App, GitHub Action, CLI, or a skill for your coding agent</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Reviewing a pull request means reconstructing the system&#39;s architecture and data flow from a diff by hand. PR Lens removes that step: it draws the change as animated architecture and data-flow diagrams and posts them as a comment inside the PR, so a reviewer sees the blast radius before reading a line.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>PR Lens is a pnpm monorepo with five packages. <code>packages/cli</code> analyzes a PR (git, workspace, LLM providers), <code>packages/renderer</code> turns the change into SVG diagrams, <code>packages/schema</code> defines and validates the graph/patch/manifest formats, <code>packages/action</code> is the GitHub Action wrapper, and <code>packages/agent-skill</code> exposes it as a coding-agent skill (<code>SKILL.md</code>).</p>
+<p>The renderer produces architecture diagrams (blast radius) and animated data-flow sequences, with <code>&lt;details&gt;</code>-nested scoped views. It ships as a GitHub App, Action, CLI, or agent skill. 50 test files and golden SVG snapshots live under <code>packages/renderer/test/__goldens__</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>packages/cli/src/cli.ts</code>, which dispatches to commands (<code>analyze.ts</code>, <code>comment.ts</code>, <code>canvas.ts</code>, <code>render.ts</code>, <code>validate.ts</code>, <code>export.ts</code>). Analysis reads the repo through <code>git.ts</code> and <code>workspace.ts</code>, then sends the diff to an LLM provider — <code>providers/gemini.ts</code>, <code>providers/openai.ts</code>, or <code>providers/http.ts</code> — which returns a structured graph. <code>schema/src/graph.ts</code> validates it (12 modules depend on it), <code>renderer/src/index.ts</code> (Ca 8) drives layout (<code>layout/edges.ts</code>, <code>layout/architecture.ts</code>, <code>layout/dataflow.ts</code>) and SVG emission (<code>svg/architecture.ts</code>, <code>svg/dataflow.ts</code>), and <code>comment.ts</code> posts the result to GitHub.</p>
+<p>Three modules carry the widest blast radius: <code>cli/src/errors.ts</code> (19 importers), <code>cli/src/terminal.ts</code> (13), and <code>schema/src/graph.ts</code> (12) — all stable hubs, so churn there ripples widely. The providers form an import cycle (<code>providers/index.ts</code> ↔ <code>gemini.ts</code> ↔ <code>openai.ts</code>), making them harder to change in isolation. <code>renderer/src/svg/architecture.ts</code> imports 14 modules (instability 0.88), the least stable node.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p>Setup: <code>pnpm install</code> then <code>pnpm build</code> (root <code>package.json</code>; pnpm per <code>.npmrc</code>).</p>
+<p>Run the CLI via the <code>@coldtea/pr-lens-cli</code> binary — <code>npx @coldtea/pr-lens-cli</code> — with a subcommand such as <code>render</code> or <code>comment</code>; the entry point is <code>packages/cli/src/bin.ts</code>. Configuration lives in <code>pr-lens.config.json</code> (schema at <code>packages/schema/json-schema/config.schema.json</code>); provider keys are handled per provider module. The GitHub App route needs no API key or workflow file. Exact command flags aren&#39;t documented in the analyzed files — the README points to the npm page rather than spelling out invocations.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A team installs the GitHub App on a monorepo. Every push to a PR triggers a redraw: the bot comment shows the architecture blast radius (green new / amber changed / red gone), then an animated data-flow sequence of the changed path, then nested <code>&lt;details&gt;</code> views scoped to the new and retired paths. Reviewers scan the diagram before opening the diff.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<p>Static analysis (18 findings: 5 high, 13 medium) reports:</p>
+<ul><li><strong>High — import cycle</strong> — <code>cli/src/providers/index.ts</code>, <code>gemini.ts</code>, <code>openai.ts</code></li><li><strong>High — deep nesting (depth 9)</strong> — <code>cli/src/commands/canvas.ts</code>, <code>comment.ts</code></li><li><strong>High — duplicated code</strong>: 30 repeated 6-line blocks across 12 files, notably <code>renderer/src/svg/architecture.ts</code> and <code>svg/dataflow.ts</code></li><li><strong>Medium — hub modules</strong> — <code>cli/src/errors.ts</code>, <code>terminal.ts</code>, <code>schema/src/graph.ts</code></li><li><strong>Medium — oversized files</strong> — <code>renderer/src/layout/edges.ts</code> (842 lines), <code>docs/showcase/frame.ts</code>, <code>cli/test/canvas.test.ts</code></li><li><strong>Medium — high branching density</strong> — <code>cli/src/git.ts</code>, <code>workspace.ts</code>, <code>layout/edges.ts</code></li></ul>
+<p>SDLC gaps: no CI workflow exists, so nothing builds or tests on push; no Dependabot/Renovate across 6 manifests; <code>@types/node</code> pinned at ^20.19.0, six majors behind current. Tests, LICENSE, and lockfile are present; no committed secrets.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The package split is clean and the golden-SVG test suite is a strong asset. The main risks are the provider import cycle, the 842-line <code>edges.ts</code>, and the absence of any CI gate. Teams reviewing large PRs will get immediate value; the codebase needs a build pipeline before it&#39;s safe to extend.</p>
             </div>
 
             
@@ -109,8 +127,36 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 110, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_packages_cli_src_errors[&quot;errors&quot;]
+  n1_packages_cli_src_terminal[&quot;terminal&quot;]
+  n2_packages_schema_src_graph[&quot;graph&quot;]
+  n3_packages_renderer_src_design[&quot;design&quot;]
+  n4_ckages_renderer_src_geometry[&quot;geometry&quot;]
+  n5_ckages_schema_src_primitives[&quot;primitives&quot;]
+  n6_packages_renderer_src_text[&quot;text&quot;]
+  n7_packages_renderer_src_index[&quot;index&quot;]
+  n8_packages_cli_src_io[&quot;io&quot;]
+  n9_packages_schema_src_version[&quot;version&quot;]
+  n8_packages_cli_src_io --&gt; n0_packages_cli_src_errors
+  n2_packages_schema_src_graph --&gt; n5_ckages_schema_src_primitives
+  n5_ckages_schema_src_primitives --&gt; n9_packages_schema_src_version</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>1</strong> of 8 declared dependencies are a major version behind. Resolved 8 of 8 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>@types/node</code></td>
+                            <td>^20.19.0</td><td>26.2.0</td>
+                            <td class="beh">6 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
@@ -126,7 +172,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">108 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">6 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
