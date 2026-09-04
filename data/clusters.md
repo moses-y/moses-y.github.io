@@ -347,7 +347,7 @@ Keeper: **codex-security** (B, 75.3). Mean grade across the 3 audited members is
 | --- | --- | --- | --- | --- |
 | **codex-security** | Web & Interfaces | TypeScript | B 75.3 | 173 |
 | oh-my-codex | Web & Interfaces | TypeScript | B- 72.7 | 410 |
-| oh-my-openagent | Web & Interfaces | TypeScript | C 60.6 | 6746 |
+| oh-my-openagent | Web & Interfaces | TypeScript | C 60.5 | 6746 |
 
 ### c014 - 2 repositories
 
