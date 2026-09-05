@@ -88,7 +88,7 @@ Keeper: **AI-research-SKILLs** (B, 77.3). Mean grade across the 5 audited member
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **AI-research-SKILLs** | Agent Skills & Plugins | Python | B 77.3 | 306 |
-| ClaudeSkills | Agent Skills & Plugins | Python | B 76.5 | 197 |
+| ClaudeSkills | Agent Skills & Plugins | Python | B 76.4 | 197 |
 | startup-skill | Agent Skills & Plugins |  | B- 74.5 | 57 |
 | awesome-agent-skills | Knowledge & Content |  | B- 72 | 4 |
 | threejs-skills | Agent Skills & Plugins |  | C+ 67.1 | 11 |
@@ -128,7 +128,7 @@ Keeper: **Lead-Generation** (C, 61). Mean grade across the 3 audited members is 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 61 | 56 |
-| googlemaps-scraper | Knowledge & Content |  | C- 58.7 | 93 |
+| googlemaps-scraper | Knowledge & Content |  | C- 58.6 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 56.1 | 90 |
 
 ### c012 - 3 repositories
@@ -225,11 +225,11 @@ Keeper: **android-sms-gateway** (C-, 58.7). Mean grade across the 2 audited memb
 
 Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **terminal-browser** (C-, 50.8). Mean grade across the 2 audited members is 50.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **terminal-browser** (C-, 50.7). Mean grade across the 2 audited members is 50.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **terminal-browser** | Web & Interfaces | TypeScript | C- 50.8 | 219 |
+| **terminal-browser** | Web & Interfaces | TypeScript | C- 50.7 | 219 |
 | carbonyl | Systems & Infra | Rust | C- 50.1 | 105 |
 
 ### c046 - 2 repositories
@@ -258,11 +258,11 @@ Keeper: **OpenSandbox** (B-, 71.6). Mean grade across the 2 audited members is 6
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ghostapp** (C-, 56.7). Mean grade across the 2 audited members is 53. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ghostapp** (C-, 56.6). Mean grade across the 2 audited members is 53. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **ghostapp** | Systems & Infra | Rust | C- 56.7 | 249 |
+| **ghostapp** | Systems & Infra | Rust | C- 56.6 | 249 |
 | ghost-os | Mobile | Swift | D 49.4 | 51 |
 
 ### c055 - 2 repositories
@@ -736,4 +736,4 @@ Keeper: **awesome-agents** (C+, 68.1). Mean grade across the 2 audited members i
 
 ---
 
-Generated from data/clusters.json built 2026-09-04. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-09-05. Regenerate with `node src/stages/build-relations.js`.
