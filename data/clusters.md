@@ -97,13 +97,13 @@ Keeper: **AI-research-SKILLs** (B, 77.3). Mean grade across the 5 audited member
 
 Crosses a domain boundary: 3 AI & Data, 2 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **MegaMemory** (B, 79.4). Mean grade across the 5 audited members is 64.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **MegaMemory** (B, 79.3). Mean grade across the 5 audited members is 64. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **MegaMemory** | Web & Interfaces | TypeScript | B 79.4 | 44 |
+| **MegaMemory** | Web & Interfaces | TypeScript | B 79.3 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | B 75.3 | 208 |
-| memsearch | AI & Data | Python | C+ 65.3 | 201 |
+| memsearch | AI & Data | Python | C+ 65.2 | 201 |
 | mcp-memory-service | AI & Data | Python | C- 58.2 | 1147 |
 | memora | AI & Data | Python | D 42.1 | 50 |
 
@@ -123,11 +123,11 @@ Keeper: **local-voice-ai** (B-, 70.7). Mean grade across the 3 audited members i
 
 Crosses a domain boundary: 1 AI & Data, 1 Knowledge & Content, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **Lead-Generation** (C, 61). Mean grade across the 3 audited members is 58.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Lead-Generation** (C, 60.8). Mean grade across the 3 audited members is 58.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Lead-Generation** | AI & Data | Python | C 61 | 56 |
+| **Lead-Generation** | AI & Data | Python | C 60.8 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.6 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 56.1 | 90 |
 
@@ -309,7 +309,7 @@ Keeper: **Hyper-Extract** (B-, 72.9). Mean grade across the 4 audited members is
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Hyper-Extract** | AI & Data | Python | B- 72.9 | 449 |
-| graph_maker | AI & Data | Jupyter Notebook | C 63.1 | 16 |
+| graph_maker | AI & Data | Jupyter Notebook | C 62.9 | 16 |
 | knowledge_graph | AI & Data | Jupyter Notebook | C- 55.9 | 42 |
 | langextract | AI & Data | Python | C- 53.7 | 129 |
 
@@ -584,12 +584,12 @@ Keeper: **node-banana** (C+, 68.4). Mean grade across the 2 audited members is 6
 
 All 2 in AI & Data.
 
-Keeper: **shotgun** (C, 64.3). Mean grade across the 2 audited members is 63.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **shotgun** (C, 64.3). Mean grade across the 2 audited members is 63.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **shotgun** | AI & Data | Python | C 64.3 | 616 |
-| spec-kit | AI & Data | Python | C 62.1 | 482 |
+| spec-kit | AI & Data | Python | C 62 | 482 |
 
 ### c042 - 2 repositories
 
