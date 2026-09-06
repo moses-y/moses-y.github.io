@@ -58,8 +58,8 @@ Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63.
 | sharedcontext | Web & Interfaces | TypeScript | C 62.7 | 42 |
 | terminal-code | Web & Interfaces | TypeScript | C 61.1 | 134 |
 | sie | AI & Data | Python | C- 59.5 | 1847 |
-| OpenContext | Web & Interfaces | JavaScript | C- 56.4 | 242 |
 | whoami | Web & Interfaces | TypeScript | C- 56.2 | 316 |
+| OpenContext | Web & Interfaces | JavaScript | C- 56.2 | 242 |
 | anywhere-agents | AI & Data | Python | C- 55.8 | 291 |
 | opencode | Web & Interfaces | TypeScript | C- 53.5 | 2755 |
 | Maestro | Web & Interfaces | TypeScript | C- 53.3 | 1456 |
@@ -170,11 +170,11 @@ Keeper: **CodeGraphContext** (C-, 56.7). Mean grade across the 2 audited members
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **Website-downloader** (B-, 71.4). Mean grade across the 2 audited members is 64.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Website-downloader** (B-, 71.2). Mean grade across the 2 audited members is 64.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Website-downloader** | Web & Interfaces | JavaScript | B- 71.4 | 22 |
+| **Website-downloader** | Web & Interfaces | JavaScript | B- 71.2 | 22 |
 | pagesource | AI & Data | Python | C- 57.8 | 15 |
 
 ### c026 - 2 repositories
@@ -269,11 +269,11 @@ Keeper: **ghostapp** (C-, 56.6). Mean grade across the 2 audited members is 53. 
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **loop-engineering** (B, 79.6). Mean grade across the 2 audited members is 74.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **loop-engineering** (B, 79.5). Mean grade across the 2 audited members is 74.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **loop-engineering** | Agent Skills & Plugins | TypeScript | B 79.6 | 388 |
+| **loop-engineering** | Agent Skills & Plugins | TypeScript | B 79.5 | 388 |
 | loopy | Web & Interfaces | JavaScript | C+ 69.1 | 53 |
 
 ### c057 - 2 repositories
