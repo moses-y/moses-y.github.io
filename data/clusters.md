@@ -274,7 +274,7 @@ Keeper: **loop-engineering** (B, 79.5). Mean grade across the 2 audited members 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **loop-engineering** | Agent Skills & Plugins | TypeScript | B 79.5 | 388 |
-| loopy | Web & Interfaces | JavaScript | C+ 69.1 | 53 |
+| loopy | Web & Interfaces | JavaScript | C+ 69 | 53 |
 
 ### c057 - 2 repositories
 
@@ -375,11 +375,11 @@ Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51.8). Me
 
 All 2 in AI & Data.
 
-Keeper: **daily_stock_analysis** (C-, 58.4). Mean grade across the 2 audited members is 58.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **daily_stock_analysis** (C-, 58.3). Mean grade across the 2 audited members is 58.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **daily_stock_analysis** | AI & Data | Python | C- 58.4 | 925 |
+| **daily_stock_analysis** | AI & Data | Python | C- 58.3 | 925 |
 | retail-analytics | AI & Data | Python | C- 58 | 118 |
 
 ### c017 - 2 repositories
