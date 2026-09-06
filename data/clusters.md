@@ -26,9 +26,9 @@ Keeper: **openskills** (B+, 82.5). Mean grade across the 15 audited members is 7
 | --- | --- | --- | --- | --- |
 | **openskills** | Web & Interfaces | TypeScript | B+ 82.5 | 94 |
 | Grafanaskills | Agent Skills & Plugins | Shell | B 78.8 | 95 |
-| skillsz | Agent Skills & Plugins | Shell | B 76.9 | 51 |
+| skillsz | Agent Skills & Plugins | Shell | B 76.8 | 51 |
 | lich-skills | Agent Skills & Plugins | Shell | B 75.6 | 46 |
-| text-to-cad | Agent Skills & Plugins | JavaScript | B 75.5 | 1663 |
+| text-to-cad | Agent Skills & Plugins | JavaScript | B 75.4 | 1663 |
 | mercury-agent-skills | Web & Interfaces | JavaScript | B 75.3 | 151 |
 | asm | Web & Interfaces | TypeScript | B 75.2 | 402 |
 | skills | Web & Interfaces | TypeScript | B- 72.1 | 67 |
@@ -49,7 +49,7 @@ Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **openwiki** | Web & Interfaces | TypeScript | B+ 82.7 | 218 |
-| looperators | Web & Interfaces | TypeScript | B 78.2 | 294 |
+| looperators | Web & Interfaces | TypeScript | B 78.1 | 294 |
 | magnitude | Web & Interfaces | TypeScript | C+ 67.9 | 1862 |
 | zero-agent | Systems & Infra | Go | C+ 67.2 | 1438 |
 | t1code | Web & Interfaces | TypeScript | C 64.9 | 600 |
@@ -551,11 +551,11 @@ Keeper: **OpenLLM** (B-, 74.3). Mean grade across the 2 audited members is 65.7.
 
 All 2 in Web & Interfaces.
 
-Keeper: **agent-orchestrator** (B, 78.4). Mean grade across the 2 audited members is 70.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **agent-orchestrator** (B, 78.3). Mean grade across the 2 audited members is 70.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **agent-orchestrator** | Web & Interfaces | TypeScript | B 78.4 | 315 |
+| **agent-orchestrator** | Web & Interfaces | TypeScript | B 78.3 | 315 |
 | dmux | Web & Interfaces | TypeScript | C 62.3 | 794 |
 
 ### c038 - 2 repositories
@@ -672,11 +672,11 @@ Keeper: **DeepTutor** (C-, 59). Mean grade across the 2 audited members is 50.1.
 
 All 2 in Web & Interfaces.
 
-Keeper: **atomic-mail-agentic** (B-, 71). Mean grade across the 2 audited members is 70. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **atomic-mail-agentic** (B-, 70.9). Mean grade across the 2 audited members is 70. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 71 | 424 |
+| **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.9 | 424 |
 | mails | Web & Interfaces | TypeScript | C+ 69 | 91 |
 
 ### c054 - 2 repositories
@@ -699,7 +699,7 @@ Keeper: **kimi-k3-in-c** (C+, 69.3). Mean grade across the 2 audited members is 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **kimi-k3-in-c** | AI & Data | Python | C+ 69.3 | 282 |
-| smol-kimi-k3 | AI & Data | Python | C- 56.3 | 22 |
+| smol-kimi-k3 | AI & Data | Python | C- 56.2 | 22 |
 
 ### c059 - 2 repositories
 
