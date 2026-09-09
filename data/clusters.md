@@ -170,12 +170,12 @@ Keeper: **CodeGraphContext** (C-, 56.6). Mean grade across the 2 audited members
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **Website-downloader** (B-, 71.2). Mean grade across the 2 audited members is 64.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Website-downloader** (B-, 71.2). Mean grade across the 2 audited members is 64.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Website-downloader** | Web & Interfaces | JavaScript | B- 71.2 | 22 |
-| pagesource | AI & Data | Python | C- 57.8 | 15 |
+| pagesource | AI & Data | Python | C- 57.6 | 15 |
 
 ### c026 - 2 repositories
 
@@ -186,7 +186,7 @@ Keeper: **macrodata** (C+, 65.4). Mean grade across the 2 audited members is 63.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **macrodata** | Agent Skills & Plugins | TypeScript | C+ 65.4 | 51 |
-| claude-supermemory | Web & Interfaces | JavaScript | C 62.2 | 39 |
+| claude-supermemory | Web & Interfaces | JavaScript | C 62.1 | 39 |
 
 ### c031 - 2 repositories
 
@@ -329,13 +329,13 @@ Keeper: **Manta** (B+, 82.2). Mean grade across the 3 audited members is 65.6. E
 
 All 3 in Knowledge & Content.
 
-Keeper: **llm-engineer-toolkit** (C-, 56). Mean grade across the 3 audited members is 55.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **llm-engineer-toolkit** (C-, 56). Mean grade across the 3 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **llm-engineer-toolkit** | Knowledge & Content |  | C- 56 | 5 |
 | llm-internals | Knowledge & Content |  | C- 55.7 | 4 |
-| awesome-agent-learning | Knowledge & Content |  | C- 54.4 | 4 |
+| awesome-agent-learning | Knowledge & Content |  | C- 54.3 | 4 |
 
 ### c011 - 3 repositories
 
@@ -402,7 +402,7 @@ Keeper: **maplibre-gl-usgs-lidar** (C+, 66.8). Mean grade across the 2 audited m
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.8 | 44 |
-| maplibre-gl-lidar | Web & Interfaces | TypeScript | C+ 65.1 | 69 |
+| maplibre-gl-lidar | Web & Interfaces | TypeScript | C+ 65 | 69 |
 
 ### c019 - 2 repositories
 
@@ -430,22 +430,22 @@ Keeper: **iot-projects** (C, 62.9). Mean grade across the 2 audited members is 6
 
 All 2 in Web & Interfaces.
 
-Keeper: **BeautySmart** (C+, 66.8). Mean grade across the 2 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **BeautySmart** (C+, 66.7). Mean grade across the 2 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **BeautySmart** | Web & Interfaces | PHP | C+ 66.8 | 6221 |
-| CRM-laravel | Web & Interfaces | PHP | D 43.9 | 320 |
+| **BeautySmart** | Web & Interfaces | PHP | C+ 66.7 | 6221 |
+| CRM-laravel | Web & Interfaces | PHP | D 43.8 | 320 |
 
 ### c024 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **AgenticTrading** (C, 61.4). Mean grade across the 2 audited members is 57.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AgenticTrading** (C, 61.3). Mean grade across the 2 audited members is 57.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **AgenticTrading** | AI & Data | Python | C 61.4 | 539 |
+| **AgenticTrading** | AI & Data | Python | C 61.3 | 539 |
 | TradingAgents | AI & Data | Python | C- 53.5 | 73 |
 
 ### c025 - 2 repositories
