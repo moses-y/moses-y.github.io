@@ -20,11 +20,11 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 7 Agent Skills & Plugins, 5 Web & Interfaces, 3 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **openskills** (B+, 82.5). Mean grade across the 15 audited members is 70.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.4). Mean grade across the 15 audited members is 70.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 82.5 | 94 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 82.4 | 94 |
 | Grafanaskills | Agent Skills & Plugins | Shell | B 78.7 | 95 |
 | skillsz | Agent Skills & Plugins | Shell | B 76.8 | 51 |
 | lich-skills | Agent Skills & Plugins | Shell | B 75.4 | 46 |
@@ -83,11 +83,11 @@ Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is
 
 Crosses a domain boundary: 4 Agent Skills & Plugins, 1 Knowledge & Content. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **AI-research-SKILLs** (B, 77.3). Mean grade across the 5 audited members is 73.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AI-research-SKILLs** (B, 77.2). Mean grade across the 5 audited members is 73.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **AI-research-SKILLs** | Agent Skills & Plugins | Python | B 77.3 | 306 |
+| **AI-research-SKILLs** | Agent Skills & Plugins | Python | B 77.2 | 306 |
 | ClaudeSkills | Agent Skills & Plugins | Python | B 76.4 | 197 |
 | startup-skill | Agent Skills & Plugins |  | B- 74.5 | 57 |
 | awesome-agent-skills | Knowledge & Content |  | B- 72 | 4 |
@@ -452,12 +452,12 @@ Keeper: **AgenticTrading** (C, 61.4). Mean grade across the 2 audited members is
 
 All 2 in Knowledge & Content.
 
-Keeper: **claude-code-system-prompts** (C+, 65.9). Mean grade across the 2 audited members is 61.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **claude-code-system-prompts** (C+, 65.9). Mean grade across the 2 audited members is 61.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **claude-code-system-prompts** | Knowledge & Content |  | C+ 65.9 | 31 |
-| system-prompts-and-models-of-ai-tools | Knowledge & Content |  | C- 57.4 | 106 |
+| system-prompts-and-models-of-ai-tools | Knowledge & Content |  | C- 57.3 | 106 |
 
 ### c027 - 2 repositories
 
