@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>September 10, 2026</span>
-                    <span>2 min read</span>
+                    <span>5 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,44 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>designing multiagent systems is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repository is a portfolio of five self‑contained projects that teach how to build LLM‑enabled multi‑agent systems from scratch. The core framework <strong>PicoAgents</strong> (280 files, 250 code files) is the primary teaching artifact, but the code base also contains many examples, course materials, and research snippets. Because the projects are meant to illustrate patterns, the engineering practices that surround them are thin: there is no CI/CD pipeline, no lockfile, and only minimal tooling guardrails.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><strong>PicoAgents</strong> (<code>picoagents/</code>) is a from‑scratch multi‑agent framework that implements agent reasoning loops, orchestration patterns, and utility components. Key modules and their import impact:</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th class="num">Importers (Ca)</th><th class="num">Imports (Ce)</th><th>Instability</th></tr></thead><tbody><tr><td><code>picoagents/src/picoagents/types</code></td><td class="num">53</td><td class="num">2</td><td>0.04 (in cycle)</td></tr><tr><td><code>picoagents/src/picoagents/messages</code></td><td class="num">39</td><td class="num">1</td><td>0.03 (in cycle)</td></tr><tr><td><code>picoagents/src/picoagents/agents/__init__.py</code></td><td class="num">0</td><td class="num">17</td><td>1 (root of cycle)</td></tr><tr><td><code>picoagents/src/picoagents/_component_config</code></td><td class="num">23</td><td class="num">0</td><td>0</td></tr><tr><td><code>picoagents/src/picoagents/_cancellation_token</code></td><td class="num">18</td><td class="num">0</td><td>0</td></tr><tr><td><code>picoagents/src/picoagents/agents/_base</code></td><td class="num">6</td><td class="num">11</td><td>0.65 (in cycle)</td></tr><tr><td><code>picoagents/src/picoagents/llm/__init__</code></td><td class="num">13</td><td class="num">4</td><td>0.24</td></tr><tr><td><code>picoagents/src/picoagents/eval/__init__</code></td><td class="num">7</td><td class="num">9</td><td>0.56</td></tr></tbody></table></div>
+<p>The import graph contains <strong>374 internal modules</strong> and <strong>471 import edges</strong>, with <strong>22 modules</strong> residing in circular dependencies. The three hub modules above (<code>types.py</code>, <code>messages.py</code>, <code>agents/__init__.py</code>) are each imported by &gt;30 other modules, giving them a high blast radius; a change there ripples across the whole framework.</p>
+<p>Other notable projects:</p>
+<ul><li><strong>examples/</strong> (112 files) – 78 code files, 7 data files; contains hello‑world demos for AutoGen, LangGraph, Semantic Kernel, and other frameworks.</li><li><strong>course/</strong> (107 files) – 40 code files, 50 data files; sample book‑generator, deep‑research, and investment‑agent implementations.</li><li><strong>code_along/</strong> (6 files) – step‑by‑step notebooks (ch04_v1‑v4) that walk through agent memory, tools, and streaming.</li><li><strong>research/</strong> (31 files) – 4 code files, 17 data files; miscellaneous experiments.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution typically starts at one of the entry‑point scripts listed in the repo metadata, e.g.:</p>
+<ul><li><code>course/samples/hello_world/autogen_core/app.py</code> – runs a minimal AutoGen core demo.</li><li><code>course/samples/hello_world/autogen_agentchat/app.py</code> – launches an AutoGen agent‑chat example.</li><li><code>course/samples/hello_world/agent_framework/app.py</code> – a generic framework scaffold.</li></ul>
+<p>Each entry point imports from <code>picoagents</code> (e.g., <code>from picoagents.src.picoagents.agents import …</code>) and from the chosen LLM backend (OpenAI, Anthropic, etc.). The framework’s control flow goes: <strong>entry → agent loop (<code>picoagents/src/picoagents/workflow/</code>) → LLM call (<code>picoagents/src/picoagents/llm/__init__</code>) → tool execution (<code>picoagents/src/picoagents/tools/_base.py</code>) → result aggregation</strong>. Because of the import cycles, any modification to <code>types.py</code> or <code>messages.py</code> must consider the downstream dependents (53 and 39 importers respectively) and the circular path through <code>agents/__init__.py</code>.</p>
+<p>The <strong>code‑health audit</strong> highlights two high‑severity issues:</p>
+<ul><li><strong>No lockfile</strong> beside <code>picoagents/pyproject.toml</code> – the manifest has no pinned dependencies, so installed transitive versions can drift between development and production.</li><li><strong>No CI configuration</strong> – 299 source files are never built or tested automatically, meaning a broken change can merge unseen.</li></ul>
+<p>Medium‑severity findings include the absence of Dependabot/Renovate, large JSON data blobs (&gt;5 MB) in <code>examples/workflows/yc_analysis/yc_data_test/companies.json</code>, and an oversized middleware file (<code>picoagents/src/picoagents/_middleware.py</code> at 665 lines).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong> (inferred from present files):</p>
+<pre data-lang="bash"><code># Clone the repository
+git clone https://github.com/moses-y/designing-multiagent-systems.git
+cd designing-multiagent-systems
+
+# Install the core framework and its dependencies
+pip install -r course/requirements.txt   # pins the picoagents stack
+# Optional: install extra demo deps
+pip install -r course/samples/hello_world/autogen_core/requirements.txt</code></pre>
+<p><strong>Configuration</strong> – environment variables for LLM keys are expected in a <code>.env</code> file at the repo root (the README mentions “set your OpenAI API key”). No dedicated config file exists beyond the <code>requirements.txt</code> manifests.</p>
+<p><strong>Running a demo</strong> – to launch the hello‑world AutoGen core example:</p>
+<pre data-lang="bash"><code>python course/samples/hello_world/autogen_core/app.py</code></pre>
+<p>The script creates a simple agent that replies to a user prompt, demonstrates the reasoning loop, and writes a <code>results.json</code> file.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>The patterns illustrated here (workflow‑driven orchestration, explicit message passing, agent‑level cancellation) map directly onto production systems that need deterministic agent pipelines, e.g., a customer‑support triage bot that routes queries through a classifier → retriever → response generator. The <strong>book‑generator</strong> sample (<code>course/samples/book_generator/autogen_core/app.py</code>) shows how to chain multiple agents to produce a PDF‑ready manuscript, a pattern reusable for report‑generation or data‑synthesis services.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>HIGH</strong> – Commit a lockfile beside the manifest (<code>picoagents/pyproject.toml</code>). Without it, installed transitive dependencies can differ between test and ship, allowing malicious patches to reach production unnoticed.</li><li><strong>HIGH</strong> – Add a CI workflow that builds and tests the repository on every push and pull request. Currently no <code>.github/workflows</code> exists.</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate for the 15 manifests; without a bot, security advisories remain unpatched until a manual audit.</li><li><strong>MEDIUM</strong> – Move the large JSON blobs (<code>companies.json</code> 16.6 MB, <code>yc_agents.json</code> 6.8 MB) to Git LFS or external object storage; they inflate clone size and CI checkout time.</li><li><strong>LOW</strong> – Add project convention files (<code>.editorconfig</code>, <code>.gitattributes</code> with <code>text=auto eol=lf</code>, and a formatter config such as <code>black</code>/<code>ruff</code> for Python) to enforce consistent editor behavior across contributors.</li></ul>
+<p><em>(All findings are deterministic outputs of the static analysis pipeline; no opinion has been added.)</em></p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repository is a well‑structured teaching collection: PicoAgents provides a transparent, from‑scratch multi‑agent framework, and the accompanying examples cover major LLM orchestration tools (AutoGen, LangGraph, Semantic Kernel). However, the engineering guardrails are minimal—no CI, no lockfile, and oversized data files increase operational overhead. It is best suited for learners, prototyping, or as a reference implementation where the user can accept the current lack of automated testing and dependency pinning. Teams looking for production‑ready, out‑of‑the‑box multi‑agent infrastructure will need to add the missing CI/CD, lockfile, and data‑management practices.</p>
             </div>
 
             
@@ -109,8 +144,41 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 374, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_oagents_src_picoagents_types[&quot;types&quot;]
+  n1_ents_src_picoagents_messages[&quot;messages&quot;]
+  n2_picoagents__component_config[&quot;_component_config&quot;]
+  n3_coagents__cancellation_token[&quot;_cancellation_token&quot;]
+  n4__src_picoagents_llm___init__[&quot;__init__&quot;]
+  n5_c_picoagents_agents___init__[&quot;__init__&quot;]
+  n6_s_src_picoagents_tools__base[&quot;_base&quot;]
+  n7_picoagents_termination__base[&quot;_base&quot;]
+  n8_gents_src_picoagents_context[&quot;context&quot;]
+  n9_agents_workflow_core__models[&quot;_models&quot;]
+  n8_gents_src_picoagents_context --&gt; n1_ents_src_picoagents_messages
+  n1_ents_src_picoagents_messages --&gt; n0_oagents_src_picoagents_types
+  n7_picoagents_termination__base --&gt; n2_picoagents__component_config
+  n7_picoagents_termination__base --&gt; n1_ents_src_picoagents_messages
+  n7_picoagents_termination__base --&gt; n0_oagents_src_picoagents_types
+  n6_s_src_picoagents_tools__base --&gt; n2_picoagents__component_config
+  n6_s_src_picoagents_tools__base --&gt; n0_oagents_src_picoagents_types
+  n6_s_src_picoagents_tools__base --&gt; n3_coagents__cancellation_token
+  n6_s_src_picoagents_tools__base --&gt; n1_ents_src_picoagents_messages
+  n0_oagents_src_picoagents_types --&gt; n1_ents_src_picoagents_messages
+  n0_oagents_src_picoagents_types --&gt; n8_gents_src_picoagents_context
+  classDef cyc stroke:#ef4444,stroke-width:2px;
+  class n0_oagents_src_picoagents_types,n1_ents_src_picoagents_messages,n5_c_picoagents_agents___init__,n7_picoagents_termination__base,n8_gents_src_picoagents_context cyc;</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">11 declared dependencies, none a major version behind. Resolved 11 of 11 against the registry.</p>
+                    
+                </div>
 
                 
                 <div class="an-block">
@@ -126,7 +194,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">2</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">1</span></div></div><div class="finding high"><div class="head"><span class="ttl">Commit a lockfile beside the manifest</span><span class="chip">high</span></div><div class="loc">picoagents/pyproject.toml</div><div class="ev">manifest with no lockfile in scope</div><div class="ev">An unlocked range means the artifact you tested and the artifact you ship can contain different transitive code, so a malicious patch release reaches production with no diff.</div><div class="rec"><b>Fix:</b> Run the package manager once and commit the generated lockfile.</div></div><div class="finding high"><div class="head"><span class="ttl">Add a workflow that builds and tests this repository</span><span class="chip">high</span></div><div class="ev">299 source files, no CI configuration</div><div class="ev">Every change merges with nobody having run the build once, which across this estate is 499 repositories.</div><div class="rec"><b>Fix:</b> Add a workflow running the project build and test command on push and pull_request.</div></div><div class="finding medium"><div class="head"><span class="ttl">Enable Dependabot or Renovate</span><span class="chip">medium</span></div><div class="ev">15 manifest(s), no update bot configured</div><div class="ev">Without a bot a published advisory sits unpatched until someone audits by hand, which across 1,322 repositories means never.</div><div class="rec"><b>Fix:</b> Commit .github/dependabot.yml covering the repo ecosystems plus github-actions.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">5 occurrences</span></div><div class="loc">examples/workflows/yc_analysis/yc_data_test/companies.json</div><div class="ev">5 blobs over 5MB: companies.json 16.6MB, companies.json 16.6MB, yc_agents.json 6.8MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><div class="finding low"><div class="head"><span class="ttl">Add the repository convention files this project lacks</span><span class="chip">low</span><span class="rankchip">3 occurrences</span></div><div class="ev">missing .editorconfig, .gitattributes, a formatter config</div><div class="ev">Without them one contributor's editor writes tabs into a Python file, a shell script commits with CRLF and fails in the container, and a notebook diff is unreviewable.</div><div class="rec"><b>Fix:</b> Add .editorconfig, .gitattributes with text=auto eol=lf, and a formatter config.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
