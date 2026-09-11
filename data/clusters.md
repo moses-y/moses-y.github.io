@@ -1,13 +1,13 @@
 # Clusters, in prose
 
-> 61 groups covering 167 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
+> 41 groups covering 98 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
 >
-> **These groupings are INFERRED.** They come from cosine distance between neural embeddings, not from anything measured in a tree. Density is a stronger claim than the connected components this used previously - a bridge repository no longer welds two unrelated neighbourhoods together - but a group of 15 still means 15 closely related projects, not 15 copies of one. Read a large group as a thread to pull, never as a list of duplicates to delete.
+> **These groupings are INFERRED.** They come from cosine distance between neural embeddings, not from anything measured in a tree. Density is a stronger claim than the connected components this used previously - a bridge repository no longer welds two unrelated neighbourhoods together - but a group of 4 still means 4 closely related projects, not 4 copies of one. Read a large group as a thread to pull, never as a list of duplicates to delete.
 
 ## What the numbers say
 
-- 22 of the 61 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
-- All 167 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
+- 14 of the 41 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
+- All 98 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
 ## How to use this
@@ -16,179 +16,82 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 ## Groups that cross a domain
 
-### c001 - 15 repositories
+### c001 - 4 repositories
 
-Crosses a domain boundary: 7 Agent Skills & Plugins, 5 Web & Interfaces, 3 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 2 AI & Data, 2 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **openskills** (B+, 82.4). Mean grade across the 15 audited members is 70.3. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 82.4 | 94 |
-| Grafanaskills | Agent Skills & Plugins | Shell | B 78.7 | 95 |
-| skillsz | Agent Skills & Plugins | Shell | B 76.8 | 51 |
-| lich-skills | Agent Skills & Plugins | Shell | B 75.4 | 46 |
-| text-to-cad | Agent Skills & Plugins | JavaScript | B 75.4 | 1663 |
-| mercury-agent-skills | Web & Interfaces | JavaScript | B 75.3 | 151 |
-| asm | Web & Interfaces | TypeScript | B 75.2 | 402 |
-| skills | Web & Interfaces | TypeScript | B- 72 | 67 |
-| agentskills | Web & Interfaces | JavaScript | B- 71.4 | 187 |
-| ai-design-skills | Agent Skills & Plugins |  | B- 71.1 | 4 |
-| best-practices | Agent Skills & Plugins |  | B- 70.9 | 23 |
-| agent-skills | Agent Skills & Plugins | Shell | C+ 68.5 | 56 |
-| dbt-agent-skills | AI & Data | Python | C+ 68 | 123 |
-| SkillNet | AI & Data | Python | C- 54.9 | 380 |
-| OpenSpace | AI & Data | Python | F 38.4 | 1310 |
-
-### c002 - 15 repositories
-
-Crosses a domain boundary: 12 Web & Interfaces, 2 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **openwiki** (B+, 82.7). Mean grade across the 15 audited members is 63. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenHands** (B-, 73.2). Mean grade across the 4 audited members is 60.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openwiki** | Web & Interfaces | TypeScript | B+ 82.7 | 218 |
-| looperators | Web & Interfaces | TypeScript | B 78.1 | 294 |
-| magnitude | Web & Interfaces | TypeScript | C+ 67.9 | 1862 |
-| zero-agent | Systems & Infra | Go | C+ 67.2 | 1438 |
-| t1code | Web & Interfaces | TypeScript | C 64.8 | 600 |
-| vscode | Web & Interfaces | TypeScript | C 63.4 | 9809 |
-| sandbox-agent | Web & Interfaces | TypeScript | C 63.3 | 785 |
-| sharedcontext | Web & Interfaces | TypeScript | C 62.6 | 42 |
-| terminal-code | Web & Interfaces | TypeScript | C 61.1 | 134 |
-| sie | AI & Data | Python | C- 59.5 | 1847 |
-| OpenContext | Web & Interfaces | JavaScript | C- 56.2 | 242 |
-| whoami | Web & Interfaces | TypeScript | C- 56 | 316 |
-| anywhere-agents | AI & Data | Python | C- 55.8 | 291 |
-| opencode | Web & Interfaces | TypeScript | C- 53.4 | 2755 |
-| Maestro | Web & Interfaces | TypeScript | C- 53.2 | 1456 |
+| **OpenHands** | AI & Data | Python | B- 73.2 | 2658 |
+| OpenJarvis | AI & Data | Python | C+ 68.6 | 1742 |
+| Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59.2 | 1548 |
+| learn-anything.xyz | Web & Interfaces | TypeScript | D 42.3 | 209 |
 
-### c003 - 6 repositories
+### c002 - 4 repositories
 
-Crosses a domain boundary: 3 Agent Skills & Plugins, 2 Web & Interfaces, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 6 audited members is 67. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C+, 65.1). Mean grade across the 4 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.3 | 212 |
-| marketplace | Agent Skills & Plugins | Shell | B 78.3 | 351 |
-| everything-claude-code | Agent Skills & Plugins | JavaScript | B- 74.6 | 795 |
-| claude-code-router | Web & Interfaces | TypeScript | C- 56.2 | 352 |
-| agentic-flow | Web & Interfaces | TypeScript | C- 56.1 | 4455 |
-| career-ops | Systems & Infra | Go | C- 54.2 | 99 |
+| **stenoai** | AI & Data | Python | C+ 65.1 | 62 |
+| hyprnote | Systems & Infra | Rust | C 61.9 | 3671 |
+| murmure | Systems & Infra | Rust | C- 50.9 | 435 |
+| meetily | Systems & Infra | Rust | D 43.4 | 509 |
 
-### c004 - 5 repositories
+### c003 - 4 repositories
 
-Crosses a domain boundary: 4 Agent Skills & Plugins, 1 Knowledge & Content. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 2 AI & Data, 1 Knowledge & Content, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **AI-research-SKILLs** (B, 77.2). Mean grade across the 5 audited members is 73.4. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **AI-research-SKILLs** | Agent Skills & Plugins | Python | B 77.2 | 306 |
-| ClaudeSkills | Agent Skills & Plugins | Python | B 76.4 | 197 |
-| startup-skill | Agent Skills & Plugins |  | B- 74.5 | 57 |
-| awesome-agent-skills | Knowledge & Content |  | B- 72 | 4 |
-| threejs-skills | Agent Skills & Plugins |  | C+ 67.1 | 11 |
-
-### c005 - 5 repositories
-
-Crosses a domain boundary: 3 AI & Data, 2 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **MegaMemory** (B, 79.3). Mean grade across the 5 audited members is 64. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **MegaMemory** | Web & Interfaces | TypeScript | B 79.3 | 44 |
-| agentmemory | Web & Interfaces | TypeScript | B 75.2 | 208 |
-| memsearch | AI & Data | Python | C+ 65.2 | 201 |
-| mcp-memory-service | AI & Data | Python | C- 58.1 | 1147 |
-| memora | AI & Data | Python | D 42 | 50 |
-
-### c009 - 3 repositories
-
-Crosses a domain boundary: 2 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **local-voice-ai** (B-, 70.7). Mean grade across the 3 audited members is 58.4. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **local-voice-ai** | Web & Interfaces | TSX | B- 70.7 | 100 |
-| speech-to-speech | AI & Data | Python | C- 54.9 | 70 |
-| VoiceAI | Web & Interfaces | TSX | D 49.7 | 358 |
-
-### c010 - 3 repositories
-
-Crosses a domain boundary: 1 AI & Data, 1 Knowledge & Content, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **Lead-Generation** (C, 60.8). Mean grade across the 3 audited members is 58.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Lead-Generation** (C, 60.8). Mean grade across the 4 audited members is 57. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.8 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.6 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 56 | 90 |
+| Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
 
-### c012 - 3 repositories
+### c004 - 4 repositories
 
-Crosses a domain boundary: 2 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 3 Web & Interfaces, 1 Agent Skills & Plugins. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **iwe** (C+, 69.2). Mean grade across the 3 audited members is 62.4. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **iwe** | Systems & Infra | Rust | C+ 69.2 | 248 |
-| MemMachine | AI & Data | Python | C 62.3 | 706 |
-| shodh-memory | Systems & Infra | Rust | C- 55.8 | 305 |
-
-### c013 - 3 repositories
-
-Crosses a domain boundary: 2 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **postgres** (C+, 65.3). Mean grade across the 3 audited members is 58.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **obsidian-mind** (B+, 80.4). Mean grade across the 4 audited members is 78.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **postgres** | Systems & Infra | C | C+ 65.3 | 7656 |
-| git | Systems & Infra | Shell | C- 59.4 | 4739 |
-| node | Web & Interfaces | JavaScript | D 49.9 | 48185 |
+| **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.4 | 187 |
+| open-second-brain | Web & Interfaces | TypeScript | B 79.9 | 2597 |
+| MegaMemory | Web & Interfaces | TypeScript | B 79.3 | 44 |
+| agentmemory | Web & Interfaces | TypeScript | B 75.2 | 208 |
 
-### c020 - 2 repositories
+### c011 - 3 repositories
 
-Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **CodeGraphContext** (C-, 56.6). Mean grade across the 2 audited members is 53.7. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **CodeGraphContext** | AI & Data | Python | C- 56.6 | 981 |
-| codegraph-rust | Systems & Infra | Rust | C- 50.7 | 369 |
-
-### c023 - 2 repositories
-
-Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **Website-downloader** (B-, 71.2). Mean grade across the 2 audited members is 64.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Website-downloader** | Web & Interfaces | JavaScript | B- 71.2 | 22 |
-| pagesource | AI & Data | Python | C- 57.6 | 15 |
+| **winpodx** | AI & Data | Python | C 62.6 | 502 |
+| winboat | Web & Interfaces | TypeScript | C- 57.8 | 121 |
+| winapps | Systems & Infra | Shell | C- 54.2 | 245 |
 
-### c026 - 2 repositories
+### c015 - 2 repositories
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **macrodata** (C+, 65.2). Mean grade across the 2 audited members is 63.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mercury-agent-skills** (B, 75.3). Mean grade across the 2 audited members is 71.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **macrodata** | Agent Skills & Plugins | TypeScript | C+ 65.2 | 51 |
-| claude-supermemory | Web & Interfaces | JavaScript | C 62.1 | 39 |
+| **mercury-agent-skills** | Web & Interfaces | JavaScript | B 75.3 | 151 |
+| agent-skills | Agent Skills & Plugins | Shell | C+ 68.5 | 56 |
 
-### c031 - 2 repositories
+### c023 - 2 repositories
 
 Crosses a domain boundary: 1 AI & Data, 1 Mobile. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
@@ -199,18 +102,7 @@ Keeper: **mlx-audio** (B-, 70.1). Mean grade across the 2 audited members is 69.
 | **mlx-audio** | AI & Data | Python | B- 70.1 | 574 |
 | mlx-audio-swift | Mobile | Swift | C+ 68.1 | 97 |
 
-### c035 - 2 repositories
-
-Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **wormhole** (C, 61.9). Mean grade across the 2 audited members is 56.3. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **wormhole** | Systems & Infra | Go | C 61.9 | 47 |
-| pgrok | Web & Interfaces | TypeScript | C- 50.7 | 26 |
-
-### c039 - 2 repositories
+### c026 - 2 repositories
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
@@ -221,62 +113,51 @@ Keeper: **android-sms-gateway** (C-, 58.6). Mean grade across the 2 audited memb
 | **android-sms-gateway** | Mobile | Kotlin | C- 58.6 | 335 |
 | httpsms | Systems & Infra | Go | D 43.9 | 430 |
 
-### c044 - 2 repositories
+### c032 - 2 repositories
 
-Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **terminal-browser** (C-, 50.7). Mean grade across the 2 audited members is 50.4. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **terminal-browser** | Web & Interfaces | TypeScript | C- 50.7 | 219 |
-| carbonyl | Systems & Infra | Rust | C- 50 | 105 |
-
-### c046 - 2 repositories
-
-Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **floci-ui** (B-, 70.2). Mean grade across the 2 audited members is 63.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is 68.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **floci-ui** | Web & Interfaces | TypeScript | B- 70.2 | 197 |
-| floci | Systems & Infra | Java | C- 57.4 | 782 |
+| **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.3 | 212 |
+| career-ops | Systems & Infra | Go | C- 54.2 | 99 |
 
-### c050 - 2 repositories
+### c034 - 2 repositories
 
-Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **OpenSandbox** (B-, 71.6). Mean grade across the 2 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **OpenSandbox** | AI & Data | Python | B- 71.6 | 2144 |
-| CubeSandbox | Systems & Infra | Go | C 60.6 | 1702 |
-
-### c051 - 2 repositories
-
-Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
-
-Keeper: **ghostapp** (C-, 56.6). Mean grade across the 2 audited members is 52.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **llmwiki** (B-, 74.6). Mean grade across the 2 audited members is 69.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **ghostapp** | Systems & Infra | Rust | C- 56.6 | 249 |
-| ghost-os | Mobile | Swift | D 49.2 | 51 |
+| **llmwiki** | AI & Data | Python | B- 74.6 | 300 |
+| llm_wiki | Web & Interfaces | TypeScript | C 63.6 | 227 |
 
-### c055 - 2 repositories
+### c035 - 2 repositories
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **loop-engineering** (B, 79.5). Mean grade across the 2 audited members is 74.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **lich-skills** (B, 75.4). Mean grade across the 2 audited members is 73.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **loop-engineering** | Agent Skills & Plugins | TypeScript | B 79.5 | 388 |
-| loopy | Web & Interfaces | JavaScript | C+ 69 | 53 |
+| **lich-skills** | Agent Skills & Plugins | Shell | B 75.4 | 46 |
+| agentskills | Web & Interfaces | JavaScript | B- 71.4 | 187 |
 
-### c057 - 2 repositories
+### c037 - 2 repositories
+
+Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+
+Keeper: **VoiceStudio** (C+, 69.3). Mean grade across the 2 audited members is 62.8. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **VoiceStudio** | AI & Data | Python | C+ 69.3 | 2062 |
+| voicebox | Web & Interfaces | TSX | C- 56.4 | 677 |
+
+### c038 - 2 repositories
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
@@ -287,80 +168,104 @@ Keeper: **flashvad** (B+, 80.7). Mean grade across the 2 audited members is 67. 
 | **flashvad** | AI & Data | Python | B+ 80.7 | 166 |
 | ten-vad | Systems & Infra | C/C++ Header | C- 53.2 | 147 |
 
-### c058 - 2 repositories
+### c040 - 2 repositories
 
-Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **strix** (B-, 72.6). Mean grade across the 2 audited members is 70.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **strix** | AI & Data | Python | B- 72.6 | 333 |
-| open-kritt | Web & Interfaces | JavaScript | C+ 67.6 | 392 |
+| **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.5 | 13 |
+| avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65.2 | 50 |
 
 ## Groups inside a single domain
 
-### c006 - 4 repositories
+### c005 - 3 repositories
 
-All 4 in AI & Data.
+All 3 in Web & Interfaces.
 
-Keeper: **Hyper-Extract** (B-, 72.8). Mean grade across the 4 audited members is 61.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Hyper-Extract** | AI & Data | Python | B- 72.8 | 449 |
-| graph_maker | AI & Data | Jupyter Notebook | C 62.9 | 16 |
-| knowledge_graph | AI & Data | Jupyter Notebook | C- 55.7 | 42 |
-| langextract | AI & Data | Python | C- 53.6 | 129 |
+| **continue** | Web & Interfaces | TypeScript | C+ 68.1 | 3058 |
+| oh-my-openagent | Web & Interfaces | TypeScript | C 60.5 | 6746 |
+| opencode | Web & Interfaces | TypeScript | C- 53.4 | 2755 |
+
+### c006 - 3 repositories
+
+All 3 in Web & Interfaces.
+
+Keeper: **BeautySmart** (C+, 66.7). Mean grade across the 3 audited members is 52.9. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **BeautySmart** | Web & Interfaces | PHP | C+ 66.7 | 6221 |
+| Multi-Beauty-Salon-Web-Application-In-ReactJS-Firebase | Web & Interfaces | TypeScript | D 47.6 | 23896 |
+| Salon-Management-System | Web & Interfaces | PHP | D 44.5 | 170 |
 
 ### c007 - 3 repositories
 
 All 3 in Web & Interfaces.
 
-Keeper: **Manta** (B+, 82.2). Mean grade across the 3 audited members is 65.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (C+, 65.8). Mean grade across the 3 audited members is 62. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Manta** | Web & Interfaces | JSX | B+ 82.2 | 374 |
-| invoice-builder | Web & Interfaces | TypeScript | C 64 | 509 |
-| invoicerr | Web & Interfaces | TypeScript | C- 50.5 | 335 |
+| **n8n** | Web & Interfaces | TypeScript | C+ 65.8 | 17556 |
+| n8n-as-code | Web & Interfaces | TypeScript | C 60.6 | 357 |
+| VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.6 | 2203 |
 
 ### c008 - 3 repositories
 
-All 3 in Knowledge & Content.
+All 3 in AI & Data.
 
-Keeper: **llm-engineer-toolkit** (C-, 56). Mean grade across the 3 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FinRL** (C, 64.1). Mean grade across the 3 audited members is 52.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **llm-engineer-toolkit** | Knowledge & Content |  | C- 56 | 5 |
-| llm-internals | Knowledge & Content |  | C- 55.7 | 4 |
-| awesome-agent-learning | Knowledge & Content |  | C- 54.3 | 4 |
+| **FinRL** | AI & Data | Python | C 64.1 | 195 |
+| tensortrade | AI & Data | Python | C- 53.8 | 153 |
+| TradeMaster | AI & Data | Python | D 40.5 | 776 |
 
-### c011 - 3 repositories
+### c009 - 3 repositories
+
+All 3 in Mobile.
+
+Keeper: **FluidVoice** (C, 61.9). Mean grade across the 3 audited members is 57.4. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **FluidVoice** | Mobile | Swift | C 61.9 | 186 |
+| VoiceInk | Mobile | Swift | C- 55.8 | 231 |
+| pindrop | Mobile | Swift | C- 54.5 | 569 |
+
+### c010 - 3 repositories
+
+All 3 in AI & Data.
+
+Keeper: **MARM-Systems** (C, 63.1). Mean grade across the 3 audited members is 61.2. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **MARM-Systems** | AI & Data | Python | C 63.1 | 124 |
+| MemMachine | AI & Data | Python | C 62.3 | 706 |
+| mcp-memory-service | AI & Data | Python | C- 58.1 | 1147 |
+
+### c012 - 3 repositories
 
 All 3 in Web & Interfaces.
 
-Keeper: **codex-security** (B, 75.3). Mean grade across the 3 audited members is 69.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **manaflow** (C+, 69.1). Mean grade across the 3 audited members is 62.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **codex-security** | Web & Interfaces | TypeScript | B 75.3 | 173 |
-| oh-my-codex | Web & Interfaces | TypeScript | B- 72.6 | 410 |
-| oh-my-openagent | Web & Interfaces | TypeScript | C 60.5 | 6746 |
+| **manaflow** | Web & Interfaces | TypeScript | C+ 69.1 | 1730 |
+| dmux | Web & Interfaces | TypeScript | C 62.2 | 794 |
+| parallel-code | Web & Interfaces | TypeScript | C- 56.8 | 254 |
 
-### c014 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **Object-Detection-using-Yolov7** (C-, 55.8). Mean grade across the 2 audited members is 55.8. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **Object-Detection-using-Yolov7** | AI & Data | Jupyter Notebook | C- 55.8 | 2 |
-| Object-Detection-in-YOLOv8 | AI & Data | Jupyter Notebook | C- 55.8 | 2 |
-
-### c015 - 2 repositories
+### c013 - 2 repositories
 
 All 2 in AI & Data.
 
@@ -371,29 +276,7 @@ Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51.6). Me
 | **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 51.6 | 2 |
 | ObjectCountingYOLOv8DeepSORT | AI & Data | Jupyter Notebook | D 47.4 | 2 |
 
-### c016 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **daily_stock_analysis** (C-, 58.3). Mean grade across the 2 audited members is 58.1. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **daily_stock_analysis** | AI & Data | Python | C- 58.3 | 925 |
-| retail-analytics | AI & Data | Python | C- 57.9 | 118 |
-
-### c017 - 2 repositories
-
-All 2 in Web & Interfaces.
-
-Keeper: **AionUi** (C-, 51.8). Mean grade across the 2 audited members is 47.2. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **AionUi** | Web & Interfaces | TypeScript | C- 51.8 | 723 |
-| Claude-Cowork | Web & Interfaces | TypeScript | D 42.6 | 44 |
-
-### c018 - 2 repositories
+### c014 - 2 repositories
 
 All 2 in Web & Interfaces.
 
@@ -404,40 +287,18 @@ Keeper: **maplibre-gl-usgs-lidar** (C+, 66.7). Mean grade across the 2 audited m
 | **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.7 | 44 |
 | maplibre-gl-lidar | Web & Interfaces | TypeScript | C+ 65 | 69 |
 
-### c019 - 2 repositories
+### c016 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **agent-browser** (C, 64.1). Mean grade across the 2 audited members is 58.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Manta** (B+, 82.2). Mean grade across the 2 audited members is 73.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **agent-browser** | Web & Interfaces | TSX | C 64.1 | 62 |
-| browser-operator-core | Web & Interfaces | JavaScript | C- 53.6 | 33770 |
+| **Manta** | Web & Interfaces | JSX | B+ 82.2 | 374 |
+| invoice-builder | Web & Interfaces | TypeScript | C 64 | 509 |
 
-### c021 - 2 repositories
-
-All 2 in Knowledge & Content.
-
-Keeper: **iot-projects** (C, 62.7). Mean grade across the 2 audited members is 60.9. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **iot-projects** | Knowledge & Content |  | C 62.7 | 5 |
-| awesome-electronics | Knowledge & Content |  | C- 59 | 7 |
-
-### c022 - 2 repositories
-
-All 2 in Web & Interfaces.
-
-Keeper: **BeautySmart** (C+, 66.7). Mean grade across the 2 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **BeautySmart** | Web & Interfaces | PHP | C+ 66.7 | 6221 |
-| CRM-laravel | Web & Interfaces | PHP | D 43.8 | 320 |
-
-### c024 - 2 repositories
+### c017 - 2 repositories
 
 All 2 in AI & Data.
 
@@ -448,40 +309,51 @@ Keeper: **AgenticTrading** (C, 61.3). Mean grade across the 2 audited members is
 | **AgenticTrading** | AI & Data | Python | C 61.3 | 539 |
 | TradingAgents | AI & Data | Python | C- 53.4 | 73 |
 
-### c025 - 2 repositories
-
-All 2 in Knowledge & Content.
-
-Keeper: **claude-code-system-prompts** (C+, 65.9). Mean grade across the 2 audited members is 61.6. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **claude-code-system-prompts** | Knowledge & Content |  | C+ 65.9 | 31 |
-| system-prompts-and-models-of-ai-tools | Knowledge & Content |  | C- 57.3 | 106 |
-
-### c027 - 2 repositories
+### c018 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **tsl-node-editor** (C, 63.8). Mean grade across the 2 audited members is 57.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 62.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **tsl-node-editor** | Web & Interfaces | TypeScript | C 63.8 | 23 |
-| editor | Web & Interfaces | TSX | C- 50.6 | 664 |
+| **altersend** | Web & Interfaces | TypeScript | C+ 69.9 | 1029 |
+| alt-sendme | Web & Interfaces | TypeScript | C- 55 | 116 |
 
-### c028 - 2 repositories
+### c019 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **codexia** (C+, 68.5). Mean grade across the 2 audited members is 58.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.4). Mean grade across the 2 audited members is 77.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **codexia** | Web & Interfaces | TypeScript | C+ 68.5 | 1025 |
-| opcode | Web & Interfaces | TSX | D 48.9 | 234 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 82.4 | 94 |
+| skills | Web & Interfaces | TypeScript | B- 72 | 67 |
 
-### c029 - 2 repositories
+### c020 - 2 repositories
+
+All 2 in AI & Data.
+
+Keeper: **livecc** (D, 46.3). Mean grade across the 2 audited members is 43.8. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **livecc** | AI & Data | Python | D 46.3 | 95 |
+| VideoAgent | AI & Data | Python | D 41.3 | 853 |
+
+### c021 - 2 repositories
+
+All 2 in AI & Data.
+
+Keeper: **graph_maker** (C, 62.9). Mean grade across the 2 audited members is 59.3. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **graph_maker** | AI & Data | Jupyter Notebook | C 62.9 | 16 |
+| knowledge_graph | AI & Data | Jupyter Notebook | C- 55.7 | 42 |
+
+### c022 - 2 repositories
 
 All 2 in AI & Data.
 
@@ -492,29 +364,18 @@ Keeper: **awesome-ai-apps** (D, 47.9). Mean grade across the 2 audited members i
 | **awesome-ai-apps** | AI & Data | Python | D 47.9 | 666 |
 | awesome-llm-apps | AI & Data | Python | D 47.7 | 1073 |
 
-### c030 - 2 repositories
-
-All 2 in Mobile.
-
-Keeper: **FluidVoice** (C, 61.9). Mean grade across the 2 audited members is 58.8. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **FluidVoice** | Mobile | Swift | C 61.9 | 186 |
-| VoiceInk | Mobile | Swift | C- 55.8 | 231 |
-
-### c032 - 2 repositories
+### c024 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **finnhub-python** (B-, 72.8). Mean grade across the 2 audited members is 67.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **client-python** (B, 78.1). Mean grade across the 2 audited members is 70. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **finnhub-python** | AI & Data | Python | B- 72.8 | 19 |
+| **client-python** | AI & Data | Python | B 78.1 | 301 |
 | twelvedata-python | AI & Data | Python | C 62 | 40 |
 
-### c033 - 2 repositories
+### c025 - 2 repositories
 
 All 2 in Web & Interfaces.
 
@@ -525,150 +386,73 @@ Keeper: **pluely** (C-, 59.6). Mean grade across the 2 audited members is 49.8. 
 | **pluely** | Web & Interfaces | TSX | C- 59.6 | 224 |
 | natively-cluely-ai-assistant | Web & Interfaces | TypeScript | D 40 | 182 |
 
-### c034 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **MemOS** (B, 75.1). Mean grade across the 2 audited members is 57.4. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **MemOS** | AI & Data | Python | B 75.1 | 862 |
-| MemoryOS | AI & Data | Python | F 39.7 | 73 |
-
-### c036 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **OpenLLM** (B-, 74.1). Mean grade across the 2 audited members is 65.5. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **OpenLLM** | AI & Data | Python | B- 74.1 | 40 |
-| litellm | AI & Data | Python | C- 57 | 7169 |
-
-### c037 - 2 repositories
+### c027 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **agent-orchestrator** (B, 78.3). Mean grade across the 2 audited members is 70.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FileSync** (C, 62.5). Mean grade across the 2 audited members is 60.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **agent-orchestrator** | Web & Interfaces | TypeScript | B 78.3 | 315 |
-| dmux | Web & Interfaces | TypeScript | C 62.2 | 794 |
+| **FileSync** | Web & Interfaces | JavaScript | C 62.5 | 44 |
+| OpenDrop | Web & Interfaces | JavaScript | C- 58.4 | 12 |
 
-### c038 - 2 repositories
+### c028 - 2 repositories
+
+All 2 in AI & Data.
+
+Keeper: **public-apis** (B+, 80). Mean grade across the 2 audited members is 71.3. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **public-apis** | AI & Data | Python | B+ 80 | 22 |
+| awesome-opensource-ai | AI & Data | Python | C 62.6 | 8 |
+
+### c029 - 2 repositories
+
+All 2 in AI & Data.
+
+Keeper: **cadquery** (B-, 71.5). Mean grade across the 2 audited members is 70.9. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **cadquery** | AI & Data | Python | B- 71.5 | 209 |
+| build123d | AI & Data | Python | B- 70.3 | 649 |
+
+### c030 - 2 repositories
+
+All 2 in AI & Data.
+
+Keeper: **gpu-hot** (C, 62.9). Mean grade across the 2 audited members is 52.6. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **gpu-hot** | AI & Data | Python | C 62.9 | 68 |
+| nvitop | AI & Data | Python | D 42.3 | 116 |
+
+### c031 - 2 repositories
 
 All 2 in Systems & Infra.
 
-Keeper: **bare-lm** (C+, 69.7). Mean grade across the 2 audited members is 66.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 67.2). Mean grade across the 2 audited members is 66.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **bare-lm** | Systems & Infra | C | C+ 69.7 | 13 |
-| tensor.h | Systems & Infra | C | C 63.9 | 9 |
+| **rust-genai** | Systems & Infra | Rust | C+ 67.2 | 187 |
+| aisix | Systems & Infra | Rust | C+ 65.4 | 526 |
 
-### c040 - 2 repositories
+### c033 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **node-banana** (C+, 68.3). Mean grade across the 2 audited members is 59.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **paseo** (B-, 71.4). Mean grade across the 2 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **node-banana** | Web & Interfaces | TypeScript | C+ 68.3 | 395 |
-| tersa | Web & Interfaces | TSX | C- 51.4 | 103 |
+| **paseo** | Web & Interfaces | TypeScript | B- 71.4 | 1647 |
+| orca | Web & Interfaces | TypeScript | C 61 | 6335 |
 
-### c041 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **shotgun** (C, 64.2). Mean grade across the 2 audited members is 63.1. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **shotgun** | AI & Data | Python | C 64.2 | 616 |
-| spec-kit | AI & Data | Python | C 62 | 482 |
-
-### c042 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **hermes-webui** (C, 60.8). Mean grade across the 2 audited members is 59. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **hermes-webui** | AI & Data | Python | C 60.8 | 232 |
-| hermes-agent | AI & Data | Python | C- 57.2 | 894 |
-
-### c043 - 2 repositories
-
-All 2 in Web & Interfaces.
-
-Keeper: **easy-agent** (C, 62.9). Mean grade across the 2 audited members is 60.3. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **easy-agent** | Web & Interfaces | TypeScript | C 62.9 | 356 |
-| claude-code-remote | Web & Interfaces | TypeScript | C- 57.8 | 34 |
-
-### c045 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **freqtrade** (C-, 55.1). Mean grade across the 2 audited members is 53.7. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **freqtrade** | AI & Data | Python | C- 55.1 | 772 |
-| hummingbot | AI & Data | Python | C- 52.2 | 1696 |
-
-### c047 - 2 repositories
-
-All 2 in Web & Interfaces.
-
-Keeper: **homepage** (B-, 72.9). Mean grade across the 2 audited members is 64.1. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **homepage** | Web & Interfaces | JavaScript | B- 72.9 | 1416 |
-| homepage-lite | Web & Interfaces | CSS | C- 55.3 | 36 |
-
-### c048 - 2 repositories
-
-All 2 in Web & Interfaces.
-
-Keeper: **manaflow** (C+, 69.1). Mean grade across the 2 audited members is 62.9. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **manaflow** | Web & Interfaces | TypeScript | C+ 69.1 | 1730 |
-| parallel-code | Web & Interfaces | TypeScript | C- 56.8 | 254 |
-
-### c049 - 2 repositories
-
-All 2 in Web & Interfaces.
-
-Keeper: **splat-transform** (C, 60.7). Mean grade across the 2 audited members is 58.2. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **splat-transform** | Web & Interfaces | TypeScript | C 60.7 | 149 |
-| supersplat | Web & Interfaces | TypeScript | C- 55.7 | 221 |
-
-### c052 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **DeepTutor** (C-, 58.8). Mean grade across the 2 audited members is 50. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **DeepTutor** | AI & Data | Python | C- 58.8 | 1012 |
-| VideoAgent | AI & Data | Python | D 41.3 | 853 |
-
-### c053 - 2 repositories
+### c036 - 2 repositories
 
 All 2 in Web & Interfaces.
 
@@ -679,60 +463,27 @@ Keeper: **atomic-mail-agentic** (B-, 70.9). Mean grade across the 2 audited memb
 | **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.9 | 424 |
 | mails | Web & Interfaces | TypeScript | C+ 68.9 | 91 |
 
-### c054 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **ai-agents-for-beginners** (C, 63.5). Mean grade across the 2 audited members is 60.2. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **ai-agents-for-beginners** | AI & Data | Jupyter Notebook | C 63.5 | 9284 |
-| build-your-own-openclaw | AI & Data | Python | C- 56.9 | 844 |
-
-### c056 - 2 repositories
-
-All 2 in AI & Data.
-
-Keeper: **kimi-k3-in-c** (C+, 69.3). Mean grade across the 2 audited members is 62.8. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **kimi-k3-in-c** | AI & Data | Python | C+ 69.3 | 282 |
-| smol-kimi-k3 | AI & Data | Python | C- 56.2 | 22 |
-
-### c059 - 2 repositories
+### c039 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **computer** (B-, 74.2). Mean grade across the 2 audited members is 73.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **decimen-optical-transfer** (C+, 69). Mean grade across the 2 audited members is 66.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **computer** | Web & Interfaces | TypeScript | B- 74.2 | 552 |
-| cloudflare-os | Web & Interfaces | TypeScript | B- 72.9 | 813 |
+| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 69 | 19 |
+| qr-data-transfer | Web & Interfaces | TypeScript | C 64.1 | 44 |
 
-### c060 - 2 repositories
+### c041 - 2 repositories
 
-All 2 in Systems & Infra.
+All 2 in Mobile.
 
-Keeper: **cas** (C+, 66.7). Mean grade across the 2 audited members is 60.8. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **cas** | Systems & Infra | Rust | C+ 66.7 | 2569 |
-| claude_code_agent_farm | Systems & Infra | Shell | C- 54.8 | 160 |
-
-### c061 - 2 repositories
-
-All 2 in Knowledge & Content.
-
-Keeper: **awesome-agents** (C+, 68.1). Mean grade across the 2 audited members is 62. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AIUsage** (C+, 69.2). Mean grade across the 2 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **awesome-agents** | Knowledge & Content |  | C+ 68.1 | 2 |
-| free-ai-agents-resources | Knowledge & Content |  | C- 56 | 4 |
+| **AIUsage** | Mobile | Swift | C+ 69.2 | 459 |
+| quotio | Mobile | Swift | C 63 | 277 |
 
 ---
 
