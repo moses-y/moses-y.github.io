@@ -20,7 +20,7 @@ const LLM_API_KEY = process.env.NVIDIA_API_KEY || process.env.LLM_API_KEY;
 const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1/chat/completions';
 const LLM_BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
 const EMBED_ENDPOINT = process.env.EMBED_ENDPOINT || `${LLM_BASE}/embeddings`;
-const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
+const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nemotron-3-embed-1b';
 
 const EMBED_CACHE_FILE = process.env.EMBED_CACHE_FILE || 'embeddings.json';
 const EMBED_BATCH = parseInt(process.env.EMBED_BATCH || '32', 10);

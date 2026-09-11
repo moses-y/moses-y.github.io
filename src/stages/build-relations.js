@@ -28,6 +28,11 @@ const {
 } = require('../lib/lib-relations.js');
 const { SITE } = require('../lib/lib-schema.js');
 const { render } = require('../lib/lib-cluster-report.js');
+// Named, not hardcoded. These two strings are published provenance - the site
+// tells a reader which model drew the semantic edges - so a model swap that left
+// them behind would turn a true statement into a false one, in the one place the
+// site promises to be exact about what produced a fact.
+const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nemotron-3-embed-1b';
 
 const ROOT = path.join(__dirname, '..', '..');
 const OUT = path.join(ROOT, 'data');
@@ -76,7 +81,7 @@ function writeLlmsTxt(index, gradesFile, manifest, sample) {
     '> audit, domain classification and eight-category grade are EXTRACTED: measured',
     '> from a tree, a history or a manifest, reproducible from the same inputs, no',
     '> model involved. The semantic similarity edges are INFERRED: cosine distance',
-    '> between neural embeddings (nvidia/nv-embedqa-e5-v5) of a text built from each',
+    '> between neural embeddings (' + EMBED_MODEL + ') of a text built from each',
     '> repository description, topics and generated summary. Treat them as a strong',
     '> hint, not as a measurement. Every edge in the relation layer carries which of',
     '> the two it is. Repositories that have not been analysed are marked as such',
@@ -266,7 +271,7 @@ function main() {
         provenance: 'INFERRED',
         derivedFrom: 'neural embedding of the repository description, topics, ' +
           'languages, frameworks and generated summary',
-        model: 'nvidia/nv-embedqa-e5-v5',
+        model: EMBED_MODEL,
         method: 'cosine similarity in the embedding space',
         evidence: 'none beyond the similarity score itself',
         answers: 'probably solves the same problem'

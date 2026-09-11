@@ -38,8 +38,19 @@ function retryBudgetSpent() {
 }
 const LLM_BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
 const EMBED_ENDPOINT = process.env.EMBED_ENDPOINT || `${LLM_BASE}/embeddings`;
-const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
-const LLM_MODELS = (process.env.LLM_MODELS || 'openai/gpt-oss-120b,nvidia/nemotron-3.5-lightning-30b-a3b,deepseek-ai/deepseek-v4-flash-0731').split(',').map(m => m.trim());
+// Retired 2026-08-25. nemotron-3-embed-1b was the only embedding model that both
+// appears in the catalogue and answers for this account - the other six 404.
+const EMBED_MODEL = process.env.EMBED_MODEL || 'nvidia/nemotron-3-embed-1b';
+/*
+ * The fallback roster, probed on 2026-09-11 and overridable by the LLM_MODELS
+ * repository variable. The three names this replaced were all unusable: the 120b
+ * was retired on 2026-09-03, nemotron-3.5-lightning is a reasoning model that
+ * spends around 110 seconds before its first token, and deepseek-v4-flash
+ * answers a trivial prompt in 3 seconds but timed out at 240s on all three of
+ * its real article prompts. Fast models first is not a preference the rotation
+ * can express - it is round robin - so every name here has to be one that answers.
+ */
+const LLM_MODELS = (process.env.LLM_MODELS || 'mistralai/mistral-nemotron,openai/gpt-oss-20b,deepseek-ai/deepseek-v4-pro-0813').split(',').map(m => m.trim());
 
 // Configuration
 const CONFIG = {

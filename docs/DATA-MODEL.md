@@ -59,7 +59,7 @@ erDiagram
     }
     EMBEDDING {
         integer repo_id PK_FK
-        blob vector "TIER 1 - 1024 dims"
+        blob vector "TIER 1 - dims set by EMBED_MODEL"
         text model
         integer dims
     }

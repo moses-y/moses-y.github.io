@@ -7,8 +7,12 @@
  * module graph the Code Brain page already renders (nodes[0].kind === 'module').
  *
  * Split-by-task (per user choice):
- *   - STRUCT_MODEL (DeepSeek V4 Pro)  -> modules, import/call edges, Ca/Ce/instability
- *   - NARR_MODEL   (GLM 5.2)          -> architecture summary + notable findings
+ *   - STRUCT_MODEL -> modules, import/call edges, Ca/Ce/instability
+ *   - NARR_MODEL   -> architecture summary + notable findings
+ *
+ * Both are overridable, and both should be: the 120b this pointed at was retired
+ * on 2026-09-03. This stage is operator-run rather than scheduled, so the dead
+ * name sat here unnoticed until src/tools/check-models.js probed it.
  *
  * Scope (per user choice): originals + top forks first. Tune with --top / --all.
  *
@@ -31,7 +35,7 @@ const OUT = path.join(ROOT, 'structure');
 // ---- Config (override via env) ----------------------------------------------
 const BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
 const API_KEY = process.env.NVIDIA_API_KEY || '';
-const STRUCT_MODEL = process.env.DEEP_STRUCT_MODEL || 'openai/gpt-oss-120b';
+const STRUCT_MODEL = process.env.DEEP_STRUCT_MODEL || 'openai/gpt-oss-20b';
 const NARR_MODEL = process.env.DEEP_NARR_MODEL || 'nvidia/nemotron-3-super-120b-a12b';
 
 const SRC_BUDGET = 120 * 1024;    // max source bytes bundled per repo (keeps prompt sane)
