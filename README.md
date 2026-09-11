@@ -190,6 +190,8 @@ src/              bucketed by what a file PRODUCES, not by what it is named
   tools/          operator utilities, not part of a run
 tests/            12 hermetic suites
 migrations/       numbered, forward-only SQL
+docs/             architecture notes, the ERDs, and DECISIONS.md — the calls
+                  made and, more usefully, what each one predicted
 .state/           glossa.db — build state, not committed, not served
 data/             published output — the data layer
 structure/        per-repository module graphs
