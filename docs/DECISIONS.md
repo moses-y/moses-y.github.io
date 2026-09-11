@@ -326,3 +326,50 @@ about.
 until something *ran*. Two empty tables, a missing index, a wrong aggregate, and a
 no-op migration runner, none of which any amount of reading the schema would have
 surfaced. That is R1 with a price tag attached.
+
+---
+
+## 2026-09-11 - D4: natural-language search is text-to-query, not RAG
+
+**Status:** decided (design only, nothing built). Full design in `docs/NL-SEARCH.md`.
+
+**What prompted it.** Asking the estate questions in English - "which repos can do
+X and Y and Z", "which let me build mobile apps faster", "what should I build
+first", "generate a project and deploy it".
+
+**What was decided.** Translate the question into a query plan against the
+structured store and have the model narrate the rows, rather than retrieving
+article prose and letting a model write from it.
+
+The reason is specific to this estate, not general. Every article is INFERRED - a
+model's summary of a tree. The facts are EXTRACTED. RAG would retrieve the inferred
+layer, launder it through a second model, and produce an answer two models deep
+from anything measured. Text-to-query makes the model a translator that never
+states a fact: it states a filter, and describes rows.
+
+The consequence worth building for: **the hallucination check becomes set
+membership.** Because the answer is generated from a result set, "did it name a
+repository that was not returned" is a string scan against a set of ids - no judge
+model, no rubric, and none of the LLM-as-judge pathologies apply. Cheap enough to
+run on every answer, which is the only kind of check that runs.
+
+**What was rejected.** Answering "faster" at all. No velocity signal exists here
+and none could - the pipeline reads trees and manifests, not calendars against
+outcomes. The system substitutes readiness (lockfile, CI, tests, docs - four of the
+eight graded axes) and must say that it did.
+
+**Predictions to check.**
+
+- **P10.** Stage 1 - structured filters only, no embeddings - delivers most of the
+  perceived value. *Check: after shipping it, how many real questions need the
+  semantic arm?*
+- **P11.** The set-membership check catches every fabricated repository name, and
+  narration quality is a much smaller problem than retrieval quality.
+- **P12.** A golden set of ~50 questions with hand-computable id sets is sufficient
+  evaluation, and no judge model is needed at any point.
+- **P13.** NL search is the forcing function for D2 rather than a consumer of it:
+  full vectors are ~12.6 MB and embedding a question needs a key, so it cannot run
+  on a public static site. *If someone ships a usable version on Pages, this is
+  wrong.*
+
+**Debrief.** _(after stage 1)_
