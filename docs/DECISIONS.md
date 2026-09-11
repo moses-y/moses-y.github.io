@@ -160,3 +160,101 @@ sooner?"
 D1 exists because of a claim nobody wrote down: that a green pipeline run meant a
 working pipeline. That went unchallenged for seventeen days precisely because it was
 never stated as something that could be false.
+
+---
+
+## Reasoning notes
+
+The entries above record decisions. This section records *how the decisions were
+reached*, because the same few mistakes keep producing them, and naming a mistake
+with evidence is cheaper than resolving to think harder.
+
+Each note is drawn from something that actually went wrong in the session that
+produced D1 and D2, not from a list of biases.
+
+### R1. A log describes a measurement; it is not the measurement
+
+The first health report said one of three chat models worked. That came from
+reading seventeen days of CI logs. Calling the models said **all four were
+unusable**, for four different reasons, one of which — the Code Brain's structure
+model — appeared in no log at all, because that stage is operator-run and had not
+been invoked since the retirement.
+
+The gap was not carelessness. The logs were real evidence, and they were evidence
+about a different question: what happened when the pipeline ran, not what is true
+now. An artifact that describes a system is always about the past.
+
+**Applies when:** a claim about a live external dependency is sourced from
+anything other than calling it. Cost of checking: one probe script. Cost of not:
+seventeen days.
+
+### R2. A new instrument needs calibrating before its output is evidence
+
+The first version of the probe used a 45-second ceiling and a 16-token budget. It
+reported `nemotron-3.5-lightning` dead while that model was demonstrably writing
+articles, and `deepseek-v4-flash` empty when it was a reasoning model that had
+spent the whole budget thinking. Two false verdicts, stated in the same tone as
+the true ones.
+
+What caught it was not re-reading the code: it was that the output **contradicted
+something already known** — those articles existed. That contradiction is the
+signal, and it is easy to explain away as the instrument being right and the old
+belief being stale.
+
+**Applies when:** a new check, script or measurement produces its first results.
+Before acting on them, find one case where the answer is already known and
+confirm the instrument agrees.
+
+### R3. Naming something is not knowing it
+
+"The IntellichatV3 and autar conventions carry over directly" was written from a
+pasted directory tree and a listing of `d:\autar`. Neither codebase had been read.
+The sentence was plausible, useful-sounding, and unearned — and it was the user
+who caught it, not the author.
+
+This repository already has the right vocabulary for this and applies it to data
+while exempting its own prose: **EXTRACTED** for measured, **INFERRED** for
+derived. A claim about a system nobody has opened is INFERRED, and saying so costs
+one clause.
+
+**Applies when:** a recommendation leans on a system, tool or codebase that has
+been described but not inspected.
+
+### R4. Stable is not the same as correct
+
+`semantic.positioned` read 1,407 in every commit for seventeen days. Nothing about
+that looks like a fault; a number that does not move looks like a number that has
+settled. Coverage decayed underneath it one repository at a time — 1,407 of 1,407,
+then of 1,420, then of 1,534.
+
+The generalisation: any figure derived from a growing corpus has an expected
+*ratio*, and the ratio is the thing worth stating. `tests/test-coverage.js` now
+states four of them. It trips on this outage around day ten rather than day one —
+the probe is what catches day one — but a floor converts silent decay into a date.
+
+**Applies when:** publishing any aggregate over a set that grows. State the
+coverage, not just the count.
+
+### R5. Proactivity is asking what else has this shape
+
+The useful move after D1 was not "monitor models better". It was: *this failed
+open, silently, in a step whose job still exited 0 — what else does that?* The
+sweep that followed found the `|| note` pattern in the workflow already handles it
+correctly, recording each failure and failing the job at the end, and that the real
+unguarded gap was coverage ratios. One of those was a relief, one became R4 and a
+test suite.
+
+That sweep took minutes and needed no permission, because it only read. The
+asymmetry is the point: looking is cheap, and the answer is useful whether it finds
+something or not.
+
+**Applies when:** any incident is resolved. Before closing it, name the *shape* of
+the failure rather than its subject, and grep for the shape.
+
+### The common root
+
+R1, R2 and R3 are one error wearing three hats: **a confident claim about
+something not executed.** The errors in this project cluster almost entirely in
+the gap between "I read it" and "I ran it" — and every one of them was cheap to
+resolve by running something. That is the check worth making a habit, because it
+is mechanical and does not depend on being in a careful mood.

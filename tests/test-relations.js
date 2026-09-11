@@ -241,7 +241,19 @@ if (fs.existsSync(llms)) {
     !/no language model produces any figure/i.test(text));
   check('llms.txt names both provenance levels',
     /EXTRACTED/.test(text) && /INFERRED/.test(text));
-  check('llms.txt discloses the embedding model by name', /nv-embedqa/.test(text));
+  /*
+   * Disclosure, not a particular vendor. This asserted /nv-embedqa/ and so
+   * failed the moment that model was retired and replaced - failing on the fix
+   * rather than on the fault, which is the wrong way round. The property worth
+   * holding is that the file names whatever model actually drew the edges, and
+   * names the same one relations.json does: an agent reading llms.txt is being
+   * told the provenance of an INFERRED layer, and two files disagreeing about
+   * it is worse than either being silent.
+   */
+  const declared = manifest.edgeTypes && manifest.edgeTypes.semantic &&
+    manifest.edgeTypes.semantic.model;
+  check('llms.txt discloses the embedding model by name',
+    !!declared && text.indexOf(declared) !== -1, declared);
 
   const kinDir2 = path.join(DATA, 'kin');
   if (fs.existsSync(kinDir2)) {
