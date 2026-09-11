@@ -25,9 +25,25 @@ const { CONFIG, LLM_API_KEY, LLM_ENDPOINT, EMBED_ENDPOINT, EMBED_MODEL } =
 
 const LIST = process.argv.includes('--list');
 const BASE = LLM_ENDPOINT.replace(/\/chat\/completions\/?$/, '');
-// Deliberately shorter than the pipeline's 240s. A model that needs four minutes
-// for eight tokens is not a model this pipeline can use, so slow counts as dead.
-const PROBE_TIMEOUT_MS = parseInt(process.env.PROBE_TIMEOUT_MS || '45000', 10);
+/*
+ * Bounded, but not as tightly as the first version of this file: a 45s probe
+ * called nemotron-3.5-lightning dead when it was demonstrably writing articles
+ * in the pipeline, just slowly. Latency is reported instead of being folded into
+ * the verdict, so "retired" and "slow" stay different findings.
+ */
+const PROBE_TIMEOUT_MS = parseInt(process.env.PROBE_TIMEOUT_MS || '150000', 10);
+// Sixteen tokens was also unfair: a reasoning model spends the whole budget
+// thinking and returns empty content, which is not the same as being broken.
+const PROBE_TOKENS = parseInt(process.env.PROBE_TOKENS || '64', 10);
+
+// Every model the pipeline names, not just the article rotation. The Code Brain's
+// structure pass had been pointing at a retired model for eight days and nothing
+// listed it anywhere a check could see.
+const EXTRA = (process.argv.find(a => a.startsWith('--probe=')) || '').slice(8);
+const DEEP = {
+  'deepgraph structure': process.env.DEEP_STRUCT_MODEL || 'openai/gpt-oss-120b',
+  'deepgraph narrative': process.env.DEEP_NARR_MODEL || 'nvidia/nemotron-3-super-120b-a12b'
+};
 
 if (!LLM_API_KEY) {
   console.error('No NVIDIA_API_KEY / LLM_API_KEY in the environment.');
@@ -55,7 +71,7 @@ async function probeChat(model) {
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
-        max_tokens: 16, temperature: 0
+        max_tokens: PROBE_TOKENS, temperature: 0
       })
     });
     const ms = Date.now() - t0;
@@ -64,8 +80,17 @@ async function probeChat(model) {
       return { ok: false, detail: `HTTP ${r.status} ${body}`, ms };
     }
     const j = await r.json();
-    const text = j.choices?.[0]?.message?.content?.trim();
-    if (!text) return { ok: false, detail: 'answered 200 with no content', ms };
+    const msg = j.choices?.[0]?.message || {};
+    const text = msg.content?.trim();
+    if (!text) {
+      // Distinguish the two ways a 200 can be useless, because they need
+      // different answers: a reasoning model needs a bigger budget, an empty
+      // response needs a different model.
+      const thought = (msg.reasoning_content || '').length;
+      return { ok: false, detail: thought
+        ? `spent the whole ${PROBE_TOKENS}-token budget reasoning (${thought} chars), returned no content`
+        : 'answered 200 with no content', ms };
+    }
     return { ok: true, detail: JSON.stringify(text.slice(0, 24)), ms };
   } catch (e) {
     return { ok: false, detail: /timeout|abort/i.test(e.message || e.name)
@@ -111,13 +136,25 @@ async function probeEmbed(model) {
 
   const row = (kind, model, res) => {
     const listed = known.size ? (known.has(model) ? '' : '  [not in catalogue]') : '';
-    console.log(`  ${res.ok ? 'ok  ' : 'DEAD'}  ${kind.padEnd(5)} ${model}  ${(res.ms + 'ms').padStart(7)}  ${res.detail}${listed}`);
+    console.log(`  ${res.ok ? 'ok  ' : 'DEAD'}  ${kind.padEnd(19)} ${model}  ${(res.ms + 'ms').padStart(7)}  ${res.detail}${listed}`);
     if (!res.ok) dead++;
   };
 
   console.log('chat rotation');
   for (const m of CONFIG.models.available) row('chat', m, await probeChat(m));
 
+  console.log('\ncode brain');
+  for (const [role, m] of Object.entries(DEEP)) row(role, m, await probeChat(m));
+
+  if (EXTRA) {
+    console.log('\ncandidates');
+    for (const m of EXTRA.split(',').map(x => x.trim()).filter(Boolean)) {
+      const res = /embed|retriev|arctic/i.test(m) ? await probeEmbed(m) : await probeChat(m);
+      // Candidates are informational: a rejected option, not a fault, so they
+      // do not count toward the exit code.
+      console.log(`  ${res.ok ? 'ok  ' : 'no  '}  candidate           ${m}  ${(res.ms + 'ms').padStart(7)}  ${res.detail}`);
+    }
+  }
   console.log('\nembeddings');
   row('embed', EMBED_MODEL, await probeEmbed(EMBED_MODEL));
 
