@@ -152,6 +152,20 @@ async function generateEmbeddings(forks, cache) {
       // failure. Whatever landed in the cache is still saved and reused next run.
       console.log(`  Embedding batch ${batchNo} failed (HTTP ${result.status}): ${result.error}`);
       if (result.status === 429) console.log('  Rate limited; remaining repos roll over to the next run');
+      /*
+       * A retirement is not a rate limit, and treating it as one cost seventeen
+       * days. nv-embedqa-e5-v5 reached end of life on 2026-08-25; this branch
+       * logged its 410, broke, and let the run exit 0 every two hours while 127
+       * repositories reached the site with no position on the semantic graph.
+       * Nothing rolls over from a 410 - the model is gone until someone changes
+       * EMBED_MODEL - so the only honest move is to stop and be seen.
+       */
+      if (result.status === 404 || result.status === 410) {
+        throw new Error(`${EMBED_MODEL} is gone (HTTP ${result.status}). ` +
+          'Set the EMBED_MODEL repository variable to a live model; ' +
+          'run the Check models workflow to see which ones answer. ' +
+          'Vectors are keyed by model name, so the whole corpus re-embeds once.');
+      }
       break;
     }
 
