@@ -373,3 +373,121 @@ eight graded axes) and must say that it did.
   wrong.*
 
 **Debrief.** _(after stage 1)_
+
+---
+
+## 2026-09-11 - D5: positioning - a rating, not a search engine
+
+**Status:** open. Strategy, nothing built. The circularity trap in P16 should be
+settled before anything is built on it.
+
+**What prompted it.** "So we become a Google for repos that developers find
+useful." Partly - and the wrong half is the half that decides everything after it.
+
+### The framing
+
+"Google for repos" is a losing frame. GitHub search, Sourcegraph and grep.app
+already index far more code than this ever will, and Google's moat is crawl plus
+index - breadth. The per-repo cost here is a model call for the article, a budgeted
+deep pass and a symbol extraction: fine at 1,534 repositories, ruinous at a million.
+That frame competes precisely where there is no advantage.
+
+Both incumbents also rank by **popularity** - links, or stars. Stars measure who
+noticed a repository, which is a claim about marketing.
+
+What exists here instead is a **normalised quality signal over a whole corpus**:
+62 checks applied uniformly, 8 axes, one rubric, findings charged consistently
+across 1,534 repositories. Nobody else has that, and it is the prerequisite for
+every idea below. The closer analogy is a credit rating - "should I depend on
+this?" - than a search engine - "does this exist?". Search is the interface; the
+rating is the asset.
+
+### Three corpora, three different products
+
+Depth is affordable here and breadth is not, so the real question is which corpus
+to go deep on.
+
+1. **The estate you own.** What it does today. "Know your own sprawl." Clearest
+   value, smallest market, longest sale, and the demo already exists.
+2. **A vertical, indexed exhaustively.** 58 repositories already classify as Agent
+   Skills & Plugins and 233 carry the LLM & Agents capability. Being *the* graded
+   index of every MCP server or agent skill is winnable because the corpus is
+   bounded and moving faster than anyone has mapped it.
+3. **Dependency-anchored.** Index only what appears in someone's dependency graph.
+   The corpus defines itself and every entry is known to matter. Most defensible,
+   most work.
+
+**Leaning: (2)**, as the cheapest test of the rating thesis.
+
+### The idea that closes the loop
+
+**Glossa as the eval harness for agent-generated code.** An agent builds a project;
+the same 62 checks, the same 8 axes and the same rubric that grade 1,534 real
+repositories grade the generated one, and return a score *plus a percentile against
+the corpus*.
+
+This needs no new machinery - checks, rubric and baseline all exist - and it is the
+only honest answer to "faster" found so far. Speed still cannot be measured here.
+**Good on the first try, calibrated against real repositories**, can be.
+
+It also completes the pair with D4: provenance-tagged facts going into an agent,
+corpus-calibrated grading coming out. Agents do not lack capability; they lack
+grounded context in and any check on their output coming back.
+
+### The trap, and a first measurement of it
+
+Best practices as an empirical finding - "of 752 web apps, the ones grading B or
+better share these traits" - is the genuinely novel computation here. The naive
+version is circular: **the rubric already rewards the traits.** "A-graded
+repositories have tests" is a restatement of `no-tests-at-all` being a charged
+check, not a discovery.
+
+So the extraction has to run on signals the rubric does not score. A first pass over
+the store, comparing grade bands on four structural signals:
+
+| band | n | avg deps | avg modules | avg instability | avg modules in a cycle |
+|---|---|---|---|---|---|
+| B+ or better | 103 | 10.8 | 256.8 | 0.354 | 3.3 |
+| middle | 1232 | 10.7 | 158.7 | 0.280 | 6.2 |
+| D or worse | 198 | 18.1 | 111.3 | 0.244 | 7.7 |
+
+Two of those four are contaminated and two are not, which is the useful result:
+
+- **Cycles are contaminated.** Not through a named check id but through the
+  architecture scorer, which divides cycles by modules directly
+  (`lib-grade.js:260`). The separation is partly the rubric looking at itself.
+- **Dependency count is contaminated.** Seven charged checks concern dependencies
+  and advisories, so more dependencies mechanically means more advisory exposure
+  means a lower grade.
+- **Module count and instability appear clean.** Neither is charged by any of the
+  62 checks nor read by any scorer. And they separate the bands anyway, in a
+  direction worth noticing: well-graded repositories here are **larger** (256.8
+  modules against 111.3) and **more unstable** in the coupling sense (0.354 against
+  0.244), not smaller and tidier.
+
+That is a real, non-circular, mildly counter-intuitive signal, found in one query.
+It is also n=103 against n=198 with no significance testing and every confounder
+intact - size almost certainly proxies for something else - so it is a reason to
+run the experiment properly, not a finding.
+
+**Predictions to check.**
+
+- **P14.** A vertical corpus (corpus option 2) reaches useful coverage at a cost the
+  current pipeline can carry, where a general index cannot. *Check: cost per
+  repository times the size of the bounded corpus.*
+- **P15.** The grade is the whole differentiator and **has never been validated
+  against anything external** - not adoption, not breakage, not maintainer
+  responsiveness. Internally consistent and provenance-clean beats stars, but "our
+  ranking is better" is an assumption. *Check: correlate the grade against any
+  external outcome at all.*
+- **P16.** **Non-rubric signals separate grade bands.** First measurement above says
+  yes for module count and instability. *Check properly: hold size constant, test
+  significance, and confirm that no scorer reads either field.*
+- **P17.** The eval harness grades agent-generated projects without modification -
+  the rubric is not secretly tuned to repositories that grew over time rather than
+  being generated at once. *This is the one most likely to be wrong.*
+- **P18.** The engine is corpus-agnostic: the scoring and provenance layers transfer
+  to a non-code corpus with the adapter layer replaced and `lib-grade.js`
+  substantially intact. *Currently a claim from reading imports, not a finding.*
+
+**Debrief.** _(after the first vertical, or the first non-code corpus)_
