@@ -293,15 +293,28 @@ function loadDeep(db, ids) {
   for (const rid of ids) {
     const deep = readJson(path.join('structure', rid + '.deep.json'), null);
     if (deep) {
+      /*
+       * The field names are the file's, not the ones guessed here originally.
+       * A .deep.json calls its adjacency `links` with `{s,t}` and keeps `edges`
+       * as a COUNT inside totals, so `for (const e of deep.edges)` iterated a
+       * number and threw - which is why --deep had never once loaded a module
+       * and both tables read 0 rows. The node fields are `inst` and `cycle`,
+       * not `instability` and `inCycle`, so even the modules that would have
+       * loaded were about to store null coupling and false for every cycle.
+       */
       const mods = deep.modules || deep.nodes || [];
       for (const m of mods) {
         const p = m.path || m.id || m.name;
         if (!p) continue;
-        mod.run(rid, p, m.ca ?? null, m.ce ?? null, m.instability ?? null, bool(m.inCycle || m.in_cycle));
+        mod.run(rid, p, m.ca ?? null, m.ce ?? null, m.inst ?? m.instability ?? null,
+          bool(m.cycle ?? m.inCycle ?? m.in_cycle));
         counts.module++;
       }
-      for (const e of (deep.edges || [])) {
-        const a = modId.get(rid, e.from || e.source), b = modId.get(rid, e.to || e.target);
+      const links = Array.isArray(deep.links) ? deep.links
+        : (Array.isArray(deep.edges) ? deep.edges : []);
+      for (const e of links) {
+        const a = modId.get(rid, e.s ?? e.from ?? e.source);
+        const b = modId.get(rid, e.t ?? e.to ?? e.target);
         if (a && b) { edge.run(rid, a.id, b.id); counts.import_edge++; }
       }
       for (const e of ((deep.flow || {}).entries || [])) {

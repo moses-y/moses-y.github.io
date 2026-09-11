@@ -45,7 +45,15 @@ function ensureDir(p) {
  * back, which is the only failure mode worth designing for here: the database
  * is rebuildable from JSON and GitHub, so recovery is re-running, not repair.
  */
-function migrate(db, dir) {
+/*
+ * `dir` defaults, and an empty directory is an error. It used to be a required
+ * parameter with no default, so migrate(db) checked a path of `undefined`, found
+ * nothing, applied nothing and returned [] - a clean success that left the schema
+ * at whatever version it happened to be. A migration runner that silently does
+ * nothing is worse than one that crashes: the crash is a wrong command, the
+ * silence is a wrong database.
+ */
+function migrate(db, dir = MIGRATIONS_DIR) {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     version    INTEGER PRIMARY KEY,
     name       TEXT NOT NULL,
@@ -59,6 +67,11 @@ function migrate(db, dir) {
   const files = fs.existsSync(dir)
     ? fs.readdirSync(dir).filter(f => /^\d+.*\.sql$/.test(f)).sort()
     : [];
+
+  if (!files.length) {
+    throw new Error(`no numbered .sql migrations found in "${dir}" - ` +
+      'refusing to report a migrated database that was never migrated');
+  }
 
   const ran = [];
   for (const f of files) {

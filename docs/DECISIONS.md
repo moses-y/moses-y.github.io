@@ -258,3 +258,71 @@ something not executed.** The errors in this project cluster almost entirely in
 the gap between "I read it" and "I ran it" — and every one of them was cheap to
 resolve by running something. That is the check worth making a habit, because it
 is mechanical and does not depend on being in a careful mood.
+
+---
+
+## 2026-09-11 - D3: P8 settled by measurement - the graph engine is not needed
+
+**Status:** decided. Settles **D2/P8**, informs **D2/P6**.
+
+**What prompted it.** D2 predicted that transitive advisory blast radius would be
+the first query relational SQL serves badly, and that it would be what justified a
+graph extension. Writing it costs an afternoon; the migration it would justify
+costs considerably more. So it was written and timed against the current store.
+
+**The prediction was wrong, and interestingly wrong.** Blast radius is not one
+query. It is two, and they sit on opposite sides of the line:
+
+| Question | Shape | Measured |
+|---|---|---|
+| Advisory -> affected packages -> repositories | 2 joins, depth known when written | **0.42 ms**, 94 rows |
+| Every high-severity advisory at once | same, unbounded | **13.41 ms**, 11,075 rows |
+| Which modules transitively import this one | recursive, depth unknown | **58.89 ms** worst of the 10 largest repositories |
+
+The estate question - the one P8 named - **is not a traversal at all.** An advisory
+names packages and packages are declared by repositories: two hops, both known when
+the query is written. There is no package-to-package edge in this data, so
+dependency depth is capped at one and no amount of graph engine changes that.
+
+The genuinely recursive query is a different one that D2 never considered:
+**module-level change impact**, walking `import_edge` backwards over 243,989
+modules and 351,839 edges. That is the query worth building a product on - "if I
+change this file, what breaks, and how far away is it" - and Postgres serves it in
+tens of milliseconds.
+
+**Decision.** No graph extension. Not now, and not for this. Revisit if a query
+appears whose depth is unknown *and* whose working set is large enough that a
+recursive CTE stops being tens of milliseconds - the estate would need to grow by
+one to two orders of magnitude first.
+
+**What the measurement found that nobody predicted.**
+
+1. `--deep` in build-store.js **had never worked.** A `.deep.json` calls its
+   adjacency `links` with `{s,t}` and keeps `edges` as a count, so
+   `for (const e of deep.edges)` iterated a number and threw. Both `module` and
+   `import_edge` had read 0 rows since the store was written, and nothing noticed
+   because nothing read them. The node fields were wrong too - `inst` and `cycle`,
+   not `instability` and `inCycle` - so even the modules that would have loaded
+   were about to store null coupling and false for every cycle.
+2. **The reverse index was missing, and its absence was silent.** `import_edge`'s
+   primary key indexes one direction; every interesting traversal runs the other
+   way. SQLite did not fail - it built a throwaway covering index on every single
+   call. 292.65 ms became **2.26 ms** once the index existed, a factor of 129.
+   Migration `003-traversal.sql`.
+3. **The first version of the query was wrong in a way that reads as plausible.**
+   A naive `UNION` over `(id, depth)` returns a module once per depth it is
+   reachable at, so it reported 13,907 affected modules in a repository containing
+   1,200. Not an overcount - a different quantity, path count rather than impact
+   set. `MIN(depth)` per module is the honest answer, and it is 802.
+4. `migrate(db)` with no directory argument applied nothing and returned success.
+   Fixed to default the path and to throw on an empty migration set.
+
+**On P6.** Not settled here - that one is about vector search at scale and needs
+Postgres. But the shape of this result is a warning about it: the predicted
+bottleneck was not the real one, and the real one was an index nobody had thought
+about.
+
+**The pattern, for the debrief.** Every one of the four findings above was invisible
+until something *ran*. Two empty tables, a missing index, a wrong aggregate, and a
+no-op migration runner, none of which any amount of reading the schema would have
+surfaced. That is R1 with a price tag attached.
