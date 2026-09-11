@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>September 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Python</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,28 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>opennews mcp is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>This repository ships production‑ready AI‑driven trading signals with zero test coverage, no CI/CD gate, and duplicated logic across two tool files. Dependencies are declared without a lockfile, and two direct dependencies are multiple major versions behind the current published release. For a technical team evaluating adoption, the absence of reproducibility guarantees and basic SDLC tooling is the primary concern.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OpenNews MCP Server is an MCP (Model Context Protocol) service that aggregates 85+ real‑time data sources across six categories—News, Listing, OnChain, Meme, Market, and Prediction—then applies AI analysis to produce impact scores, trading signals (long/short/neutral), and bilingual (EN/ZH) summaries. The code lives primarily in <code>src/opennews_mcp/</code>: <code>app.py</code>, <code>server.py</code>, <code>__main__.py</code>, and a tools package with <code>news.py</code>, <code>realtime.py</code>, <code>finance.py</code> (804 lines), <code>strategy.py</code>, <code>discovery.py</code>, and <code>free.py</code>. Configuration is read from <code>config.json</code> at the root and the <code>OPENNEWS_TOKEN</code> environment variable. The README lists 85+ sources—Bloomberg, Reuters, CoinDesk, Binance, OKX, and others—organized by engine type.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>src/opennews_mcp/__main__.py</code> (the <code>uv run opennews-mcp</code> entry point) and <code>src/opennews_mcp/server.py</code>, which instantiates the MCP server. The import graph analysis reports 13 Python modules with <strong>zero detected import edges</strong> and <strong>no circular dependencies</strong>, meaning inter‑module wiring is not established via static imports; components are likely composed dynamically or through the MCP framework’s tool registration. The three most connected modules—<code>__init__</code>, <code>__main__</code>, and <code>api_client</code>—each have <code>Ca 0 Ce 0</code>, confirming no module imports another within the analyzed set. The <code>src/opennews_mcp/tools/</code> modules (<code>news</code>, <code>realtime</code>, <code>finance</code>, etc.) each operate independently; <code>finance.py</code> at 804 lines is the widest‑blast‑radius file, as a change there could affect signal generation broadly without clear isolation.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong>: Install with <code>uv</code> as documented in the README:</p>
+<pre data-lang="bash"><code>claude mcp add opennews \
+  -e OPENNEWS_TOKEN=&lt;your-token&gt; \
+  -- uv --directory /path/to/opennews-mcp run opennews-mcp</code></pre>
+<p>Alternatively, for OpenClaw: <code>export OPENNEWS_TOKEN=&quot;&lt;your-token&gt;&quot; &amp;&amp; cp -r openclaw-skill/opennews ~/.openclaw/skills/</code>.</p>
+<p><strong>Configuration</strong>: The token must be set as <code>OPENNEWS_TOKEN</code> in the environment or in <code>config.json</code> at the project root. The <code>pyproject.toml</code> and <code>openclaw-skill/opennews/package.json</code> declare dependencies <code>mcp</code>, <code>httpx</code>, and <code>websockets</code>; no lockfile is present, so <code>uv lock</code> or <code>pip install</code> will resolve to the latest compatible versions.</p>
+<p><strong>Running it</strong>: The entry point is <code>src/opennews_mcp/__main__.py</code> invoked via <code>uv run opennews-mcp</code>. No Dockerfile or Makefile exists; the process starts the MCP server, which listens for tool calls and queries the 85+ data sources.</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A quantitative trading team could subscribe to the MCP server’s <code>news</code> and <code>market</code> tools to receive AI‑rated signals. For example, a bot might call the <code>discovery</code> tool to fetch the latest finance articles, then the <code>strategy</code> module to translate impact scores into position sizes. The bilingual summaries allow cross‑language analytics desks to consume the same data without separate translation pipelines.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>[MEDIUM/clarity]</strong> Duplicated code blocks: 5 repeated 6‑line segments appear in <code>src/opennews_mcp/tools/news.py</code> and <code>src/opennews_mcp/tools/realtime.py</code>. Extract shared helpers to DRY the logic.</li><li><strong>[MEDIUM/cognitive_load]</strong> Oversized file: <code>src/opennews_mcp/tools/finance.py</code> contains 804 code lines; holding its responsibility in one head is error‑prone. Split into cohesive units by concern (e.g., price data, on‑chain metrics, sentiment).</li><li><strong>[Medium/SDLC]</strong> No test files detected—untested code paths across the repository.</li><li><strong>[Medium/SDLC]</strong> No CI/CD pipeline—no automated build/test gate in <code>.github/</code> or equivalent.</li><li><strong>[Low/Risk]</strong> Dependencies declared without a lockfile (<code>openclaw-skill/opennews/package.json</code>, <code>pyproject.toml</code>); builds are non‑reproducible across environments.</li><li><strong>[Low/Risk]</strong> Two declared dependencies are behind the current major version: <code>websockets &gt;=13</code> (current 17.0.1, 4 majors behind) and <code>mcp &gt;=1.25,&lt;2</code> (current 2.0.0, 1 major behind).</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The repo delivers a functional MCP server with broad data coverage and useful AI‑generated signals, but the lack of tests, CI, and a lockfile makes it unsuitable for production pipelines without significant hardening. The duplicated logic and 800‑line finance module are the most immediate technical debt items. Teams comfortable pinning dependencies manually and adding their own test harness can leverage the data sources quickly; others should seek a more automated, reproducible setup.</p>
             </div>
 
             
@@ -111,6 +130,18 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>2</strong> of 3 declared dependencies are a major version behind. Resolved 3 of 3 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>websockets</code></td>
+                            <td>&gt;=13</td><td>17.0.1</td>
+                            <td class="beh">4 major</td></tr><tr><td><code>mcp</code></td>
+                            <td>&gt;=1.25,&lt;2</td><td>2.0.0</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
                 <div class="an-block">
