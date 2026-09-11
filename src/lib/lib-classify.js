@@ -28,7 +28,10 @@ const LANG_DOMAIN = {
   SQL: 'AI & Data',
   Terraform: 'Systems & Infra', HCL: 'Systems & Infra', Dockerfile: 'Systems & Infra',
   Makefile: 'Systems & Infra', 'C/C++ Header': 'Systems & Infra', Perl: 'Systems & Infra',
-  Scala: 'Systems & Infra', Haskell: 'Systems & Infra', Nix: 'Systems & Infra'
+  Scala: 'Systems & Infra', Haskell: 'Systems & Infra', Nix: 'Systems & Infra',
+  // An IDL, not an application language: a .proto file describes a wire contract
+  // between services, so it belongs with the infrastructure it wires together.
+  'Protocol Buffers': 'Systems & Infra'
 };
 
 /*

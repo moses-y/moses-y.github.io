@@ -64,6 +64,7 @@
         'Nix': 'DevOps & Tooling', 'Perl': 'DevOps & Tooling',
         'Scala': 'Backend & Services', 'Haskell': 'Backend & Services',
         'Julia': 'AI / ML & Data', 'Solidity': 'Systems',
+        'Protocol Buffers': 'DevOps & Tooling',
         // Prose-only repositories - skills packs, awesome lists, question sets.
         // primaryLanguage only returns these when there is no code at all, so
         // reaching here means the repository really is a document collection.
