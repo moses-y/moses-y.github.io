@@ -150,11 +150,11 @@ Keeper: **lich-skills** (B, 75.4). Mean grade across the 2 audited members is 73
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **VoiceStudio** (C+, 69.3). Mean grade across the 2 audited members is 62.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 61.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **VoiceStudio** | AI & Data | Python | C+ 69.3 | 2062 |
+| **VoiceStudio** | AI & Data | Python | C+ 66.8 | 2062 |
 | voicebox | Web & Interfaces | TSX | C- 56.4 | 677 |
 
 ### c038 - 2 repositories
