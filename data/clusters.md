@@ -27,7 +27,7 @@ Keeper: **OpenHands** (B-, 73.2). Mean grade across the 4 audited members is 60.
 | **OpenHands** | AI & Data | Python | B- 73.2 | 2658 |
 | OpenJarvis | AI & Data | Python | C+ 68.6 | 1742 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59.2 | 1548 |
-| learn-anything.xyz | Web & Interfaces | TypeScript | D 42.3 | 209 |
+| learn-anything.xyz | Web & Interfaces | TypeScript | D 42.1 | 209 |
 
 ### c002 - 4 repositories
 
@@ -72,12 +72,12 @@ Keeper: **obsidian-mind** (B+, 80.4). Mean grade across the 4 audited members is
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **winpodx** | AI & Data | Python | C 62.6 | 502 |
-| winboat | Web & Interfaces | TypeScript | C- 57.8 | 121 |
+| winboat | Web & Interfaces | TypeScript | C- 57.6 | 121 |
 | winapps | Systems & Infra | Shell | C- 54.2 | 245 |
 
 ### c015 - 2 repositories
@@ -185,12 +185,12 @@ Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 69
 
 All 3 in Web & Interfaces.
 
-Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 68.1 | 3058 |
-| oh-my-openagent | Web & Interfaces | TypeScript | C 60.5 | 6746 |
+| oh-my-openagent | Web & Interfaces | TypeScript | C 60.4 | 6746 |
 | opencode | Web & Interfaces | TypeScript | C- 53.4 | 2755 |
 
 ### c006 - 3 repositories
@@ -335,12 +335,12 @@ Keeper: **openskills** (B+, 82.4). Mean grade across the 2 audited members is 77
 
 All 2 in AI & Data.
 
-Keeper: **livecc** (D, 46.3). Mean grade across the 2 audited members is 43.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **livecc** (D, 46.3). Mean grade across the 2 audited members is 43.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **livecc** | AI & Data | Python | D 46.3 | 95 |
-| VideoAgent | AI & Data | Python | D 41.3 | 853 |
+| VideoAgent | AI & Data | Python | D 41.1 | 853 |
 
 ### c021 - 2 repositories
 
