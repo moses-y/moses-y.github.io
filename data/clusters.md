@@ -33,11 +33,11 @@ Keeper: **OpenHands** (B-, 73.2). Mean grade across the 4 audited members is 60.
 
 Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **stenoai** (C+, 65.1). Mean grade across the 4 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **stenoai** | AI & Data | Python | C+ 65.1 | 62 |
+| **stenoai** | AI & Data | Python | C+ 65 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.9 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.9 | 435 |
 | meetily | Systems & Infra | Rust | D 43.4 | 509 |
@@ -51,7 +51,7 @@ Keeper: **Lead-Generation** (C, 60.8). Mean grade across the 4 audited members i
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.8 | 56 |
-| googlemaps-scraper | Knowledge & Content |  | C- 58.6 | 93 |
+| googlemaps-scraper | Knowledge & Content |  | C- 58.5 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 56 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
 
@@ -161,12 +161,12 @@ Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 6
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **flashvad** (B+, 80.7). Mean grade across the 2 audited members is 67. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **flashvad** (B+, 80.7). Mean grade across the 2 audited members is 66.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **flashvad** | AI & Data | Python | B+ 80.7 | 166 |
-| ten-vad | Systems & Infra | C/C++ Header | C- 53.2 | 147 |
+| ten-vad | Systems & Infra | C/C++ Header | C- 53 | 147 |
 
 ### c040 - 2 repositories
 
@@ -467,12 +467,12 @@ Keeper: **atomic-mail-agentic** (B-, 70.9). Mean grade across the 2 audited memb
 
 All 2 in Web & Interfaces.
 
-Keeper: **decimen-optical-transfer** (C+, 69). Mean grade across the 2 audited members is 66.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **decimen-optical-transfer** (C+, 68.9). Mean grade across the 2 audited members is 66.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 69 | 19 |
-| qr-data-transfer | Web & Interfaces | TypeScript | C 64.1 | 44 |
+| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 68.9 | 19 |
+| qr-data-transfer | Web & Interfaces | TypeScript | C 64 | 44 |
 
 ### c041 - 2 repositories
 
@@ -487,4 +487,4 @@ Keeper: **AIUsage** (C+, 69.2). Mean grade across the 2 audited members is 66.1.
 
 ---
 
-Generated from data/clusters.json built 2026-09-18. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-09-19. Regenerate with `node src/stages/build-relations.js`.
