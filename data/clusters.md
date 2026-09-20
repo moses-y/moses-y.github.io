@@ -46,11 +46,11 @@ Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.3. E
 
 Crosses a domain boundary: 2 AI & Data, 1 Knowledge & Content, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **Lead-Generation** (C, 60.8). Mean grade across the 4 audited members is 57. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Lead-Generation** (C, 60.7). Mean grade across the 4 audited members is 57. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Lead-Generation** | AI & Data | Python | C 60.8 | 56 |
+| **Lead-Generation** | AI & Data | Python | C 60.7 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.5 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 56 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
@@ -59,13 +59,13 @@ Keeper: **Lead-Generation** (C, 60.8). Mean grade across the 4 audited members i
 
 Crosses a domain boundary: 3 Web & Interfaces, 1 Agent Skills & Plugins. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **obsidian-mind** (B+, 80.4). Mean grade across the 4 audited members is 78.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **obsidian-mind** (B+, 80.3). Mean grade across the 4 audited members is 78.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.4 | 187 |
+| **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.3 | 187 |
 | open-second-brain | Web & Interfaces | TypeScript | B 79.9 | 2597 |
-| MegaMemory | Web & Interfaces | TypeScript | B 79.3 | 44 |
+| MegaMemory | Web & Interfaces | TypeScript | B 79.1 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | B 75.2 | 208 |
 
 ### c011 - 3 repositories
@@ -346,11 +346,11 @@ Keeper: **livecc** (D, 46.3). Mean grade across the 2 audited members is 43.7. E
 
 All 2 in AI & Data.
 
-Keeper: **graph_maker** (C, 62.9). Mean grade across the 2 audited members is 59.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **graph_maker** (C, 62.7). Mean grade across the 2 audited members is 59.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **graph_maker** | AI & Data | Jupyter Notebook | C 62.9 | 16 |
+| **graph_maker** | AI & Data | Jupyter Notebook | C 62.7 | 16 |
 | knowledge_graph | AI & Data | Jupyter Notebook | C- 55.7 | 42 |
 
 ### c022 - 2 repositories
