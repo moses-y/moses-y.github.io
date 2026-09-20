@@ -461,7 +461,7 @@ Keeper: **paseo** (B-, 71.4). Mean grade across the 2 audited members is 66.2. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **paseo** | Web & Interfaces | TypeScript | B- 71.4 | 1647 |
-| orca | Web & Interfaces | TypeScript | C 61 | 6335 |
+| orca | Web & Interfaces | TypeScript | C 60.9 | 6335 |
 
 ### c036 - 2 repositories
 
