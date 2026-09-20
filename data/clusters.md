@@ -7,7 +7,7 @@
 ## What the numbers say
 
 - 15 of the 42 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
-- 1 of the 100 clustered repositories (1%) have never been audited. Every keeper chosen over one of them is a provisional choice.
+- All 100 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
 ## How to use this
@@ -183,12 +183,12 @@ Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 69
 
 Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 1 audited members is 68.1. 1 of 2 (50%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 2 audited members is 65.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **free-for-dev** | Web & Interfaces | HTML | C+ 68.1 | 10 |
-| free-for-devs | Systems & Infra |  | not audited | 3 |
+| free-for-devs | Systems & Infra |  | C 62.7 | 3 |
 
 ## Groups inside a single domain
 
