@@ -1,13 +1,13 @@
 # Clusters, in prose
 
-> 41 groups covering 98 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
+> 42 groups covering 100 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
 >
 > **These groupings are INFERRED.** They come from cosine distance between neural embeddings, not from anything measured in a tree. Density is a stronger claim than the connected components this used previously - a bridge repository no longer welds two unrelated neighbourhoods together - but a group of 4 still means 4 closely related projects, not 4 copies of one. Read a large group as a thread to pull, never as a list of duplicates to delete.
 
 ## What the numbers say
 
-- 14 of the 41 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
-- All 98 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
+- 15 of the 42 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
+- 1 of the 100 clustered repositories (1%) have never been audited. Every keeper chosen over one of them is a provisional choice.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
 ## How to use this
@@ -178,6 +178,17 @@ Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 69
 | --- | --- | --- | --- | --- |
 | **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.5 | 13 |
 | avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65.2 | 50 |
+
+### c042 - 2 repositories
+
+Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+
+Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 1 audited members is 68.1. 1 of 2 (50%) have not been audited, so a better keeper may be hiding among them.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **free-for-dev** | Web & Interfaces | HTML | C+ 68.1 | 10 |
+| free-for-devs | Systems & Infra |  | not audited | 3 |
 
 ## Groups inside a single domain
 
