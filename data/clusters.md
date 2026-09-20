@@ -150,12 +150,12 @@ Keeper: **lich-skills** (B, 75.4). Mean grade across the 2 audited members is 73
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 61.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 61.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **VoiceStudio** | AI & Data | Python | C+ 66.8 | 2062 |
-| voicebox | Web & Interfaces | TSX | C- 56.4 | 677 |
+| voicebox | Web & Interfaces | TSX | C- 56.3 | 677 |
 
 ### c038 - 2 repositories
 
@@ -456,11 +456,11 @@ Keeper: **paseo** (B-, 71.4). Mean grade across the 2 audited members is 66.2. E
 
 All 2 in Web & Interfaces.
 
-Keeper: **atomic-mail-agentic** (B-, 70.9). Mean grade across the 2 audited members is 69.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **atomic-mail-agentic** (B-, 70.7). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.9 | 424 |
+| **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.7 | 424 |
 | mails | Web & Interfaces | TypeScript | C+ 68.9 | 91 |
 
 ### c039 - 2 repositories
