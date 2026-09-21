@@ -273,7 +273,7 @@ Keeper: **manaflow** (C+, 69.1). Mean grade across the 3 audited members is 62.7
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **manaflow** | Web & Interfaces | TypeScript | C+ 69.1 | 1730 |
-| dmux | Web & Interfaces | TypeScript | C 62.2 | 794 |
+| dmux | Web & Interfaces | TypeScript | C 62.1 | 794 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.8 | 254 |
 
 ### c013 - 2 repositories
@@ -412,12 +412,12 @@ Keeper: **FileSync** (C, 62.4). Mean grade across the 2 audited members is 60.4.
 
 All 2 in AI & Data.
 
-Keeper: **public-apis** (B+, 80). Mean grade across the 2 audited members is 71.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **public-apis** (B+, 80). Mean grade across the 2 audited members is 71.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **public-apis** | AI & Data | Python | B+ 80 | 22 |
-| awesome-opensource-ai | AI & Data | Python | C 62.6 | 8 |
+| awesome-opensource-ai | AI & Data | Python | C 62.4 | 8 |
 
 ### c029 - 2 repositories
 
@@ -498,4 +498,4 @@ Keeper: **AIUsage** (C+, 69.2). Mean grade across the 2 audited members is 66.1.
 
 ---
 
-Generated from data/clusters.json built 2026-09-20. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-09-21. Regenerate with `node src/stages/build-relations.js`.
