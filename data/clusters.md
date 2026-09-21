@@ -133,7 +133,7 @@ Keeper: **llmwiki** (B-, 74.5). Mean grade across the 2 audited members is 69. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **llmwiki** | AI & Data | Python | B- 74.5 | 300 |
-| llm_wiki | Web & Interfaces | TypeScript | C 63.6 | 227 |
+| llm_wiki | Web & Interfaces | TypeScript | C 63.5 | 227 |
 
 ### c035 - 2 repositories
 
