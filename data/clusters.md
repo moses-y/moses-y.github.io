@@ -423,12 +423,12 @@ Keeper: **public-apis** (B+, 80). Mean grade across the 2 audited members is 71.
 
 All 2 in AI & Data.
 
-Keeper: **cadquery** (B-, 71.5). Mean grade across the 2 audited members is 70.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **cadquery** (B-, 71.5). Mean grade across the 2 audited members is 70.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **cadquery** | AI & Data | Python | B- 71.5 | 209 |
-| build123d | AI & Data | Python | B- 70.3 | 649 |
+| build123d | AI & Data | Python | B- 70.2 | 649 |
 
 ### c030 - 2 repositories
 
