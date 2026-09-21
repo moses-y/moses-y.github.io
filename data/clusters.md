@@ -262,7 +262,7 @@ Keeper: **MARM-Systems** (C, 63). Mean grade across the 3 audited members is 61.
 | --- | --- | --- | --- | --- |
 | **MARM-Systems** | AI & Data | Python | C 63 | 124 |
 | MemMachine | AI & Data | Python | C 62.3 | 706 |
-| mcp-memory-service | AI & Data | Python | C- 58.1 | 1147 |
+| mcp-memory-service | AI & Data | Python | C- 58 | 1147 |
 
 ### c012 - 3 repositories
 
