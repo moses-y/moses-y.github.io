@@ -139,11 +139,11 @@ Keeper: **llmwiki** (B-, 74.5). Mean grade across the 2 audited members is 69. E
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **lich-skills** (B, 75.4). Mean grade across the 2 audited members is 73.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **lich-skills** (B, 75.3). Mean grade across the 2 audited members is 73.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **lich-skills** | Agent Skills & Plugins | Shell | B 75.4 | 46 |
+| **lich-skills** | Agent Skills & Plugins | Shell | B 75.3 | 46 |
 | agentskills | Web & Interfaces | JavaScript | B- 71.4 | 187 |
 
 ### c037 - 2 repositories
