@@ -78,7 +78,7 @@ Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58.1. 
 | --- | --- | --- | --- | --- |
 | **winpodx** | AI & Data | Python | C 62.6 | 502 |
 | winboat | Web & Interfaces | TypeScript | C- 57.6 | 121 |
-| winapps | Systems & Infra | Shell | C- 54.2 | 245 |
+| winapps | Systems & Infra | Shell | C- 54.1 | 245 |
 
 ### c015 - 2 repositories
 
