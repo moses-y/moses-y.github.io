@@ -66,7 +66,7 @@ Keeper: **obsidian-mind** (B+, 80.3). Mean grade across the 4 audited members is
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.3 | 187 |
 | open-second-brain | Web & Interfaces | TypeScript | B 79.9 | 2597 |
 | MegaMemory | Web & Interfaces | TypeScript | B 79.1 | 44 |
-| agentmemory | Web & Interfaces | TypeScript | B 75.2 | 208 |
+| agentmemory | Web & Interfaces | TypeScript | B 75.1 | 208 |
 
 ### c011 - 3 repositories
 
@@ -220,11 +220,11 @@ Keeper: **BeautySmart** (C+, 66.7). Mean grade across the 3 audited members is 5
 
 All 3 in Web & Interfaces.
 
-Keeper: **n8n** (C+, 65.8). Mean grade across the 3 audited members is 62. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (C+, 65.7). Mean grade across the 3 audited members is 61.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **n8n** | Web & Interfaces | TypeScript | C+ 65.8 | 17556 |
+| **n8n** | Web & Interfaces | TypeScript | C+ 65.7 | 17556 |
 | n8n-as-code | Web & Interfaces | TypeScript | C 60.5 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.6 | 2203 |
 
@@ -390,12 +390,12 @@ Keeper: **client-python** (B, 78.1). Mean grade across the 2 audited members is 
 
 All 2 in Web & Interfaces.
 
-Keeper: **pluely** (C-, 59.6). Mean grade across the 2 audited members is 49.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **pluely** (C-, 59.5). Mean grade across the 2 audited members is 49.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **pluely** | Web & Interfaces | TSX | C- 59.6 | 224 |
-| natively-cluely-ai-assistant | Web & Interfaces | TypeScript | D 40 | 182 |
+| **pluely** | Web & Interfaces | TSX | C- 59.5 | 224 |
+| natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.9 | 182 |
 
 ### c027 - 2 repositories
 
