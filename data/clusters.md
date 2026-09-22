@@ -95,11 +95,11 @@ Keeper: **mercury-agent-skills** (B, 75.3). Mean grade across the 2 audited memb
 
 Crosses a domain boundary: 1 AI & Data, 1 Mobile. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mlx-audio** (B-, 70.1). Mean grade across the 2 audited members is 69.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mlx-audio** (B-, 70). Mean grade across the 2 audited members is 69. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **mlx-audio** | AI & Data | Python | B- 70.1 | 574 |
+| **mlx-audio** | AI & Data | Python | B- 70 | 574 |
 | mlx-audio-swift | Mobile | Swift | C+ 68.1 | 97 |
 
 ### c026 - 2 repositories
@@ -244,11 +244,11 @@ Keeper: **FinRL** (C, 64). Mean grade across the 3 audited members is 52.8. Ever
 
 All 3 in Mobile.
 
-Keeper: **FluidVoice** (C, 61.9). Mean grade across the 3 audited members is 57.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 61.8). Mean grade across the 3 audited members is 57.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FluidVoice** | Mobile | Swift | C 61.9 | 186 |
+| **FluidVoice** | Mobile | Swift | C 61.8 | 186 |
 | VoiceInk | Mobile | Swift | C- 55.8 | 231 |
 | pindrop | Mobile | Swift | C- 54.5 | 569 |
 
@@ -445,11 +445,11 @@ Keeper: **gpu-hot** (C, 62.8). Mean grade across the 2 audited members is 52.5. 
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 67.2). Mean grade across the 2 audited members is 66.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 67.1). Mean grade across the 2 audited members is 66.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **rust-genai** | Systems & Infra | Rust | C+ 67.2 | 187 |
+| **rust-genai** | Systems & Infra | Rust | C+ 67.1 | 187 |
 | aisix | Systems & Infra | Rust | C+ 65.4 | 526 |
 
 ### c033 - 2 repositories
