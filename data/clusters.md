@@ -225,7 +225,7 @@ Keeper: **n8n** (C+, 65.8). Mean grade across the 3 audited members is 62. Every
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **n8n** | Web & Interfaces | TypeScript | C+ 65.8 | 17556 |
-| n8n-as-code | Web & Interfaces | TypeScript | C 60.6 | 357 |
+| n8n-as-code | Web & Interfaces | TypeScript | C 60.5 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.6 | 2203 |
 
 ### c008 - 3 repositories
@@ -498,4 +498,4 @@ Keeper: **AIUsage** (C+, 69.2). Mean grade across the 2 audited members is 66.1.
 
 ---
 
-Generated from data/clusters.json built 2026-09-21. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-09-22. Regenerate with `node src/stages/build-relations.js`.
