@@ -20,12 +20,12 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 2 AI & Data, 2 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **OpenHands** (B-, 73.2). Mean grade across the 4 audited members is 60.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenHands** (B-, 73.1). Mean grade across the 4 audited members is 60.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **OpenHands** | AI & Data | Python | B- 73.2 | 2658 |
-| OpenJarvis | AI & Data | Python | C+ 68.6 | 1742 |
+| **OpenHands** | AI & Data | Python | B- 73.1 | 2658 |
+| OpenJarvis | AI & Data | Python | C+ 68.5 | 1742 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59.2 | 1548 |
 | learn-anything.xyz | Web & Interfaces | TypeScript | D 42.1 | 209 |
 
@@ -232,11 +232,11 @@ Keeper: **n8n** (C+, 65.8). Mean grade across the 3 audited members is 62. Every
 
 All 3 in AI & Data.
 
-Keeper: **FinRL** (C, 64.1). Mean grade across the 3 audited members is 52.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FinRL** (C, 64). Mean grade across the 3 audited members is 52.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FinRL** | AI & Data | Python | C 64.1 | 195 |
+| **FinRL** | AI & Data | Python | C 64 | 195 |
 | tensortrade | AI & Data | Python | C- 53.8 | 153 |
 | TradeMaster | AI & Data | Python | D 40.5 | 776 |
 
@@ -268,13 +268,13 @@ Keeper: **MARM-Systems** (C, 63). Mean grade across the 3 audited members is 61.
 
 All 3 in Web & Interfaces.
 
-Keeper: **manaflow** (C+, 69.1). Mean grade across the 3 audited members is 62.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **manaflow** (C+, 69). Mean grade across the 3 audited members is 62.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **manaflow** | Web & Interfaces | TypeScript | C+ 69.1 | 1730 |
+| **manaflow** | Web & Interfaces | TypeScript | C+ 69 | 1730 |
 | dmux | Web & Interfaces | TypeScript | C 62.1 | 794 |
-| parallel-code | Web & Interfaces | TypeScript | C- 56.8 | 254 |
+| parallel-code | Web & Interfaces | TypeScript | C- 56.7 | 254 |
 
 ### c013 - 2 repositories
 
@@ -456,11 +456,11 @@ Keeper: **rust-genai** (C+, 67.2). Mean grade across the 2 audited members is 66
 
 All 2 in Web & Interfaces.
 
-Keeper: **paseo** (B-, 71.4). Mean grade across the 2 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **paseo** (B-, 71.3). Mean grade across the 2 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **paseo** | Web & Interfaces | TypeScript | B- 71.4 | 1647 |
+| **paseo** | Web & Interfaces | TypeScript | B- 71.3 | 1647 |
 | orca | Web & Interfaces | TypeScript | C 60.9 | 6335 |
 
 ### c036 - 2 repositories
