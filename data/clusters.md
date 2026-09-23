@@ -106,11 +106,11 @@ Keeper: **mlx-audio** (B-, 70). Mean grade across the 2 audited members is 69. E
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **android-sms-gateway** (C-, 58.6). Mean grade across the 2 audited members is 51.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **android-sms-gateway** (C-, 58.5). Mean grade across the 2 audited members is 51.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **android-sms-gateway** | Mobile | Kotlin | C- 58.6 | 335 |
+| **android-sms-gateway** | Mobile | Kotlin | C- 58.5 | 335 |
 | httpsms | Systems & Infra | Go | D 43.9 | 430 |
 
 ### c032 - 2 repositories
@@ -261,7 +261,7 @@ Keeper: **MARM-Systems** (C, 63). Mean grade across the 3 audited members is 61.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **MARM-Systems** | AI & Data | Python | C 63 | 124 |
-| MemMachine | AI & Data | Python | C 62.3 | 706 |
+| MemMachine | AI & Data | Python | C 62.2 | 706 |
 | mcp-memory-service | AI & Data | Python | C- 58 | 1147 |
 
 ### c012 - 3 repositories
@@ -412,22 +412,22 @@ Keeper: **FileSync** (C, 62.4). Mean grade across the 2 audited members is 60.4.
 
 All 2 in AI & Data.
 
-Keeper: **public-apis** (B+, 80). Mean grade across the 2 audited members is 71.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **public-apis** (B, 79.9). Mean grade across the 2 audited members is 71.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **public-apis** | AI & Data | Python | B+ 80 | 22 |
+| **public-apis** | AI & Data | Python | B 79.9 | 22 |
 | awesome-opensource-ai | AI & Data | Python | C 62.4 | 8 |
 
 ### c029 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **cadquery** (B-, 71.5). Mean grade across the 2 audited members is 70.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **cadquery** (B-, 71.4). Mean grade across the 2 audited members is 70.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **cadquery** | AI & Data | Python | B- 71.5 | 209 |
+| **cadquery** | AI & Data | Python | B- 71.4 | 209 |
 | build123d | AI & Data | Python | B- 70.2 | 649 |
 
 ### c030 - 2 repositories
@@ -439,7 +439,7 @@ Keeper: **gpu-hot** (C, 62.8). Mean grade across the 2 audited members is 52.5. 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **gpu-hot** | AI & Data | Python | C 62.8 | 68 |
-| nvitop | AI & Data | Python | D 42.3 | 116 |
+| nvitop | AI & Data | Python | D 42.2 | 116 |
 
 ### c031 - 2 repositories
 
