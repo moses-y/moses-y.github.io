@@ -33,12 +33,12 @@ Keeper: **OpenHands** (B-, 73.1). Mean grade across the 4 audited members is 60.
 
 Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C+ 65 | 62 |
-| hyprnote | Systems & Infra | Rust | C 61.9 | 3671 |
+| hyprnote | Systems & Infra | Rust | C 61.8 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.8 | 435 |
 | meetily | Systems & Infra | Rust | D 43.3 | 509 |
 
@@ -237,7 +237,7 @@ Keeper: **FinRL** (C, 64). Mean grade across the 3 audited members is 52.7. Ever
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FinRL** | AI & Data | Python | C 64 | 195 |
-| tensortrade | AI & Data | Python | C- 53.8 | 153 |
+| tensortrade | AI & Data | Python | C- 53.7 | 153 |
 | TradeMaster | AI & Data | Python | D 40.4 | 776 |
 
 ### c009 - 3 repositories
@@ -318,7 +318,7 @@ Keeper: **AgenticTrading** (C, 61.2). Mean grade across the 2 audited members is
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **AgenticTrading** | AI & Data | Python | C 61.2 | 539 |
-| TradingAgents | AI & Data | Python | C- 53.4 | 73 |
+| TradingAgents | AI & Data | Python | C- 53.3 | 73 |
 
 ### c018 - 2 repositories
 
@@ -335,22 +335,22 @@ Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 82.4). Mean grade across the 2 audited members is 77.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.3). Mean grade across the 2 audited members is 77.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 82.4 | 94 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 82.3 | 94 |
 | skills | Web & Interfaces | TypeScript | B- 72 | 67 |
 
 ### c020 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **livecc** (D, 46.3). Mean grade across the 2 audited members is 43.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **livecc** (D, 46.2). Mean grade across the 2 audited members is 43.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **livecc** | AI & Data | Python | D 46.3 | 95 |
+| **livecc** | AI & Data | Python | D 46.2 | 95 |
 | VideoAgent | AI & Data | Python | D 41.1 | 853 |
 
 ### c021 - 2 repositories
