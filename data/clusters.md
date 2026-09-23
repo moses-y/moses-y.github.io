@@ -52,7 +52,7 @@ Keeper: **Lead-Generation** (C, 60.7). Mean grade across the 4 audited members i
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.7 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.5 | 93 |
-| google-maps-scraper | Systems & Infra | Go | C- 56 | 90 |
+| google-maps-scraper | Systems & Infra | Go | C- 55.9 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
 
 ### c004 - 4 repositories
@@ -401,12 +401,12 @@ Keeper: **pluely** (C-, 59.5). Mean grade across the 2 audited members is 49.7. 
 
 All 2 in Web & Interfaces.
 
-Keeper: **FileSync** (C, 62.4). Mean grade across the 2 audited members is 60.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FileSync** (C, 62.4). Mean grade across the 2 audited members is 60.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FileSync** | Web & Interfaces | JavaScript | C 62.4 | 44 |
-| OpenDrop | Web & Interfaces | JavaScript | C- 58.4 | 12 |
+| OpenDrop | Web & Interfaces | JavaScript | C- 58.3 | 12 |
 
 ### c028 - 2 repositories
 
