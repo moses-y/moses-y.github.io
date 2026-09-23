@@ -324,12 +324,12 @@ Keeper: **AgenticTrading** (C, 61.3). Mean grade across the 2 audited members is
 
 All 2 in Web & Interfaces.
 
-Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 62.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 62.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **altersend** | Web & Interfaces | TypeScript | C+ 69.9 | 1029 |
-| alt-sendme | Web & Interfaces | TypeScript | C- 55 | 116 |
+| alt-sendme | Web & Interfaces | TypeScript | C- 54.9 | 116 |
 
 ### c019 - 2 repositories
 
