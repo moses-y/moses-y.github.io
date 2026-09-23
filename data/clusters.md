@@ -39,7 +39,7 @@ Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.3. E
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C+ 65 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.9 | 3671 |
-| murmure | Systems & Infra | Rust | C- 50.9 | 435 |
+| murmure | Systems & Infra | Rust | C- 50.8 | 435 |
 | meetily | Systems & Infra | Rust | D 43.3 | 509 |
 
 ### c003 - 4 repositories
@@ -106,12 +106,12 @@ Keeper: **mlx-audio** (B-, 70). Mean grade across the 2 audited members is 69. E
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **android-sms-gateway** (C-, 58.5). Mean grade across the 2 audited members is 51.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **android-sms-gateway** (C-, 58.5). Mean grade across the 2 audited members is 51.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **android-sms-gateway** | Mobile | Kotlin | C- 58.5 | 335 |
-| httpsms | Systems & Infra | Go | D 43.9 | 430 |
+| httpsms | Systems & Infra | Go | D 43.7 | 430 |
 
 ### c032 - 2 repositories
 
