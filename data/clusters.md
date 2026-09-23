@@ -100,7 +100,7 @@ Keeper: **mlx-audio** (B-, 70). Mean grade across the 2 audited members is 69. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **mlx-audio** | AI & Data | Python | B- 70 | 574 |
-| mlx-audio-swift | Mobile | Swift | C+ 68.1 | 97 |
+| mlx-audio-swift | Mobile | Swift | C+ 68 | 97 |
 
 ### c026 - 2 repositories
 
