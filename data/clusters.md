@@ -1,13 +1,13 @@
 # Clusters, in prose
 
-> 42 groups covering 100 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
+> 42 groups covering 101 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
 >
 > **These groupings are INFERRED.** They come from cosine distance between neural embeddings, not from anything measured in a tree. Density is a stronger claim than the connected components this used previously - a bridge repository no longer welds two unrelated neighbourhoods together - but a group of 4 still means 4 closely related projects, not 4 copies of one. Read a large group as a thread to pull, never as a list of duplicates to delete.
 
 ## What the numbers say
 
-- 15 of the 42 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
-- All 100 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
+- 16 of the 42 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
+- All 101 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
 ## How to use this
@@ -44,6 +44,19 @@ Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.2. E
 
 ### c003 - 4 repositories
 
+Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
+
+Keeper: **FluidVoice** (C, 61.8). Mean grade across the 4 audited members is 55.7. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **FluidVoice** | Mobile | Swift | C 61.8 | 186 |
+| VoiceInk | Mobile | Swift | C- 55.7 | 231 |
+| pindrop | Mobile | Swift | C- 54.5 | 569 |
+| lipflow | AI & Data | Python | C- 50.8 | 87 |
+
+### c004 - 4 repositories
+
 Crosses a domain boundary: 2 AI & Data, 1 Knowledge & Content, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
 Keeper: **Lead-Generation** (C, 60.7). Mean grade across the 4 audited members is 57. Every member is audited, so the choice of keeper rests on evidence.
@@ -55,7 +68,7 @@ Keeper: **Lead-Generation** (C, 60.7). Mean grade across the 4 audited members i
 | google-maps-scraper | Systems & Infra | Go | C- 55.9 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
 
-### c004 - 4 repositories
+### c005 - 4 repositories
 
 Crosses a domain boundary: 3 Web & Interfaces, 1 Agent Skills & Plugins. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
@@ -144,7 +157,7 @@ Keeper: **lich-skills** (B, 75.3). Mean grade across the 2 audited members is 73
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **lich-skills** | Agent Skills & Plugins | Shell | B 75.3 | 46 |
-| agentskills | Web & Interfaces | JavaScript | B- 71.4 | 187 |
+| agentskills | Web & Interfaces | JavaScript | B- 71.3 | 187 |
 
 ### c037 - 2 repositories
 
@@ -161,11 +174,11 @@ Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 6
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **flashvad** (B+, 80.7). Mean grade across the 2 audited members is 66.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **flashvad** (B+, 80.6). Mean grade across the 2 audited members is 66.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **flashvad** | AI & Data | Python | B+ 80.7 | 166 |
+| **flashvad** | AI & Data | Python | B+ 80.6 | 166 |
 | ten-vad | Systems & Infra | C/C++ Header | C- 53 | 147 |
 
 ### c040 - 2 repositories
@@ -192,7 +205,7 @@ Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 2 audited members is 
 
 ## Groups inside a single domain
 
-### c005 - 3 repositories
+### c006 - 3 repositories
 
 All 3 in Web & Interfaces.
 
@@ -204,7 +217,7 @@ Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.6
 | oh-my-openagent | Web & Interfaces | TypeScript | C 60.4 | 6746 |
 | opencode | Web & Interfaces | TypeScript | C- 53.2 | 2755 |
 
-### c006 - 3 repositories
+### c007 - 3 repositories
 
 All 3 in Web & Interfaces.
 
@@ -216,7 +229,7 @@ Keeper: **BeautySmart** (C+, 66.5). Mean grade across the 3 audited members is 5
 | Multi-Beauty-Salon-Web-Application-In-ReactJS-Firebase | Web & Interfaces | TypeScript | D 47.5 | 23896 |
 | Salon-Management-System | Web & Interfaces | PHP | D 44.4 | 170 |
 
-### c007 - 3 repositories
+### c008 - 3 repositories
 
 All 3 in Web & Interfaces.
 
@@ -228,7 +241,7 @@ Keeper: **n8n** (C+, 65.7). Mean grade across the 3 audited members is 61.9. Eve
 | n8n-as-code | Web & Interfaces | TypeScript | C 60.5 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.5 | 2203 |
 
-### c008 - 3 repositories
+### c009 - 3 repositories
 
 All 3 in AI & Data.
 
@@ -239,18 +252,6 @@ Keeper: **FinRL** (C, 64). Mean grade across the 3 audited members is 52.7. Ever
 | **FinRL** | AI & Data | Python | C 64 | 195 |
 | tensortrade | AI & Data | Python | C- 53.7 | 153 |
 | TradeMaster | AI & Data | Python | D 40.4 | 776 |
-
-### c009 - 3 repositories
-
-All 3 in Mobile.
-
-Keeper: **FluidVoice** (C, 61.8). Mean grade across the 3 audited members is 57.3. Every member is audited, so the choice of keeper rests on evidence.
-
-| repository | domain | language | grade | files |
-| --- | --- | --- | --- | --- |
-| **FluidVoice** | Mobile | Swift | C 61.8 | 186 |
-| VoiceInk | Mobile | Swift | C- 55.7 | 231 |
-| pindrop | Mobile | Swift | C- 54.5 | 569 |
 
 ### c010 - 3 repositories
 
