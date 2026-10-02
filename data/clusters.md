@@ -7,7 +7,7 @@
 ## What the numbers say
 
 - 17 of the 41 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
-- 1 of the 105 clustered repositories (1%) have never been audited. Every keeper chosen over one of them is a provisional choice.
+- All 105 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
 ## How to use this
@@ -20,11 +20,12 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 8 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **agent-orchestrator** (B, 78.2). Mean grade across the 8 audited members is 64.7. 1 of 9 (11%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **agent-orchestrator** | Web & Interfaces | TypeScript | B 78.2 | 315 |
+| **cezar** | Web & Interfaces | TypeScript | B 78.8 | 1915 |
+| agent-orchestrator | Web & Interfaces | TypeScript | B 78.2 | 315 |
 | paseo | Web & Interfaces | TypeScript | B- 71.3 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | C+ 69 | 1730 |
 | mco | AI & Data | Python | C+ 66.1 | 568 |
@@ -32,7 +33,6 @@ Keeper: **agent-orchestrator** (B, 78.2). Mean grade across the 8 audited member
 | orca | Web & Interfaces | TypeScript | C 60.9 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.7 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 53.1 | 1456 |
-| cezar | Web & Interfaces | TypeScript | not audited | 1915 |
 
 ### c002 - 4 repositories
 
@@ -70,7 +70,7 @@ Keeper: **FluidVoice** (C, 61.8). Mean grade across the 4 audited members is 55.
 | --- | --- | --- | --- | --- |
 | **FluidVoice** | Mobile | Swift | C 61.8 | 186 |
 | VoiceInk | Mobile | Swift | C- 55.7 | 231 |
-| pindrop | Mobile | Swift | C- 54.5 | 569 |
+| pindrop | Mobile | Swift | C- 54.4 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
 
 ### c005 - 4 repositories
@@ -95,7 +95,7 @@ Keeper: **obsidian-mind** (B+, 80.3). Mean grade across the 4 audited members is
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.3 | 187 |
-| open-second-brain | Web & Interfaces | TypeScript | B 79.9 | 2597 |
+| open-second-brain | Web & Interfaces | TypeScript | B 79.8 | 2597 |
 | MegaMemory | Web & Interfaces | TypeScript | B 79.1 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | B 75.1 | 208 |
 
@@ -214,11 +214,11 @@ Keeper: **no-ai-slop** (B-, 74.3). Mean grade across the 2 audited members is 69
 
 Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 2 audited members is 65.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **free-for-dev** (C+, 67.9). Mean grade across the 2 audited members is 65.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **free-for-dev** | Web & Interfaces | HTML | C+ 68.1 | 10 |
+| **free-for-dev** | Web & Interfaces | HTML | C+ 67.9 | 10 |
 | free-for-devs | Systems & Infra |  | C 62.7 | 3 |
 
 ## Groups inside a single domain
@@ -452,12 +452,12 @@ Keeper: **gpu-hot** (C, 62.6). Mean grade across the 2 audited members is 52.4. 
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 67.1). Mean grade across the 2 audited members is 66.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 67.1). Mean grade across the 2 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **rust-genai** | Systems & Infra | Rust | C+ 67.1 | 187 |
-| aisix | Systems & Infra | Rust | C+ 65.4 | 526 |
+| aisix | Systems & Infra | Rust | C+ 65.3 | 526 |
 
 ### c035 - 2 repositories
 
