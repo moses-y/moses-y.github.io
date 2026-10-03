@@ -51,11 +51,11 @@ Keeper: **OpenHands** (B-, 73.1). Mean grade across the 4 audited members is 60.
 
 Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **stenoai** (C+, 65). Mean grade across the 4 audited members is 55.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C, 64.8). Mean grade across the 4 audited members is 55.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **stenoai** | AI & Data | Python | C+ 65 | 62 |
+| **stenoai** | AI & Data | Python | C 64.8 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.8 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.8 | 435 |
 | meetily | Systems & Infra | Rust | D 43.3 | 509 |
@@ -108,7 +108,7 @@ Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58.1. 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **winpodx** | AI & Data | Python | C 62.6 | 502 |
-| winboat | Web & Interfaces | TypeScript | C- 57.6 | 121 |
+| winboat | Web & Interfaces | TypeScript | C- 57.5 | 121 |
 | winapps | Systems & Infra | Shell | C- 54.1 | 245 |
 
 ### c015 - 2 repositories
@@ -494,4 +494,4 @@ Keeper: **AIUsage** (C+, 69.1). Mean grade across the 2 audited members is 66. E
 
 ---
 
-Generated from data/clusters.json built 2026-10-02. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-03. Regenerate with `node src/stages/build-relations.js`.
