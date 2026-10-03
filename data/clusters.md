@@ -227,12 +227,12 @@ Keeper: **free-for-dev** (C+, 67.9). Mean grade across the 2 audited members is 
 
 All 3 in Web & Interfaces.
 
-Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 68.1 | 3058 |
-| oh-my-openagent | Web & Interfaces | TypeScript | C 60.4 | 6746 |
+| oh-my-openagent | Web & Interfaces | TypeScript | C 60.3 | 6746 |
 | opencode | Web & Interfaces | TypeScript | C- 53.2 | 2755 |
 
 ### c008 - 3 repositories
