@@ -148,11 +148,11 @@ Keeper: **android-sms-gateway** (C-, 58.5). Mean grade across the 2 audited memb
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is 68.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.2). Mean grade across the 2 audited members is 68.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.3 | 212 |
+| **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.2 | 212 |
 | career-ops | Systems & Infra | Go | C- 54.2 | 99 |
 
 ### c033 - 2 repositories
