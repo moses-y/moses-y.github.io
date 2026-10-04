@@ -115,11 +115,11 @@ Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58.1. 
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mercury-agent-skills** (B, 75.3). Mean grade across the 2 audited members is 71.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mercury-agent-skills** (B, 75.1). Mean grade across the 2 audited members is 71.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **mercury-agent-skills** | Web & Interfaces | JavaScript | B 75.3 | 151 |
+| **mercury-agent-skills** | Web & Interfaces | JavaScript | B 75.1 | 151 |
 | agent-skills | Agent Skills & Plugins | Shell | C+ 68.4 | 56 |
 
 ### c023 - 2 repositories
@@ -331,11 +331,11 @@ Keeper: **AgenticTrading** (C, 61.2). Mean grade across the 2 audited members is
 
 All 2 in Web & Interfaces.
 
-Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 62.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **altersend** (C+, 69.8). Mean grade across the 2 audited members is 62.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **altersend** | Web & Interfaces | TypeScript | C+ 69.9 | 1029 |
+| **altersend** | Web & Interfaces | TypeScript | C+ 69.8 | 1029 |
 | alt-sendme | Web & Interfaces | TypeScript | C- 54.9 | 116 |
 
 ### c019 - 2 repositories
