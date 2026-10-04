@@ -25,7 +25,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Ev
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **cezar** | Web & Interfaces | TypeScript | B 78.8 | 1915 |
-| agent-orchestrator | Web & Interfaces | TypeScript | B 78.2 | 315 |
+| agent-orchestrator | Web & Interfaces | TypeScript | B 78.1 | 315 |
 | paseo | Web & Interfaces | TypeScript | B- 71.3 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | C+ 69 | 1730 |
 | mco | AI & Data | Python | C+ 66.1 | 568 |
@@ -186,7 +186,7 @@ Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 6
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **VoiceStudio** | AI & Data | Python | C+ 66.8 | 2062 |
-| voicebox | Web & Interfaces | TSX | C- 56.3 | 677 |
+| voicebox | Web & Interfaces | TSX | C- 56.2 | 677 |
 
 ### c037 - 2 repositories
 
@@ -463,11 +463,11 @@ Keeper: **rust-genai** (C+, 67.1). Mean grade across the 2 audited members is 66
 
 All 2 in Web & Interfaces.
 
-Keeper: **atomic-mail-agentic** (B-, 70.7). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **atomic-mail-agentic** (B-, 70.6). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.7 | 424 |
+| **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.6 | 424 |
 | mails | Web & Interfaces | TypeScript | C+ 68.8 | 91 |
 
 ### c038 - 2 repositories
