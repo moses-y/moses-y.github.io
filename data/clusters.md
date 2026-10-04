@@ -30,7 +30,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Ev
 | manaflow | Web & Interfaces | TypeScript | C+ 69 | 1730 |
 | mco | AI & Data | Python | C+ 66.1 | 568 |
 | dmux | Web & Interfaces | TypeScript | C 62.1 | 794 |
-| orca | Web & Interfaces | TypeScript | C 60.9 | 6335 |
+| orca | Web & Interfaces | TypeScript | C 60.8 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.7 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 53.1 | 1456 |
 
