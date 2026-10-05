@@ -51,14 +51,14 @@ Keeper: **OpenHands** (B-, 73.1). Mean grade across the 4 audited members is 60.
 
 Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **stenoai** (C, 64.8). Mean grade across the 4 audited members is 55.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C, 64.8). Mean grade across the 4 audited members is 55.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C 64.8 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.8 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.8 | 435 |
-| meetily | Systems & Infra | Rust | D 43.3 | 509 |
+| meetily | Systems & Infra | Rust | D 43.2 | 509 |
 
 ### c004 - 4 repositories
 
@@ -275,11 +275,11 @@ Keeper: **FinRL** (C, 64). Mean grade across the 3 audited members is 52.7. Ever
 
 All 3 in AI & Data.
 
-Keeper: **MARM-Systems** (C, 63). Mean grade across the 3 audited members is 61.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **MARM-Systems** (C, 62.9). Mean grade across the 3 audited members is 61. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **MARM-Systems** | AI & Data | Python | C 63 | 124 |
+| **MARM-Systems** | AI & Data | Python | C 62.9 | 124 |
 | MemMachine | AI & Data | Python | C 62.2 | 706 |
 | mcp-memory-service | AI & Data | Python | C- 58 | 1147 |
 
@@ -468,7 +468,7 @@ Keeper: **atomic-mail-agentic** (B-, 70.6). Mean grade across the 2 audited memb
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.6 | 424 |
-| mails | Web & Interfaces | TypeScript | C+ 68.8 | 91 |
+| mails | Web & Interfaces | TypeScript | C+ 68.7 | 91 |
 
 ### c038 - 2 repositories
 
