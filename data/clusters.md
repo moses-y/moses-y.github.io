@@ -29,7 +29,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Ev
 | paseo | Web & Interfaces | TypeScript | B- 71.3 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | C+ 69 | 1730 |
 | mco | AI & Data | Python | C+ 66.1 | 568 |
-| dmux | Web & Interfaces | TypeScript | C 62.1 | 794 |
+| dmux | Web & Interfaces | TypeScript | C 62 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.8 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.7 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 53.1 | 1456 |
@@ -419,12 +419,12 @@ Keeper: **FileSync** (C, 62.2). Mean grade across the 2 audited members is 60.3.
 
 All 2 in AI & Data.
 
-Keeper: **public-apis** (B, 79.9). Mean grade across the 2 audited members is 71.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **public-apis** (B, 79.9). Mean grade across the 2 audited members is 71.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **public-apis** | AI & Data | Python | B 79.9 | 22 |
-| awesome-opensource-ai | AI & Data | Python | C 62.4 | 8 |
+| awesome-opensource-ai | AI & Data | Python | C 62.3 | 8 |
 
 ### c029 - 2 repositories
 
@@ -494,4 +494,4 @@ Keeper: **AIUsage** (C+, 69.1). Mean grade across the 2 audited members is 66. E
 
 ---
 
-Generated from data/clusters.json built 2026-10-04. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-05. Regenerate with `node src/stages/build-relations.js`.
