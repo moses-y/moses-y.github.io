@@ -159,12 +159,12 @@ Keeper: **ai-job-search** (B+, 82.2). Mean grade across the 2 audited members is
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **llmwiki** (B-, 74.4). Mean grade across the 2 audited members is 69. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **llmwiki** (B-, 74.4). Mean grade across the 2 audited members is 68.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **llmwiki** | AI & Data | Python | B- 74.4 | 300 |
-| llm_wiki | Web & Interfaces | TypeScript | C 63.5 | 227 |
+| llm_wiki | Web & Interfaces | TypeScript | C 63.3 | 227 |
 
 ### c034 - 2 repositories
 
