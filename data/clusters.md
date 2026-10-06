@@ -251,11 +251,11 @@ Keeper: **BeautySmart** (C+, 66.5). Mean grade across the 3 audited members is 5
 
 All 3 in Web & Interfaces.
 
-Keeper: **n8n** (C+, 65.7). Mean grade across the 3 audited members is 61.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (C+, 65.5). Mean grade across the 3 audited members is 61.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **n8n** | Web & Interfaces | TypeScript | C+ 65.7 | 17556 |
+| **n8n** | Web & Interfaces | TypeScript | C+ 65.5 | 17556 |
 | n8n-as-code | Web & Interfaces | TypeScript | C 60.4 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.5 | 2203 |
 
@@ -397,11 +397,11 @@ Keeper: **client-python** (B, 78). Mean grade across the 2 audited members is 70
 
 All 2 in Web & Interfaces.
 
-Keeper: **pluely** (C-, 59.5). Mean grade across the 2 audited members is 49.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **pluely** (C-, 59.3). Mean grade across the 2 audited members is 49.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **pluely** | Web & Interfaces | TSX | C- 59.5 | 224 |
+| **pluely** | Web & Interfaces | TSX | C- 59.3 | 224 |
 | natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.8 | 182 |
 
 ### c027 - 2 repositories
