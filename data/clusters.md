@@ -26,24 +26,24 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Ev
 | --- | --- | --- | --- | --- |
 | **cezar** | Web & Interfaces | TypeScript | B 78.8 | 1915 |
 | agent-orchestrator | Web & Interfaces | TypeScript | B 78.1 | 315 |
-| paseo | Web & Interfaces | TypeScript | B- 71.3 | 1647 |
-| manaflow | Web & Interfaces | TypeScript | C+ 69 | 1730 |
+| paseo | Web & Interfaces | TypeScript | B- 71.2 | 1647 |
+| manaflow | Web & Interfaces | TypeScript | C+ 68.9 | 1730 |
 | mco | AI & Data | Python | C+ 66 | 568 |
 | dmux | Web & Interfaces | TypeScript | C 62 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.8 | 6335 |
-| parallel-code | Web & Interfaces | TypeScript | C- 56.7 | 254 |
+| parallel-code | Web & Interfaces | TypeScript | C- 56.5 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 53.1 | 1456 |
 
 ### c002 - 4 repositories
 
 Crosses a domain boundary: 2 AI & Data, 2 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **OpenHands** (B-, 73.1). Mean grade across the 4 audited members is 60.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenHands** (B-, 72.9). Mean grade across the 4 audited members is 60.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **OpenHands** | AI & Data | Python | B- 73.1 | 2658 |
-| OpenJarvis | AI & Data | Python | C+ 68.5 | 1742 |
+| **OpenHands** | AI & Data | Python | B- 72.9 | 2658 |
+| OpenJarvis | AI & Data | Python | C+ 68.4 | 1742 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59.1 | 1548 |
 | learn-anything.xyz | Web & Interfaces | TypeScript | D 42 | 209 |
 
@@ -263,11 +263,11 @@ Keeper: **n8n** (C+, 65.7). Mean grade across the 3 audited members is 61.9. Eve
 
 All 3 in AI & Data.
 
-Keeper: **FinRL** (C, 64). Mean grade across the 3 audited members is 52.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FinRL** (C, 63.8). Mean grade across the 3 audited members is 52.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FinRL** | AI & Data | Python | C 64 | 195 |
+| **FinRL** | AI & Data | Python | C 63.8 | 195 |
 | tensortrade | AI & Data | Python | C- 53.7 | 153 |
 | TradeMaster | AI & Data | Python | D 40.4 | 776 |
 
