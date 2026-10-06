@@ -97,7 +97,7 @@ Keeper: **obsidian-mind** (B+, 80.1). Mean grade across the 4 audited members is
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.1 | 187 |
 | open-second-brain | Web & Interfaces | TypeScript | B 79.8 | 2597 |
 | MegaMemory | Web & Interfaces | TypeScript | B 79 | 44 |
-| agentmemory | Web & Interfaces | TypeScript | B 75.1 | 208 |
+| agentmemory | Web & Interfaces | TypeScript | B 75 | 208 |
 
 ### c012 - 3 repositories
 
@@ -397,12 +397,12 @@ Keeper: **client-python** (B, 78). Mean grade across the 2 audited members is 70
 
 All 2 in Web & Interfaces.
 
-Keeper: **pluely** (C-, 59.5). Mean grade across the 2 audited members is 49.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **pluely** (C-, 59.5). Mean grade across the 2 audited members is 49.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **pluely** | Web & Interfaces | TSX | C- 59.5 | 224 |
-| natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.9 | 182 |
+| natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.8 | 182 |
 
 ### c027 - 2 repositories
 
