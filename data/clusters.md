@@ -126,12 +126,12 @@ Keeper: **mercury-agent-skills** (B, 75.1). Mean grade across the 2 audited memb
 
 Crosses a domain boundary: 1 AI & Data, 1 Mobile. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mlx-audio** (C+, 69.9). Mean grade across the 2 audited members is 69. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mlx-audio** (C+, 69.9). Mean grade across the 2 audited members is 68.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **mlx-audio** | AI & Data | Python | C+ 69.9 | 574 |
-| mlx-audio-swift | Mobile | Swift | C+ 68 | 97 |
+| mlx-audio-swift | Mobile | Swift | C+ 67.9 | 97 |
 
 ### c026 - 2 repositories
 
