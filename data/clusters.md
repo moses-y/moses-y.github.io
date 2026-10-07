@@ -44,7 +44,7 @@ Keeper: **OpenHands** (B-, 72.9). Mean grade across the 4 audited members is 60.
 | --- | --- | --- | --- | --- |
 | **OpenHands** | AI & Data | Python | B- 72.9 | 2658 |
 | OpenJarvis | AI & Data | Python | C+ 68.4 | 1742 |
-| Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59.1 | 1548 |
+| Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59 | 1548 |
 | learn-anything.xyz | Web & Interfaces | TypeScript | D 42 | 209 |
 
 ### c003 - 4 repositories
@@ -239,13 +239,13 @@ Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.5
 
 All 3 in Web & Interfaces.
 
-Keeper: **BeautySmart** (C+, 66.5). Mean grade across the 3 audited members is 52.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **BeautySmart** (C+, 66.4). Mean grade across the 3 audited members is 52.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **BeautySmart** | Web & Interfaces | PHP | C+ 66.5 | 6221 |
-| Multi-Beauty-Salon-Web-Application-In-ReactJS-Firebase | Web & Interfaces | TypeScript | D 47.5 | 23896 |
-| Salon-Management-System | Web & Interfaces | PHP | D 44.4 | 170 |
+| **BeautySmart** | Web & Interfaces | PHP | C+ 66.4 | 6221 |
+| Multi-Beauty-Salon-Web-Application-In-ReactJS-Firebase | Web & Interfaces | TypeScript | D 47.4 | 23896 |
+| Salon-Management-System | Web & Interfaces | PHP | D 44.3 | 170 |
 
 ### c009 - 3 repositories
 
@@ -257,7 +257,7 @@ Keeper: **n8n** (C+, 65.5). Mean grade across the 3 audited members is 61.8. Eve
 | --- | --- | --- | --- | --- |
 | **n8n** | Web & Interfaces | TypeScript | C+ 65.5 | 17556 |
 | n8n-as-code | Web & Interfaces | TypeScript | C 60.4 | 357 |
-| VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.5 | 2203 |
+| VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.4 | 2203 |
 
 ### c010 - 3 repositories
 
@@ -269,7 +269,7 @@ Keeper: **FinRL** (C, 63.8). Mean grade across the 3 audited members is 52.6. Ev
 | --- | --- | --- | --- | --- |
 | **FinRL** | AI & Data | Python | C 63.8 | 195 |
 | tensortrade | AI & Data | Python | C- 53.7 | 153 |
-| TradeMaster | AI & Data | Python | D 40.4 | 776 |
+| TradeMaster | AI & Data | Python | D 40.2 | 776 |
 
 ### c011 - 3 repositories
 
@@ -298,12 +298,12 @@ Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51.4). Me
 
 All 2 in Web & Interfaces.
 
-Keeper: **maplibre-gl-usgs-lidar** (C+, 66.6). Mean grade across the 2 audited members is 65.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **maplibre-gl-usgs-lidar** (C+, 66.6). Mean grade across the 2 audited members is 65.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.6 | 44 |
-| maplibre-gl-lidar | Web & Interfaces | TypeScript | C 64.9 | 69 |
+| maplibre-gl-lidar | Web & Interfaces | TypeScript | C 64.8 | 69 |
 
 ### c016 - 2 repositories
 
@@ -320,11 +320,11 @@ Keeper: **Manta** (B+, 82.1). Mean grade across the 2 audited members is 73. Eve
 
 All 2 in AI & Data.
 
-Keeper: **AgenticTrading** (C, 61.2). Mean grade across the 2 audited members is 57.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AgenticTrading** (C, 61). Mean grade across the 2 audited members is 57.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **AgenticTrading** | AI & Data | Python | C 61.2 | 539 |
+| **AgenticTrading** | AI & Data | Python | C 61 | 539 |
 | TradingAgents | AI & Data | Python | C- 53.3 | 73 |
 
 ### c018 - 2 repositories
