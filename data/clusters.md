@@ -494,4 +494,4 @@ Keeper: **AIUsage** (C+, 69.1). Mean grade across the 2 audited members is 66. E
 
 ---
 
-Generated from data/clusters.json built 2026-10-06. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-07. Regenerate with `node src/stages/build-relations.js`.
