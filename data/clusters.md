@@ -20,7 +20,7 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 8 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
@@ -32,7 +32,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.2. Ev
 | dmux | Web & Interfaces | TypeScript | C 62 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.8 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.5 | 254 |
-| Maestro | Web & Interfaces | TypeScript | C- 53.1 | 1456 |
+| Maestro | Web & Interfaces | TypeScript | C- 52.9 | 1456 |
 
 ### c002 - 4 repositories
 
