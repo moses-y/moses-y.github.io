@@ -115,12 +115,12 @@ Keeper: **winpodx** (C, 62.6). Mean grade across the 3 audited members is 58. Ev
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mercury-agent-skills** (B, 75.1). Mean grade across the 2 audited members is 71.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mercury-agent-skills** (B, 75.1). Mean grade across the 2 audited members is 71.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **mercury-agent-skills** | Web & Interfaces | JavaScript | B 75.1 | 151 |
-| agent-skills | Agent Skills & Plugins | Shell | C+ 68.4 | 56 |
+| agent-skills | Agent Skills & Plugins | Shell | C+ 68.3 | 56 |
 
 ### c023 - 2 repositories
 
@@ -233,7 +233,7 @@ Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.5
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 68.1 | 3058 |
 | oh-my-openagent | Web & Interfaces | TypeScript | C 60.3 | 6746 |
-| opencode | Web & Interfaces | TypeScript | C- 53.2 | 2755 |
+| opencode | Web & Interfaces | TypeScript | C- 53.1 | 2755 |
 
 ### c008 - 3 repositories
 
@@ -287,34 +287,34 @@ Keeper: **MARM-Systems** (C, 62.9). Mean grade across the 3 audited members is 6
 
 All 2 in AI & Data.
 
-Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51.4). Mean grade across the 2 audited members is 49.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51.2). Mean grade across the 2 audited members is 49.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 51.4 | 2 |
+| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 51.2 | 2 |
 | ObjectCountingYOLOv8DeepSORT | AI & Data | Jupyter Notebook | D 47.4 | 2 |
 
 ### c014 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **maplibre-gl-usgs-lidar** (C+, 66.6). Mean grade across the 2 audited members is 65.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **maplibre-gl-usgs-lidar** (C+, 66.5). Mean grade across the 2 audited members is 65.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.6 | 44 |
+| **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.5 | 44 |
 | maplibre-gl-lidar | Web & Interfaces | TypeScript | C 64.8 | 69 |
 
 ### c016 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **Manta** (B+, 82.1). Mean grade across the 2 audited members is 73. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Manta** (B+, 82.1). Mean grade across the 2 audited members is 72.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Manta** | Web & Interfaces | JSX | B+ 82.1 | 374 |
-| invoice-builder | Web & Interfaces | TypeScript | C 63.9 | 509 |
+| invoice-builder | Web & Interfaces | TypeScript | C 63.7 | 509 |
 
 ### c017 - 2 repositories
 
