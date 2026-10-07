@@ -342,11 +342,11 @@ Keeper: **altersend** (C+, 69.8). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 82.3). Mean grade across the 2 audited members is 77.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.2). Mean grade across the 2 audited members is 77.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 82.3 | 94 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 82.2 | 94 |
 | skills | Web & Interfaces | TypeScript | B- 71.9 | 67 |
 
 ### c020 - 2 repositories
