@@ -56,7 +56,7 @@ Keeper: **stenoai** (C, 64.8). Mean grade across the 4 audited members is 55.1. 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C 64.8 | 62 |
-| hyprnote | Systems & Infra | Rust | C 61.8 | 3671 |
+| hyprnote | Systems & Infra | Rust | C 61.7 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.7 | 435 |
 | meetily | Systems & Infra | Rust | D 43.2 | 509 |
 
@@ -64,12 +64,12 @@ Keeper: **stenoai** (C, 64.8). Mean grade across the 4 audited members is 55.1. 
 
 Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **FluidVoice** (C, 61.7). Mean grade across the 4 audited members is 55.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 61.7). Mean grade across the 4 audited members is 55.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FluidVoice** | Mobile | Swift | C 61.7 | 186 |
-| VoiceInk | Mobile | Swift | C- 55.7 | 231 |
+| VoiceInk | Mobile | Swift | C- 55.6 | 231 |
 | pindrop | Mobile | Swift | C- 54.4 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
 
@@ -263,12 +263,12 @@ Keeper: **n8n** (C+, 65.5). Mean grade across the 3 audited members is 61.8. Eve
 
 All 3 in AI & Data.
 
-Keeper: **FinRL** (C, 63.8). Mean grade across the 3 audited members is 52.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FinRL** (C, 63.8). Mean grade across the 3 audited members is 52.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FinRL** | AI & Data | Python | C 63.8 | 195 |
-| tensortrade | AI & Data | Python | C- 53.7 | 153 |
+| tensortrade | AI & Data | Python | C- 53.6 | 153 |
 | TradeMaster | AI & Data | Python | D 40.2 | 776 |
 
 ### c011 - 3 repositories
@@ -325,7 +325,7 @@ Keeper: **AgenticTrading** (C, 61). Mean grade across the 2 audited members is 5
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **AgenticTrading** | AI & Data | Python | C 61 | 539 |
-| TradingAgents | AI & Data | Python | C- 53.3 | 73 |
+| TradingAgents | AI & Data | Python | C- 53.2 | 73 |
 
 ### c018 - 2 repositories
 
@@ -342,22 +342,22 @@ Keeper: **altersend** (C+, 69.8). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 82.2). Mean grade across the 2 audited members is 77.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.2). Mean grade across the 2 audited members is 77. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **openskills** | Web & Interfaces | TypeScript | B+ 82.2 | 94 |
-| skills | Web & Interfaces | TypeScript | B- 71.9 | 67 |
+| skills | Web & Interfaces | TypeScript | B- 71.8 | 67 |
 
 ### c020 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **livecc** (D, 46.2). Mean grade across the 2 audited members is 43.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **livecc** (D, 46.1). Mean grade across the 2 audited members is 43.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **livecc** | AI & Data | Python | D 46.2 | 95 |
+| **livecc** | AI & Data | Python | D 46.1 | 95 |
 | VideoAgent | AI & Data | Python | D 41 | 853 |
 
 ### c021 - 2 repositories
@@ -369,29 +369,29 @@ Keeper: **graph_maker** (C, 62.5). Mean grade across the 2 audited members is 59
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **graph_maker** | AI & Data | Jupyter Notebook | C 62.5 | 16 |
-| knowledge_graph | AI & Data | Jupyter Notebook | C- 55.5 | 42 |
+| knowledge_graph | AI & Data | Jupyter Notebook | C- 55.4 | 42 |
 
 ### c022 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **awesome-ai-apps** (D, 47.8). Mean grade across the 2 audited members is 47.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **awesome-ai-apps** (D, 47.6). Mean grade across the 2 audited members is 47.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **awesome-ai-apps** | AI & Data | Python | D 47.8 | 666 |
-| awesome-llm-apps | AI & Data | Python | D 47.6 | 1073 |
+| **awesome-ai-apps** | AI & Data | Python | D 47.6 | 666 |
+| awesome-llm-apps | AI & Data | Python | D 47.5 | 1073 |
 
 ### c024 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **client-python** (B, 78). Mean grade across the 2 audited members is 70. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **client-python** (B, 78). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **client-python** | AI & Data | Python | B 78 | 301 |
-| twelvedata-python | AI & Data | Python | C 61.9 | 40 |
+| twelvedata-python | AI & Data | Python | C 61.7 | 40 |
 
 ### c025 - 2 repositories
 
@@ -494,4 +494,4 @@ Keeper: **AIUsage** (C+, 69.1). Mean grade across the 2 audited members is 66. E
 
 ---
 
-Generated from data/clusters.json built 2026-10-07. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-08. Regenerate with `node src/stages/build-relations.js`.
