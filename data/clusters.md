@@ -70,7 +70,7 @@ Keeper: **FluidVoice** (C, 61.7). Mean grade across the 4 audited members is 55.
 | --- | --- | --- | --- | --- |
 | **FluidVoice** | Mobile | Swift | C 61.7 | 186 |
 | VoiceInk | Mobile | Swift | C- 55.6 | 231 |
-| pindrop | Mobile | Swift | C- 54.4 | 569 |
+| pindrop | Mobile | Swift | C- 54.2 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
 
 ### c005 - 4 repositories
@@ -90,12 +90,12 @@ Keeper: **Lead-Generation** (C, 60.6). Mean grade across the 4 audited members i
 
 Crosses a domain boundary: 3 Web & Interfaces, 1 Agent Skills & Plugins. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **obsidian-mind** (B+, 80.1). Mean grade across the 4 audited members is 78.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **obsidian-mind** (B+, 80.1). Mean grade across the 4 audited members is 78.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.1 | 187 |
-| open-second-brain | Web & Interfaces | TypeScript | B 79.8 | 2597 |
+| open-second-brain | Web & Interfaces | TypeScript | B 79.6 | 2597 |
 | MegaMemory | Web & Interfaces | TypeScript | B 79 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | B 75 | 208 |
 
@@ -214,11 +214,11 @@ Keeper: **no-ai-slop** (B-, 74.2). Mean grade across the 2 audited members is 69
 
 Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **free-for-dev** (C+, 67.9). Mean grade across the 2 audited members is 65.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **free-for-dev** (C+, 67.8). Mean grade across the 2 audited members is 65.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **free-for-dev** | Web & Interfaces | HTML | C+ 67.9 | 10 |
+| **free-for-dev** | Web & Interfaces | HTML | C+ 67.8 | 10 |
 | free-for-devs | Systems & Infra |  | C 62.7 | 3 |
 
 ## Groups inside a single domain
@@ -452,12 +452,12 @@ Keeper: **gpu-hot** (C, 62.5). Mean grade across the 2 audited members is 52.3. 
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 67). Mean grade across the 2 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 67). Mean grade across the 2 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **rust-genai** | Systems & Infra | Rust | C+ 67 | 187 |
-| aisix | Systems & Infra | Rust | C+ 65.3 | 526 |
+| aisix | Systems & Infra | Rust | C+ 65.2 | 526 |
 
 ### c035 - 2 repositories
 
