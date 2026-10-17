@@ -232,7 +232,7 @@ Keeper: **continue** (C+, 68.1). Mean grade across the 3 audited members is 60.5
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 68.1 | 3058 |
-| oh-my-openagent | Web & Interfaces | TypeScript | C 60.3 | 6746 |
+| oh-my-openagent | Web & Interfaces | TypeScript | C 60.2 | 6746 |
 | opencode | Web & Interfaces | TypeScript | C- 53.1 | 2755 |
 
 ### c008 - 3 repositories
