@@ -51,11 +51,11 @@ Keeper: **OpenHands** (B-, 72.9). Mean grade across the 4 audited members is 60.
 
 Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **stenoai** (C, 64.8). Mean grade across the 4 audited members is 55.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C, 64.7). Mean grade across the 4 audited members is 55.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **stenoai** | AI & Data | Python | C 64.8 | 62 |
+| **stenoai** | AI & Data | Python | C 64.7 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.7 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.7 | 435 |
 | meetily | Systems & Infra | Rust | D 43.2 | 509 |
@@ -108,7 +108,7 @@ Keeper: **winpodx** (C, 62.5). Mean grade across the 3 audited members is 58. Ev
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **winpodx** | AI & Data | Python | C 62.5 | 502 |
-| winboat | Web & Interfaces | TypeScript | C- 57.5 | 121 |
+| winboat | Web & Interfaces | TypeScript | C- 57.4 | 121 |
 | winapps | Systems & Infra | Shell | C- 54 | 245 |
 
 ### c015 - 2 repositories
