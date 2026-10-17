@@ -45,7 +45,7 @@ Keeper: **OpenHands** (B-, 72.9). Mean grade across the 4 audited members is 60.
 | **OpenHands** | AI & Data | Python | B- 72.9 | 2658 |
 | OpenJarvis | AI & Data | Python | C+ 68.4 | 1742 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 59 | 1548 |
-| learn-anything.xyz | Web & Interfaces | TypeScript | D 42 | 209 |
+| learn-anything.xyz | Web & Interfaces | TypeScript | D 41.9 | 209 |
 
 ### c003 - 4 repositories
 
@@ -82,7 +82,7 @@ Keeper: **Lead-Generation** (C, 60.6). Mean grade across the 4 audited members i
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.6 | 56 |
-| googlemaps-scraper | Knowledge & Content |  | C- 58.4 | 93 |
+| googlemaps-scraper | Knowledge & Content |  | C- 58.2 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 55.8 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
 
@@ -197,7 +197,7 @@ Keeper: **flashvad** (B+, 80.5). Mean grade across the 2 audited members is 66.7
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **flashvad** | AI & Data | Python | B+ 80.5 | 166 |
-| ten-vad | Systems & Infra | C/C++ Header | C- 52.9 | 147 |
+| ten-vad | Systems & Infra | C/C++ Header | C- 52.8 | 147 |
 
 ### c039 - 2 repositories
 
@@ -358,7 +358,7 @@ Keeper: **livecc** (D, 46.1). Mean grade across the 2 audited members is 43.5. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **livecc** | AI & Data | Python | D 46.1 | 95 |
-| VideoAgent | AI & Data | Python | D 41 | 853 |
+| VideoAgent | AI & Data | Python | D 40.9 | 853 |
 
 ### c021 - 2 repositories
 
@@ -474,12 +474,12 @@ Keeper: **atomic-mail-agentic** (B-, 70.6). Mean grade across the 2 audited memb
 
 All 2 in Web & Interfaces.
 
-Keeper: **decimen-optical-transfer** (C+, 68.7). Mean grade across the 2 audited members is 66.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **decimen-optical-transfer** (C+, 68.6). Mean grade across the 2 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 68.7 | 19 |
-| qr-data-transfer | Web & Interfaces | TypeScript | C 63.9 | 44 |
+| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 68.6 | 19 |
+| qr-data-transfer | Web & Interfaces | TypeScript | C 63.8 | 44 |
 
 ### c040 - 2 repositories
 
