@@ -425,7 +425,7 @@ Keeper: **public-apis** (B, 79.8). Mean grade across the 2 audited members is 71
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **public-apis** | AI & Data | Python | B 79.8 | 22 |
-| awesome-opensource-ai | AI & Data | Python | C 62.3 | 8 |
+| awesome-opensource-ai | AI & Data | Python | C 62.2 | 8 |
 
 ### c029 - 2 repositories
 
