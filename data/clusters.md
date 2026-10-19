@@ -51,14 +51,14 @@ Keeper: **OpenHands** (B-, 72.9). Mean grade across the 4 audited members is 60.
 
 Crosses a domain boundary: 3 Systems & Infra, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **stenoai** (C, 64.7). Mean grade across the 4 audited members is 55.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **stenoai** (C, 64.7). Mean grade across the 4 audited members is 55. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C 64.7 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.7 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.7 | 435 |
-| meetily | Systems & Infra | Rust | D 43.2 | 509 |
+| meetily | Systems & Infra | Rust | D 43 | 509 |
 
 ### c004 - 4 repositories
 
@@ -227,12 +227,12 @@ Keeper: **free-for-dev** (C+, 67.8). Mean grade across the 2 audited members is 
 
 All 4 in AI & Data.
 
-Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 63.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 63.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **forgetful** | AI & Data | Python | B- 71.5 | 379 |
-| MARM-Systems | AI & Data | Python | C 62.9 | 124 |
+| MARM-Systems | AI & Data | Python | C 62.8 | 124 |
 | MemMachine | AI & Data | Python | C 62.1 | 706 |
 | mcp-memory-service | AI & Data | Python | C- 57.8 | 1147 |
 
@@ -464,12 +464,12 @@ Keeper: **rust-genai** (C+, 67). Mean grade across the 2 audited members is 66.1
 
 All 2 in Web & Interfaces.
 
-Keeper: **atomic-mail-agentic** (B-, 70.5). Mean grade across the 2 audited members is 69.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **atomic-mail-agentic** (B-, 70.5). Mean grade across the 2 audited members is 69.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.5 | 424 |
-| mails | Web & Interfaces | TypeScript | C+ 68.7 | 91 |
+| mails | Web & Interfaces | TypeScript | C+ 68.5 | 91 |
 
 ### c038 - 2 repositories
 
