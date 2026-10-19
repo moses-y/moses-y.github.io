@@ -28,7 +28,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66.1. Ev
 | agent-orchestrator | Web & Interfaces | TypeScript | B 78 | 315 |
 | paseo | Web & Interfaces | TypeScript | B- 71.2 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | C+ 68.9 | 1730 |
-| mco | AI & Data | Python | C+ 66 | 568 |
+| mco | AI & Data | Python | C+ 65.9 | 568 |
 | dmux | Web & Interfaces | TypeScript | C 61.8 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.7 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.5 | 254 |
@@ -170,11 +170,11 @@ Keeper: **llmwiki** (B-, 74.3). Mean grade across the 2 audited members is 68.8.
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **lich-skills** (B, 75.2). Mean grade across the 2 audited members is 73.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **lich-skills** (B, 75). Mean grade across the 2 audited members is 73.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **lich-skills** | Agent Skills & Plugins | Shell | B 75.2 | 46 |
+| **lich-skills** | Agent Skills & Plugins | Shell | B 75 | 46 |
 | agentskills | Web & Interfaces | JavaScript | B- 71.2 | 187 |
 
 ### c036 - 2 repositories
