@@ -103,13 +103,13 @@ Keeper: **obsidian-mind** (B+, 80). Mean grade across the 4 audited members is 7
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **winpodx** (C, 62.5). Mean grade across the 3 audited members is 58. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **winpodx** (C, 62.5). Mean grade across the 3 audited members is 57.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **winpodx** | AI & Data | Python | C 62.5 | 502 |
 | winboat | Web & Interfaces | TypeScript | C- 57.4 | 121 |
-| winapps | Systems & Infra | Shell | C- 54 | 245 |
+| winapps | Systems & Infra | Shell | C- 53.9 | 245 |
 
 ### c015 - 2 repositories
 
@@ -264,11 +264,11 @@ Keeper: **BeautySmart** (C+, 66.4). Mean grade across the 3 audited members is 5
 
 All 3 in Web & Interfaces.
 
-Keeper: **n8n** (C+, 65.5). Mean grade across the 3 audited members is 61.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (C+, 65.4). Mean grade across the 3 audited members is 61.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **n8n** | Web & Interfaces | TypeScript | C+ 65.5 | 17556 |
+| **n8n** | Web & Interfaces | TypeScript | C+ 65.4 | 17556 |
 | n8n-as-code | Web & Interfaces | TypeScript | C 60.3 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.4 | 2203 |
 
@@ -398,11 +398,11 @@ Keeper: **client-python** (B, 77.8). Mean grade across the 2 audited members is 
 
 All 2 in Web & Interfaces.
 
-Keeper: **pluely** (C-, 59.3). Mean grade across the 2 audited members is 49.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **pluely** (C-, 59.2). Mean grade across the 2 audited members is 49.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **pluely** | Web & Interfaces | TSX | C- 59.3 | 224 |
+| **pluely** | Web & Interfaces | TSX | C- 59.2 | 224 |
 | natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.7 | 182 |
 
 ### c027 - 2 repositories
