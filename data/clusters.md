@@ -1,13 +1,13 @@
 # Clusters, in prose
 
-> 41 groups covering 106 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
+> 42 groups covering 108 repositories. Every pair scoring at least 0.68 semantic similarity is an edge, and Louvain modularity over the thresholded semantic edges partitions that graph into groups that are linked more densely inside than out.
 >
 > **These groupings are INFERRED.** They come from cosine distance between neural embeddings, not from anything measured in a tree. Density is a stronger claim than the connected components this used previously - a bridge repository no longer welds two unrelated neighbourhoods together - but a group of 9 still means 9 closely related projects, not 9 copies of one. Read a large group as a thread to pull, never as a list of duplicates to delete.
 
 ## What the numbers say
 
-- 17 of the 41 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
-- All 106 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
+- 17 of the 42 groups cross a domain boundary. Those are the ones worth reading first: two repositories the classifier put in different parts of the estate that the embedding still pulled together.
+- All 108 clustered repositories have been audited, so every keeper below was chosen against a grade rather than against a gap.
 - No group is entirely unaudited, so there is no group whose keeper is a guess about a guess.
 
 ## How to use this
@@ -492,6 +492,17 @@ Keeper: **AIUsage** (C+, 69). Mean grade across the 2 audited members is 66. Eve
 | --- | --- | --- | --- | --- |
 | **AIUsage** | Mobile | Swift | C+ 69 | 459 |
 | quotio | Mobile | Swift | C 62.9 | 277 |
+
+### c042 - 2 repositories
+
+All 2 in Systems & Infra.
+
+Keeper: **free-my-tv** (C, 61.3). Mean grade across the 2 audited members is 57.8. Every member is audited, so the choice of keeper rests on evidence.
+
+| repository | domain | language | grade | files |
+| --- | --- | --- | --- | --- |
+| **free-my-tv** | Systems & Infra | Java | C 61.3 | 106 |
+| cleanyourtv | Systems & Infra | Java | C- 54.3 | 327 |
 
 ---
 
