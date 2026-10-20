@@ -64,11 +64,11 @@ Keeper: **stenoai** (C, 64.7). Mean grade across the 4 audited members is 55. Ev
 
 Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **FluidVoice** (C, 61.7). Mean grade across the 4 audited members is 55.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 61.6). Mean grade across the 4 audited members is 55.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FluidVoice** | Mobile | Swift | C 61.7 | 186 |
+| **FluidVoice** | Mobile | Swift | C 61.6 | 186 |
 | VoiceInk | Mobile | Swift | C- 55.6 | 231 |
 | pindrop | Mobile | Swift | C- 54.2 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
@@ -126,11 +126,11 @@ Keeper: **mercury-agent-skills** (B, 75). Mean grade across the 2 audited member
 
 Crosses a domain boundary: 1 AI & Data, 1 Mobile. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mlx-audio** (C+, 69.9). Mean grade across the 2 audited members is 68.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mlx-audio** (C+, 69.7). Mean grade across the 2 audited members is 68.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **mlx-audio** | AI & Data | Python | C+ 69.9 | 574 |
+| **mlx-audio** | AI & Data | Python | C+ 69.7 | 574 |
 | mlx-audio-swift | Mobile | Swift | C+ 67.9 | 97 |
 
 ### c026 - 2 repositories
@@ -148,12 +148,12 @@ Keeper: **android-sms-gateway** (C-, 58.4). Mean grade across the 2 audited memb
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.1). Mean grade across the 2 audited members is 68.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.1). Mean grade across the 2 audited members is 68.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.1 | 212 |
-| career-ops | Systems & Infra | Go | C- 54.2 | 99 |
+| career-ops | Systems & Infra | Go | C- 54.1 | 99 |
 
 ### c033 - 2 repositories
 
@@ -453,11 +453,11 @@ Keeper: **gpu-hot** (C, 62.5). Mean grade across the 2 audited members is 52.3. 
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 67). Mean grade across the 2 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 66.8). Mean grade across the 2 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **rust-genai** | Systems & Infra | Rust | C+ 67 | 187 |
+| **rust-genai** | Systems & Infra | Rust | C+ 66.8 | 187 |
 | aisix | Systems & Infra | Rust | C+ 65.2 | 526 |
 
 ### c035 - 2 repositories
@@ -486,12 +486,12 @@ Keeper: **decimen-optical-transfer** (C+, 68.6). Mean grade across the 2 audited
 
 All 2 in Mobile.
 
-Keeper: **AIUsage** (C+, 69). Mean grade across the 2 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AIUsage** (C+, 69). Mean grade across the 2 audited members is 65.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **AIUsage** | Mobile | Swift | C+ 69 | 459 |
-| quotio | Mobile | Swift | C 62.9 | 277 |
+| quotio | Mobile | Swift | C 62.8 | 277 |
 
 ### c042 - 2 repositories
 
