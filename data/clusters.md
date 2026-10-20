@@ -164,7 +164,7 @@ Keeper: **llmwiki** (B-, 74.3). Mean grade across the 2 audited members is 68.8.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **llmwiki** | AI & Data | Python | B- 74.3 | 300 |
-| llm_wiki | Web & Interfaces | TypeScript | C 63.3 | 227 |
+| llm_wiki | Web & Interfaces | TypeScript | C 63.2 | 227 |
 
 ### c034 - 2 repositories
 
@@ -495,4 +495,4 @@ Keeper: **AIUsage** (C+, 69). Mean grade across the 2 audited members is 66. Eve
 
 ---
 
-Generated from data/clusters.json built 2026-10-19. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-20. Regenerate with `node src/stages/build-relations.js`.
