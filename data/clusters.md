@@ -264,12 +264,12 @@ Keeper: **BeautySmart** (C+, 66.4). Mean grade across the 3 audited members is 5
 
 All 3 in Web & Interfaces.
 
-Keeper: **n8n** (C+, 65.5). Mean grade across the 3 audited members is 61.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (C+, 65.5). Mean grade across the 3 audited members is 61.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **n8n** | Web & Interfaces | TypeScript | C+ 65.5 | 17556 |
-| n8n-as-code | Web & Interfaces | TypeScript | C 60.4 | 357 |
+| n8n-as-code | Web & Interfaces | TypeScript | C 60.3 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.4 | 2203 |
 
 ### c011 - 3 repositories
