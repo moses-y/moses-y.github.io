@@ -57,7 +57,7 @@ Keeper: **stenoai** (C, 64.7). Mean grade across the 4 audited members is 55. Ev
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C 64.7 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.7 | 3671 |
-| murmure | Systems & Infra | Rust | C- 50.7 | 435 |
+| murmure | Systems & Infra | Rust | C- 50.6 | 435 |
 | meetily | Systems & Infra | Rust | D 43 | 509 |
 
 ### c004 - 4 repositories
@@ -83,7 +83,7 @@ Keeper: **Lead-Generation** (C, 60.5). Mean grade across the 4 audited members i
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.5 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.2 | 93 |
-| google-maps-scraper | Systems & Infra | Go | C- 55.8 | 90 |
+| google-maps-scraper | Systems & Infra | Go | C- 55.7 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
 
 ### c007 - 4 repositories
@@ -137,12 +137,12 @@ Keeper: **mlx-audio** (C+, 69.7). Mean grade across the 2 audited members is 68.
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **android-sms-gateway** (C-, 58.3). Mean grade across the 2 audited members is 51. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **android-sms-gateway** (C-, 58.3). Mean grade across the 2 audited members is 50.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **android-sms-gateway** | Mobile | Kotlin | C- 58.3 | 335 |
-| httpsms | Systems & Infra | Go | D 43.6 | 430 |
+| httpsms | Systems & Infra | Go | D 43.5 | 430 |
 
 ### c032 - 2 repositories
 
@@ -409,12 +409,12 @@ Keeper: **pluely** (C-, 59.2). Mean grade across the 2 audited members is 49.5. 
 
 All 2 in Web & Interfaces.
 
-Keeper: **FileSync** (C, 62.1). Mean grade across the 2 audited members is 60.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FileSync** (C, 62.1). Mean grade across the 2 audited members is 60. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FileSync** | Web & Interfaces | JavaScript | C 62.1 | 44 |
-| OpenDrop | Web & Interfaces | JavaScript | C- 58.2 | 12 |
+| OpenDrop | Web & Interfaces | JavaScript | C- 58 | 12 |
 
 ### c028 - 2 repositories
 
