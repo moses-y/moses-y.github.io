@@ -115,12 +115,12 @@ Keeper: **winpodx** (C, 62.5). Mean grade across the 3 audited members is 57.9. 
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mercury-agent-skills** (B, 75). Mean grade across the 2 audited members is 71.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mercury-agent-skills** (B, 75). Mean grade across the 2 audited members is 71.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **mercury-agent-skills** | Web & Interfaces | JavaScript | B 75 | 151 |
-| agent-skills | Agent Skills & Plugins | Shell | C+ 68.3 | 56 |
+| agent-skills | Agent Skills & Plugins | Shell | C+ 68.1 | 56 |
 
 ### c023 - 2 repositories
 
@@ -288,22 +288,22 @@ Keeper: **FinRL** (C, 63.7). Mean grade across the 3 audited members is 52.5. Ev
 
 All 2 in AI & Data.
 
-Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51.2). Mean grade across the 2 audited members is 49.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51). Mean grade across the 2 audited members is 49.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 51.2 | 2 |
+| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 51 | 2 |
 | ObjectCountingYOLOv8DeepSORT | AI & Data | Jupyter Notebook | D 47.4 | 2 |
 
 ### c014 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **maplibre-gl-usgs-lidar** (C+, 66.5). Mean grade across the 2 audited members is 65.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **maplibre-gl-usgs-lidar** (C+, 66.3). Mean grade across the 2 audited members is 65.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.5 | 44 |
+| **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.3 | 44 |
 | maplibre-gl-lidar | Web & Interfaces | TypeScript | C 64.6 | 69 |
 
 ### c016 - 2 repositories
