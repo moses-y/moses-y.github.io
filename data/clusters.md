@@ -148,11 +148,11 @@ Keeper: **android-sms-gateway** (C-, 58.3). Mean grade across the 2 audited memb
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.1). Mean grade across the 2 audited members is 68.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is 68.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.1 | 212 |
+| **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.3 | 212 |
 | career-ops | Systems & Infra | Go | C- 54.1 | 99 |
 
 ### c033 - 2 repositories
@@ -332,12 +332,12 @@ Keeper: **AgenticTrading** (C, 60.9). Mean grade across the 2 audited members is
 
 All 2 in Web & Interfaces.
 
-Keeper: **altersend** (C+, 69.7). Mean grade across the 2 audited members is 62.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **altersend** (C+, 69.7). Mean grade across the 2 audited members is 62.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **altersend** | Web & Interfaces | TypeScript | C+ 69.7 | 1029 |
-| alt-sendme | Web & Interfaces | TypeScript | C- 54.8 | 116 |
+| alt-sendme | Web & Interfaces | TypeScript | C- 54.6 | 116 |
 
 ### c019 - 2 repositories
 

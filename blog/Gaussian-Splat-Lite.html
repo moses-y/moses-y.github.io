@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>October 21, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">JavaScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,36 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>High performance 3D Gaussian Splatting (3DGS) renderer for Three.js. WebGPU and WebGL2. Supports PLY, SPZ, Streaming LOD including SOG and RAD.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Rendering large, high‑fidelity 3D Gaussian splat scenes in a web browser is computationally expensive. Existing libraries either lack WebGPU support, cannot stream detail on‑the‑fly, or expose a confusing API. The project addresses those gaps by providing a <strong>Three.js‑compatible renderer</strong> that runs on WebGPU / WebGL2, streams RAD and SOG levels of detail, and offers stochastic rendering with optional neural denoising.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The core is a <strong><code>GaussianSplatRenderer</code></strong> (<code>src/rendering/GaussianSplatRenderer.js</code>) that plugs into a Three.js scene. It builds a splat mesh (<code>src/capture/SplatMesh.js</code>) from a URL or byte buffer, parses the data (<code>src/loaders/SplatLoader.js</code> → <code>src/loaders/source.js</code> → <code>src/loaders/rad.js</code> or <code>src/loaders/sog.js</code>), and feeds it to the GPU. The renderer uses <strong>WebGPU</strong> when available but falls back to WebGL2 (<code>src/rendering/GaussianSplatRenderer.js</code> checks <code>renderer.isWebGPU</code>). Streaming is handled by <code>RadStreamScheduler</code> or <code>SogStreamScheduler</code> (<code>src/loaders/stream/rad-stream/*</code>), which load additional LOD chunks as the camera moves.</p>
+<p>The renderer also supports <strong>stochastic blending</strong> (<code>src/rendering/uniforms.js</code> defines the <code>stochastic</code> uniform) and optional <strong>neural denoising</strong> (<code>src/addons/NeuralDenoiseNode.js</code>). Off‑screen capture is implemented in <code>src/capture/WebGPUCapture.js</code>/<code>WebGLCapture.js</code>.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <strong><code>src/index.js</code></strong>. It imports the public API:</p>
+<ul><li><code>GaussianSplatRenderer</code> → <code>src/rendering/GaussianSplatRenderer.js</code></li><li><code>SplatMesh</code> → <code>src/capture/SplatMesh.js</code></li><li><code>RadStreamScheduler</code> → <code>src/loaders/stream/rad-stream/RadSelectionState.js</code></li></ul>
+<p><code>src/index.js</code> exposes the classes via the package export. When a user creates a <code>SplatMesh</code>, the loader chain resolves: <code>SplatMesh → SplatLoader → source → rad / sog</code> → <code>radFormat</code> or <code>sogZip</code> → binary decoder (<code>rust/gaussian-splat-lib/src/decoder.rs</code> compiled to wasm). The decoded data is wrapped in an <code>IndexedSplats</code> object (<code>src/data/IndexedSplats.js</code>), which the renderer consumes.</p>
+<p>The renderer builds a Three.js <code>BufferGeometry</code> from the indexed splats. It imports <code>rendererUtils</code> and <code>unifroms</code>—the most‑connected modules (32 and 22 Ca, respectively)—to set shader uniforms, bind GPU buffers, and dispatch draw calls. The shader program resides in <code>src/addons/taaShared.js</code> and <code>src/addons/neuralDenoiseGL.js</code>, which are compiled into WebGPU shader modules at runtime.</p>
+<p>The fan‑out to the GPU is a single dispatch per frame; the heavy work is in the wasm decoder (called from <code>wasmCall.js</code>) and the GPU shader. No external network or filesystem calls occur after the initial asset fetch.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<h4 id="setup">Setup</h4>
+<pre data-lang="bash"><code>npm install gaussian-splat-lite three</code></pre>
+<p>The project ships with a bundled wasm module (<code>rust/gaussian-splat-lib/src/lib.rs</code>). If you need a fresh build, run:</p>
+<pre data-lang="bash"><code>cd rust
+cargo build --target wasm32-unknown-unknown --release</code></pre>
+<h4 id="configuration">Configuration</h4>
+<p>No environment variables are required. Asset URLs are passed directly to <code>SplatMesh</code>:</p>
+<pre data-lang="js"><code>const splat = new SplatMesh({ url: &#39;/assets/scene.spz&#39; });</code></pre>
+<h4 id="running">Running</h4>
+<p>A minimal example (copy the snippet from the README) starts in <code>src/index.js</code> and uses <code>index.html</code> as the hosting page. The demo page in the repo (<code>index.html</code>) shows the full workflow.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A GIS provider can stream a city‑scale RAD scene to mobile browsers. The <code>RadStreamScheduler</code> loads LOD chunks as the camera zooms in, while <code>SplatMesh</code> exposes the splat mesh as a standard Three.js object. The entire pipeline is driven by a single Three.js render loop, so the hosting application remains unchanged.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High/clarity (Hub)</strong> – <code>src/data/defines.js</code>, <code>src/rendering/uniforms.js</code>, <code>src/rendering/rendererUtils.js</code> are imported by 32, 22, and 20 modules respectively. Any change here has a wide blast radius.</li><li><strong>High/cognitive_load (Oversized)</strong> – <code>bin/rad/storage.js</code>, <code>src/rendering/GaussianSplatRenderer.js</code>, <code>examples/viewer/cameraController.js</code> each exceed 600 lines.</li><li><strong>High/cognitive_load (Deep nesting)</strong> – <code>src/rendering/tsl/ProjectionProgram.js</code>, <code>rust/gaussian-splat-lib/src/ply.rs</code>, <code>rust/gaussian-splat-lib/src/rad.rs</code> have nesting depth 6.</li><li><strong>High/clarity (Duplicated code)</strong> – 161 repeated 6‑line blocks across 55 files (e.g., <code>bin/build-lod.js</code> and <code>bin/rad/rad.js</code>).</li><li><strong>Missing tests</strong> – Only two test files exist, covering minimal loader logic.</li><li><strong>Outdated dependencies</strong> – <code>typescript ^5.7.3</code>, <code>vite ^6.4.4</code>, <code>@biomejs/biome ^1.9.4</code> are behind the current major releases.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>The library delivers a functional, WebGPU‑backed Gaussian splat renderer that integrates cleanly into Three.js and supports streaming LOD. Its API is straightforward for a developer familiar with Three.js. However, the codebase has significant cognitive complexity, duplicated logic, and outdated tooling, which will increase maintenance overhead. Teams that need immediate WebGPU rendering for large scenes should adopt it, but they should budget for refactoring critical hubs and adding test coverage.</p>
             </div>
 
             
@@ -109,8 +136,44 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Module dependencies</span>
+                    <p class="an-note">The 10 most depended-upon modules of 264, from static import analysis. Red outline marks a module in an import cycle.</p>
+                    <div class="mermaid">graph LR
+  n0_src_data_defines[&quot;defines&quot;]
+  n1_src_rendering_uniforms[&quot;uniforms&quot;]
+  n2_src_rendering_rendererUtils[&quot;rendererUtils&quot;]
+  n3__loaders_postDecode_protocol[&quot;protocol&quot;]
+  n4_src_loaders_rad_radFormat[&quot;radFormat&quot;]
+  n5_src_data_splatData[&quot;splatData&quot;]
+  n6_src_runtime_abort[&quot;abort&quot;]
+  n7_src_scene_SplatMesh[&quot;SplatMesh&quot;]
+  n8_src_data_textureLayout[&quot;textureLayout&quot;]
+  n9_src_data_Splats[&quot;Splats&quot;]
+  n9_src_data_Splats --&gt; n0_src_data_defines
+  n9_src_data_Splats --&gt; n5_src_data_splatData
+  n9_src_data_Splats --&gt; n8_src_data_textureLayout
+  n8_src_data_textureLayout --&gt; n0_src_data_defines
+  n1_src_rendering_uniforms --&gt; n0_src_data_defines
+  n1_src_rendering_uniforms --&gt; n8_src_data_textureLayout
+  n7_src_scene_SplatMesh --&gt; n9_src_data_Splats</div>
+                </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note"><strong>3</strong> of 25 declared dependencies are a major version behind. Resolved 8 of 25 against the registry.</p>
+                    <table class="tbl an-deps">
+                        <tr><th>Package</th><th>Declared</th><th>Latest</th><th>Behind</th></tr>
+                        <tr><td><code>typescript</code></td>
+                            <td>^5.7.3</td><td>7.0.2</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>vite</code></td>
+                            <td>^6.4.4</td><td>8.2.1</td>
+                            <td class="beh">2 major</td></tr><tr><td><code>@biomejs/biome</code></td>
+                            <td>1.9.4</td><td>2.5.8</td>
+                            <td class="beh">1 major</td></tr>
+                    </table>
+                </div>
 
                 
 
