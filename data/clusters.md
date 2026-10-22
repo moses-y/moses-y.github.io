@@ -246,7 +246,7 @@ Keeper: **continue** (C+, 68). Mean grade across the 3 audited members is 60.4. 
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 68 | 3058 |
 | oh-my-openagent | Web & Interfaces | TypeScript | C 60.2 | 6746 |
-| opencode | Web & Interfaces | TypeScript | C- 53.1 | 2755 |
+| opencode | Web & Interfaces | TypeScript | C- 53 | 2755 |
 
 ### c009 - 3 repositories
 
@@ -315,7 +315,7 @@ Keeper: **Manta** (B+, 81.9). Mean grade across the 2 audited members is 72.8. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Manta** | Web & Interfaces | JSX | B+ 81.9 | 374 |
-| invoice-builder | Web & Interfaces | TypeScript | C 63.7 | 509 |
+| invoice-builder | Web & Interfaces | TypeScript | C 63.6 | 509 |
 
 ### c017 - 2 repositories
 
@@ -343,11 +343,11 @@ Keeper: **altersend** (C+, 69.7). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 82.2). Mean grade across the 2 audited members is 77. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.1). Mean grade across the 2 audited members is 76.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 82.2 | 94 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 82.1 | 94 |
 | skills | Web & Interfaces | TypeScript | B- 71.8 | 67 |
 
 ### c020 - 2 repositories
@@ -506,4 +506,4 @@ Keeper: **free-my-tv** (C, 61.3). Mean grade across the 2 audited members is 57.
 
 ---
 
-Generated from data/clusters.json built 2026-10-21. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-22. Regenerate with `node src/stages/build-relations.js`.
