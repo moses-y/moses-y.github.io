@@ -203,12 +203,12 @@ Keeper: **flashvad** (B+, 80.5). Mean grade across the 2 audited members is 66.7
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **no-ai-slop** (B-, 74.2). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **no-ai-slop** (B-, 74.2). Mean grade across the 2 audited members is 69.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.2 | 13 |
-| avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65.1 | 50 |
+| avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65 | 50 |
 
 ### c041 - 2 repositories
 
@@ -343,12 +343,12 @@ Keeper: **altersend** (C+, 69.7). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 82.1). Mean grade across the 2 audited members is 76.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 82.1). Mean grade across the 2 audited members is 76.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **openskills** | Web & Interfaces | TypeScript | B+ 82.1 | 94 |
-| skills | Web & Interfaces | TypeScript | B- 71.8 | 67 |
+| skills | Web & Interfaces | TypeScript | B- 71.6 | 67 |
 
 ### c020 - 2 repositories
 
@@ -376,23 +376,23 @@ Keeper: **graph_maker** (C, 62.4). Mean grade across the 2 audited members is 58
 
 All 2 in AI & Data.
 
-Keeper: **awesome-ai-apps** (D, 47.6). Mean grade across the 2 audited members is 47.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **awesome-ai-apps** (D, 47.5). Mean grade across the 2 audited members is 47.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **awesome-ai-apps** | AI & Data | Python | D 47.6 | 666 |
+| **awesome-ai-apps** | AI & Data | Python | D 47.5 | 666 |
 | awesome-llm-apps | AI & Data | Python | D 47.4 | 1073 |
 
 ### c024 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **client-python** (B, 77.8). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **client-python** (B, 77.8). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **client-python** | AI & Data | Python | B 77.8 | 301 |
-| twelvedata-python | AI & Data | Python | C 61.7 | 40 |
+| twelvedata-python | AI & Data | Python | C 61.6 | 40 |
 
 ### c025 - 2 repositories
 
