@@ -84,7 +84,7 @@ Keeper: **Lead-Generation** (C, 60.5). Mean grade across the 4 audited members i
 | **Lead-Generation** | AI & Data | Python | C 60.5 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.2 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 55.7 | 90 |
-| Google-Maps-Scrapper | AI & Data | Python | C- 52.8 | 6 |
+| Google-Maps-Scrapper | AI & Data | Python | C- 52.7 | 6 |
 
 ### c007 - 4 repositories
 
