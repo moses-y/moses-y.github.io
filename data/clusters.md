@@ -506,4 +506,4 @@ Keeper: **free-my-tv** (C, 61.3). Mean grade across the 2 audited members is 57.
 
 ---
 
-Generated from data/clusters.json built 2026-10-23. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-10-24. Regenerate with `node src/stages/build-relations.js`.
