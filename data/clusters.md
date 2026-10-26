@@ -103,11 +103,11 @@ Keeper: **obsidian-mind** (B+, 80). Mean grade across the 4 audited members is 7
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **winpodx** (C, 62.5). Mean grade across the 3 audited members is 57.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **winpodx** (C, 62.4). Mean grade across the 3 audited members is 57.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **winpodx** | AI & Data | Python | C 62.5 | 502 |
+| **winpodx** | AI & Data | Python | C 62.4 | 502 |
 | winboat | Web & Interfaces | TypeScript | C- 57.4 | 121 |
 | winapps | Systems & Infra | Shell | C- 53.9 | 245 |
 
