@@ -10,11 +10,14 @@
  * would change when each binding is initialised, and the boot calls at the end of
  * 07-extras must still run last.
  */
-        // Animate Stats - real Code Brain metrics, K-formatted.
+        // Animate Stats - real Code Brain metrics. Exact below 10K so the repository
+        // count matches the 1,659 quoted in the hero; K and M above that.
         let statsAnimated = false;
         function fmtStat(n) {
             n = Math.floor(n);
-            return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'K' : String(n);
+            if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (n >= 1e4) return Math.floor(n / 1000) + 'K';
+            return n.toLocaleString('en-US');
         }
         function animateStats(stats) {
             const fields = [
