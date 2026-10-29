@@ -943,23 +943,20 @@
             if (!grid) return;
 
             try {
-                // Fetch contribution data from GitHub events API
-                const response = await fetch('https://api.github.com/users/moses-y/events?per_page=100');
+                // The full contribution calendar (what the GitHub profile shows). The
+                // events API only returns the last 100 events, which left most of a
+                // year-long grid empty.
+                const response = await fetch('https://github-contributions-api.jogruber.de/v4/moses-y?y=last');
                 if (!response.ok) throw new Error('API error');
 
-                const events = await response.json();
+                const data = await response.json();
 
-                // Generate last 365 days of dates
                 const today = new Date();
                 const oneYearAgo = new Date(today);
                 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-                // Create contribution map from events
                 const contributions = new Map();
-                events.forEach(event => {
-                    const date = event.created_at.split('T')[0];
-                    contributions.set(date, (contributions.get(date) || 0) + 1);
-                });
+                data.contributions.forEach(day => contributions.set(day.date, day.count));
 
                 // Find max for normalization
                 const maxContributions = Math.max(...contributions.values(), 1);
@@ -1017,74 +1014,15 @@
                     </div>
                 `).join('');
 
-                countEl.textContent = `${totalContributions} public events · last ~90 days`;
+                countEl.textContent = `${totalContributions.toLocaleString('en-US')} contributions in the last year`;
             } catch (e) {
-                // Fallback: generate mock data based on stats
-                generateMockHeatmap();
+                // No data means no section - an invented grid would misstate the record.
+                const section = grid.closest('.github-heatmap');
+                if (section) section.style.display = 'none';
             }
         }
 
 /* extras */
-        function generateMockHeatmap() {
-            const grid = document.getElementById('heatmap-grid');
-            const monthsContainer = document.getElementById('heatmap-months');
-            const countEl = document.getElementById('heatmap-count');
-
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const today = new Date();
-            let currentDate = new Date(today);
-            currentDate.setFullYear(currentDate.getFullYear() - 1);
-
-            // Align to Sunday
-            while (currentDate.getDay() !== 0) {
-                currentDate.setDate(currentDate.getDate() - 1);
-            }
-
-            const weeks = [];
-            let totalContributions = 0;
-
-            while (currentDate <= today) {
-                const week = [];
-                for (let i = 0; i < 7; i++) {
-                    // Generate pseudo-random but consistent activity based on date
-                    const seed = currentDate.getTime();
-                    const rand = Math.sin(seed) * 10000;
-                    const activity = Math.floor((rand - Math.floor(rand)) * 5);
-                    const level = Math.max(0, Math.min(4, activity));
-                    if (level > 0) totalContributions += level;
-
-                    week.push({
-                        date: currentDate.toISOString().split('T')[0],
-                        level,
-                        month: currentDate.getMonth(),
-                        day: currentDate.getDate()
-                    });
-                    currentDate.setDate(currentDate.getDate() + 1);
-                }
-                weeks.push(week);
-            }
-
-            // Render months
-            let lastMonth = -1;
-            let monthHtml = '';
-            weeks.forEach(week => {
-                const firstDay = week[0];
-                if (firstDay && firstDay.month !== lastMonth && firstDay.day <= 7) {
-                    monthHtml += `<span class="heatmap-month">${monthNames[firstDay.month]}</span>`;
-                    lastMonth = firstDay.month;
-                }
-            });
-            monthsContainer.innerHTML = monthHtml;
-
-            grid.innerHTML = weeks.map(week => `
-                <div class="heatmap-week">
-                    ${week.map(day => `<div class="heatmap-day" data-level="${day.level}"></div>`).join('')}
-                </div>
-            `).join('');
-
-            countEl.textContent = `${totalContributions} public events · last ~90 days`;
-        }
-
         // Contact Form Handler
         const contactForm = document.getElementById('contact-form');
         const formStatus = document.getElementById('form-status');
