@@ -170,12 +170,12 @@ Keeper: **llmwiki** (B-, 74.3). Mean grade across the 2 audited members is 68.8.
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **lich-skills** (B, 75). Mean grade across the 2 audited members is 73.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **lich-skills** (B, 75). Mean grade across the 2 audited members is 73. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **lich-skills** | Agent Skills & Plugins | Shell | B 75 | 46 |
-| agentskills | Web & Interfaces | JavaScript | B- 71.2 | 187 |
+| agentskills | Web & Interfaces | JavaScript | B- 71.1 | 187 |
 
 ### c037 - 2 repositories
 
@@ -192,11 +192,11 @@ Keeper: **VoiceStudio** (C+, 66.6). Mean grade across the 2 audited members is 6
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **flashvad** (B+, 80.5). Mean grade across the 2 audited members is 66.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **flashvad** (B+, 80.4). Mean grade across the 2 audited members is 66.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **flashvad** | AI & Data | Python | B+ 80.5 | 166 |
+| **flashvad** | AI & Data | Python | B+ 80.4 | 166 |
 | ten-vad | Systems & Infra | C/C++ Header | C- 52.8 | 147 |
 
 ### c040 - 2 repositories
