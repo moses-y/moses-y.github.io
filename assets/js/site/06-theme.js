@@ -41,23 +41,20 @@
             if (!grid) return;
 
             try {
-                // Fetch contribution data from GitHub events API
-                const response = await fetch('https://api.github.com/users/moses-y/events?per_page=100');
+                // The full contribution calendar (what the GitHub profile shows). The
+                // events API only returns the last 100 events, which left most of a
+                // year-long grid empty.
+                const response = await fetch('https://github-contributions-api.jogruber.de/v4/moses-y?y=last');
                 if (!response.ok) throw new Error('API error');
 
-                const events = await response.json();
+                const data = await response.json();
 
-                // Generate last 365 days of dates
                 const today = new Date();
                 const oneYearAgo = new Date(today);
                 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-                // Create contribution map from events
                 const contributions = new Map();
-                events.forEach(event => {
-                    const date = event.created_at.split('T')[0];
-                    contributions.set(date, (contributions.get(date) || 0) + 1);
-                });
+                data.contributions.forEach(day => contributions.set(day.date, day.count));
 
                 // Find max for normalization
                 const maxContributions = Math.max(...contributions.values(), 1);
@@ -115,9 +112,10 @@
                     </div>
                 `).join('');
 
-                countEl.textContent = `${totalContributions} public events · last ~90 days`;
+                countEl.textContent = `${totalContributions.toLocaleString('en-US')} contributions in the last year`;
             } catch (e) {
-                // Fallback: generate mock data based on stats
-                generateMockHeatmap();
+                // No data means no section - an invented grid would misstate the record.
+                const section = grid.closest('.github-heatmap');
+                if (section) section.style.display = 'none';
             }
         }
