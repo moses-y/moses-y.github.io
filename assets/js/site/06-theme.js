@@ -33,89 +33,101 @@
         mobileThemeToggle && mobileThemeToggle.addEventListener('click', toggleTheme);
 
         // GitHub Contribution Heatmap
+        // The full contribution calendar for every year, fetched once. Like the
+        // GitHub profile it opens on the last twelve months, with a button per year.
         async function loadGitHubHeatmap() {
             const grid = document.getElementById('heatmap-grid');
             const monthsContainer = document.getElementById('heatmap-months');
             const countEl = document.getElementById('heatmap-count');
+            const yearsEl = document.getElementById('heatmap-years');
             // Heatmap only exists on the home page - skip elsewhere.
             if (!grid) return;
 
+            let data;
             try {
-                // The full contribution calendar (what the GitHub profile shows). The
-                // events API only returns the last 100 events, which left most of a
-                // year-long grid empty.
-                const response = await fetch('https://github-contributions-api.jogruber.de/v4/moses-y?y=last');
+                const response = await fetch('https://github-contributions-api.jogruber.de/v4/moses-y');
                 if (!response.ok) throw new Error('API error');
-
-                const data = await response.json();
-
-                const today = new Date();
-                const oneYearAgo = new Date(today);
-                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
-                const contributions = new Map();
-                data.contributions.forEach(day => contributions.set(day.date, day.count));
-
-                // Find max for normalization
-                const maxContributions = Math.max(...contributions.values(), 1);
-
-                // Generate weeks (53 weeks in a year)
-                const weeks = [];
-                let currentDate = new Date(oneYearAgo);
-
-                // Align to Sunday
-                while (currentDate.getDay() !== 0) {
-                    currentDate.setDate(currentDate.getDate() - 1);
-                }
-
-                while (currentDate <= today) {
-                    const week = [];
-                    for (let i = 0; i < 7; i++) {
-                        const dateStr = currentDate.toISOString().split('T')[0];
-                        const count = contributions.get(dateStr) || 0;
-                        const level = count === 0 ? 0 : Math.ceil((count / maxContributions) * 4);
-                        week.push({
-                            date: dateStr,
-                            count,
-                            level: Math.min(level, 4),
-                            month: currentDate.getMonth(),
-                            day: currentDate.getDate()
-                        });
-                        currentDate.setDate(currentDate.getDate() + 1);
-                    }
-                    weeks.push(week);
-                }
-
-                // Render months
-                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                let lastMonth = -1;
-                let monthHtml = '';
-                weeks.forEach((week, i) => {
-                    const firstDay = week[0];
-                    if (firstDay && firstDay.month !== lastMonth && firstDay.day <= 7) {
-                        monthHtml += `<span class="heatmap-month">${monthNames[firstDay.month]}</span>`;
-                        lastMonth = firstDay.month;
-                    }
-                });
-                monthsContainer.innerHTML = monthHtml;
-
-                // Render grid
-                const totalContributions = [...contributions.values()].reduce((a, b) => a + b, 0);
-                grid.innerHTML = weeks.map(week => `
-                    <div class="heatmap-week">
-                        ${week.map(day => `
-                            <div class="heatmap-day"
-                                 data-level="${day.level}"
-                                 title="${day.date}: ${day.count} contributions">
-                            </div>
-                        `).join('')}
-                    </div>
-                `).join('');
-
-                countEl.textContent = `${totalContributions.toLocaleString('en-US')} contributions in the last year`;
+                data = await response.json();
             } catch (e) {
                 // No data means no section - an invented grid would misstate the record.
                 const section = grid.closest('.github-heatmap');
                 if (section) section.style.display = 'none';
+                return;
             }
+
+            const days = new Map(data.contributions.map(d => [d.date, d]));
+            const iso = d => d.toISOString().split('T')[0];
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+            function render(year) {
+                const today = new Date();
+                let from, to;
+                if (year === 'last') {
+                    to = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+                    from = new Date(to);
+                    from.setUTCFullYear(from.getUTCFullYear() - 1);
+                    from.setUTCDate(from.getUTCDate() + 1);
+                } else {
+                    from = new Date(Date.UTC(year, 0, 1));
+                    to = new Date(Date.UTC(year, 11, 31));
+                }
+
+                // Weeks start on Sunday; days outside the range are left blank.
+                const cursor = new Date(from);
+                cursor.setUTCDate(cursor.getUTCDate() - cursor.getUTCDay());
+                const fromStr = iso(from), toStr = iso(to);
+                const weeks = [];
+                let total = 0;
+                while (iso(cursor) <= toStr) {
+                    const week = [];
+                    for (let i = 0; i < 7; i++) {
+                        const date = iso(cursor);
+                        const inRange = date >= fromStr && date <= toStr;
+                        const d = inRange ? days.get(date) : null;
+                        const count = d ? d.count : 0;
+                        if (inRange) total += count;
+                        week.push({ date, count, level: d ? d.level : 0, inRange,
+                                    month: cursor.getUTCMonth(), day: cursor.getUTCDate() });
+                        cursor.setUTCDate(cursor.getUTCDate() + 1);
+                    }
+                    weeks.push(week);
+                }
+
+                let lastMonth = -1;
+                monthsContainer.innerHTML = weeks.map(week => {
+                    const first = week.find(d => d.inRange) || week[0];
+                    if (first.month !== lastMonth && first.day <= 7) {
+                        lastMonth = first.month;
+                        return `<span class="heatmap-month">${monthNames[first.month]}</span>`;
+                    }
+                    return '';
+                }).join('');
+
+                grid.innerHTML = weeks.map(week => `
+                    <div class="heatmap-week">
+                        ${week.map(day => day.inRange ? `
+                            <div class="heatmap-day"
+                                 data-level="${day.level}"
+                                 title="${day.date}: ${day.count} contribution${day.count === 1 ? '' : 's'}">
+                            </div>` : '<div class="heatmap-day heatmap-day-empty"></div>').join('')}
+                    </div>
+                `).join('');
+
+                const label = year === 'last' ? 'in the last year' : `in ${year}`;
+                countEl.textContent = `${total.toLocaleString('en-US')} contribution${total === 1 ? '' : 's'} ${label}`;
+
+                if (yearsEl) yearsEl.querySelectorAll('button').forEach(b =>
+                    b.classList.toggle('active', b.dataset.year === String(year)));
+            }
+
+            if (yearsEl) {
+                const years = Object.keys(data.total).map(Number).sort((a, b) => b - a);
+                yearsEl.innerHTML = ['last', ...years].map(y =>
+                    `<button type="button" data-year="${y}">${y === 'last' ? 'Last year' : y}</button>`).join('');
+                yearsEl.addEventListener('click', e => {
+                    const b = e.target.closest('button');
+                    if (b) render(b.dataset.year === 'last' ? 'last' : Number(b.dataset.year));
+                });
+            }
+            render('last');
         }
