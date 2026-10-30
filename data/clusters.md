@@ -95,7 +95,7 @@ Keeper: **obsidian-mind** (B+, 80). Mean grade across the 4 audited members is 7
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80 | 187 |
-| open-second-brain | Web & Interfaces | TypeScript | B 79.6 | 2597 |
+| open-second-brain | Web & Interfaces | TypeScript | B 79.5 | 2597 |
 | MegaMemory | Web & Interfaces | TypeScript | B 78.9 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | B- 74.8 | 208 |
 
