@@ -322,11 +322,11 @@ Keeper: **maplibre-gl-usgs-lidar** (C+, 66.3). Mean grade across the 2 audited m
 
 All 2 in Web & Interfaces.
 
-Keeper: **Manta** (B+, 81.9). Mean grade across the 2 audited members is 72.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Manta** (B+, 81.8). Mean grade across the 2 audited members is 72.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Manta** | Web & Interfaces | JSX | B+ 81.9 | 374 |
+| **Manta** | Web & Interfaces | JSX | B+ 81.8 | 374 |
 | invoice-builder | Web & Interfaces | TypeScript | C 63.6 | 509 |
 
 ### c018 - 2 repositories
@@ -399,11 +399,11 @@ Keeper: **awesome-ai-apps** (D, 47.5). Mean grade across the 2 audited members i
 
 All 2 in AI & Data.
 
-Keeper: **client-python** (B, 77.8). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **client-python** (B, 77.7). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **client-python** | AI & Data | Python | B 77.8 | 301 |
+| **client-python** | AI & Data | Python | B 77.7 | 301 |
 | twelvedata-python | AI & Data | Python | C 61.6 | 40 |
 
 ### c026 - 2 repositories
@@ -421,11 +421,11 @@ Keeper: **pluely** (C-, 59.2). Mean grade across the 2 audited members is 49.5. 
 
 All 2 in Web & Interfaces.
 
-Keeper: **FileSync** (C, 62.1). Mean grade across the 2 audited members is 60. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FileSync** (C, 62). Mean grade across the 2 audited members is 60. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FileSync** | Web & Interfaces | JavaScript | C 62.1 | 44 |
+| **FileSync** | Web & Interfaces | JavaScript | C 62 | 44 |
 | OpenDrop | Web & Interfaces | JavaScript | C- 58 | 12 |
 
 ### c029 - 2 repositories
@@ -454,11 +454,11 @@ Keeper: **cadquery** (B-, 71.2). Mean grade across the 2 audited members is 70.6
 
 All 2 in AI & Data.
 
-Keeper: **gpu-hot** (C, 62.5). Mean grade across the 2 audited members is 52.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **gpu-hot** (C, 62.4). Mean grade across the 2 audited members is 52.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **gpu-hot** | AI & Data | Python | C 62.5 | 68 |
+| **gpu-hot** | AI & Data | Python | C 62.4 | 68 |
 | nvitop | AI & Data | Python | D 42 | 116 |
 
 ### c032 - 2 repositories
