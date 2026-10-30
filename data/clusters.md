@@ -70,7 +70,7 @@ Keeper: **FluidVoice** (C, 61.6). Mean grade across the 4 audited members is 55.
 | --- | --- | --- | --- | --- |
 | **FluidVoice** | Mobile | Swift | C 61.6 | 186 |
 | VoiceInk | Mobile | Swift | C- 55.5 | 231 |
-| pindrop | Mobile | Swift | C- 54.2 | 569 |
+| pindrop | Mobile | Swift | C- 54.1 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
 
 ### c005 - 4 repositories
@@ -465,12 +465,12 @@ Keeper: **gpu-hot** (C, 62.4). Mean grade across the 2 audited members is 52.2. 
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 66.8). Mean grade across the 2 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 66.8). Mean grade across the 2 audited members is 65.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **rust-genai** | Systems & Infra | Rust | C+ 66.8 | 187 |
-| aisix | Systems & Infra | Rust | C+ 65.2 | 526 |
+| aisix | Systems & Infra | Rust | C+ 65 | 526 |
 
 ### c036 - 2 repositories
 
