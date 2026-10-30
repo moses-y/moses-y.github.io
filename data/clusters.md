@@ -203,11 +203,11 @@ Keeper: **flashvad** (B+, 80.4). Mean grade across the 2 audited members is 66.6
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **no-ai-slop** (B-, 74.2). Mean grade across the 2 audited members is 69.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **no-ai-slop** (B-, 74.1). Mean grade across the 2 audited members is 69.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.2 | 13 |
+| **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.1 | 13 |
 | avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65 | 50 |
 
 ### c042 - 2 repositories
@@ -498,11 +498,11 @@ Keeper: **decimen-optical-transfer** (C+, 68.6). Mean grade across the 2 audited
 
 All 2 in Mobile.
 
-Keeper: **AIUsage** (C+, 69). Mean grade across the 2 audited members is 65.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AIUsage** (C+, 68.8). Mean grade across the 2 audited members is 65.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **AIUsage** | Mobile | Swift | C+ 69 | 459 |
+| **AIUsage** | Mobile | Swift | C+ 68.8 | 459 |
 | quotio | Mobile | Swift | C 62.8 | 277 |
 
 ---
