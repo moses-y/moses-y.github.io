@@ -214,11 +214,11 @@ Keeper: **no-ai-slop** (B-, 74.1). Mean grade across the 2 audited members is 69
 
 Crosses a domain boundary: 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **free-for-dev** (C+, 67.8). Mean grade across the 2 audited members is 65.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **free-for-dev** (C+, 67.7). Mean grade across the 2 audited members is 65.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **free-for-dev** | Web & Interfaces | HTML | C+ 67.8 | 10 |
+| **free-for-dev** | Web & Interfaces | HTML | C+ 67.7 | 10 |
 | free-for-devs | Systems & Infra |  | C 62.7 | 3 |
 
 ## Groups inside a single domain
