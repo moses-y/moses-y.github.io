@@ -45,7 +45,7 @@ Keeper: **OpenHands** (B-, 72.8). Mean grade across the 4 audited members is 60.
 | **OpenHands** | AI & Data | Python | B- 72.8 | 2658 |
 | OpenJarvis | AI & Data | Python | C+ 68.2 | 1742 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 58.9 | 1548 |
-| learn-anything.xyz | Web & Interfaces | TypeScript | D 41.9 | 209 |
+| learn-anything.xyz | Web & Interfaces | TypeScript | D 41.8 | 209 |
 
 ### c003 - 4 repositories
 
@@ -82,7 +82,7 @@ Keeper: **Lead-Generation** (C, 60.5). Mean grade across the 4 audited members i
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.5 | 56 |
-| googlemaps-scraper | Knowledge & Content |  | C- 58.2 | 93 |
+| googlemaps-scraper | Knowledge & Content |  | C- 58.1 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 55.7 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.7 | 6 |
 
@@ -197,7 +197,7 @@ Keeper: **flashvad** (B+, 80.4). Mean grade across the 2 audited members is 66.6
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **flashvad** | AI & Data | Python | B+ 80.4 | 166 |
-| ten-vad | Systems & Infra | C/C++ Header | C- 52.8 | 147 |
+| ten-vad | Systems & Infra | C/C++ Header | C- 52.7 | 147 |
 
 ### c040 - 2 repositories
 
@@ -366,12 +366,12 @@ Keeper: **openskills** (B+, 82.1). Mean grade across the 2 audited members is 76
 
 All 2 in AI & Data.
 
-Keeper: **livecc** (D, 46). Mean grade across the 2 audited members is 43.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **livecc** (D, 46). Mean grade across the 2 audited members is 43.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **livecc** | AI & Data | Python | D 46 | 95 |
-| VideoAgent | AI & Data | Python | D 40.9 | 853 |
+| VideoAgent | AI & Data | Python | D 40.8 | 853 |
 
 ### c022 - 2 repositories
 
@@ -487,12 +487,12 @@ Keeper: **atomic-mail-agentic** (B-, 70.5). Mean grade across the 2 audited memb
 
 All 2 in Web & Interfaces.
 
-Keeper: **decimen-optical-transfer** (C+, 68.6). Mean grade across the 2 audited members is 66.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **decimen-optical-transfer** (C+, 68.5). Mean grade across the 2 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 68.6 | 19 |
-| qr-data-transfer | Web & Interfaces | TypeScript | C 63.8 | 44 |
+| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 68.5 | 19 |
+| qr-data-transfer | Web & Interfaces | TypeScript | C 63.6 | 44 |
 
 ### c041 - 2 repositories
 
