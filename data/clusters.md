@@ -219,7 +219,7 @@ Keeper: **free-for-dev** (C+, 67.7). Mean grade across the 2 audited members is 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **free-for-dev** | Web & Interfaces | HTML | C+ 67.7 | 10 |
-| free-for-devs | Systems & Infra |  | C 62.7 | 3 |
+| free-for-devs | Systems & Infra |  | C 62.6 | 3 |
 
 ## Groups inside a single domain
 
