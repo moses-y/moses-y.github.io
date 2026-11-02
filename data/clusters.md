@@ -448,7 +448,7 @@ Keeper: **cadquery** (B-, 71.2). Mean grade across the 2 audited members is 70.6
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **cadquery** | AI & Data | Python | B- 71.2 | 209 |
-| build123d | AI & Data | Python | B- 70 | 649 |
+| build123d | AI & Data | Python | C+ 69.9 | 649 |
 
 ### c031 - 2 repositories
 
