@@ -58,7 +58,7 @@ Keeper: **stenoai** (C, 64.6). Mean grade across the 4 audited members is 54.9. 
 | **stenoai** | AI & Data | Python | C 64.6 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.6 | 3671 |
 | murmure | Systems & Infra | Rust | C- 50.6 | 435 |
-| meetily | Systems & Infra | Rust | D 43 | 509 |
+| meetily | Systems & Infra | Rust | D 42.9 | 509 |
 
 ### c004 - 4 repositories
 
@@ -232,7 +232,7 @@ Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 63.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **forgetful** | AI & Data | Python | B- 71.5 | 379 |
-| MARM-Systems | AI & Data | Python | C 62.8 | 124 |
+| MARM-Systems | AI & Data | Python | C 62.7 | 124 |
 | MemMachine | AI & Data | Python | C 62 | 706 |
 | mcp-memory-service | AI & Data | Python | C- 57.7 | 1147 |
 
@@ -476,12 +476,12 @@ Keeper: **rust-genai** (C+, 66.8). Mean grade across the 2 audited members is 65
 
 All 2 in Web & Interfaces.
 
-Keeper: **atomic-mail-agentic** (B-, 70.4). Mean grade across the 2 audited members is 69.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **atomic-mail-agentic** (B-, 70.4). Mean grade across the 2 audited members is 69.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **atomic-mail-agentic** | Web & Interfaces | TypeScript | B- 70.4 | 424 |
-| mails | Web & Interfaces | TypeScript | C+ 68.5 | 91 |
+| mails | Web & Interfaces | TypeScript | C+ 68.4 | 91 |
 
 ### c039 - 2 repositories
 
