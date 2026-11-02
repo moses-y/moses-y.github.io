@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>November 2, 2026</span>
-                    <span>2 min read</span>
+                    <span>4 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,42 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>craft anything is a various technologies project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with various technologies or interested in clean, maintainable code architecture.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers often need a repeatable way to understand how an existing application works and then generate a new, compliant version. Existing tools are either limited to a single platform or require manual inspection and coding. This repo offers a single‑stack solution that automatically studies, builds, and validates a target, reducing manual effort and the risk of hidden bugs.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>The project is a portfolio of five Rust‑based tools that together provide a clean‑room “study‑build‑verify” workflow.</p>
+<ul><li><code>crates/ai</code> contains the core <strong>agent</strong> logic that drives the coding agent, exposing functions like <code>call</code>, <code>journal</code>, and <code>investigation</code>.</li><li><code>crates/analysis</code> supplies parsers and inspectors (e.g., <code>js_inventory.rs</code> and <code>web_har.rs</code>) that read the target’s artifacts.</li><li><code>crates/engine</code> implements the runtime environment, session state, and tool registry (<code>registry.rs</code>).</li><li><code>apps/craft-anything</code> is the CLI entry point that orchestrates a run.</li><li><code>apps/craft-anything-web</code> provides a web UI that visualizes the audit trail and build status.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p>Execution starts at <code>main</code> in <code>apps/craft-anything/src/main.rs</code>. From there, the <code>pick_adapter</code> flow loads the target, then <code>run</code> in <code>apps/craft-anything-cli/src/main.rs</code> is invoked, which calls <code>ai</code> in <code>crates/ai/src/lib.rs</code>. The <code>ai</code> path triggers the <code>call</code> function that drives the agent, which in turn calls the <code>investigation</code> routine that uses <code>analysis</code> modules to collect evidence. The traced path <code>main -&gt; run -&gt; ai -&gt; build_model</code> shows that the engine performs a network call to an Anthropic model (<code>anthropic::Anthropic::new</code>). The largest blast‑radius functions are <code>is_empty</code> (200 calls), <code>path</code> (186 calls), and <code>call</code> (167 calls). These serve as central utilities; changes affect many modules. The call graph has no cycles, so dependencies are acyclic, simplifying refactors.</p>
+<p>File‑by‑file responsibility (top 5):</p>
+<ul><li><code>crates/ai/src/agent.rs</code> – 68 functions, 27 calls, drives the agent.</li><li><code>crates/engine/src/registry.rs</code> – 19 functions, 2 types, registers tools.</li><li><code>crates/analysis/src/standin.rs</code> – 43 functions, 14 calls, provides heuristics.</li><li><code>crates/engine/src/session.rs</code> – 32 functions, 5 types, manages state.</li><li><code>crates/engine/src/lib.rs</code> – 24 functions, 5 types, offers runtime helpers.</li></ul>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code>git clone https://github.com/moses-y/craft-anything
+cd craft-anything
+cargo build --release</code></pre>
+<p>The Cargo workspace pulls all crates; <code>Cargo.lock</code> ensures deterministic versions.</p>
+<p><strong>Configuration</strong> Set the Anthropic API key in <code>~/.config/craft-anything/anthropic.toml</code> (not present by default; create it). Example:</p>
+<pre data-lang="toml"><code>[anthropic]
+api_key = &quot;YOUR_KEY&quot;</code></pre>
+<p><strong>Running</strong></p>
+<pre data-lang="bash"><code>./target/release/craft-anything run --target https://example.com</code></pre>
+<p><code>run</code> is defined in <code>apps/craft-anything-cli/src/main.rs</code>. For a web UI:</p>
+<pre data-lang="bash"><code>./target/release/craft-anything-web</code></pre>
+<p>The server starts on <code>localhost:8000</code> (see <code>apps/craft-anything-web/src/main.rs</code>).</p>
+<h3 id="real-world-use">Real-World Use</h3>
+<p>A DevOps engineer can point the tool at a legacy web app, let the agent rebuild it in Rust, and then compare screenshots across screen widths. The workflow could be scripted in CI to ensure every new release stays functionally identical to the original.</p>
+<pre data-lang="bash"><code>craft-anything-web --target https://old-site.com
+# CI job validates the generated project against the live site</code></pre>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High (Cognitive Load)</strong> – 43 deep‑nested files (<code>crates/ai/src/cli_agents/adapters/antigravity.rs</code>, etc.).</li><li><strong>High (Duplicated Code)</strong> – 181 repeated 6‑line blocks across 86 files.</li><li><strong>High (Oversized Files)</strong> – 15 files &gt; 1500 lines (<code>crates/engine/src/tools/adb_tools.rs</code>).</li><li><strong>Medium (Resource Safety)</strong> – 1 file opens a file without a context manager (<code>assets/app-icon/trace.py</code>).</li></ul>
+<p><strong>CI &amp; SDLC</strong></p>
+<ul><li>GitHub Actions workflows exist (<code>.github/workflows/*.yml</code>) but lack a test step and pin actions to a SHA.</li><li>Dependabot is not configured; vulnerability scans are absent.</li><li>Workflow jobs lack <code>timeout-minutes</code>.</li><li>Secrets are committed in <code>xtask/src/secrets.rs</code>.</li></ul>
+<p>These findings are static analysis results and not opinions.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>Craft Anything is a cohesive Rust ecosystem that automates the study‑build‑verify cycle for any software. Its modular design and clear entry points make it approachable, but the codebase suffers from cognitive load, duplication, and missing CI safeguards. Teams that need rapid, repeatable rebuilding of existing apps and are willing to invest in refactoring will benefit most.</p>
             </div>
 
             
