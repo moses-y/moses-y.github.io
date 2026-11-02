@@ -29,7 +29,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66. Ever
 | paseo | Web & Interfaces | TypeScript | B- 71.1 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | C+ 68.8 | 1730 |
 | mco | AI & Data | Python | C+ 65.9 | 568 |
-| dmux | Web & Interfaces | TypeScript | C 61.8 | 794 |
+| dmux | Web & Interfaces | TypeScript | C 61.7 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.6 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.4 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 52.8 | 1456 |
@@ -159,11 +159,11 @@ Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **llmwiki** (B-, 74.3). Mean grade across the 2 audited members is 68.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **llmwiki** (B-, 74.1). Mean grade across the 2 audited members is 68.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **llmwiki** | AI & Data | Python | B- 74.3 | 300 |
+| **llmwiki** | AI & Data | Python | B- 74.1 | 300 |
 | llm_wiki | Web & Interfaces | TypeScript | C 63.2 | 227 |
 
 ### c035 - 2 repositories
@@ -234,7 +234,7 @@ Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 63.
 | **forgetful** | AI & Data | Python | B- 71.5 | 379 |
 | MARM-Systems | AI & Data | Python | C 62.7 | 124 |
 | MemMachine | AI & Data | Python | C 62 | 706 |
-| mcp-memory-service | AI & Data | Python | C- 57.7 | 1147 |
+| mcp-memory-service | AI & Data | Python | C- 57.6 | 1147 |
 
 ### c008 - 3 repositories
 
