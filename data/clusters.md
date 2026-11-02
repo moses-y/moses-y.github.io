@@ -432,12 +432,12 @@ Keeper: **FileSync** (C, 62). Mean grade across the 2 audited members is 60. Eve
 
 All 2 in AI & Data.
 
-Keeper: **public-apis** (B, 79.7). Mean grade across the 2 audited members is 71. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **public-apis** (B, 79.7). Mean grade across the 2 audited members is 70.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **public-apis** | AI & Data | Python | B 79.7 | 22 |
-| awesome-opensource-ai | AI & Data | Python | C 62.2 | 8 |
+| awesome-opensource-ai | AI & Data | Python | C 62.1 | 8 |
 
 ### c030 - 2 repositories
 
