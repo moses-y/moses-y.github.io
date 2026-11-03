@@ -90,14 +90,14 @@ Keeper: **Lead-Generation** (C, 60.4). Mean grade across the 4 audited members i
 
 Crosses a domain boundary: 3 Web & Interfaces, 1 Agent Skills & Plugins. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **obsidian-mind** (B, 79.9). Mean grade across the 4 audited members is 78.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **obsidian-mind** (B, 79.9). Mean grade across the 4 audited members is 78.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B 79.9 | 187 |
 | open-second-brain | Web & Interfaces | TypeScript | B 79.5 | 2597 |
 | MegaMemory | Web & Interfaces | TypeScript | B 78.8 | 44 |
-| agentmemory | Web & Interfaces | TypeScript | B- 74.8 | 208 |
+| agentmemory | Web & Interfaces | TypeScript | B- 74.7 | 208 |
 
 ### c012 - 3 repositories
 
@@ -410,12 +410,12 @@ Keeper: **client-python** (B, 77.7). Mean grade across the 2 audited members is 
 
 All 2 in Web & Interfaces.
 
-Keeper: **pluely** (C-, 59.2). Mean grade across the 2 audited members is 49.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **pluely** (C-, 59.2). Mean grade across the 2 audited members is 49.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **pluely** | Web & Interfaces | TSX | C- 59.2 | 224 |
-| natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.7 | 182 |
+| natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.6 | 182 |
 
 ### c028 - 2 repositories
 
