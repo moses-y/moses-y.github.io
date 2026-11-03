@@ -20,30 +20,30 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 8 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 65.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **cezar** | Web & Interfaces | TypeScript | B 78.8 | 1915 |
 | agent-orchestrator | Web & Interfaces | TypeScript | B 77.9 | 315 |
-| paseo | Web & Interfaces | TypeScript | B- 71.1 | 1647 |
-| manaflow | Web & Interfaces | TypeScript | C+ 68.8 | 1730 |
+| paseo | Web & Interfaces | TypeScript | B- 71 | 1647 |
+| manaflow | Web & Interfaces | TypeScript | C+ 68.7 | 1730 |
 | mco | AI & Data | Python | C+ 65.7 | 568 |
 | dmux | Web & Interfaces | TypeScript | C 61.7 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.6 | 6335 |
-| parallel-code | Web & Interfaces | TypeScript | C- 56.4 | 254 |
+| parallel-code | Web & Interfaces | TypeScript | C- 56.3 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 52.8 | 1456 |
 
 ### c002 - 4 repositories
 
 Crosses a domain boundary: 2 AI & Data, 2 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **OpenHands** (B-, 72.8). Mean grade across the 4 audited members is 60.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenHands** (B-, 72.7). Mean grade across the 4 audited members is 60.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **OpenHands** | AI & Data | Python | B- 72.8 | 2658 |
-| OpenJarvis | AI & Data | Python | C+ 68.2 | 1742 |
+| **OpenHands** | AI & Data | Python | B- 72.7 | 2658 |
+| OpenJarvis | AI & Data | Python | C+ 68.1 | 1742 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C- 58.9 | 1548 |
 | learn-anything.xyz | Web & Interfaces | TypeScript | D 41.8 | 209 |
 
@@ -276,11 +276,11 @@ Keeper: **n8n** (C+, 65.4). Mean grade across the 3 audited members is 61.6. Eve
 
 All 3 in AI & Data.
 
-Keeper: **FinRL** (C, 63.7). Mean grade across the 3 audited members is 52.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FinRL** (C, 63.6). Mean grade across the 3 audited members is 52.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FinRL** | AI & Data | Python | C 63.7 | 195 |
+| **FinRL** | AI & Data | Python | C 63.6 | 195 |
 | tensortrade | AI & Data | Python | C- 53.5 | 153 |
 | TradeMaster | AI & Data | Python | D 40.1 | 776 |
 
