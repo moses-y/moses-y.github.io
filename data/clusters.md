@@ -269,7 +269,7 @@ Keeper: **n8n** (C+, 65.4). Mean grade across the 3 audited members is 61.6. Eve
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **n8n** | Web & Interfaces | TypeScript | C+ 65.4 | 17556 |
-| n8n-as-code | Web & Interfaces | TypeScript | C 60.3 | 357 |
+| n8n-as-code | Web & Interfaces | TypeScript | C 60.1 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.2 | 2203 |
 
 ### c011 - 3 repositories
