@@ -349,7 +349,7 @@ Keeper: **altersend** (C+, 69.5). Mean grade across the 2 audited members is 62.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **altersend** | Web & Interfaces | TypeScript | C+ 69.5 | 1029 |
-| alt-sendme | Web & Interfaces | TypeScript | C- 54.6 | 116 |
+| alt-sendme | Web & Interfaces | TypeScript | C- 54.5 | 116 |
 
 ### c020 - 2 repositories
 
