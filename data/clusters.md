@@ -32,7 +32,7 @@ Keeper: **cezar** (B, 78.8). Mean grade across the 9 audited members is 65.9. Ev
 | dmux | Web & Interfaces | TypeScript | C 61.7 | 794 |
 | orca | Web & Interfaces | TypeScript | C 60.6 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 56.3 | 254 |
-| Maestro | Web & Interfaces | TypeScript | C- 52.8 | 1456 |
+| Maestro | Web & Interfaces | TypeScript | C- 52.7 | 1456 |
 
 ### c002 - 4 repositories
 
