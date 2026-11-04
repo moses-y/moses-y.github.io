@@ -64,11 +64,11 @@ Keeper: **stenoai** (C, 64.6). Mean grade across the 4 audited members is 54.9. 
 
 Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **FluidVoice** (C, 61.6). Mean grade across the 4 audited members is 55.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 61.5). Mean grade across the 4 audited members is 55.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FluidVoice** | Mobile | Swift | C 61.6 | 186 |
+| **FluidVoice** | Mobile | Swift | C 61.5 | 186 |
 | VoiceInk | Mobile | Swift | C- 55.5 | 231 |
 | pindrop | Mobile | Swift | C- 54.1 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
@@ -153,7 +153,7 @@ Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **ai-job-search** | Agent Skills & Plugins | TypeScript | B+ 82.3 | 212 |
-| career-ops | Systems & Infra | Go | C- 54.1 | 99 |
+| career-ops | Systems & Infra | Go | C- 54 | 99 |
 
 ### c034 - 2 repositories
 
@@ -465,11 +465,11 @@ Keeper: **gpu-hot** (C, 62.4). Mean grade across the 2 audited members is 52.2. 
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 66.8). Mean grade across the 2 audited members is 65.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 66.7). Mean grade across the 2 audited members is 65.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **rust-genai** | Systems & Infra | Rust | C+ 66.8 | 187 |
+| **rust-genai** | Systems & Infra | Rust | C+ 66.7 | 187 |
 | aisix | Systems & Infra | Rust | C+ 65 | 526 |
 
 ### c036 - 2 repositories
@@ -498,13 +498,13 @@ Keeper: **decimen-optical-transfer** (C+, 68.5). Mean grade across the 2 audited
 
 All 2 in Mobile.
 
-Keeper: **AIUsage** (C+, 68.8). Mean grade across the 2 audited members is 65.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AIUsage** (C+, 68.8). Mean grade across the 2 audited members is 65.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **AIUsage** | Mobile | Swift | C+ 68.8 | 459 |
-| quotio | Mobile | Swift | C 62.8 | 277 |
+| quotio | Mobile | Swift | C 62.6 | 277 |
 
 ---
 
-Generated from data/clusters.json built 2026-11-03. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-04. Regenerate with `node src/stages/build-relations.js`.
