@@ -57,7 +57,7 @@ Keeper: **stenoai** (C, 64.6). Mean grade across the 4 audited members is 54.9. 
 | --- | --- | --- | --- | --- |
 | **stenoai** | AI & Data | Python | C 64.6 | 62 |
 | hyprnote | Systems & Infra | Rust | C 61.6 | 3671 |
-| murmure | Systems & Infra | Rust | C- 50.6 | 435 |
+| murmure | Systems & Infra | Rust | C- 50.4 | 435 |
 | meetily | Systems & Infra | Rust | D 42.9 | 509 |
 
 ### c004 - 4 repositories
@@ -83,7 +83,7 @@ Keeper: **Lead-Generation** (C, 60.4). Mean grade across the 4 audited members i
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.4 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.1 | 93 |
-| google-maps-scraper | Systems & Infra | Go | C- 55.7 | 90 |
+| google-maps-scraper | Systems & Infra | Go | C- 55.5 | 90 |
 | Google-Maps-Scrapper | AI & Data | Python | C- 52.7 | 6 |
 
 ### c007 - 4 repositories
@@ -142,7 +142,7 @@ Keeper: **android-sms-gateway** (C-, 58.1). Mean grade across the 2 audited memb
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **android-sms-gateway** | Mobile | Kotlin | C- 58.1 | 335 |
-| httpsms | Systems & Infra | Go | D 43.5 | 430 |
+| httpsms | Systems & Infra | Go | D 43.4 | 430 |
 
 ### c033 - 2 repositories
 
