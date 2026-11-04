@@ -426,7 +426,7 @@ Keeper: **FileSync** (C, 62). Mean grade across the 2 audited members is 60. Eve
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FileSync** | Web & Interfaces | JavaScript | C 62 | 44 |
-| OpenDrop | Web & Interfaces | JavaScript | C- 58 | 12 |
+| OpenDrop | Web & Interfaces | JavaScript | C- 57.9 | 12 |
 
 ### c029 - 2 repositories
 
