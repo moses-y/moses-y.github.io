@@ -246,7 +246,7 @@ Keeper: **continue** (C+, 67.9). Mean grade across the 3 audited members is 60.3
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 67.9 | 3058 |
 | oh-my-openagent | Web & Interfaces | TypeScript | C 60.1 | 6746 |
-| opencode | Web & Interfaces | TypeScript | C- 53 | 2755 |
+| opencode | Web & Interfaces | TypeScript | C- 52.9 | 2755 |
 
 ### c009 - 3 repositories
 
@@ -327,7 +327,7 @@ Keeper: **Manta** (B+, 81.8). Mean grade across the 2 audited members is 72.7. E
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Manta** | Web & Interfaces | JSX | B+ 81.8 | 374 |
-| invoice-builder | Web & Interfaces | TypeScript | C 63.6 | 509 |
+| invoice-builder | Web & Interfaces | TypeScript | C 63.5 | 509 |
 
 ### c018 - 2 repositories
 
@@ -355,11 +355,11 @@ Keeper: **altersend** (C+, 69.5). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 82.1). Mean grade across the 2 audited members is 76.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 81.9). Mean grade across the 2 audited members is 76.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 82.1 | 94 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 81.9 | 94 |
 | skills | Web & Interfaces | TypeScript | B- 71.6 | 67 |
 
 ### c021 - 2 repositories
