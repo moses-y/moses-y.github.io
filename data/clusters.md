@@ -208,7 +208,7 @@ Keeper: **no-ai-slop** (B-, 74.1). Mean grade across the 2 audited members is 69
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.1 | 13 |
-| avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65 | 50 |
+| avoid-ai-writing | Web & Interfaces | JavaScript | C 64.9 | 50 |
 
 ### c042 - 2 repositories
 
