@@ -77,14 +77,14 @@ Keeper: **FluidVoice** (C, 61.5). Mean grade across the 4 audited members is 55.
 
 Crosses a domain boundary: 2 AI & Data, 1 Knowledge & Content, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **Lead-Generation** (C, 60.4). Mean grade across the 4 audited members is 56.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Lead-Generation** (C, 60.4). Mean grade across the 4 audited members is 56.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Lead-Generation** | AI & Data | Python | C 60.4 | 56 |
 | googlemaps-scraper | Knowledge & Content |  | C- 58.1 | 93 |
 | google-maps-scraper | Systems & Infra | Go | C- 55.5 | 90 |
-| Google-Maps-Scrapper | AI & Data | Python | C- 52.7 | 6 |
+| Google-Maps-Scrapper | AI & Data | Python | C- 52.6 | 6 |
 
 ### c007 - 4 repositories
 
