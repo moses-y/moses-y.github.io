@@ -120,7 +120,7 @@ Keeper: **mercury-agent-skills** (B-, 74.9). Mean grade across the 2 audited mem
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **mercury-agent-skills** | Web & Interfaces | JavaScript | B- 74.9 | 151 |
-| agent-skills | Agent Skills & Plugins | Shell | C+ 68.1 | 56 |
+| agent-skills | Agent Skills & Plugins | Shell | C+ 68 | 56 |
 
 ### c024 - 2 repositories
 
@@ -300,22 +300,22 @@ Keeper: **free-my-tv** (C, 61.3). Mean grade across the 3 audited members is 56.
 
 All 2 in AI & Data.
 
-Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 51). Mean grade across the 2 audited members is 49.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 50.9). Mean grade across the 2 audited members is 49.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 51 | 2 |
+| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 50.9 | 2 |
 | ObjectCountingYOLOv8DeepSORT | AI & Data | Jupyter Notebook | D 47.4 | 2 |
 
 ### c015 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **maplibre-gl-usgs-lidar** (C+, 66.3). Mean grade across the 2 audited members is 65.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **maplibre-gl-usgs-lidar** (C+, 66.2). Mean grade across the 2 audited members is 65.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.3 | 44 |
+| **maplibre-gl-usgs-lidar** | Web & Interfaces | TypeScript | C+ 66.2 | 44 |
 | maplibre-gl-lidar | Web & Interfaces | TypeScript | C 64.5 | 69 |
 
 ### c017 - 2 repositories
@@ -507,4 +507,4 @@ Keeper: **AIUsage** (C+, 68.8). Mean grade across the 2 audited members is 65.7.
 
 ---
 
-Generated from data/clusters.json built 2026-11-04. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-05. Regenerate with `node src/stages/build-relations.js`.
