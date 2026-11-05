@@ -355,12 +355,12 @@ Keeper: **altersend** (C+, 69.5). Mean grade across the 2 audited members is 62.
 
 All 2 in Web & Interfaces.
 
-Keeper: **openskills** (B+, 81.9). Mean grade across the 2 audited members is 76.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **openskills** (B+, 81.9). Mean grade across the 2 audited members is 76.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **openskills** | Web & Interfaces | TypeScript | B+ 81.9 | 94 |
-| skills | Web & Interfaces | TypeScript | B- 71.6 | 67 |
+| skills | Web & Interfaces | TypeScript | B- 71.5 | 67 |
 
 ### c021 - 2 repositories
 
@@ -388,23 +388,23 @@ Keeper: **graph_maker** (C, 62.2). Mean grade across the 2 audited members is 58
 
 All 2 in AI & Data.
 
-Keeper: **awesome-ai-apps** (D, 47.5). Mean grade across the 2 audited members is 47.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **awesome-ai-apps** (D, 47.4). Mean grade across the 2 audited members is 47.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **awesome-ai-apps** | AI & Data | Python | D 47.5 | 666 |
+| **awesome-ai-apps** | AI & Data | Python | D 47.4 | 666 |
 | awesome-llm-apps | AI & Data | Python | D 47.2 | 1073 |
 
 ### c025 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **client-python** (B, 77.7). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **client-python** (B, 77.7). Mean grade across the 2 audited members is 69.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **client-python** | AI & Data | Python | B 77.7 | 301 |
-| twelvedata-python | AI & Data | Python | C 61.6 | 40 |
+| twelvedata-python | AI & Data | Python | C 61.5 | 40 |
 
 ### c026 - 2 repositories
 
