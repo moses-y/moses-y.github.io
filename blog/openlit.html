@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>November 11, 2026</span>
-                    <span>2 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,9 +79,39 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content" id="post-content">
-                
-                <p>Same agent Smaller bill. The tools and infrastructure to get more work from your AI. Fewer tokens. Less compute. Lower cost.</p><p>This various technologies project caught my attention for its practical approach to solving real developer problems. The codebase offers patterns worth studying for anyone working in this space.</p>
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>AI agents often run in production without observability, cost tracking, or guardrails. Teams struggle to trace every LLM call, evaluate safety, and adjust prompts without redeploying. The result is opaque failures, hidden costs, and brittle guardrails.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p>OpenLIT supplies an end‑to‑end harness for agent observability and cost management.</p>
+<ul><li><strong>Tracing</strong> – <code>cli/internal/otlp/exporter.go</code> pushes OpenTelemetry spans for every LLM and tool call into the OpenTelemetry collector (<code>opentelemetry-gpu-collector/</code>).</li><li><strong>Guardrails</strong> – <code>cli/internal/coding/hook/opencode/privacy.go</code> enforces privacy rules at runtime.</li><li><strong>Pricing</strong> – <code>cli/internal/coding/pricing/pricing.go</code> calculates per‑token cost using local pricing data (<code>docs/assets/pricing.json</code>).</li><li><strong>CLI</strong> – <code>cli/cmd/openlit/main.go</code> exposes commands to launch agents, install hooks, and run diagnostics.</li></ul>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<ol><li><strong>Entry Point</strong> – <code>cli/cmd/openlit/main.go</code> parses flags and calls <code>cmd.Run</code>.</li><li><strong>Command Routing</strong> – <code>cli/internal/coding/cmd.go</code> dispatches to sub‑commands (install, uninstall, doctor).</li><li><strong>Hook Installation</strong> – <code>cli/internal/coding/install/install_opencode.go</code> writes the OpEncode plugin (<code>plugins/opencode/openlit.ts</code>) into the harness.</li><li><strong>Runtime Tracing</strong> – During a call, the agent emits a span that flows to <code>cli/internal/otlp/exporter.go</code>, which serialises to OTLP and forwards to the collector defined in <code>opentelemetry-gpu-collector/otel-collector-config.yaml</code>.</li><li><strong>Guard Enforcement</strong> – The collector forwards the span to <code>cli/internal/coding/hook/opencode/privacy.go</code>, which inspects the prompt and rejects disallowed content.</li><li><strong>Pricing</strong> – <code>cli/internal/coding/pricing/pricing.go</code> consumes <code>docs/assets/pricing.json</code> and attaches cost attributes to the span.</li></ol>
+<p>The wiring is a single path from CLI → internal command → hook installation → OTLP exporter → collector → guard &amp; pricing. There are no hidden cycles; each file owns a clear slice of responsibility (e.g., <code>otlp/exporter.go</code> only handles OTLP payloads, <code>privacy.go</code> only inspects prompt text).</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<pre data-lang="bash"><code># 1. Clone
+git clone https://github.com/moses-y/openlit
+
+# 2. Build the CLI
+cd openlit
+go build ./cli/cmd/openlit
+
+# 3. Install hooks into your harness
+./openlit install opencode
+
+# 4. Run your agent (example: Anthropic chat)
+export OPENAI_API_KEY=sk-...
+./openlit run examples/anthropic-chat-app/app.py</code></pre>
+<p><strong>Configuration</strong> – Set <code>OPENAI_API_KEY</code> or the relevant model key. The collector is pre‑configured in <code>opentelemetry-gpu-collector/otel-collector-config.yaml</code>; no extra env vars needed unless you change the endpoint.</p>
+<p><strong>Running</strong> – The agent script (<code>examples/anthropic-chat-app/app.py</code>) is the entry point for your harness; OpenLIT injects the hook automatically.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A SaaS platform runs a large fleet of Cognition agents. By installing the OpenLIT hook, every LLM call is traced, cost is attached, and any prompt that violates the privacy policy is automatically blocked. The platform can then run CI gates on the trace data to prevent regressions before deployment.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>High</strong> – Commit a lockfile beside the manifest – <code>sdk/python/pyproject.toml</code></li><li><strong>Medium</strong> – Pin the container base image by digest – <code>cli/Dockerfile</code></li><li><strong>Medium</strong> – Gate pull requests on a dependency vulnerability scan – <code>.github/workflows/</code></li><li><strong>Medium</strong> – Move large binaries to Git LFS or out of the repository – <code>src/opamp-server/opamp-server</code></li><li><strong>Medium</strong> – Add a non‑root USER to the image – <code>cli/Dockerfile</code></li><li><strong>Low</strong> – Set timeout‑minutes on the workflow jobs – <code>.github/workflows/release-cli.yml</code></li><li><strong>Low</strong> – Add the repository convention files this project lacks – missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config</li></ul>
+<p>The repo contains a license, lockfiles (<code>go.sum</code>, <code>docs/package-lock.json</code>), tests, and CI. Secret files are present but audited.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p>OpenLIT provides a lightweight, OpenTelemetry‑native harness that adds tracing, guardrails, and cost tracking to any AI agent without changing the agent code. The CLI and hook system are well‑structured, and the project has a solid CI pipeline. However, the code health audit highlights missing lockfiles, mutable base images, and missing vulnerability scans. Teams that already use OpenTelemetry and need runtime guardrails and cost attribution will benefit most; those requiring zero‑trust deployments should address the highlighted security gaps.</p>
             </div>
 
             
@@ -111,6 +141,11 @@
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Dependencies</span>
+                    <p class="an-note">29 declared dependencies, none a major version behind. Resolved 2 of 29 against the registry.</p>
+                    
+                </div>
 
                 
                 <div class="an-block">
@@ -126,7 +161,7 @@
                 </p>
             </section>
 
-            
+            <section class="analysis rpt" aria-label="Code health audit"><h2 class="an-h">What would stop me shipping this</h2><p class="an-note">Ranked by severity &times; confidence &times; production reach. Reach is the honest discriminator across a collection that is mostly other people's code: the same finding matters more in something that ships.</p><div class="bars"><div class="bar"><span class="name">high</span><span class="track"><span class="fill high" style="width:25%"></span></span><span class="n">1</span></div><div class="bar"><span class="name">medium</span><span class="track"><span class="fill medium" style="width:100%"></span></span><span class="n">4</span></div><div class="bar"><span class="name">low</span><span class="track"><span class="fill low" style="width:50%"></span></span><span class="n">2</span></div></div><div class="finding high"><div class="head"><span class="ttl">Commit a lockfile beside the manifest</span><span class="chip">high</span></div><div class="loc">sdk/python/pyproject.toml</div><div class="ev">manifest with no lockfile in scope</div><div class="ev">An unlocked range means the artifact you tested and the artifact you ship can contain different transitive code, so a malicious patch release reaches production with no diff.</div><div class="rec"><b>Fix:</b> Run the package manager once and commit the generated lockfile.</div></div><div class="finding medium"><div class="head"><span class="ttl">Pin the container base image by digest</span><span class="chip">medium</span><span class="rankchip">2 occurrences</span></div><div class="loc">cli/Dockerfile</div><div class="ev">golang:${GO_VERSION}-alpine, debian:bookworm-slim</div><div class="ev">An untagged or mutable base means today's build and last month's contain different libc and a different CVE set, with no record of which shipped.</div><div class="rec"><b>Fix:</b> Use image:tag@sha256:&lt;digest&gt; and enable Dependabot's docker ecosystem.</div></div><div class="finding medium"><div class="head"><span class="ttl">Gate pull requests on a dependency vulnerability scan</span><span class="chip">medium</span></div><div class="loc">.github/workflows</div><div class="ev">no dependency scan in CI</div><div class="ev">This is the one gate that would catch a known-vulnerable package before it reaches a build, and no repository in the sample had it.</div><div class="rec"><b>Fix:</b> Add dependency-review-action on pull_request, or osv-scanner on push and a schedule.</div></div><div class="finding medium"><div class="head"><span class="ttl">Move large binaries to Git LFS or out of the repository</span><span class="chip">medium</span><span class="rankchip">7 occurrences</span></div><div class="loc">src/opamp-server/opamp-server</div><div class="ev">7 blobs over 5MB: opamp-server 13.0MB, otter-overview.mp4 9.6MB, experiments.mp4 9.6MB</div><div class="ev">One repository here carries twenty blobs over 5MB including a 10.9MB spreadsheet, so every clone and every CI checkout pays for data nobody diffs.</div><div class="rec"><b>Fix:</b> Track those extensions with LFS, or move datasets to object storage and fetch them in a setup step.</div></div><div class="finding medium"><div class="head"><span class="ttl">Add a non-root USER to the image</span><span class="chip">medium</span></div><div class="loc">cli/Dockerfile</div><div class="ev">CMD or ENTRYPOINT with no USER directive</div><div class="ev">A process running as root in the container is root against every mounted volume, and it turns any container escape or writable-mount mistake from a contained problem into a host one.</div><div class="rec"><b>Fix:</b> Create an unprivileged user, chown what it needs, and end the Dockerfile with USER.</div></div><div class="finding low"><div class="head"><span class="ttl">Set timeout-minutes on the workflow jobs</span><span class="chip">low</span><span class="rankchip">4 occurrences</span></div><div class="loc">.github/workflows/release-cli.yml</div><div class="ev">4 workflow(s) declare no job timeout</div><div class="ev">A wedged step runs to the six-hour platform default, which on a two-hourly schedule means three runs overlap behind it.</div><div class="rec"><b>Fix:</b> Add timeout-minutes with a realistic bound to each job.</div></div><div class="finding low"><div class="head"><span class="ttl">Add the repository convention files this project lacks</span><span class="chip">low</span><span class="rankchip">3 occurrences</span></div><div class="ev">missing .editorconfig, .gitattributes, a formatter config</div><div class="ev">Without them one contributor's editor writes tabs into a Python file, a shell script commits with CRLF and fails in the container, and a notebook diff is unreviewable.</div><div class="rec"><b>Fix:</b> Add .editorconfig, .gitattributes with text=auto eol=lf, and a formatter config.</div></div><p class="an-note">Checked deterministically against the repository tree and a bounded set of its files: committed credentials, unpinned actions and base images, missing lockfiles and update bots, workflows that discard failures, published advisories against the declared dependencies, runtime configuration, licensing and notebook reproducibility. No language model is involved in this section.</p></section>
 
             
 
