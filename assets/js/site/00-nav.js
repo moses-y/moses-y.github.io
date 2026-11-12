@@ -62,6 +62,17 @@
             const nav = document.getElementById('navbar');
             if (!nav) return;
 
+            // Generated interior pages ship without the desktop theme toggle, so
+            // the nav looked different off the homepage. Add it beside the links.
+            if (ul && !document.getElementById('theme-toggle')) {
+                const t = document.createElement('button');
+                t.className = 'theme-toggle';
+                t.id = 'theme-toggle';
+                t.setAttribute('aria-label', 'Toggle dark/light mode');
+                t.innerHTML = THEME_SVG;
+                ul.insertAdjacentElement('afterend', t);
+            }
+
             // Several pages ship a menu button with no menu behind it.
             let menu = document.getElementById('mobile-menu');
             if (!menu) {

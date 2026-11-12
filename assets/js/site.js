@@ -58,6 +58,17 @@
             const nav = document.getElementById('navbar');
             if (!nav) return;
 
+            // Generated interior pages ship without the desktop theme toggle, so
+            // the nav looked different off the homepage. Add it beside the links.
+            if (ul && !document.getElementById('theme-toggle')) {
+                const t = document.createElement('button');
+                t.className = 'theme-toggle';
+                t.id = 'theme-toggle';
+                t.setAttribute('aria-label', 'Toggle dark/light mode');
+                t.innerHTML = THEME_SVG;
+                ul.insertAdjacentElement('afterend', t);
+            }
+
             // Several pages ship a menu button with no menu behind it.
             let menu = document.getElementById('mobile-menu');
             if (!menu) {
@@ -350,7 +361,6 @@
             // it, where it explains why the provenance rule exists. `p` is the
             // parent repository, present only on a fork.
             setNum('hero-repos', n);
-            setNum('hero-forked', R.filter(r => r.p).length);
         }
 
         function setNum(id, value) {
@@ -379,7 +389,6 @@
             setNum('pl-assertions', pipeline.assertions);
             setNum('pl-checks', pipeline.checks);
             setNum('pl-axes', pipeline.axes);
-            setNum('hero-scripts', pipeline.scripts);
         }
 
         // Draws the estate behind the hero from the umap coordinates already in the
@@ -486,7 +495,6 @@
             // the index does not load but the aggregate does.
             if (stats && !(forks && forks.forks && forks.forks.length)) {
                 setNum('hero-repos', stats.repos);
-                setNum('hero-forked', stats.forked);
             }
             renderStats();
         }
