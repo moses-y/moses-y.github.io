@@ -72,7 +72,7 @@ function servicePage(s) {
 <body>
 ${NAV}
     <main id="main-content">
-    <section class="hero" style="min-height:auto;padding-top:160px;">
+    <section class="hero hero-compact">
         <div class="container">
             <div class="hero-content">
                 <div class="hero-badge"><span class="dot"></span> ${s.badge}</div>
@@ -165,7 +165,7 @@ function blogPost(p) {
 <body>
 ${NAV}
     <main id="main-content">
-    <article class="hero" style="min-height:auto;padding-top:160px;">
+    <article class="hero hero-compact">
         <div class="container" style="max-width:820px;">
             <div class="hero-badge"><span class="dot"></span> ${p.tag}</div>
             <h1 style="font-size:clamp(2rem,5vw,3.2rem);margin:18px 0;">${esc(p.h1)}</h1>
@@ -218,7 +218,7 @@ function caseStudyPage(c) {
 <body>
 ${NAV}
     <main id="main-content">
-    <article class="hero" style="min-height:auto;padding-top:160px;">
+    <article class="hero hero-compact">
         <div class="container" style="max-width:820px;">
             <div class="hero-badge"><span class="dot"></span> ${c.sector}</div>
             <h1 style="font-size:clamp(2rem,5vw,3rem);margin:18px 0;"><span class="gradient-text">${esc(c.h1)}</span></h1>
@@ -273,7 +273,7 @@ function servicesHub() {
 <body>
 ${NAV}
     <main id="main-content">
-    <section class="hero" style="min-height:auto;padding-top:160px;">
+    <section class="hero hero-compact">
         <div class="container">
             <div class="hero-content">
                 <div class="hero-badge"><span class="dot"></span> Services</div>
@@ -318,7 +318,7 @@ function blogIndex() {
 <body>
 ${NAV}
     <main id="main-content">
-    <section class="hero" style="min-height:auto;padding-top:160px;">
+    <section class="hero hero-compact">
         <div class="container">
             <div class="hero-content">
                 <div class="hero-badge"><span class="dot"></span> Insights</div>
@@ -364,7 +364,7 @@ function caseStudiesHub() {
 <body>
 ${NAV}
     <main id="main-content">
-    <section class="hero" style="min-height:auto;padding-top:160px;">
+    <section class="hero hero-compact">
         <div class="container">
             <div class="hero-content">
                 <div class="hero-badge"><span class="dot"></span> Case Studies</div>

@@ -26,8 +26,13 @@ set -uo pipefail
 DRY_RUN="${DRY_RUN:-0}"
 
 echo "Collecting your forks..."
-forks=$(gh api --paginate '/user/repos?per_page=100&affiliation=owner' \
-  --jq '.[] | select(.fork==true and .archived==false) | .full_name')
+# Fail loudly: an empty/missing token used to look like "no forks" and exit 0,
+# so the scheduled job showed green while syncing nothing.
+if ! forks=$(gh api --paginate '/user/repos?per_page=100&affiliation=owner' \
+  --jq '.[] | select(.fork==true and .archived==false) | .full_name'); then
+  echo "::error::Could not list repos. Is the FORK_SYNC_TOKEN secret set and valid?"
+  exit 1
+fi
 
 if [ -z "$forks" ]; then
   echo "No (non-archived) forks found."
