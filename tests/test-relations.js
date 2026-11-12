@@ -369,58 +369,34 @@ if (fs.existsSync(SKILL) && clusters && index) {
 console.log('the graph page consumes the layer rather than re-deriving it');
 
 /*
- * Code Graph now reads /data/kin/<id>.json instead of building its own
- * similarity lists from forks.json. That makes it a consumer of the published
- * files, which is the point - but it also means a path or a load order can go
- * wrong in a way that only shows up as an empty panel in a browser nobody is
- * looking at. These are the two failures that would be silent.
+ * The merged Code Graph page (code-brain.html) reads /data/kin/<id>.json
+ * rather than building its own similarity lists. A path or a load order can go
+ * wrong in a way that only shows up as an empty panel nobody is looking at.
  */
-const page = path.join(ROOT, 'knowledge-graph.html');
+const page = path.join(ROOT, 'code-brain.html');
 const traverse = path.join(ROOT, 'assets', 'js', 'kg-traverse.js');
 if (fs.existsSync(page) && fs.existsSync(traverse)) {
   const html = fs.readFileSync(page, 'utf8');
   const js = fs.readFileSync(traverse, 'utf8');
-
   const at = s => html.indexOf(s);
-  check('the page loads the traversal module',
-    at('assets/js/kg-traverse.js') !== -1);
+  check('the page loads the traversal module', at('assets/js/kg-traverse.js') !== -1);
   check('it loads before the controller that calls it',
-    at('assets/js/kg-traverse.js') < at('assets/js/knowledge-graph.js'));
-
-  // The builder writes data/kin/<id>.json. If either side moves, the panel
-  // silently falls back to the old similarity list and looks fine.
-  check('the module fetches the path the builder writes',
-    /fetch\('data\/kin\/'/.test(js));
-  check('the module labels both provenance levels',
-    /extracted/.test(js) && /inferred/.test(js));
-
-  // The drawn graph and the clustering must agree on what counts as kin, or
-  // the picture argues with data/clusters.json.
+    at('assets/js/kg-traverse.js') < at('assets/js/code-brain.js'));
+  check('the page has somewhere to render a neighbourhood', /id="i-kin"/.test(html));
+  check('the module fetches the path the builder writes', /fetch\('data\/kin\/'/.test(js));
+  check('the module labels both provenance levels', /extracted/.test(js) && /inferred/.test(js));
+  // The drawn graph and the clustering must agree on what counts as kin.
   const dflt = html.match(/id="edge-min"[^>]*value="([\d.]+)"/);
   check('the default edge threshold is the clustering threshold',
     !!dflt && Number(dflt[1]) === CLUSTER_AT, dflt ? dflt[1] : 'no control');
-
-  /*
-   * Code Brain is the module's second caller and the reason it had a latent
-   * crash: it passes no simByRepo, and the fallback path read that index
-   * unguarded. The two pages must keep sharing one implementation rather than
-   * drifting into two, so the checks are on the shared module and on the second
-   * page having the container and the script it needs.
-   */
-  const brain = path.join(ROOT, 'code-brain.html');
-  if (fs.existsSync(brain)) {
-    const bh = fs.readFileSync(brain, 'utf8');
-    check('Code Brain loads the same traversal module',
-      bh.indexOf('assets/js/kg-traverse.js') !== -1);
-    check('it loads before the controller that reaches it',
-      bh.indexOf('assets/js/kg-traverse.js') < bh.indexOf('assets/js/code-brain.js'));
-    check('Code Brain has somewhere to render a neighbourhood',
-      /id="i-kin"/.test(bh));
-    check('the module survives a caller with no local similarity index',
-      /ctx\.simByRepo \|\| \{\}/.test(js), 'unguarded simByRepo read');
-  }
+  check('the module survives a caller with no local similarity index',
+    /ctx\.simByRepo \|\| \{\}/.test(js), 'unguarded simByRepo read');
+  // Old Code Graph links must still land somewhere.
+  const old = path.join(ROOT, 'knowledge-graph.html');
+  check('the old Code Graph URL redirects to the merged page',
+    fs.existsSync(old) && /code-brain\.html\?/.test(fs.readFileSync(old, 'utf8')));
 } else {
-  console.log('  skip  knowledge-graph.html or kg-traverse.js not present');
+  console.log('  skip  code-brain.html or kg-traverse.js not present');
 }
 
 console.log(fail ? '\n' + fail + ' failing' : '\nall passing');

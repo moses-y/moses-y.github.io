@@ -240,7 +240,7 @@
     function index(reports) {
         if (!reports || !reports.length) {
             return '<h1>Architecture Reports</h1><p class="note">No reports have been generated yet. ' +
-                'Explore the <a href="code-brain.html">Code Brain graph</a>.</p>';
+                'Explore the <a href="code-brain.html">Code Graph</a>.</p>';
         }
         var totF = reports.reduce(function (s, r) { return s + (r.findings || 0); }, 0);
         var totM = reports.reduce(function (s, r) { return s + (r.modules || 0); }, 0);

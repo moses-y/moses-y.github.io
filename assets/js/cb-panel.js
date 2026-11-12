@@ -111,9 +111,8 @@
          * inside one repository - and had no way to say what is beside it; this
          * is the one relation the hierarchy cannot express.
          *
-         * No simByRepo is passed because this page draws no similarity edges. It
-         * does not need one: the kin files are fetched by id, and the module
-         * treats a missing local index as "nothing to fall back to".
+         * simByRepo is the local similarity index from the semantic map; the
+         * module falls back to it when a published kin file is missing.
          */
         var kinToken = 0;
         function renderKin(node) {
@@ -125,6 +124,7 @@
                 token: mine,
                 stale: function (t) { return t !== kinToken; },
                 nodeById: g.nodeById,
+                simByRepo: g.simByRepo,
                 onWalk: onWalk
             });
         }

@@ -59,7 +59,7 @@ const NAV = `    <a href="#main-content" class="skip-link">Skip to main content<
                 <li><a href="/case-studies.html">Case Studies</a></li>
                 <li><a href="/projects.html">Projects</a></li>
                 <li><a href="/insights/">Insights</a></li>
-                <li><a href="/knowledge-graph.html">Code Graph</a></li>
+                <li><a href="/code-brain.html">Code Graph</a></li>
             </ul>
             <a href="${CAL}" target="_blank" rel="noopener" class="nav-cta">Book a call</a>
         </div>

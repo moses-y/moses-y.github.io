@@ -133,6 +133,10 @@ function surfaces() {
       // probe measures settling rather than the grow.
       ['grow_keeps_layout',
         '(()=>{const cb=window.__codeBrain;if(!cb)return false;return new Promise(done=>{setTimeout(()=>{const b=cb.positions();const id=cb.firstRepo();if(!id){done(false);return;}cb.grow(id);setTimeout(()=>{const a=cb.positions();let m=0;for(const k of Object.keys(b)){if(!a[k]||b[k][0]==null||a[k][0]==null)continue;const d=Math.hypot(a[k][0]-b[k][0],a[k][1]-b[k][1],a[k][2]-b[k][2]);if(d>m)m=d}done(m<120)},4500)},7000)})})()'],
+      // Grown modules stay tethered to their repo. They once flew ~2000 units
+      // off the flat pack (charged sheet + centring force), off screen.
+      ['grown_attached',
+        '(()=>{const cb=window.__codeBrain;if(!cb)return false;return new Promise(done=>{setTimeout(()=>{const id=cb.firstRepo();cb.grow(id);setTimeout(()=>{const g=cb.grown(id);done(!!g&&g.farthest<400)},6000)},4000)})})()'],
       ['deck_rows', 'document.querySelectorAll(".drow").length'],
       ['readout_figures', 'document.querySelectorAll(".ro-fig .n").length'],
       // The reader must open in place, render the deterministic report, lift the
@@ -154,25 +158,15 @@ function surfaces() {
       ['surface_links', 'document.querySelectorAll(".sm-cols li a").length'],
       ['nav_present', 'document.querySelectorAll(".sm-nav a").length']
     ], '.sm-domain'],
-    ['knowledge-graph', '/knowledge-graph.html', [
-      ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("#graph canvas").length),6000))'],
-      ['repos', '+(document.getElementById("s-repos")||{}).textContent'],
-      // Plate layout: the deck must stay in sync with the graph it drives.
-      ['deck_cards', 'document.querySelectorAll(".card").length'],
-      ['readout_figures', 'document.querySelectorAll(".ro-fig .n").length'],
-      ['controls_kept', 'document.querySelectorAll("#search,#reset,#semantic-toggle,#legend-toggle,#prev,#next").length'],
-      // Geometry, not just presence. Three regressions shipped green because the
-      // loop asked "does a canvas exist" rather than "is it the right size", and
-      // "is there a panel" rather than "is it on screen".
-      ['canvas_matches_container',
-        'new Promise(r=>setTimeout(()=>{const c=document.querySelector("#graph canvas");const g=document.getElementById("graph").getBoundingClientRect();r(!!c&&c.style.width===Math.round(g.width)+"px"&&c.style.height===Math.round(g.height)+"px")},6500))'],
-      ['panel_within_stage',
-        '(()=>{const i=document.getElementById("info");i.classList.add("open");return new Promise(r=>setTimeout(()=>{const s=document.querySelector(".stage").getBoundingClientRect();const b=i.getBoundingClientRect();i.classList.remove("open");r(b.top>=s.top-2&&b.bottom<=s.bottom+2&&b.right<=s.right+2)},1600))})()'],
-      ['graph_fills_stage',
-        '(()=>{const g=document.getElementById("graph").getBoundingClientRect();const s=document.querySelector(".stage").getBoundingClientRect();return Math.round(g.width)>=Math.round(s.width)-2&&Math.round(g.height)>=Math.round(s.height)-2})()'],
-      ['card_drives_focus',
-        '(()=>{document.querySelectorAll(".card")[2].click();return new Promise(r=>setTimeout(()=>r(document.querySelectorAll(\'.card[data-active="1"]\').length===1 && document.getElementById("info").classList.contains("open")),1500))})()']
-    ], '.card'],
+    // Code Graph merged into code-brain.html; the old URL must still land on
+    // the semantic view, and the merged page must keep both pages' controls.
+    ['code-graph-semantic', '/knowledge-graph.html?view=semantic', [
+      ['landed_on_merged_page', 'location.pathname'],
+      ['semantic_selected', 'document.getElementById("f-view").value'],
+      ['edge_control_shown', '!document.getElementById("edge-ctl").hidden'],
+      ['controls_kept', 'document.querySelectorAll("#search,#reset,#f-view,#f-colour,#f-domain,#f-lang,#f-size,#legend-toggle,#prev,#next").length'],
+      ['canvas', 'new Promise(r=>setTimeout(()=>r(document.querySelectorAll("#graph canvas").length),6000))']
+    ], '.drow'],
     ['article', '/blog/' + article, [
       // Counts prose blocks, not <p> specifically: headings are promoted out of
       // <p> now, and a tag-specific probe would read that as lost content.

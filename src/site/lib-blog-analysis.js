@@ -307,8 +307,8 @@ function renderAnalysis(post) {
                 </div>` : ''}
 
                 <p class="an-links">
-                    <a href="../code-brain.html?repo=${encodeURIComponent(post.id)}">Open in Code Brain &rarr;</a>
-                    <a href="../knowledge-graph.html?repo=${encodeURIComponent(post.id)}">See its neighbourhood &rarr;</a>
+                    <a href="../code-brain.html?repo=${encodeURIComponent(post.id)}">Open in Code Graph &rarr;</a>
+                    <a href="../code-brain.html?view=semantic&amp;repo=${encodeURIComponent(post.id)}">See its neighbourhood &rarr;</a>
                 </p>
             </section>`;
 }
