@@ -146,13 +146,15 @@
                 // thousands of characters and pushed every control in this
                 // panel below the fold.
                 el.iDesc.textContent = f.description || firstSentences(f.summary, 2) || 'No description available.';
-                var meta = ['<span><strong>' + node.domain + '</strong></span>', '<span><strong>' + node.language + '</strong></span>'];
-                if (f.stars) meta.push('<span><strong>' + f.stars + '</strong> stars</span>');
-                if (node.files) meta.push('<span><strong>' + node.files + '</strong> files</span>');
+                // Attributes as quiet chips; the domain carries its colour dot.
+                var meta = ['<span><i class="chip-dot" style="background:' + CBDom.domainColor(node.domain) + '"></i>' + CBDom.esc(node.domain) + '</span>',
+                    '<span>' + CBDom.esc(node.language) + '</span>'];
+                if (node.files) meta.push('<span><strong>' + node.files.toLocaleString('en-US') + '</strong> files</span>');
+                if (f.stars) meta.push('<span><strong>' + f.stars.toLocaleString('en-US') + '</strong> stars</span>');
                 el.iMeta.innerHTML = meta.join('');
                 var lnk = '';
-                if (f.url) lnk += '<a href="' + f.url + '" target="_blank" rel="noopener">GitHub ↗</a>';
-                if (f.name) lnk += '<button type="button" data-read-briefing>Briefing →</button>';
+                if (f.name) lnk += '<button type="button" data-read-briefing>Read briefing</button>';
+                if (f.url) lnk += '<a href="' + f.url + '" target="_blank" rel="noopener">View on GitHub ↗</a>';
                 el.iLinks.innerHTML = lnk;
                 var rb = el.iLinks.querySelector('[data-read-briefing]');
                 if (rb) rb.addEventListener('click', function () { openReader(f, node); });
@@ -162,8 +164,9 @@
                     el.reportBtn.onclick = function () { openReader(f, node); };
                 }
                 el.iDive.style.display = '';
-                el.iDiveLabel.textContent = 'Grow this repo\'s file & folder structure';
-                el.diveBtn.textContent = node.dived ? '↴ Grown' : '↴ Grow structure';
+                // One structure action at a time: grow, or once grown, collapse.
+                el.diveBtn.textContent = 'Grow structure';
+                el.diveBtn.style.display = node.dived ? 'none' : '';
                 el.collapseBtn.style.display = node.dived ? '' : 'none';
                 if (node.dived && node.findings) renderFindings(node);
             } else if (node.kind === 'domain') {

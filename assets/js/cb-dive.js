@@ -104,7 +104,7 @@
                         repoNode.hasDeep = !!(s.deep && s.nodes && s.nodes.length);
                         ctx.renderFindings(repoNode);
                     }
-                    el.collapseBtn.style.display = ''; el.diveBtn.textContent = '↴ Grown';
+                    el.collapseBtn.style.display = ''; el.diveBtn.style.display = 'none';
                     var kind = isModule ? (s.shown + ' modules · ' + s.edges + ' imports · ' + nComm + ' communities') : (newNodes.length + ' files/dirs');
                     toast('Grew ' + kind + (s.truncated ? ' (partial)' : ''));
                     setTimeout(function () { ctx.flyTo(repoNode, 120); }, 400);
@@ -118,7 +118,7 @@
                 .then(function () {
                     var f = ctx.getFocus();
                     el.diveBtn.disabled = false;
-                    if (!f || !nodeById[f.id] || !f.dived) el.diveBtn.textContent = '↴ Grow structure';
+                    if (!f || !nodeById[f.id] || !f.dived) el.diveBtn.textContent = 'Grow structure';
                 });
         }
 
@@ -134,7 +134,7 @@
             repoNode.dived = false;
             pinExisting();
             ctx.redraw();
-            el.collapseBtn.style.display = 'none'; el.diveBtn.textContent = '↴ Grow structure';
+            el.collapseBtn.style.display = 'none'; el.diveBtn.style.display = ''; el.diveBtn.textContent = 'Grow structure';
             ctx.computeHighlight(repoNode.id);
         }
 

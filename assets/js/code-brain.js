@@ -95,25 +95,28 @@
             // Positions are computed, not simulated: see cb-layout.js. Pinned
             // before the first frame, so nothing bursts out of the origin.
             var semanticOn = false;
-            CBLayout.compute(nodes);
-            CBLayout.place(nodes, 'treePos');
+            CBLayout.computeSemantic(nodes, nodeById);
+            function sizeOf(n) {
+                if (n.kind === 'repo') return Math.min(6, n.val);
+                if (n.kind === 'root') return 14;
+                return n.val;
+            }
 
             var Graph = ForceGraph3D({ controlType: 'orbit' })(document.getElementById('graph'))
                 .backgroundColor('#06070f')
                 .graphData({ nodes: nodes, links: links })
                 .nodeLabel(hoverCard)
-                .nodeVal(function (n) {
-                    // A repo's dot fills most of its packed circle. Sphere radius
-                    // is cbrt(val) * relSize, so invert that.
-                    if (n.kind === 'repo' && n.packR) return Math.pow(0.8 * n.packR / 1.6, 3);
-                    return n.val;
-                })
+                // Repos capped small so a 500-repo language is a cloud, not a ball.
+                .nodeVal(sizeOf)
                 .nodeRelSize(1.6)
-                // Domains and languages draw as labelled rings around their repos.
-                .nodeThreeObject(function (n) { return CBLayout.hubObject(n); })
+                // Domain (and big language) names float above their hub spheres.
+                .nodeThreeObject(function (n) { return CBLayout.hubLabel(n, Math.cbrt(sizeOf(n)) * 1.6); })
+                .nodeThreeObjectExtend(true)
                 .showNavInfo(false)
-                .warmupTicks(0)
-                .cooldownTime(4000)
+                // The whole layout settles before the first frame, then stops:
+                // no burst from the origin, no drift. See cb-layout.js.
+                .warmupTicks(320)
+                .cooldownTicks(0)
                 .d3VelocityDecay(0.38)
                 .nodeColor(function (n) {
                     if (highlightNodes.size && !highlightNodes.has(n.id)) return 'rgba(120,130,160,0.10)';
@@ -122,10 +125,7 @@
                 .nodeVisibility(nodeShown)
                 .nodeOpacity(0.95)
                 .nodeResolution(10)
-                // Containment is drawn by the rings, so the tree's own links stay
-                // hidden; only similarity edges and grown structure are drawn.
                 .linkVisibility(function (l) {
-                    if (!l.kind && !l._dive) return false;
                     return nodeShown(nodeById[idOf(l.source)]) && nodeShown(nodeById[idOf(l.target)]);
                 })
                 .linkColor(function (l) {
@@ -146,20 +146,10 @@
 
             GraphShell.fitToContainer(Graph, document.getElementById('graph'));
 
-            // Physics only acts on the structure a dive grows: everything else is
-            // pinned by cb-layout. Pinned nodes carry no charge, because a flat
-            // sheet of 1,700 charged repos pushes free nodes far off the plane.
-            Graph.d3Force('link')
-                .distance(function (l) { return l.kind === 'sim' ? 40 : l._dive ? 16 : 30; })
-                .strength(function (l) { return l._dive ? 0.9 : 0; });
-            Graph.d3Force('charge')
-                .strength(function (n) { return (n.kind === 'dir' || n.kind === 'file' || n.kind === 'module') ? -22 : 0; })
-                .distanceMax(160);
-            // The default centring force re-centres the mean of all nodes every
-            // tick. Pinned nodes snap back to fx; free ones keep the shift, so a
-            // grown structure drifted steadily away from its repo. Layout is
-            // computed now, so there is nothing for it to centre.
-            Graph.d3Force('center', null);
+            // Settle the 3D layout before the first frame, freeze it, then leave
+            // physics to grown structure only (cb-layout.js).
+            var onReady = [];
+            CBLayout.settle(Graph, nodes, nodeById, function () { onReady.forEach(function (f) { f(); }); });
 
             // The hint has done its job once someone drags, scrolls or clicks.
             var hintEl = document.querySelector('.hint');
@@ -188,8 +178,8 @@
             var controls = Graph.controls();
             controls.enableRotate = controls.enableZoom = controls.enablePan = true;
             controls.rotateSpeed = 0.9; controls.zoomSpeed = 1.1;
-            // No idle spin: the tree view is a flat pack that would turn edge-on.
-            controls.autoRotate = false; controls.autoRotateSpeed = 0.3;
+            // A slow idle spin shows off the depth; it stops at the first touch.
+            controls.autoRotate = true; controls.autoRotateSpeed = 0.3;
             var spinning = true;
             controls.addEventListener('start', function () { if (spinning) { controls.autoRotate = false; spinning = false; } });
 
@@ -202,7 +192,8 @@
             // position, so those are hidden too.
             function nodeShown(n) {
                 if (!n) return true;
-                if (n._vis === false || n.kind === 'root') return false;
+                if (n._vis === false) return false;
+                if (semanticOn && n.kind === 'root') return false;
                 if (semanticOn && (n.kind === 'domain' || n.kind === 'lang')) return false;
                 if (semanticOn && n.kind === 'repo' && !n.semPos) return false;
                 return true;
@@ -254,14 +245,7 @@
                 Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth()).linkDirectionalParticles(Graph.linkDirectionalParticles());
             }
 
-            // The tree view is a flat pack in the z = 0 plane. The shared flyTo
-            // places the camera on the ray from the origin through the node,
-            // which for a node in that plane means looking at it edge-on. Look
-            // straight down at it instead; the meaning map is 3D and keeps the ray.
-            function flyTo(node, pad) {
-                if (semanticOn || !node) return GraphShell.flyTo(Graph, node, pad, 1300);
-                Graph.cameraPosition({ x: node.x || 0, y: node.y || 0, z: (node.z || 0) + (pad || 150) }, node, 1300);
-            }
+            function flyTo(node, pad) { GraphShell.flyTo(Graph, node, pad, 1300); }
 
             // ---------- View: tree or semantic map ----------
             // Two computed position sets; switching glides every dot from one to
@@ -281,8 +265,8 @@
                 var on = view === 'semantic' && g.canSemantic;
                 el.fView.value = on ? 'semantic' : 'tree';
                 if (on === semanticOn && !instant) return;
-                // Rings fade out before the glide to the meaning map and back in
-                // after the glide home, so they never hang around empty.
+                // Hubs fade out before the glide to the meaning map and back in
+                // after the glide home, so they never hang around unattached.
                 if (on) { semanticOn = true; Graph.nodeVisibility(nodeShown); }
                 edges.show(on);
                 semanticOn = on;
@@ -348,8 +332,6 @@
                 neighborIdx = 0;
                 computeHighlight(node.id);
                 var pad = node.kind === 'repo' ? 150 : node.kind === 'domain' ? 260 : 120;
-                // A ring is framed whole, however large its circle is.
-                if (node.packR && node.kind !== 'repo') pad = Math.max(pad, node.packR * 2.6);
                 flyTo(node, pad);
                 showInfo(node);
                 updateNeighborUI();
@@ -478,19 +460,21 @@
 
             // Deep links. Old Code Graph URLs redirect here with ?view=semantic,
             // and blog posts link ?repo=<id> to open a repository directly.
+            // Deep links wait for the frozen layout: there is nothing to glide
+            // to, or fly to, until it exists.
             var qs = new URLSearchParams(location.search);
             var wantRepo = qs.get('repo');
-            if (qs.get('view') === 'semantic') setView('semantic', true);
-            if (wantRepo) {
-                var hit = nodeById['repo:' + wantRepo] || nodes.find(function (n) {
+            onReady.push(function () {
+                if (qs.get('view') === 'semantic') setView('semantic', true);
+                var hit = wantRepo && (nodeById['repo:' + wantRepo] || nodes.find(function (n) {
                     return n.kind === 'repo' && n.name.toLowerCase() === wantRepo.toLowerCase();
-                });
-                if (hit) setTimeout(function () { onNodeClick(hit); }, 1500);
-            }
+                }));
+                // After the library's own first-frame camera placement, which
+                // would otherwise override an immediate fit.
+                if (hit) setTimeout(function () { onNodeClick(hit); }, 400);
+                else setTimeout(function () { if (!currentFocus) fitAll(600); }, 250);
+            });
 
-            // Fit early (warm-up has already placed most nodes) and again once
-            // the layout settles, with a tight margin so the estate fills the canvas.
-            if (!wantRepo) setTimeout(function () { if (!currentFocus) fitAll(0); }, 60);
             updateNeighborUI();
             el.loading.style.display = 'none';
         }

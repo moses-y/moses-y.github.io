@@ -1,26 +1,26 @@
 /*
- * cb-layout.js - where every node sits, computed rather than simulated.
+ * cb-layout.js - where every node sits, settled once and then frozen.
  *
- * The graph used to let a force simulation find positions on every page load.
- * That is what made the estate burst out of the origin, drift while you tried
- * to click it, and pack each big language into one overlapping ball: physics
- * only approximates a tree. Both views are now exact and deterministic:
+ * The graph used to let a force simulation run live on every page load, which
+ * is what made the estate burst out of the origin and drift while you tried to
+ * click it. The 3D look was right; running it in front of the visitor was not.
  *
- *   treePos  circle packing (d3.pack) of domain -> language -> repo. Domains
- *            and languages are drawn as rings, repos as dots inside them.
+ *   treePos  the 3D domain -> language -> repo layout. The simulation runs
+ *            entirely before the first frame (warmup), from d3's deterministic
+ *            starting spiral, so it is the same on every visit. It is then
+ *            captured and every node is pinned.
  *   semPos   the UMAP coordinates the pipeline already computes offline.
  *
- * Every repo, domain and language node is pinned (fx/fy/fz) to one of these.
- * Physics now runs only for the module nodes a dive grows, and switching views
- * is a short tween between the two position sets instead of a re-simulation.
+ * Physics afterwards runs only for the module nodes a dive grows, and switching
+ * views is a short tween between the two position sets instead of a re-run.
  */
 (function (global) {
     'use strict';
 
-    var PACK_SIZE = 1400, SEM_SPREAD = 1100;
+    var SEM_SPREAD = 1100;
 
     // three r168 matches what 3d-force-graph@1.73.4 bundles; a different copy
-    // renders rings but silently drops textures, so the labels vanished. It is
+    // draws meshes but silently drops textures, so the labels vanished. It is
     // an ES module only, hence the dynamic import. If it fails the page still
     // works and hubs fall back to plain spheres.
     var THREE = null;
@@ -28,45 +28,65 @@
         .then(function (m) { THREE = m; })
         .catch(function (e) { console.warn('three unavailable, hubs drawn as spheres', e); });
 
-    function byCountThenName(a, b) {
-        return (b.value - a.value) || String(a.data.name).localeCompare(String(b.data.name));
-    }
-
-    function compute(nodes) {
-        var d3 = global.d3;
-        var domains = nodes.filter(function (n) { return n.kind === 'domain'; });
-        var langs = nodes.filter(function (n) { return n.kind === 'lang'; });
-        var repos = nodes.filter(function (n) { return n.kind === 'repo'; });
-
-        var tree = {
-            name: '', children: domains.map(function (d) {
-                return {
-                    name: d.name, node: d, children: langs.filter(function (l) { return l.domain === d.name; })
-                        .map(function (l) {
-                            return {
-                                name: l.name, node: l, children: repos.filter(function (r) {
-                                    return r.domain === d.name && r.language === l.name;
-                                }).map(function (r) { return { name: r.name, node: r }; })
-                            };
-                        })
-                };
-            })
-        };
-        var h = d3.hierarchy(tree).sum(function (d) { return d.children ? 0 : 1; }).sort(byCountThenName);
-        d3.pack().size([PACK_SIZE, PACK_SIZE])
-            .padding(function (d) { return d.depth === 0 ? 28 : d.depth === 1 ? 12 : 2.5; })(h);
-        h.each(function (d) {
-            var n = d.data.node;
-            if (!n) return;
-            n.treePos = [d.x - PACK_SIZE / 2, PACK_SIZE / 2 - d.y, 0];
-            n.packR = d.r;
-        });
-
-        repos.forEach(function (n) {
+    // UMAP positions, available before the tree has settled.
+    // Also counts repos per language hub, which decides which get a label.
+    function computeSemantic(nodes, nodeById) {
+        nodes.forEach(function (n) {
+            if (n.kind !== 'repo') return;
+            var hub = nodeById['lang:' + n.domain + '|' + n.language];
+            if (hub) hub.repoCount = (hub.repoCount || 0) + 1;
             var u = n.repo && n.repo.umap;
             n.semPos = (Array.isArray(u) && u.length === 3)
                 ? [(u[0] - 0.5) * SEM_SPREAD, (u[1] - 0.5) * SEM_SPREAD, (u[2] - 0.5) * SEM_SPREAD]
                 : null;
+        });
+    }
+
+    // Freeze the settled 3D tree as each node's home position.
+    function captureTree(nodes) {
+        nodes.forEach(function (n) {
+            if (n.parentRepo || typeof n.x !== 'number') return;
+            n.treePos = [n.x, n.y, n.z];
+        });
+    }
+
+    /*
+     * Phase 1, before the first frame (the caller sets warmupTicks and
+     * cooldownTicks(0)): the 3D layout forces. Hubs push apart hard, repos
+     * gently, and short leaf links keep each language a loose cloud.
+     *
+     * Phase 2, when warm-up ends: freeze that layout as every node's home and
+     * hand physics to grown structure only. Pinned nodes carry no charge and
+     * there is no centring force; either one flung grown modules thousands of
+     * units away from their repo.
+     */
+    function settle(Graph, nodes, nodeById, ready) {
+        function kindOf(x) { var n = typeof x === 'object' ? x : nodeById[x]; return n ? n.kind : ''; }
+        Graph.d3Force('link')
+            .distance(function (l) {
+                var a = kindOf(l.source), b = kindOf(l.target);
+                return (a === 'root' || b === 'root') ? 240 : (a === 'domain' || b === 'domain') ? 110 : 46;
+            })
+            .strength(0.6);
+        Graph.d3Force('charge')
+            .strength(function (n) { return n.kind === 'root' ? -900 : n.kind === 'domain' ? -700 : n.kind === 'lang' ? -180 : -28; })
+            .distanceMax(520);
+
+        var done = false;
+        Graph.onEngineStop(function () {
+            if (done) return;
+            done = true;
+            captureTree(nodes);
+            place(nodes, 'treePos');
+            Graph.d3Force('link')
+                .distance(function (l) { return l.kind === 'sim' ? 40 : l._dive ? 16 : 30; })
+                .strength(function (l) { return l._dive ? 0.9 : 0; });
+            Graph.d3Force('charge')
+                .strength(function (n) { return (n.kind === 'dir' || n.kind === 'file' || n.kind === 'module') ? -22 : 0; })
+                .distanceMax(160);
+            Graph.d3Force('center', null);
+            Graph.cooldownTicks(Infinity).cooldownTime(4000);
+            ready();
         });
     }
 
@@ -75,7 +95,7 @@
     // Pin immediately, without animation. Used on load and on reset.
     function place(nodes, key) {
         nodes.forEach(function (n) {
-            var p = n.kind === 'root' ? [0, 0, 0] : (n.treePos ? posOf(n, key) : null);
+            var p = n.treePos ? posOf(n, key) : null;
             if (!p) return;
             n.x = n.fx = p[0]; n.y = n.fy = p[1]; n.z = n.fz = p[2];
             n.vx = n.vy = n.vz = 0;
@@ -112,7 +132,7 @@
         })(start);
     }
 
-    // ---- rings and labels for domain and language nodes --------------------
+    // ---- labels for domain and language hubs --------------------------------
     function label(text, color, height) {
         var c = document.createElement('canvas'), ctx = c.getContext('2d');
         var font = '600 56px Inter, system-ui, sans-serif';
@@ -122,37 +142,26 @@
         ctx.fillText(text, 12, 40);
         var tex = new THREE.CanvasTexture(c);
         tex.colorSpace = THREE.SRGBColorSpace;
-        var spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+        // sizeAttenuation off: a constant size on screen. Sized in world units,
+        // labels were unreadable from afar and filled the view up close.
+        var spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, sizeAttenuation: false }));
         spr.scale.set(height * c.width / c.height, height, 1);
         return spr;
     }
 
-    function hubObject(n) {
-        if (!THREE || !n.packR || (n.kind !== 'domain' && n.kind !== 'lang')) return null;
-        var isDomain = n.kind === 'domain';
-        var g = new THREE.Group();
-        var w = isDomain ? 2.2 : 1.1;
-        var ring = new THREE.Mesh(
-            new THREE.RingGeometry(Math.max(0, n.packR - w), n.packR, isDomain ? 128 : 64),
-            new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: isDomain ? 0.6 : 0.35,
-                side: THREE.DoubleSide, depthWrite: false }));
-        g.add(ring);
-        var fill = new THREE.Mesh(
-            new THREE.CircleGeometry(n.packR, isDomain ? 128 : 64),
-            new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: isDomain ? 0.035 : 0.03,
-                side: THREE.DoubleSide, depthWrite: false }));
-        fill.position.z = -0.5;
-        g.add(fill);
-        // Domains always carry their name; languages only when their circle is
-        // big enough to read, so 46 labels never pile up.
-        if (isDomain || n.packR > 55) {
-            var h = isDomain ? 30 : 13;
-            var t = label(n.name, n.color, h);
-            t.position.set(0, n.packR + h * 0.7, 0);
-            g.add(t);
-        }
-        return g;
+    // A floating name above each domain hub, and above languages big enough to
+    // matter, so the 3D estate is readable without hovering. Added to the
+    // default sphere (nodeThreeObjectExtend), not instead of it.
+    function hubLabel(n, radius) {
+        if (!THREE || (n.kind !== 'domain' && n.kind !== 'lang')) return null;
+        if (n.kind === 'lang' && !(n.repoCount >= 40)) return null;
+        // Fractions of the viewport height, since the sprite ignores distance.
+        var h = n.kind === 'domain' ? 0.032 : 0.02;
+        var t = label(n.name, n.color, h);
+        t.position.set(0, radius + 6, 0);
+        return t;
     }
 
-    global.CBLayout = { ready: ready, compute: compute, place: place, morph: morph, hubObject: hubObject };
+    global.CBLayout = { ready: ready, computeSemantic: computeSemantic, captureTree: captureTree, settle: settle,
+        place: place, morph: morph, hubLabel: hubLabel };
 })(window);
