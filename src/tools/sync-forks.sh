@@ -39,7 +39,7 @@ if [ -z "$forks" ]; then
   exit 0
 fi
 
-total=0; synced=0; uptodate=0; skipped=0
+total=0; synced=0; uptodate=0; skipped=0; denied=0
 
 while IFS= read -r repo; do
   [ -z "$repo" ] && continue
@@ -72,8 +72,15 @@ while IFS= read -r repo; do
     reason=$(echo "$resp" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-120)
     echo "SKIP  $repo ($branch) — $reason"
     skipped=$((skipped+1))
+    case "$resp" in *"not accessible by personal access token"*|*"Must have admin rights"*|*"403"*) denied=$((denied+1));; esac
   fi
 done <<< "$forks"
 
 echo "----------------------------------------"
 echo "Forks: $total | Fast-forwarded: $synced | Already current: $uptodate | Skipped: $skipped"
+
+# A token that can list but not write skips every fork. That used to end green.
+if [ "$denied" -gt 0 ]; then
+  echo "::error::$denied fork(s) refused the token. FORK_SYNC_TOKEN needs Contents: Read and write (and Workflows: Read and write) on all repositories."
+  exit 1
+fi

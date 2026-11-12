@@ -22,15 +22,13 @@
         // header cannot differ between pages.
         const NAV_PRIMARY = [
             ['Projects', '/projects.html'],
-            ['Code Graph', '/knowledge-graph.html'],
-            ['Code Brain', '/code-brain.html'],
+            ['Code Graph', '/code-brain.html'],
             ['Services', '/services.html'],
             ['Case Studies', '/case-studies.html'],
             ['About', '/#about']
         ];
         const NAV_MENU = [
-            ['Work', [['Projects', '/projects.html'], ['Code Graph', '/knowledge-graph.html'],
-                      ['Code Brain', '/code-brain.html'], ['Insights', '/insights/']]],
+            ['Work', [['Projects', '/projects.html'], ['Code Graph', '/code-brain.html'], ['Insights', '/insights/']]],
             ['Consulting', [['Services', '/services.html'], ['Case Studies', '/case-studies.html']]],
             ['About', [['About me', '/#about'], ['Skills', '/#skills'],
                        ['Experience', '/#experience'], ['Contact', '/#contact']]]

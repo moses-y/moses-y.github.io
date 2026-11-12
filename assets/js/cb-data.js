@@ -66,10 +66,26 @@
             addLink(langIds[lkey], rid);
         });
 
+        // Similarity edges from the embedding pipeline. Kept out of `links` so the
+        // domain/language tree stays the default picture; the semantic view swaps
+        // them in and pins repos to their UMAP coordinates.
+        var simLinks = [], simByRepo = {};
+        (data.similarityLinks || []).forEach(function (sl) {
+            var a = 'repo:' + sl.source, b = 'repo:' + sl.target;
+            if (!nodeById[a] || !nodeById[b]) return;
+            simLinks.push({ source: a, target: b, sim: sl.similarity, kind: 'sim' });
+            (simByRepo[a] = simByRepo[a] || []).push({ id: b, sim: sl.similarity });
+            (simByRepo[b] = simByRepo[b] || []).push({ id: a, sim: sl.similarity });
+        });
+        Object.keys(simByRepo).forEach(function (k) { simByRepo[k].sort(function (x, y) { return y.sim - x.sim; }); });
+        var canSemantic = simLinks.length > 0 &&
+            forks.some(function (f) { return Array.isArray(f.umap) && f.umap.length === 3; });
+
         return {
             forks: forks, nodes: nodes, links: links, adjacency: adjacency,
             nodeById: nodeById, domainIds: domainIds, langIds: langIds,
             langCounts: langCounts, domainCounts: domainCounts, totalFiles: totalFiles,
+            simLinks: simLinks, simByRepo: simByRepo, canSemantic: canSemantic,
             // The dive grows this same graph, so it needs the same two mutators.
             // They close over nodes, nodeById and adjacency, so handing them back
             // keeps the behaviour identical to one shared closure.
@@ -235,14 +251,31 @@
             o.value = d; o.textContent = d + ' (' + counts[d] + ')';
             el.fDomain.appendChild(o);
         });
+        if (el.fLang) {
+            var lc = g.langCounts;
+            Object.keys(lc).sort(function (a, b) { return lc[b] - lc[a]; }).forEach(function (l) {
+                var o = document.createElement('option');
+                o.value = l; o.textContent = l + ' (' + lc[l] + ')';
+                el.fLang.appendChild(o);
+            });
+        }
     }
 
-    function buildLegend(g) {
-        var domainCounts = g.domainCounts;
+    // The key follows the Colour dropdown: domains, or the top languages (a key
+    // of all 46 would be longer than the rail). Grade has its own key in
+    // graph-grade.js.
+    function buildLegend(g, mode) {
+        var byLang = mode === 'language';
+        var counts = byLang ? g.langCounts : g.domainCounts;
+        var color = byLang ? langColor : domainColor;
         el.legend.innerHTML = '';
-        Object.keys(domainCounts).sort(function (a, b) { return domainCounts[b] - domainCounts[a]; }).forEach(function (d) {
+        var keys = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+        if (byLang) keys = keys.slice(0, 14);
+        el.legend.classList.toggle('many', keys.length > 8);
+        keys.forEach(function (d) {
             var row = document.createElement('div'); row.className = 'row';
-            row.innerHTML = '<span class="dot" style="background:' + domainColor(d) + '"></span>' + d + ' (' + domainCounts[d] + ')';
+            row.innerHTML = '<span class="dot" style="background:' + color(d) + '"></span>' +
+                '<span class="nm">' + esc(d) + '</span><span class="ct">' + counts[d].toLocaleString('en-US') + '</span>';
             el.legend.appendChild(row);
         });
     }

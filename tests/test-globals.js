@@ -33,18 +33,16 @@ const path = require('path');
 // The files that share state through window, and what each is allowed to reach.
 const GROUPS = [
   {
-    name: 'code brain',
-    files: ['index-record.js', 'cb-dom.js', 'cb-data.js', 'cb-panel.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'code-brain.js'],
-    provides: ['IndexRecord', 'CBDom', 'CBData', 'CBPanel', 'GraphShell', 'GraphGrade', 'KGTraverse']
-  },
-  {
-    name: 'semantic map',
-    files: ['index-record.js', 'kg-data.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'knowledge-graph.js'],
-    provides: ['IndexRecord', 'KGData', 'GraphShell', 'GraphGrade', 'KGTraverse']
+    // Code Graph and Code Brain merged into one page (code-brain.html); the
+    // semantic map's own kg-data.js / knowledge-graph.js no longer exist.
+    name: 'code graph',
+    files: ['index-record.js', 'cb-dom.js', 'cb-data.js', 'cb-panel.js', 'cb-layout.js', 'cb-dive.js', 'graph-shell.js', 'graph-grade.js', 'kg-traverse.js', 'code-brain.js'],
+    provides: ['IndexRecord', 'CBDom', 'CBData', 'CBPanel', 'CBLayout', 'CBDive', 'GraphShell', 'GraphGrade', 'KGTraverse']
   }
 ];
 
-const BROWSER = new Set(['window', 'document', 'console', 'Math', 'JSON', 'Object', 'Array',
+// `import` is dynamic import(), a keyword rather than a global (cb-layout.js).
+const BROWSER = new Set(['import', 'window', 'document', 'console', 'Math', 'JSON', 'Object', 'Array',
   'String', 'Number', 'Boolean', 'Date', 'Set', 'Map', 'WeakMap', 'Promise', 'RegExp',
   'Error', 'TypeError', 'fetch', 'setTimeout', 'clearTimeout', 'setInterval',
   'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'localStorage',
@@ -169,7 +167,7 @@ for (const group of GROUPS) {
   };
 
   const shell = cssRules('graph-shell.css');
-  for (const page of ['code-brain.css', 'knowledge-graph.css']) {
+  for (const page of ['code-brain.css']) {
     const own = cssRules(page);
     for (const [sel, body] of own) {
       if (shell.has(sel) && shell.get(sel) === body) {
@@ -178,15 +176,15 @@ for (const group of GROUPS) {
       }
     }
   }
-  for (const page of ['code-brain.html', 'knowledge-graph.html']) {
+  for (const page of ['code-brain.html']) {
     const html = fs.readFileSync(page, 'utf8');
     if (html.indexOf('assets/css/graph-shell.css') === -1) {
       fail++;
       console.log(`FAIL  ${page} does not load graph-shell.css`);
     }
-    // Both pages offer the same second question of the same picture. One
-    // without the control is a page where the grade is invisible again.
-    for (const need of ['assets/js/graph-grade.js', 'id="grade-toggle"']) {
+    // Grade is one of the Colour choices. A page without it is a page where
+    // the grade is invisible again.
+    for (const need of ['assets/js/graph-grade.js', 'id="f-colour"', '<option value="grade">']) {
       if (html.indexOf(need) === -1) {
         fail++;
         console.log(`FAIL  ${page} is missing ${need}`);
@@ -268,14 +266,14 @@ for (const group of GROUPS) {
  * nobody notices seven megabytes until someone measures a page load.
  */
 {
-  for (const page of ['code-brain.html', 'knowledge-graph.html']) {
+  for (const page of ['code-brain.html']) {
     const html = fs.readFileSync(page, 'utf8');
     if (html.indexOf('assets/js/index-record.js') === -1) {
       fail++;
       console.log(`FAIL  ${page} does not load index-record.js`);
     }
   }
-  for (const file of ['code-brain.js', 'knowledge-graph.js']) {
+  for (const file of ['code-brain.js']) {
     const src = fs.readFileSync(path.join('assets', 'js', file), 'utf8');
     if (src.indexOf('IndexRecord.loadEstate') === -1) {
       fail++;

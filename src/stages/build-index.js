@@ -256,8 +256,7 @@ function main() {
 // only from the XML.
 const PAGE_LABELS = {
   'projects.html': ['Projects', 'Every repository, with its measured facts'],
-  'knowledge-graph.html': ['Code Graph', 'Semantic map of the estate'],
-  'code-brain.html': ['Code Brain', 'Domains to languages to repos to modules'],
+  'code-brain.html': ['Code Graph', 'Every repo by domain, language or meaning, down to its modules'],
   'report.html': ['Architecture reports', 'Deterministic analysis per repository'],
   'services.html': ['Services', 'How I work with clients'],
   'case-studies.html': ['Case studies', 'Selected engagements'],
@@ -284,7 +283,7 @@ function writeSitemapPage(records, staticPages, articles) {
   }
   const domains = [...byDomain.entries()].sort((a, b) => b[1].length - a[1].length);
 
-  const surfaces = ['projects.html', 'knowledge-graph.html', 'code-brain.html', 'report.html']
+  const surfaces = ['projects.html', 'code-brain.html', 'report.html']
     .filter(p => staticPages.includes(p));
   const advisory = ['services.html', 'case-studies.html', 'ai-readiness-assessment.html',
     'ai-governance-consulting.html', 'graphrag-knowledge-graph-agents.html',
@@ -359,8 +358,7 @@ function writeSitemapPage(records, staticPages, articles) {
     <nav class="sm-nav">
         <a href="/" class="sm-logo">MY</a>
         <a href="/projects.html">Projects</a>
-        <a href="/knowledge-graph.html">Code Graph</a>
-        <a href="/code-brain.html">Code Brain</a>
+        <a href="/code-brain.html">Code Graph</a>
         <a href="/services.html">Services</a>
         <a href="/case-studies.html">Case Studies</a>
     </nav>
