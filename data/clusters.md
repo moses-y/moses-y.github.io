@@ -63,12 +63,12 @@ Keeper: **stenoai** (C, 64.6). Mean grade across the 4 audited members is 54.9. 
 
 Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **FluidVoice** (C, 61.5). Mean grade across the 4 audited members is 55.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 61.5). Mean grade across the 4 audited members is 56. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FluidVoice** | Mobile | Swift | C 61.5 | 186 |
-| VoiceInk | Mobile | Swift | C- 55.4 | 231 |
+| VoiceInk | Mobile | Swift | C- 57.4 | 231 |
 | pindrop | Mobile | Swift | C- 54.5 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
 
@@ -203,12 +203,12 @@ Keeper: **VoiceStudio** (C+, 66.5). Mean grade across the 2 audited members is 6
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **flashvad** (B+, 80.4). Mean grade across the 2 audited members is 66.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **flashvad** (B+, 80.4). Mean grade across the 2 audited members is 66.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **flashvad** | AI & Data | Python | B+ 80.4 | 166 |
-| ten-vad | Systems & Infra | C/C++ Header | C- 52.7 | 147 |
+| ten-vad | Systems & Infra | C | C- 53.2 | 147 |
 
 ### c040 - 2 repositories
 
@@ -304,7 +304,7 @@ Keeper: **free-my-tv** (C, 61.3). Mean grade across the 3 audited members is 56.
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **free-my-tv** | Systems & Infra | Java | C 61.3 | 106 |
-| unbloat-android-tv | Systems & Infra | Shell | C- 54.4 | 44 |
+| unbloat-android-tv | Systems & Infra | Java | C- 54.4 | 44 |
 | cleanyourtv | Systems & Infra | Java | C- 54.3 | 327 |
 
 ### c015 - 2 repositories
@@ -410,12 +410,12 @@ Keeper: **awesome-ai-apps** (D, 47.4). Mean grade across the 2 audited members i
 
 All 2 in AI & Data.
 
-Keeper: **client-python** (B, 77.7). Mean grade across the 2 audited members is 69.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **client-python** (B, 77.7). Mean grade across the 2 audited members is 70.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **client-python** | AI & Data | Python | B 77.7 | 301 |
-| twelvedata-python | AI & Data | Python | C 61.5 | 40 |
+| twelvedata-python | AI & Data | Python | C 63.4 | 40 |
 
 ### c026 - 2 repositories
 
@@ -443,11 +443,11 @@ Keeper: **FileSync** (C, 62). Mean grade across the 2 audited members is 60. Eve
 
 All 2 in AI & Data.
 
-Keeper: **public-apis** (B, 79.6). Mean grade across the 2 audited members is 71.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **public-apis** (B+, 81.4). Mean grade across the 2 audited members is 72.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **public-apis** | AI & Data | Python | B 79.6 | 22 |
+| **public-apis** | AI & Data | Python | B+ 81.4 | 22 |
 | awesome-opensource-ai | AI & Data | Python | C 63.1 | 8 |
 
 ### c030 - 2 repositories
