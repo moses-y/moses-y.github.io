@@ -52,14 +52,14 @@ Keeper: **openskills** (B+, 81.9). Mean grade across the 5 audited members is 74
 
 Crosses a domain boundary: 2 Systems & Infra, 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **hyprnote** (C, 63.6). Mean grade across the 4 audited members is 54.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **hyprnote** (C, 63.6). Mean grade across the 4 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **hyprnote** | Systems & Infra | Rust | C 63.6 | 3671 |
 | stenoai | AI & Data | Python | C- 58.4 | 62 |
 | murmure | Web & Interfaces | TypeScript | C- 52.3 | 435 |
-| meetily | Systems & Infra | Rust | D 44.2 | 509 |
+| meetily | Systems & Infra | Rust | D 46.7 | 509 |
 
 ### c004 - 4 repositories
 
@@ -229,14 +229,14 @@ Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 2 audited members is 
 
 All 4 in AI & Data.
 
-Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 64.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **forgetful** | AI & Data | Python | B- 71.5 | 379 |
+| mcp-memory-service | AI & Data | Python | C+ 66.3 | 1147 |
 | MemMachine | AI & Data | Python | C 63.7 | 706 |
-| MARM-Systems | AI & Data | Python | C 62.7 | 124 |
-| mcp-memory-service | AI & Data | Python | C- 58.9 | 1147 |
+| MARM-Systems | AI & Data | Python | C 62.5 | 124 |
 
 ### c008 - 3 repositories
 
