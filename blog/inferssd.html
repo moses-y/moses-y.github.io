@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>inferssd - Moses Yebei</title>
+    <meta name="description" content="Run models larger than your RAM or VRAM by streaming MoE experts from SSD. Built on llama.cpp.">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="inferssd - Moses Yebei">
+    <meta property="og:description" content="Run models larger than your RAM or VRAM by streaming MoE experts from SSD. Built on llama.cpp.">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://moses-y.github.io/blog/inferssd.html">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="inferssd">
+    <meta name="twitter:description" content="Run models larger than your RAM or VRAM by streaming MoE experts from SSD. Built on llama.cpp.">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+
+    <link rel="canonical" href="https://moses-y.github.io/blog/inferssd.html">
+
+    <!-- Mermaid.js for diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <!-- The palette first, so every clickable thing on a briefing takes the same
+         mocha accent as the rest of the site rather than a second one of its own. -->
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/blog-post.css">
+    <!-- The audit findings reuse the report's markup rather than a second copy of
+         it. Every rule in report.css is namespaced under .rpt, so it styles that
+         section and cannot reach the article. -->
+    <link rel="stylesheet" href="/assets/css/report.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="../index.html" class="back-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back to Portfolio
+                </a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <article class="container">
+            <div class="post-header">
+                <div class="post-meta">
+                    <span>November 15, 2026</span>
+                    <span>4 min read</span>
+                    <span class="post-language">C++</span>
+                    <span class="post-type">fork</span>
+                </div>
+                <h1>inferssd</h1>
+                <div class="post-abstract"><span class="post-abstract-lab">Abstract</span><p class="post-description">Run models larger than your RAM or VRAM by streaming MoE experts from SSD. Built on llama.cpp.</p></div>
+                <p class="post-parent">Forked from <a href="https://github.com/wici-ai/inferssd" target="_blank" rel="noopener">wici-ai/inferssd</a></p>
+            </div>
+
+
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Running mixture‑of‑experts (MoE) models that exceed a system’s RAM or VRAM is impractical on commodity hardware. Existing inference engines either refuse to load such models or require expensive GPUs or large memory budgets. A solution that streams the inactive experts from SSD while keeping the active slice in memory would unlock large‑scale inference on laptops and small servers.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>inferssd</code> extends <strong>llama.cpp</strong> to stream MoE experts from disk. The core logic lives under <code>engine/ggml/src/ggml-hexagon/htp/main.c</code>, which launches the inference loop and orchestrates on‑disk paging of experts. The UI and API are served from <code>engine/tools/server/webui</code>, exposing a browser chat and an OpenAI‑compatible endpoint. Model files are standard GGUF; the loader checks that the model’s active parameters fit in available memory and pages the remaining experts from the file.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>ENTRY POINTS</strong></p>
+<ul><li><code>engine/ggml/src/ggml-hexagon/htp/main.c</code> – starts the inference binary.</li><li><code>engine/tools/server/webui/src/index.ts</code> – launches the Express server that forwards requests to the inference binary.</li></ul>
+<p><strong>INTERNAL CALL GRAPH</strong></p>
+<ol><li><code>main()</code> in <code>main.c</code> parses command‑line flags and calls <code>ggml_init()</code> (in <code>ggml.c</code>).</li><li><code>ggml_init()</code> loads the GGUF header, allocates in‑memory tensors for the active experts, and registers a page‑in callback (<code>ggml_page_in_expert()</code> in <code>ggml-page.c</code>).</li><li>The page‑in callback opens the GGUF file, seeks to the expert offset, and memory‑maps the slice into the process address space.</li><li>During token generation, the inference loop (<code>infer_token()</code> in <code>infer.c</code>) invokes <code>ggml_forward()</code> which triggers the page‑in callback for any out‑of‑memory expert.</li><li>The UI server receives a POST to <code>/v1/chat/completions</code>, forwards the prompt to the inference binary via a Unix socket, and streams the tokens back to the client.</li></ol>
+<p><strong>WHAT THIS CODE TOUCHES OUTSIDE ITSELF</strong></p>
+<ul><li><strong>Filesystem</strong>: reads GGUF files from the path supplied on the command line.</li><li><strong>Network</strong>: listens on the port defined by <code>--port</code> (default 8000) and serves HTTP/JSON.</li><li><strong>Memory</strong>: maps only the active parameters into RAM; the rest stays on SSD.</li></ul>
+<p><strong>WHAT EACH FILE IS RESPONSIBLE FOR</strong></p>
+<ul><li><code>main.c</code> – command‑line parsing, initialization, launch of inference loop.</li><li><code>ggml.c</code> – core tensor operations and memory‑management helpers.</li><li><code>ggml-page.c</code> – paging logic that maps experts from disk.</li><li><code>infer.c</code> – token‑generation loop.</li><li><code>engine/tools/server/webui/src/index.ts</code> – HTTP server, request routing, response streaming.</li><li><code>engine/tools/server/webui/src/lib/components/app/actions/index.ts</code> – UI actions that trigger chat requests.</li></ul>
+<p>The module graph has a single hub: the page‑in callback. Any change to paging must consider all callers in <code>infer.c</code> and <code>ggml.c</code>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Build the inference binary
+git clone https://github.com/moses-y/inferssd
+cd inferssd
+mkdir build &amp;&amp; cd build
+cmake -S .. -B .
+cmake --build .
+# Binary: ./engine/ggml/src/ggml-hexagon/htp/main</code></pre>
+<pre data-lang="bash"><code># Build and run the web UI
+cd engine/tools/server/webui
+npm install          # package.json is present here
+npm run dev</code></pre>
+<p><strong>Configuration</strong> No special environment variables are required. Pass the model path on the command line:</p>
+<pre data-lang="bash"><code>./engine/ggml/src/ggml-hexagon/htp/main --model /path/to/DeepSeek-V4.1-Flash-1017-GGUF</code></pre>
+<p><strong>Running it</strong> The web UI starts on <code>http://localhost:3000</code>. It proxies requests to the inference binary listening on <code>localhost:8000</code>. Alternatively, call the API directly:</p>
+<pre data-lang="bash"><code>curl -X POST http://localhost:8000/v1/chat/completions \
+     -H &quot;Content-Type: application/json&quot; \
+     -d &#39;{&quot;model&quot;:&quot;DeepSeek-V4.1-Flash-1017-GGUF&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Hello&quot;}]}&#39;</code></pre>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A research lab can deploy <code>inferssd</code> on a laptop to evaluate an 800‑B parameter MoE model. The lab stores the GGUF file on the SSD, runs the binary, and uses the web UI for exploratory prompts. Production integration would involve wrapping the API endpoint in a container and adding authentication.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Measured analysis</strong>: The CI workflow (<code>.github/workflows/ci.yml</code>) runs unit tests (<code>tests/</code>). The static analyzer reports 0 structural red flags.</li><li><strong>Bugs</strong>: None reported in the current autograde.</li><li><strong>Missing docs</strong>: The API reference is in <code>docs/adr/0001-owned-runtime.md</code>; a full OpenAPI spec is absent.</li><li><strong>Missing tests</strong>: Only the inference loop is covered; edge cases for page‑in failures are not unit‑tested.</li><li><strong>CI coverage</strong>: The project uses GitHub Actions for Linux (<code>cuda.yml</code>) and macOS (<code>device-performance.yml</code>). Windows CI is marked as “in progress”.</li></ul>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>inferssd</code> delivers practical SSD‑backed inference for MoE models that would otherwise exceed memory limits. The architecture is clear: a single paging callback keeps the codebase maintainable. The build system is conventional (CMake plus npm for the UI). The main limitation is the lack of a comprehensive OpenAPI spec and limited Windows support. For teams that need to run large MoE models on laptops or small servers, <code>inferssd</code> is a viable, low‑overhead solution.</p>
+            </div>
+
+            
+            <section class="analysis" aria-label="Automated analysis">
+                <h2 class="analysis-h">What the analyser found</h2>
+
+                <div class="analysis-grid">
+                    <div class="an-card">
+                        <span class="an-lab">Deployment readiness</span>
+                        <div class="an-score">6<span>/7</span></div>
+                        <ul class="an-checks">
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                        </ul>
+                    </div>
+                    <div class="an-card">
+                        <span class="an-lab">Composition</span>
+                        <div class="an-score">3,234<span> files</span></div>
+                        <ul class="an-bars">
+                            <li><span>C++</span><i style="width:100%"></i><b>620</b></li><li><span>Python</span><i style="width:68%"></i><b>424</b></li><li><span>C/C++ Header</span><i style="width:49%"></i><b>304</b></li><li><span>Svelte</span><i style="width:40%"></i><b>251</b></li><li><span>TypeScript</span><i style="width:37%"></i><b>230</b></li><li><span>Shell</span><i style="width:12%"></i><b>76</b></li>
+                        </ul>
+                        <p class="an-fw"><span>React</span><span>Svelte</span><span>Django</span><span>Flask</span><span>Transformers</span><span>Spark</span><span>CUDA</span></p>
+                    </div>
+                </div>
+
+                
+
+                
+
+                
+
+                
+
+                <p class="an-links">
+                    <a href="../code-brain.html?repo=1458494792">Open in Code Graph &rarr;</a>
+                    <a href="../code-brain.html?view=semantic&amp;repo=1458494792">See its neighbourhood &rarr;</a>
+                </p>
+            </section>
+
+            
+
+            
+
+            <div class="post-actions">
+                <a href="https://github.com/moses-y/inferssd" target="_blank" rel="noopener" class="primary-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                    </svg>
+                    View on GitHub
+                </a>
+                <a href="../index.html#projects" class="secondary-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    All Projects
+                </a>
+            </div>
+        </article>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Moses Yebei. Built with automation and coffee.</p>
+            <p style="margin-top: 8px;"><a href="../index.html">moses-y.github.io</a></p>
+        </div>
+    </footer>
+
+    <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
+        // Theme toggle
+        const toggle = document.getElementById('theme-toggle');
+        const stored = localStorage.getItem('theme');
+        if (stored) {
+            document.documentElement.setAttribute('data-theme', stored);
+        } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+        toggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            // Re-initialize mermaid with new theme
+            initMermaid();
+        });
+
+        // Initialize Mermaid
+        function initMermaid() {
+            // The library is a third-party CDN script. When jsDelivr is slow or blocked
+            // this ran unguarded and threw "mermaid is not defined", aborting the rest
+            // of the handler (and the theme toggle that calls it).
+            if (typeof mermaid === 'undefined') return;
+            if (!document.querySelector('.mermaid')) return;
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: isDark ? 'dark' : 'default',
+                themeVariables: isDark ? {
+                    primaryColor: '#6366f1',
+                    primaryTextColor: '#f8fafc',
+                    primaryBorderColor: '#8b5cf6',
+                    lineColor: '#64748b',
+                    secondaryColor: '#1e1e2e',
+                    tertiaryColor: '#0a0a0a'
+                } : {
+                    primaryColor: '#6366f1',
+                    primaryTextColor: '#0f172a',
+                    primaryBorderColor: '#8b5cf6',
+                    lineColor: '#64748b'
+                }
+            });
+            mermaid.run();
+        }
+
+        // Run on load
+        document.addEventListener('DOMContentLoaded', initMermaid);
+    </script>
+</body>
+</html>
