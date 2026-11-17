@@ -172,12 +172,12 @@ Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **llmwiki** (B-, 74.9). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **llmwiki** (B-, 74.9). Mean grade across the 2 audited members is 69.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **llmwiki** | AI & Data | Python | B- 74.9 | 300 |
-| llm_wiki | Web & Interfaces | TypeScript | C 64.5 | 227 |
+| llm_wiki | Web & Interfaces | TypeScript | C 64.1 | 227 |
 
 ### c035 - 2 repositories
 
@@ -266,12 +266,12 @@ Keeper: **BeautySmart** (C+, 66.2). Mean grade across the 3 audited members is 5
 
 All 3 in Web & Interfaces.
 
-Keeper: **n8n** (C+, 66.7). Mean grade across the 3 audited members is 62.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (C+, 66.7). Mean grade across the 3 audited members is 61.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **n8n** | Web & Interfaces | TypeScript | C+ 66.7 | 17556 |
-| n8n-as-code | Web & Interfaces | TypeScript | C 61.5 | 357 |
+| n8n-as-code | Web & Interfaces | TypeScript | C- 59.6 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.1 | 2203 |
 
 ### c011 - 3 repositories
@@ -456,12 +456,12 @@ Keeper: **rust-genai** (C+, 68.2). Mean grade across the 2 audited members is 66
 
 All 2 in Systems & Infra.
 
-Keeper: **OpenSandbox** (B-, 71.6). Mean grade across the 2 audited members is 66.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenSandbox** (B-, 71.6). Mean grade across the 2 audited members is 70.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **OpenSandbox** | Systems & Infra | Go | B- 71.6 | 2144 |
-| CubeSandbox | Systems & Infra | Go | C 61.5 | 1702 |
+| CubeSandbox | Systems & Infra | Go | C+ 68.6 | 1702 |
 
 ### c036 - 2 repositories
 
