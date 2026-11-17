@@ -9,7 +9,7 @@
     <!-- Open Graph -->
     <meta property="og:title" content="cover - Moses Yebei">
     <meta property="og:description" content="Local privacy proxy that replaces secrets and PII before AI requests leave your machine.">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&amp;h=400&amp;fit=crop&amp;q=80">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/cover.html">
 
@@ -17,7 +17,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="cover">
     <meta name="twitter:description" content="Local privacy proxy that replaces secrets and PII before AI requests leave your machine.">
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&amp;h=400&amp;fit=crop&amp;q=80">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/cover.html">
 
@@ -59,8 +59,8 @@
         <article class="container">
             <div class="post-header">
                 <div class="post-meta">
-                    <span>August 23, 2026</span>
-                    <span>3 min read</span>
+                    <span>November 12, 2026</span>
+                    <span>4 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -80,30 +80,39 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Teams using AI coding agents and LLM APIs face a real tension: the more context you give the model, the more likely you are to leak secrets, API keys, customer PII, or internal hostnames into third-party traffic. Redacting values breaks the conversation, because the agent can no longer reference the original data. Cover sits between the agent and the LLM, replacing sensitive values with reversible pseudonyms before the request leaves the machine, then restoring them in the response.</p>
+<p>Developers using cloud‑based LLMs must keep secrets, credentials and internal URLs out of the request payloads that leave their local machine.  A naïve approach is to manually scrub data or to run the model in‑house, both of which break workflow or introduce security gaps.  The need is a lightweight, bidirectional proxy that can replace sensitive values before the request is sent and restore the originals on the response, all without changing the client code.</p>
 <h3 id="what-this-does">What This Does</h3>
-<p>Cover is a local reverse proxy written in Go. It intercepts outgoing JSON from agents like Codex or Claude Code, applies policy-driven transformations (allow, mask, redact, pseudonymize, block), and restores the originals in JSON and SSE streaming responses. The core logic lives in <code>internal/redact/</code> — <code>redact.go</code> applies the policy, <code>mapping.go</code> maintains the reversible session mappings, and <code>restore.go</code> reverses the transformation. <code>internal/proxy/proxy.go</code> and <code>internal/proxy/stream_sse.go</code> handle the HTTP interception and streaming.</p>
-<p>The <code>cmd/cover/</code> entry point exposes a CLI with subcommands for init, inspect, doctor, and monitor. The <code>internal/llamacpp/</code> package adds an optional local semantic detector for free-form text that regex misses.</p>
+<p>The repository implements a privacy proxy that intercepts HTTP requests from supported AI clients (Codex, Claude, Pi/Oh My Pi, OpenAI‑compatible SDKs) and rewrites them in two phases:</p>
+<ol><li><strong>Pre‑flight redaction</strong> – <code>internal/redact/redact.go</code> replaces matched secrets, IPs, URLs, etc. with deterministic pseudonyms or placeholders.</li><li><strong>Post‑flight restoration</strong> – the same logic in <code>internal/redact/redact.go</code> is applied in reverse to any response that contains the generated stand‑ins.</li></ol>
+<p>The core server lives in <code>cmd/cover/main.go</code>, which starts an HTTP listener defined by <code>internal/proxy/proxy.go</code>.  Policy rules are loaded from YAML files (<code>configs/config.example.yaml</code> and <code>configs/codex-router.example.yaml</code>) and parsed by <code>internal/codexconfig/config.go</code>.  The daemon logic (<code>internal/daemon/daemon.go</code>) manages the proxy process and its PID file, while <code>internal/daemon/port.go</code> handles port allocation.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>Execution starts in <code>cmd/cover/main.go</code>, which dispatches to subcommands. The proxy path goes: <code>main.go</code> → <code>internal/proxy/proxy.go</code> → <code>internal/redact/redact.go</code> → <code>internal/redact/mapping.go</code>. The <code>mapping.go</code> file owns the reversible pseudonym store — bounded, session-isolated, memory-only with TTL. That file carries the widest blast radius: if the mapping leaks or corrupts, the proxy either fails closed or exposes secrets. The <code>hardening_test.go</code> files in both <code>internal/proxy/</code> and <code>internal/redact/</code> stress-test this boundary.</p>
-<p>The daemon lifecycle is in <code>internal/daemon/daemon.go</code> and <code>port.go</code>. Configuration flows from <code>internal/config/config.go</code> and <code>internal/codexconfig/config.go</code>. Installation and agent configuration live in <code>internal/install/install.go</code> and <code>agentsettings.go</code>. The wiring is clean — no cycles in the module graph, and the proxy path is only four hops from entry to the network call.</p>
+<p>Execution begins in <code>cmd/cover/main.go</code> (<code>main</code> function).  The CLI parses sub‑commands (<code>installCmd</code>, <code>envCmd</code>, <code>initCmd</code>, <code>startCmd</code>), each delegating to functions in the same file or to helpers in <code>internal/daemon</code> and <code>internal/proxy</code>.  A typical run follows:</p>
+<ol><li><code>main</code> → <code>startCmd</code> → <code>internal/proxy/proxy.go:New</code> → <code>ServeHTTP</code></li><li><code>ServeHTTP</code> → <code>serveContentMonitor</code> → <code>internal/activity/monitor.go:Run</code></li><li><code>Run</code> → <code>Parse</code> → <code>internal/redact/redact.go:RedactForProxy</code> (pre‑flight)</li><li>Response passes back through <code>ServeHTTP</code> → <code>publishContent</code> → <code>internal/redact/redact.go:Restore</code> (post‑flight)</li><li><code>PublishContent</code> writes the transformed body to the client.</li></ol>
+<p>The call graph shows <code>Close</code>, <code>New</code>, <code>Redact</code>, <code>Load</code>, and <code>Transform</code> as the most heavily used functions, each invoked by dozens of callers.  File‑level responsibility:</p>
+<ul><li><code>internal/proxy/proxy.go</code> owns the HTTP handling and policy application (17 functions, 4 types).</li><li><code>internal/redact/mapping.go</code> manages the pseudonym store (17 functions, 3 types).</li><li><code>internal/daemon/daemon.go</code> manages process state (9 functions).</li></ul>
+<p>The code touches the filesystem for configuration (<code>Load</code> in <code>internal/redact/mapping.go</code>), pseudonym key (<code>LoadOrCreatePseudonymKey</code> in <code>internal/config/pseudonym_key.go</code>), and daemon PID files (via <code>Write</code>/<code>Read</code> in <code>internal/daemon/daemon.go</code>).  It performs one outbound network call per request to the target AI endpoint, while all other I/O is local.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
-<p><strong>Setup</strong> — Install via the script or build manually:</p>
-<pre data-lang="sh"><code>git clone https://github.com/moses-y/cover
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># From a fresh checkout
+git clone https://github.com/moses-y/cover
 cd cover
 go build -o cover ./cmd/cover
 install -m 0755 cover ~/.local/bin/cover</code></pre>
-<p><strong>Configuration</strong> — <code>cover init</code> generates <code>configs/config.example.yaml</code>, which defines policies with actions like <code>allow</code>, <code>mask</code>, <code>pseudonymize</code>, and <code>block</code>. The <code>configs/codex-router.example.yaml</code> handles Codex-specific routing.</p>
-<p><strong>Running it</strong> — Start the daemon with <code>cover start</code>, then point your agent at the local proxy. Use <code>cover inspect</code> to preview protected JSON before sending, and <code>cover doctor</code> to verify the policy and daemon health.</p>
-<h3 id="real-world-use">Real-World Use</h3>
-<p>Point Claude Code at the proxy, define a policy that pseudonymizes <code>api_key</code> and <code>customer_email</code> fields, and the agent can still reference <code>user_42</code> in conversation while the real email never leaves localhost. <code>cover inspect</code> shows exactly what will be sent before any request goes out.</p>
+<p>Or use the provided installer script:</p>
+<pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/moses-y/cover/main/scripts/install.sh | bash</code></pre>
+<p><strong>Configuration</strong> Edit <code>configs/config.example.yaml</code> to set <code>target_url</code>, <code>port</code>, and policy rules.  Copy it to <code>~/.config/cover/config.yaml</code> or set <code>COVER_CONFIG</code> to point to it.</p>
+<p><strong>Running</strong></p>
+<pre data-lang="bash"><code>cover start</code></pre>
+<p>This launches the daemon (<code>internal/daemon/daemon.go</code>) and begins listening on the configured port.  The proxy is now ready to be pointed to by any of the supported LLM clients via the <code>target_url</code> in the config.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A team uses OpenAI’s <code>openai</code> Python SDK.  They point the SDK’s <code>base_url</code> to <code>http://localhost:8080/v1</code>.  Code that normally contains an API key or internal host is automatically redacted; responses with placeholder values are transparently restored, keeping the runtime logic intact.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<p>The repo has 26 test files across the core packages, CI in <code>.github/workflows/ci.yml</code>, Apache 2.0 license, and a <code>SECURITY.md</code>. The <code>internal/redact/</code> package has benchmark tests, which suggests performance was a real concern. The code structure is clean with no red flags from static analysis.</p>
-<p><strong>Severity (Med)</strong> — This is a fork of DavidCarliez/cover with 22 stars; the original project has more community validation than this fork&#39;s zero stars suggest. Verify the fork hasn&#39;t diverged in ways that break the documented install script, which still points at the original repo.</p>
+<ul><li><strong>MEDIUM</strong> – Declare least‑privilege permissions for <code>GITHUB_TOKEN</code> (<code>.github/workflows/ci.yml</code>).</li><li><strong>MEDIUM</strong> – Enable Dependabot or Renovate (<code>.github/dependabot.yml</code>).</li><li><strong>MEDIUM</strong> – Gate pull requests on a dependency vulnerability scan (<code>.github/workflows/ci.yml</code>).</li><li><strong>MEDIUM</strong> – Set <code>persist-credentials: false</code> on checkout (<code>.github/workflows/ci.yml</code>).</li><li><strong>LOW</strong> – Set <code>timeout-minutes</code> on workflow jobs (<code>.github/workflows/ci.yml</code>).</li></ul>
+<p>The static analysis found 8 medium‑level cognitive‑load issues: deep nesting in <code>cmd/cover/monitor.go</code> and <code>internal/redact/policy.go</code>; duplicated blocks across several files; oversized <code>cmd/cover/main.go</code>; and high branching density in <code>internal/activity/monitor.go</code>, <code>internal/activity/monitor_test.go</code>, and <code>internal/codexconfig/config.go</code>.  No critical or high‑severity bugs were detected.  Tests cover 58 files and CI runs successfully on GitHub Actions.</p>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p>Cover is a well-structured, genuinely useful privacy tool for teams that need LLM context without exfiltration risk. The reversible pseudonym approach is sound, and the fail-closed hardening shows real engineering discipline. It&#39;s a niche tool — you need a specific workflow (local LLM proxy, policy-driven redaction) to justify the setup, but for that workflow it&#39;s a solid choice.</p>
+<p>Cover offers a clear, Go‑based privacy proxy that works out of the box for common LLM clients.  It is well‑structured, tested, and CI‑protected, though some refactoring could reduce cognitive load.  Teams that need to keep secrets local while still using cloud LLMs will benefit from its deterministic pseudonymization and seamless integration.</p>
             </div>
 
             
@@ -120,11 +129,11 @@ install -m 0755 cover ~/.local/bin/cover</code></pre>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">80<span> files</span></div>
+                        <div class="an-score">145<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>63</b></li><li><span>YAML</span><i style="width:10%"></i><b>6</b></li><li><span>Markdown</span><i style="width:10%"></i><b>6</b></li><li><span>Shell</span><i style="width:2%"></i><b>1</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>106</b></li><li><span>YAML</span><i style="width:8%"></i><b>9</b></li><li><span>Markdown</span><i style="width:7%"></i><b>7</b></li><li><span>JSON</span><i style="width:6%"></i><b>6</b></li><li><span>JavaScript</span><i style="width:5%"></i><b>5</b></li><li><span>Shell</span><i style="width:2%"></i><b>2</b></li>
                         </ul>
-                        
+                        <p class="an-fw"><span>React</span></p>
                     </div>
                 </div>
 

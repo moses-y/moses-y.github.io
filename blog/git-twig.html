@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>git twig - Moses Yebei</title>
+    <meta name="description" content="Native copy-on-write Git worktrees, with verified materialization and reproducible benchmarks.">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="git twig - Moses Yebei">
+    <meta property="og:description" content="Native copy-on-write Git worktrees, with verified materialization and reproducible benchmarks.">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://moses-y.github.io/blog/git-twig.html">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="git twig">
+    <meta name="twitter:description" content="Native copy-on-write Git worktrees, with verified materialization and reproducible benchmarks.">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+
+    <link rel="canonical" href="https://moses-y.github.io/blog/git-twig.html">
+
+    <!-- Mermaid.js for diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <!-- The palette first, so every clickable thing on a briefing takes the same
+         mocha accent as the rest of the site rather than a second one of its own. -->
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/blog-post.css">
+    <!-- The audit findings reuse the report's markup rather than a second copy of
+         it. Every rule in report.css is namespaced under .rpt, so it styles that
+         section and cannot reach the article. -->
+    <link rel="stylesheet" href="/assets/css/report.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="../index.html" class="back-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back to Portfolio
+                </a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <article class="container">
+            <div class="post-header">
+                <div class="post-meta">
+                    <span>November 16, 2026</span>
+                    <span>3 min read</span>
+                    <span class="post-language">Rust</span>
+                    <span class="post-type">fork</span>
+                </div>
+                <h1>git twig</h1>
+                <div class="post-abstract"><span class="post-abstract-lab">Abstract</span><p class="post-description">Native copy-on-write Git worktrees, with verified materialization and reproducible benchmarks.</p></div>
+                <p class="post-parent">Forked from <a href="https://github.com/leostera/git-twig" target="_blank" rel="noopener">leostera/git-twig</a></p>
+            </div>
+
+
+            <div class="listen-bar" id="listen-bar" hidden>
+                <button class="listen-btn" id="listen-btn" aria-label="Listen to this briefing">
+                    <span class="listen-icon" aria-hidden="true">&#9654;</span>
+                    <span id="listen-label">Listen</span>
+                </button>
+                <button class="listen-stop" id="listen-stop" hidden aria-label="Stop">&#9632;</button>
+                <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
+            </div>
+
+            <div class="post-content numbered" id="post-content">
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <h3 id="the-problem">The Problem</h3>
+<p>Developers who spin up many Git worktrees waste disk space and suffer from slow checkout times. On filesystems that do not support reflinks, each worktree copies the entire repository, creating a new copy of every file even when only a few differ.</p>
+<h3 id="what-this-does">What This Does</h3>
+<p><code>git-twig</code> creates lightweight, copy‑on‑write (CoW) worktrees. The command line tool in <strong>crates/git-twig/src/main.rs</strong> dispatches to the library in <strong>crates/git-twig/src/lib.rs</strong>, which in turn calls <strong>crates/git-twig/src/native.rs</strong> to perform the CoW operation. Files that are unchanged are hard‑linked; only local modifications, ignored files, or files on unsupported filesystems are copied. The tool verifies the integrity of the copied content against the requested commit, writes all staged changes under <code>twigs/staging</code>, and removes the staging area on success.</p>
+<p>The project ships a CLI, a set of benchmarks in <strong>bench/</strong>, and a web UI in <strong>sites/twig.leostera.dev/</strong> that visualises benchmark results.</p>
+<h3 id="how-it-is-wired">How It Is Wired</h3>
+<p><strong>Entry point</strong> – <code>cargo run -p git-twig</code> starts <code>crates/git-twig/src/main.rs</code>. From there, the <code>Command</code> enum (defined in the same file) routes to <code>lib::run</code> in <strong>crates/git-twig/src/lib.rs</strong>. <code>run</code> calls <code>native::create_worktree</code> when the <code>new</code> subcommand is used. <code>create_worktree</code> performs the following sequence:</p>
+<ol><li><code>snapshot::take_snapshot</code> ( <strong>crates/git-twig/src/snapshot.rs</strong> ) records the source tree’s state.</li><li><code>native::link_or_copy</code> ( <strong>crates/git-twig/src/native.rs</strong> ) walks the tree, hard‑links unchanged files and copies only the differences.</li><li><code>staging::apply_staging</code> ( <strong>crates/git-twig/src/staging.rs</strong> ) writes local changes to the destination while keeping them isolated.</li><li>On success, <code>staging::clean</code> removes the staging directory; on failure, the staging area is left for inspection.</li></ol>
+<p>Each of these modules touches only the filesystem; none make external network calls. The benchmark harness in <strong>crates/twig-bench/src/main.rs</strong> drives a series of <code>git-twig</code> commands and records timings in <strong>bench/results/</strong>.</p>
+<h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
+<pre data-lang="sh"><code>git clone https://github.com/moses-y/git-twig
+cd git-twig
+cargo install --path crates/git-twig --locked</code></pre>
+<p>The binary is installed as <code>git-twig</code>.</p>
+<p><strong>Configuration</strong> No additional config files are required. If you want to force the native CoW backend, set <code>TWIG_TRACE=1</code> to see which filesystem path is used.</p>
+<p><strong>Running</strong></p>
+<pre data-lang="sh"><code>git -C &lt;repo&gt; twig new -b feature/foo &lt;target&gt; &lt;commit&gt;
+git -C &lt;repo&gt; twig list</code></pre>
+<p>The <code>new</code> command creates a CoW worktree at <code>&lt;target&gt;</code>. The <code>list</code> command displays registered worktrees.</p>
+<p>For developers, <code>git twig skill</code> prints the bundled Rust skill, located in <strong>crates/git-twig/src/help.rs</strong>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A CI system that spins up many lightweight agents can call <code>git-twig new -b test/&lt;id&gt; ../worktree &lt;commit&gt;</code> before each job. The job then runs inside the worktree, writes test results, and the agent cleans up without duplicating the repository.</p>
+<h3 id="code-health-issues">Code Health &amp; Issues</h3>
+<ul><li><strong>Tests</strong> – <code>crates/git-twig/tests/worktrees.rs</code> covers creation, failure, and cleanup paths.</li><li><strong>CI</strong> – <code>.github/workflows/ci.yml</code> runs on Linux images with Btrfs and XFS, ensuring native CoW support.</li><li><strong>Licensing</strong> – <code>LICENSE</code> is MIT; no unlicensed dependencies.</li><li><strong>Missing</strong> – No Dockerfile or CI for macOS; the project relies on the user’s native environment.</li></ul>
+<p>No static analysis warnings were found in the current <code>cargo clippy</code> run.</p>
+<h3 id="the-bottom-line">The Bottom Line</h3>
+<p><code>git-twig</code> delivers a concise, Rust‑based CLI that reduces worktree disk usage by up to 90 % on supported filesystems while maintaining correctness. It is well‑tested on Linux and comes with a benchmark suite that quantifies the trade‑offs. Teams that routinely create many temporary worktrees—such as CI pipelines or agent‑based workflows—will benefit most; on unsupported filesystems the tool falls back to standard <code>git worktree</code>.</p>
+            </div>
+
+            
+            <section class="analysis" aria-label="Automated analysis">
+                <h2 class="analysis-h">What the analyser found</h2>
+
+                <div class="analysis-grid">
+                    <div class="an-card">
+                        <span class="an-lab">Deployment readiness</span>
+                        <div class="an-score">6<span>/7</span></div>
+                        <ul class="an-checks">
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                        </ul>
+                    </div>
+                    <div class="an-card">
+                        <span class="an-lab">Composition</span>
+                        <div class="an-score">163<span> files</span></div>
+                        <ul class="an-bars">
+                            <li><span>JSON</span><i style="width:100%"></i><b>39</b></li><li><span>Markdown</span><i style="width:87%"></i><b>34</b></li><li><span>Rust</span><i style="width:44%"></i><b>17</b></li><li><span>TypeScript</span><i style="width:33%"></i><b>13</b></li><li><span>TOML</span><i style="width:8%"></i><b>3</b></li><li><span>YAML</span><i style="width:5%"></i><b>2</b></li>
+                        </ul>
+                        <p class="an-fw"><span>React</span></p>
+                    </div>
+                </div>
+
+                
+
+                
+
+                
+
+                
+
+                <p class="an-links">
+                    <a href="../code-brain.html?repo=1460302594">Open in Code Graph &rarr;</a>
+                    <a href="../code-brain.html?view=semantic&amp;repo=1460302594">See its neighbourhood &rarr;</a>
+                </p>
+            </section>
+
+            
+
+            
+
+            <div class="post-actions">
+                <a href="https://github.com/moses-y/git-twig" target="_blank" rel="noopener" class="primary-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                    </svg>
+                    View on GitHub
+                </a>
+                <a href="../index.html#projects" class="secondary-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    All Projects
+                </a>
+            </div>
+        </article>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Moses Yebei. Built with automation and coffee.</p>
+            <p style="margin-top: 8px;"><a href="../index.html">moses-y.github.io</a></p>
+        </div>
+    </footer>
+
+    <script>
+        // Read aloud via the browser's own voices. No API, no key, no audio files -
+        // which matters because pre-rendering audio for every repo would blow past
+        // the GitHub Pages size limit.
+        (function () {
+            // Feature-detect both halves: some embedded browsers expose speechSynthesis
+            // without a usable SpeechSynthesisUtterance constructor.
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') return;
+            var bar = document.getElementById('listen-bar');
+            var btn = document.getElementById('listen-btn');
+            var stopBtn = document.getElementById('listen-stop');
+            var label = document.getElementById('listen-label');
+            var icon = btn.querySelector('.listen-icon');
+            var progress = document.getElementById('listen-progress');
+            var paras = [].slice.call(document.querySelectorAll('#post-content p'))
+                .filter(function (p) { return p.textContent.trim().length; });
+            if (!paras.length) return;
+            bar.hidden = false;
+
+            var idx = 0, playing = false;
+
+            // One utterance per paragraph rather than one for the whole article:
+            // long utterances get silently truncated in some engines, and this also
+            // gives a natural progress readout and highlight.
+            function speak(i) {
+                if (i >= paras.length) { reset(); return; }
+                idx = i;
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                paras[i].classList.add('speaking');
+                progress.textContent = (i + 1) + ' / ' + paras.length;
+                var u = new SpeechSynthesisUtterance(paras[i].textContent);
+                u.rate = 1.0;
+                u.onend = function () { if (playing) speak(i + 1); };
+                u.onerror = function () { reset(); };
+                window.speechSynthesis.speak(u);
+            }
+
+            function reset() {
+                playing = false;
+                window.speechSynthesis.cancel();
+                paras.forEach(function (p) { p.classList.remove('speaking'); });
+                label.textContent = 'Listen';
+                icon.innerHTML = '&#9654;';
+                stopBtn.hidden = true;
+                progress.textContent = '';
+                idx = 0;
+            }
+
+            btn.addEventListener('click', function () {
+                if (!playing) {
+                    playing = true;
+                    label.textContent = 'Pause';
+                    icon.innerHTML = '&#10073;&#10073;';
+                    stopBtn.hidden = false;
+                    // Resume mid-paragraph if paused, otherwise start from where we were.
+                    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+                    else speak(idx);
+                } else {
+                    playing = false;
+                    window.speechSynthesis.pause();
+                    label.textContent = 'Resume';
+                    icon.innerHTML = '&#9654;';
+                }
+            });
+
+            stopBtn.addEventListener('click', reset);
+            // Speech keeps running after navigation otherwise.
+            window.addEventListener('beforeunload', function () { window.speechSynthesis.cancel(); });
+        })();
+
+        // Theme toggle
+        const toggle = document.getElementById('theme-toggle');
+        const stored = localStorage.getItem('theme');
+        if (stored) {
+            document.documentElement.setAttribute('data-theme', stored);
+        } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+        toggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            // Re-initialize mermaid with new theme
+            initMermaid();
+        });
+
+        // Initialize Mermaid
+        function initMermaid() {
+            // The library is a third-party CDN script. When jsDelivr is slow or blocked
+            // this ran unguarded and threw "mermaid is not defined", aborting the rest
+            // of the handler (and the theme toggle that calls it).
+            if (typeof mermaid === 'undefined') return;
+            if (!document.querySelector('.mermaid')) return;
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: isDark ? 'dark' : 'default',
+                themeVariables: isDark ? {
+                    primaryColor: '#6366f1',
+                    primaryTextColor: '#f8fafc',
+                    primaryBorderColor: '#8b5cf6',
+                    lineColor: '#64748b',
+                    secondaryColor: '#1e1e2e',
+                    tertiaryColor: '#0a0a0a'
+                } : {
+                    primaryColor: '#6366f1',
+                    primaryTextColor: '#0f172a',
+                    primaryBorderColor: '#8b5cf6',
+                    lineColor: '#64748b'
+                }
+            });
+            mermaid.run();
+        }
+
+        // Run on load
+        document.addEventListener('DOMContentLoaded', initMermaid);
+    </script>
+</body>
+</html>
