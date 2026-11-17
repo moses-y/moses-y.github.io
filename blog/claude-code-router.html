@@ -9,7 +9,7 @@
     <!-- Open Graph -->
     <meta property="og:title" content="claude code router - Moses Yebei">
     <meta property="og:description" content="Use Claude Code as the foundation for coding infrastructure, allowing you to decide how to interact with the model while enjoying updates from Anthropic.">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/claude-code-router.html">
 
@@ -17,7 +17,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="claude code router">
     <meta name="twitter:description" content="Use Claude Code as the foundation for coding infrastructure, allowing you to decide how to interact with the model while enjoying updates from Anthropic.">
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/claude-code-router.html">
 
@@ -82,43 +82,52 @@
             <div class="post-content numbered" id="post-content">
                 <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Developers using <strong>Claude Code</strong> need a way to route requests to different LLM providers, apply request/response transformations, and manage models from the command line. Without a router they must edit Claude Code’s config manually or write ad‑hoc scripts, which is error‑prone and hard to version.</p>
+<p>Developers who use multiple coding agents (Claude, Codex, Grok, Kimi, etc.) often maintain separate configuration files and endpoints for each provider. Switching a model or adding a new provider requires editing several client configs, leading to errors and duplicated effort. A unified local gateway that routes requests, manages credentials, and logs traffic would simplify workflows and reduce configuration drift.</p>
 <h3 id="what-this-does">What This Does</h3>
-<p><code>claude-code-router</code> sits between Claude Code and the underlying model APIs. It reads a JSON config (<code>~/.claude-code-router/config.json</code>) and, based on the request type, selects a provider (OpenRouter, Gemini, Ollama, etc.) and applies a transformer chain. The core logic lives in <strong><code>packages/core/src</code></strong> (transformers, plugin manager, server) while the CLI front‑end lives in <strong><code>packages/cli/src</code></strong>. The documentation site (<code>docs/src/pages/index.tsx</code>) and the example presets (<code>examples/*.json</code>) illustrate typical usage.</p>
+<p>The repository packages four independent projects: a CLI, a local server, a UI dashboard, and a Docker‑based runtime.</p>
+<ul><li><strong><code>packages/cli/src/cli.ts</code></strong> exposes commands such as <code>run</code>, <code>config</code>, and <code>serve</code>.</li><li><strong><code>packages/core/src/server.ts</code></strong> implements the HTTP gateway that accepts model requests, applies routing rules, and forwards them to the chosen provider.</li><li><strong><code>packages/core/src/gateway/features/hosted-web-search/index.ts</code></strong> adds optional web‑search capabilities to the request pipeline.</li><li><strong><code>packages/core/src/providers/presets/anthropic/index.ts</code></strong> contains the Anthropic provider harness.</li></ul>
+<p>The CLI can start the server (<code>packages/cli/src/cli.ts:main</code>), load presets (<code>packages/cli/src/utils/modelSelector.ts</code>), and invoke the gateway. The UI in <code>packages/ui/src/App.tsx</code> consumes the local endpoint and visualises logs.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<ol><li><strong>Entry point</strong> – the CLI is launched via <code>packages/cli/src/cli.ts</code> (<code>main</code> function, line 99).</li><li><code>main</code> parses arguments (via <code>@inquirer/prompts</code>) and calls <code>run</code> in <code>packages/cli/src/utils/index.ts</code> (line 186).</li><li><code>run</code> creates a readline interface, then invokes <code>getServer</code> from <code>packages/server/src/index.ts</code>.</li><li><code>getServer</code> constructs an Express app (<code>packages/core/src/server.ts:createApp</code>) and registers routes from <code>packages/core/src/api/routes.ts</code>.</li><li>When a Claude Code request arrives, the route handler calls <code>registerNamespace</code> → <code>initialize</code> → <code>registerDefaultTransformersInternal</code> (see the call chain <code>start → registerNamespace → initialize → registerDefaultTransformersInternal</code>). This iterates <code>Object.values(Transformers)</code> and triggers each transformer (e.g., <code>packages/core/src/transformer/anthropic.transformer.ts</code>, <code>openai.responses.transformer.ts</code>).</li><li>The selected transformer calls the underlying model SDK (10 distinct functions across the repo, e.g., <code>post</code> in <code>packages/server/src/index.ts</code>). These are the only outward‑facing calls: they perform HTTP requests to provider endpoints.</li><li>After the model response returns, the transformer chain may modify the payload before the server sends it back to Claude Code.</li></ol>
-<p><strong>Blast‑radius hotspots</strong> – <code>packages/core/src/types/llm.ts</code> and <code>packages/core/src/types/transformer.ts</code> are imported by 17 other modules each, making them high‑impact “hub” modules. The import cycle among <code>packages/core/src/types/llm.ts</code>, <code>packages/core/src/types/transformer.ts</code>, and <code>packages/cli/src/utils/index.ts</code> adds instability (instability = 1). The most‑connected functions (<code>cn</code>, <code>delete</code>, <code>post</code>) are called from dozens of places, so changes there ripple widely.</p>
+<p>Execution begins at <code>packages/core/src/server.ts:198</code> (<code>start</code>). From there, the flow is: <code>start</code> → <code>registerNamespace</code> → <code>initialize</code> → <code>registerDefaultTransformersInternal</code>. <code>registerDefaultTransformersInternal</code> iterates over <code>Object.values(Transformers)</code> (see <code>packages/core/src/transformer/index</code>). The CLI entry point <code>packages/cli/src/cli.ts:99</code> (<code>main</code>) calls <code>readConfigFile</code> (<code>packages/cli/src/utils/index.ts</code>) to load user settings from disk. <code>run</code> (<code>packages/cli/src/utils/index.ts:186</code>) obtains the server instance via <code>getServer</code>, then calls <code>listPresets</code> (<code>packages/server/src/index.ts:91</code>). <code>saveConfigAndRestart</code> (<code>packages/ui/src/App.tsx:81</code>) triggers <code>restartService</code> (<code>packages/core/src/server.ts</code>), which removes the existing socket (<code>unlink</code>) and restarts the gateway.</p>
+<p>The internal call graph shows 590 edges; key functions with broad influence are <code>cn</code>, <code>delete</code>, <code>post</code>, and <code>readConfigFile</code>. The most referenced module is <code>packages/core/src/types/llm.ts</code>, which is a hub for 17 dependents, indicating a high blast radius for changes. Import cycles involving <code>packages/core/src/types/llm.ts</code>, <code>packages/core/src/types/transformer.ts</code>, and <code>packages/cli/src/utils/index.ts</code> introduce maintenance friction.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
-<pre data-lang="bash"><code># 1. Install Claude Code (global)
-npm install -g @anthropic-ai/claude-code
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># Clone the repo
+git clone https://github.com/moses-y/claude-code-router
+cd claude-code-router
 
-# 2. Install the router (global)
-npm install -g @musistudio/claude-code-router
+# Install dependencies (pnpm is used in package.json)
+pnpm install</code></pre>
+<p><strong>Configuration</strong> Create a <code>config.json</code> in the project root or in the user home as specified by <code>packages/core/src/services/config.ts</code>. Required keys include <code>apiKey</code>, <code>provider</code>, and optional routing rules.</p>
+<p><strong>Running the Gateway</strong></p>
+<pre data-lang="bash"><code># Start the local server
+pnpm run start:server</code></pre>
+<p>The server listens on <code>http://localhost:3000</code> by default (configured in <code>packages/server/src/index.ts</code>).</p>
+<p><strong>CLI Commands</strong></p>
+<pre data-lang="bash"><code># List available models
+pnpm run cli -- list-models
 
-# 3. Create a config (example path shown in README)
-cat &gt; ~/.claude-code-router/config.json &lt;&lt;&#39;EOF&#39;
-{
-  &quot;PROXY_URL&quot;: &quot;http://127.0.0.1:7890&quot;,
-  &quot;LOG&quot;: true,
-  &quot;LOG_LEVEL&quot;: &quot;debug&quot;,
-  &quot;APIKEY&quot;: &quot;your-secret-key&quot;,
-  &quot;HOST&quot;: &quot;127.0.0.1&quot;
-}
-EOF
+# Test a model request
+pnpm run cli -- run --model=claude-3.5</code></pre>
+<p>The CLI script lives in <code>packages/cli/src/cli.ts</code> and invokes the server via <code>packages/core/src/server.ts</code>.</p>
+<p><strong>Docker</strong></p>
+<pre data-lang="bash"><code># Build the image
+docker build -t ccr-server .
 
-# 4. Start the router server (CLI command)
-ccr start   # implemented in packages/cli/src/cli.ts
-
-# 5. Switch models from Claude Code
-/model gpt-4   # routed through the `/model` command handled by the transformer chain</code></pre>
-<p>All commands are documented under <code>docs/docs/cli/commands/</code> and the example presets (<code>examples/simple-preset-example.json</code>) show how to declare provider‑specific settings.</p>
+# Run the container
+docker run -p 3000:3000 --env-file .env ccr-server</code></pre>
+<p>The Dockerfile (<code>packages/server/Dockerfile</code>) uses <code>node:20-alpine</code> as the base.</p>
 <h3 id="real-world-use">Real‑World Use</h3>
-<p>A CI pipeline can run unit tests, then invoke <code>ccr start</code> in a Docker container (see <code>packages/server/Dockerfile</code>). A GitHub Action can call <code>ccr model list</code> to verify that the correct provider is selected before deploying code generation steps. Because the router logs both server‑level (<code>pino</code> files) and application‑level events, operators can audit which model answered a given request.</p>
+<p>A data‑science workflow uses the CLI to submit a prompt to Claude, automatically retries on failure, and logs the round‑trip latency. The UI then visualises token usage per session, allowing the team to monitor cost and tweak provider selection without editing separate client configs.</p>
+<pre data-lang="bash"><code># Submit a prompt
+pnpm run cli -- run --model=claude-3.5 &quot;Translate this code to Rust.&quot;
+
+# View logs in the dashboard
+open http://localhost:3000/dashboard</code></pre>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<ul><li><strong>High – Pin GitHub Actions</strong> – <code>.github/workflows/*</code> uses version tags (<code>@v4</code>, <code>@v3</code>). Replace with 40‑char commit SHAs to avoid supply‑chain attacks.</li><li><strong>High – No test suite</strong> – 157 source files, 0 test files. Add at least one test per public entry point and run them in CI.</li><li><strong>Medium – Enable Dependabot</strong> – No <code>dependabot.yml</code>; add to keep dependencies patched.</li><li><strong>Medium – Use lockfile in CI</strong> – Workflows run <code>npm install</code>; switch to <code>npm ci</code> (or <code>pnpm install --frozen-lockfile</code>).</li><li><strong>Medium – Pin Docker base image</strong> – <code>node:20-alpine</code> should be referenced by digest.</li><li><strong>Medium – Add vulnerability scan</strong> – No dependency‑review step; integrate <code>osv-scanner</code> or <code>dependency-review-action</code>.</li><li><strong>Medium – Checkout without persisting credentials</strong> – Add <code>persist-credentials: false</code> to the checkout step.</li><li><strong>Medium – Run as non‑root</strong> – Dockerfile lacks a non‑root <code>USER</code>.</li><li><strong>Low – Job timeouts</strong> – <code>.github/workflows/docker-publish.yml</code> omits <code>timeout-minutes</code>.</li><li><strong>Low – Repository conventions</strong> – Missing <code>.editorconfig</code>, <code>.gitattributes</code>, and formatter config.</li></ul>
-<p>Additional observations: the repo includes a full Docusaurus site, Docker support, and CI, but lacks automated tests and some hardening best practices identified above.</p>
+<ul><li><strong>High</strong> – Import cycle among <code>packages/core/src/types/llm.ts</code>, <code>packages/core/src/types/transformer.ts</code>, <code>packages/cli/src/utils/index.ts</code>.</li><li><strong>High</strong> – Duplicated 6‑line blocks across 55 files (<code>packages/cli/src/cli.ts</code>, <code>packages/cli/src/utils/index.ts</code>, <code>packages/server/src/utils/index.ts</code>).</li><li><strong>High</strong> – Empty <code>catch {}</code> blocks in <code>packages/core/src/plugins/token-speed.ts</code> and <code>packages/core/src/transformer/tooluse.transformer.ts</code>.</li><li><strong>Medium</strong> – Empty test suite: 0 test files in <code>packages/core/src/test</code>.</li><li><strong>Medium</strong> – Unpinned GitHub Actions (<code>.github/workflows/*</code> use <code>@vN</code>).</li><li><strong>Medium</strong> – Docker base image not pinned by digest.</li><li><strong>Medium</strong> – No non‑root user in <code>packages/server/Dockerfile</code>.</li><li><strong>Low</strong> – Missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config.</li><li><strong>Low</strong> – Workflow jobs lack <code>timeout-minutes</code>.</li></ul>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p><code>claude-code-router</code> provides a concrete, extensible way to route Claude Code requests across multiple LLM providers and apply custom transformations, with a clear CLI and server architecture. However, the lack of tests, the presence of import cycles, and several security‑hardening gaps mean the codebase needs prudent review before production deployment. It is suitable for teams comfortable tweaking TypeScript monorepos and willing to add the missing test and hardening steps.</p>
+<p>Claude Code Router provides a single, locally hosted endpoint that consolidates multiple coding agents and their providers. The architecture is modular, but critical import cycles and duplicated helpers raise maintenance costs. Docker support and a CLI make deployment straightforward, yet the lack of tests and missing CI safeguards mean changes can slip through unchecked. Teams that need unified agent management and are comfortable addressing the identified high‑severity issues will find this repository valuable.</p>
             </div>
 
             
@@ -128,18 +137,18 @@ ccr start   # implemented in packages/cli/src/cli.ts
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">7<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">352<span> files</span></div>
+                        <div class="an-score">895<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>113</b></li><li><span>Markdown</span><i style="width:82%"></i><b>93</b></li><li><span>TSX</span><i style="width:37%"></i><b>42</b></li><li><span>JSON</span><i style="width:31%"></i><b>35</b></li><li><span>JavaScript</span><i style="width:8%"></i><b>9</b></li><li><span>YAML</span><i style="width:4%"></i><b>5</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>300</b></li><li><span>Markdown</span><i style="width:38%"></i><b>115</b></li><li><span>TSX</span><i style="width:21%"></i><b>63</b></li><li><span>JSON</span><i style="width:9%"></i><b>28</b></li><li><span>YAML</span><i style="width:2%"></i><b>6</b></li><li><span>JavaScript</span><i style="width:2%"></i><b>5</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span><span>Tailwind</span><span>Docker</span><span>Transformers</span></p>
+                        <p class="an-fw"><span>React</span><span>Docker</span><span>CUDA</span></p>
                     </div>
                 </div>
 
@@ -195,6 +204,12 @@ ccr start   # implemented in packages/cli/src/cli.ts
                 </div>
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>packages/core/src/web/provider-secrets.ts, packages/core/test/unit/web/provider-secrets.test.mjs</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1134563092">Open in Code Graph &rarr;</a>

@@ -29,7 +29,7 @@ Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited member
 | paseo | Web & Interfaces | TypeScript | B- 72.4 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | B- 70 | 1730 |
 | mco | AI & Data | Python | C+ 66.7 | 568 |
-| orca | Web & Interfaces | TypeScript | C 61.4 | 6335 |
+| orca | Web & Interfaces | TypeScript | C 61.6 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 57.7 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 54.6 | 1456 |
 
@@ -368,11 +368,11 @@ Keeper: **livecc** (D, 45.9). Mean grade across the 2 audited members is 43.3. E
 
 All 2 in AI & Data.
 
-Keeper: **graph_maker** (C, 62.2). Mean grade across the 2 audited members is 60.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **graph_maker** (C, 61.9). Mean grade across the 2 audited members is 60.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **graph_maker** | AI & Data | Jupyter Notebook | C 62.2 | 16 |
+| **graph_maker** | AI & Data | Jupyter Notebook | C 61.9 | 16 |
 | knowledge_graph | AI & Data | Jupyter Notebook | C- 58.3 | 42 |
 
 ### c022 - 2 repositories
@@ -489,11 +489,11 @@ Keeper: **monocode** (C+, 66.4). Mean grade across the 2 audited members is 64.3
 
 All 2 in AI & Data.
 
-Keeper: **tiny-tts** (C-, 50.8). Mean grade across the 1 audited members is 50.8. 1 of 2 (50%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **tiny-tts** (C-, 50.7). Mean grade across the 1 audited members is 50.7. 1 of 2 (50%) have not been audited, so a better keeper may be hiding among them.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **tiny-tts** | AI & Data | Python | C- 50.8 | 57 |
+| **tiny-tts** | AI & Data | Python | C- 50.7 | 57 |
 | tiny-voca | AI & Data | Python | not audited | 50 |
 
 ### c039 - 2 repositories

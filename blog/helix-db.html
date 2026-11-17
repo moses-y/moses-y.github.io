@@ -80,39 +80,48 @@
             </div>
 
             <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real-World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
+                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Building AI applications typically requires stitching together separate databases—relational, vector, and graph—each with its own query language, operational model, and data duplication. HelixDB addresses this by unifying these data models into a single storage engine, reducing the operational complexity of managing multiple systems for knowledge graphs, AI memory, and application data.</p>
+<p>Modern analytics workloads often need to store graph relationships, dense vector embeddings, and full‑text data in a single transactional engine. Building a custom solution is costly; existing databases either lack vector search or force separate systems for graph and text.</p>
 <h3 id="what-this-does">What This Does</h3>
-<p>HelixDB is a graph-vector database built from scratch in Rust, designed to serve as a unified platform for AI applications. It supports graph, vector, KV, document, and relational data models within one engine. The repository includes a CLI (<code>crates/cli/src/main.rs</code>), SDKs for Rust, TypeScript, Python, and Go (<code>sdks/</code>), and a query AST shared across all clients (<code>crates/ast/src/lib.rs</code>).</p>
-<p>The project provides a <code>helix chef</code> command that bootstraps a full application—scaffolding, local instance, seed data, and optional handoff to coding agents like Claude Code or Codex. The core storage layer runs on object storage (S3-compatible), with an in-memory mode for development.</p>
+<p>HelixDB delivers a unified OLTP engine written in Rust that exposes graph traversal, approximate nearest‑neighbor search, and BM25 keyword search. The core engine lives in <code>crates/db</code>, while the CLI (<code>crates/cli</code>) and SDKs (<code>sdks/</code>) provide language‑specific clients. The project also ships a Docker image (<code>docker-image/Dockerfile</code>) for quick deployment and a set of tooling scripts (<code>tools/</code>).</p>
+<h4 id="core-files">Core Files</h4>
+<ul><li><code>crates/db/src/config/cache.rs</code> – cache configuration, 83 functions.</li><li><code>crates/ast/src/traversal.rs</code> – traversal logic, 179 functions.</li><li><code>sdks/python/src/helixdb/client.py</code> – Python SDK, high‑level client API.</li></ul>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>This is a collection of six self-contained projects, not a single codebase. The main components are:</p>
-<ul><li><code>crates/</code> (1532 files): Core database engine, planner, and CLI</li><li><code>sdks/</code> (76 files): TypeScript, Python, Go client libraries</li><li><code>bindings/</code> (18 files): UniFFI bindings for cross-language support</li><li><code>tools/</code>, <code>scripts/</code>, <code>docker-image/</code>: Supporting utilities and containerization</li></ul>
-<p>The CLI entry point is <code>crates/cli/src/main.rs</code>, which routes to <code>helix init</code>, <code>helix start</code>, and <code>helix query</code> commands. Queries are authored as DSLs in each SDK, serialized to a shared JSON AST, and sent to a running instance via <code>POST /v2/query</code>. The Python SDK (<code>sdks/python/src/helixdb/client.py</code>) shows a circular import cycle with <code>helixdb/__init__</code> and <code>async_client</code>, making changes to those modules riskier.</p>
-<p>The TypeScript SDK (<code>sdks/typescript/src/index</code>) is the most-connected module (10 importers), meaning changes there have the widest blast radius across SDK consumers.</p>
+<p>Execution starts at <code>crates/cli/src/main.rs:623</code> (<code>main</code>). The CLI parses arguments, builds a query plan, and calls <code>crates/db/src/execution/interpreter/mod.rs:120</code> (<code>execute</code>). <code>execute</code> invokes the planner, encodes the plan, and finally calls <code>crates/db/src/execution/interpreter/mod.rs:120</code> → <code>crates/db/src/execution/interpreter/mod.rs:120</code> → database write functions.</p>
+<p>A typical trace:</p>
+<pre><code>main → run → execute → plan → encode → db.execute → storage write</code></pre>
+<p>The entry‑point <code>run</code> in <code>bindings/uniffi/src/runtime.rs:18</code> calls only 136 functions, and <code>execute</code> touches 207 database functions. The widest blast radius is in <code>crates/db/src/config/cache.rs</code> (83 functions, called from 69 files).</p>
+<p>Circular dependencies appear in the Python SDK: <code>sdks/python/src/helixdb/client.py</code> → <code>__init__</code> → <code>async_client</code> → back to <code>client.py</code>. This makes refactoring difficult because a change in <code>client.py</code> forces a rebuild of all SDK modules.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
-<pre data-lang="bash"><code># Install CLI
-curl -sSL &quot;https://install.helix-db.com&quot; | bash
+<p><strong>Setup</strong></p>
+<pre data-lang="bash"><code># From the repo root
+git clone https://github.com/moses-y/helix-db
+cd helix-db
+cargo build --release</code></pre>
+<p>Docker build is also available:</p>
+<pre data-lang="bash"><code>docker build -t helix-db .</code></pre>
+<p><strong>Configuration</strong> The CLI reads <code>helix.toml</code> generated by <code>helix init local</code>. No external env vars are required for the default in‑memory mode.</p>
+<p><strong>Running it</strong></p>
+<pre data-lang="bash"><code># Start a local instance
+./target/release/helix start dev
 
-# Quick start
-helix chef
-
-# Manual setup
-helix init
-helix start dev
-helix query dev --file examples/request.json
-helix stop dev</code></pre>
-<p>Default storage is in-memory (data wiped on stop). Use <code>--disk</code> or <code>--storage-uri s3://...</code> for persistence. SDKs connect to <code>http://localhost:6969</code> by default.</p>
-<h3 id="real-world-use">Real-World Use</h3>
-<p>A company building an AI assistant with company knowledge could use HelixDB to store employee records (relational), document embeddings (vector), and organizational relationships (graph) in one system. The assistant queries across all models in a single request, eliminating data synchronization between separate stores.</p>
+# Run a query
+./target/release/helix query dev --file examples/request.json</code></pre>
+<p>The CLI entry point is <code>crates/cli/src/main.rs</code>.</p>
+<h3 id="real-world-use">Real‑World Use</h3>
+<p>A data‑science pipeline can embed HelixDB in a Rust service:</p>
+<pre data-lang="rust"><code>let db = helix_db::Embedded::new(); // from `bindings/uniffi/src/lib.rs`
+let result = db.query(r#&quot;{ node(id: 1) { name } }&quot;#).await?;</code></pre>
+<p>The service then streams results to a web frontend or feeds them into a ML model.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<p>Static analysis identified 392 findings (72 high, 320 medium) across four categories:</p>
-<ul><li><strong>High</strong> - Import cycle in Python SDK: <code>sdks/python/src/helixdb/client.py</code> participates in circular imports with <code>__init__</code> and <code>async_client</code>. Fix: extract shared types or defer imports.</li><li><strong>High</strong> - Deep nesting (57 instances): <code>crates/planner/src/planning/selected/native/scoped/control_flow/tests.rs</code> reaches indentation depth 10. Fix: use early returns and guard clauses.</li><li><strong>High</strong> - Duplicated code: 127 repeated 6-line blocks across 78 files in <code>crates/db/fuzz/fuzz_targets/</code>. Fix: extract shared helpers.</li><li><strong>Medium</strong> - File handles without context managers: <code>sdks/python/src/helixdb/client.py</code> uses bare <code>open()</code> calls.</li></ul>
-<p>SDLC observations:</p>
-<ul><li><strong>High</strong> - Third-party GitHub Actions pinned to tags, not commit SHAs (supply-chain risk)</li><li><strong>Medium</strong> - No dependency update bot configured</li><li><strong>Medium</strong> - No vulnerability scan gate in CI</li><li><strong>Medium</strong> - <code>persist-credentials: false</code> not set on checkout</li></ul>
+<ul><li><strong>High</strong> – Import cycle in <code>sdks/python/src/helixdb/client.py</code> (affects SDK stability).</li><li><strong>High</strong> – File opened without context manager in <code>sdks/python/src/helixdb/client.py</code>.</li><li><strong>High</strong> – Deep nesting (max depth 10) in planner tests (<code>crates/planner/...</code>).</li><li><strong>High</strong> – Duplicated code blocks in multiple fuzz targets (<code>crates/db/fuzz/...</code>).</li></ul>
+<p><strong>CI / Hygiene</strong></p>
+<ul><li>GitHub Actions present but pinned to tags (<code>dtolnay/rust-toolchain@1.97.1</code>).</li><li>Dependency advisories: <code>tokio@1</code> CVE‑2021‑45710.</li><li>No Dependabot or vulnerability scan configured.</li></ul>
+<p><strong>Other Observations</strong></p>
+<ul><li>803 test files, 210 docs, 1 license, 1 Dockerfile.</li><li>No committed secrets detected.</li></ul>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p>HelixDB is a serious, well-structured database project with real engineering depth—the Rust core, unified query AST, and multi-SDK support are substantial. It&#39;s early-stage (no stars, in-memory default) but the architecture is sound. Teams building AI applications that need unified graph+vector storage should evaluate it; those needing production stability should wait for maturity.</p>
+<p>HelixDB is a well‑structured portfolio of Rust projects that deliver graph, vector, and full‑text search in a single transactional engine. The modular design and SDKs make it suitable for Rust, Python, TypeScript, and Go consumers. However, the Python SDK contains circular imports and some unsafe file handling, and the overall CI configuration needs tightening to guard against known vulnerabilities. Developers who need an integrated analytics engine with a Rust‑backed core should evaluate the current state, especially the SDK quality, before production deployment.</p>
             </div>
 
             
@@ -129,11 +138,11 @@ helix stop dev</code></pre>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">1,805<span> files</span></div>
+                        <div class="an-score">2,771<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>1487</b></li><li><span>Markdown</span><i style="width:2%"></i><b>31</b></li><li><span>JSON</span><i style="width:2%"></i><b>29</b></li><li><span>TOML</span><i style="width:2%"></i><b>24</b></li><li><span>Python</span><i style="width:1%"></i><b>21</b></li><li><span>Shell</span><i style="width:1%"></i><b>15</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>2039</b></li><li><span>Python</span><i style="width:3%"></i><b>65</b></li><li><span>JSON</span><i style="width:2%"></i><b>48</b></li><li><span>Markdown</span><i style="width:2%"></i><b>44</b></li><li><span>TOML</span><i style="width:1%"></i><b>30</b></li><li><span>TypeScript</span><i style="width:1%"></i><b>21</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Spring</span><span>Docker</span><span>Neo4j</span></p>
                     </div>
                 </div>
 
