@@ -172,11 +172,11 @@ Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is
 
 Crosses a domain boundary: 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **llmwiki** (B, 75.1). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **llmwiki** (B-, 74.9). Mean grade across the 2 audited members is 69.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **llmwiki** | AI & Data | Python | B 75.1 | 300 |
+| **llmwiki** | AI & Data | Python | B- 74.9 | 300 |
 | llm_wiki | Web & Interfaces | TypeScript | C 64.5 | 227 |
 
 ### c035 - 2 repositories
@@ -478,12 +478,12 @@ Keeper: **atomic-mail-agentic** (B-, 71). Mean grade across the 2 audited member
 
 All 2 in Systems & Infra.
 
-Keeper: **monocode** (C+, 66.4). Mean grade across the 2 audited members is 62.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **monocode** (C+, 66.4). Mean grade across the 2 audited members is 64.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **monocode** | Systems & Infra | Rust | C+ 66.4 | 1090 |
-| jcode | Systems & Infra | Rust | C- 59 | 1352 |
+| jcode | Systems & Infra | Rust | C 62.2 | 1352 |
 
 ### c038 - 2 repositories
 
