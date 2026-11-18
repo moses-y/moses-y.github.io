@@ -139,11 +139,11 @@ Keeper: **mlx-audio** (B-, 71.1). Mean grade across the 2 audited members is 70.
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **android-sms-gateway** (C-, 59.9). Mean grade across the 2 audited members is 52.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **android-sms-gateway** (C, 60.3). Mean grade across the 2 audited members is 52.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **android-sms-gateway** | Mobile | Kotlin | C- 59.9 | 335 |
+| **android-sms-gateway** | Mobile | Kotlin | C 60.3 | 335 |
 | httpsms | Systems & Infra | Go | D 45.2 | 430 |
 
 ### c031 - 2 repositories
@@ -457,11 +457,11 @@ Keeper: **public-apis** (B+, 81.4). Mean grade across the 2 audited members is 7
 
 All 2 in AI & Data.
 
-Keeper: **cadquery** (B-, 72.7). Mean grade across the 2 audited members is 71.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **cadquery** (B-, 72.1). Mean grade across the 2 audited members is 71.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **cadquery** | AI & Data | Python | B- 72.7 | 209 |
+| **cadquery** | AI & Data | Python | B- 72.1 | 209 |
 | build123d | AI & Data | Python | B- 71.1 | 649 |
 
 ### c032 - 2 repositories

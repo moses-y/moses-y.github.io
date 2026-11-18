@@ -9,7 +9,7 @@
     <!-- Open Graph -->
     <meta property="og:title" content="superplane - Moses Yebei">
     <meta property="og:description" content="The open source control plane for agentic engineering.">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/superplane.html">
 
@@ -17,7 +17,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="superplane">
     <meta name="twitter:description" content="The open source control plane for agentic engineering.">
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/superplane.html">
 
@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>November 12, 2026</span>
-                    <span>4 min read</span>
+                    <span>3 min read</span>
                     <span class="post-language">Go</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -82,41 +82,45 @@
             <div class="post-content numbered" id="post-content">
                 <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
                 <h3 id="the-problem">The Problem</h3>
-<p>Engineering teams need a deterministic engine that can coordinate multi‑step workflows across Git, CI/CD, cloud infra, and incident tools while preserving auditability and allowing human‑in‑the‑loop approvals. Existing script‑based glue is fragile, hard to version, and offers no unified UI for operators or AI agents.</p>
+<p>Engineering teams need an automated way to turn backlog issues into verified pull requests. Manual coordination of agents, CI, and approvals is error‑prone and slows delivery.</p>
 <h3 id="what-this-does">What This Does</h3>
-<p><code>SuperPlane</code> provides an open‑source control plane that models each workflow as a <strong>canvas</strong> (graph of nodes) stored in git (<code>canvas.yaml</code>). The runtime executes canvases, persisting state in a Postgres DB and exposing a web UI built with React (<code>web_src/</code>). Core server code lives in <code>pkg/server/server.go</code> and <code>pkg/public/server.go</code>, while the CLI (<code>cmd/cli/main.go</code>) offers administrative commands (e.g., <code>superplane run</code>, <code>superplane app create</code>). The Go backend (<code>pkg/…</code>) implements the orchestration engine, and the TypeScript/React front‑end (<code>web_src/</code>) renders dashboards and console panels defined in <code>canvas.yaml</code> and <code>console.yaml</code>.</p>
+<p>SuperPlane provides a <strong>control plane for agentic engineering</strong>. The core CLI (<code>cmd/cli/main.go</code>) orchestrates agent actions, verifies outcomes, and pushes changes back to GitHub. Agent logic lives in <code>pkg/agents/agent_tools</code>, where each tool (e.g., <code>access.go</code>, <code>anthropic/provider.go</code>) implements an action that can be called by the orchestrator. The renderer (<code>pkg/cli/core/renderer.go</code>) formats responses for human consumption, while the authorization service (<code>pkg/authorization/service.go</code>) enforces permission checks on every request.</p>
+<p>The database layer (<code>db/</code> and <code>pkg/database/db_context.go</code>) stores secrets, agent state, and audit logs. Web components (<code>web_src/</code>) expose a UI that visualises the factory workflow, but they do not drive the core logic.</p>
 <h3 id="how-it-is-wired">How It Is Wired</h3>
-<p><em>Entry → Server</em> – Execution starts in <code>cmd/server/main.go</code>, which creates a <code>pkg/server.Server</code> instance, reads configuration from <code>.env.example</code>, and calls <code>Server.Start()</code>. <code>Start()</code> registers HTTP routes (<code>pkg/public/server.go</code>) and launches background workers that poll the DB for pending runs.</p>
-<p><em>Entry → CLI</em> – <code>cmd/cli/main.go</code> builds a <code>cobra.Command</code> tree; each sub‑command ultimately calls functions in <code>pkg/cli/</code> (e.g., <code>RunCommand</code>), which invoke the same server‑side services (<code>pkg/server</code>) via the Go client library, ensuring CLI and HTTP paths share business logic.</p>
-<p><em>Run Lifecycle</em> – A new run is created by <code>pkg/run/create.go</code> (called from an HTTP trigger or CLI). It inserts a row in <code>runs</code> (SQL defined in <code>db/migrations/*.sql</code>), then enqueues a job in the internal worker queue (<code>pkg/worker/queue.go</code>). Workers pick up the job, resolve the canvas graph (<code>pkg/canvas/graph.go</code>), and execute each node by calling the component dispatcher (<code>pkg/component/dispatch.go</code>). Dispatch routes to concrete implementations in <code>pkg/component/&lt;integration&gt;/</code> (e.g., GitHub, AWS, Slack). Each component writes its output back to the <code>run_items</code> table and may emit events that trigger downstream nodes.</p>
-<p><em>UI Path</em> – The React app built from <code>web_src/</code> is compiled into <code>pkg/public/pkg/web/assets/dist/</code>. <code>pkg/public/server.go</code> serves <code>index.html</code> and static assets, while API endpoints (<code>/api/v1/runs</code>, <code>/api/v1/canvases</code>) are handled by <code>pkg/server/handlers/*.go</code>. The UI reads the same JSON payloads stored in the DB, displaying live run status, console panels, and allowing manual approvals.</p>
-<p><em>Key Ownership</em></p>
-<ul><li><code>cmd/server/main.go</code> – process bootstrap, config, server start.</li><li><code>pkg/server/server.go</code> – HTTP router, middleware, DB connection.</li><li><code>pkg/public/server.go</code> – static file server, SPA entry point.</li><li><code>pkg/run/*</code> – run creation, state persistence.</li><li><code>pkg/component/*</code> – integration implementations (largest blast radius; a bug here can affect external systems).</li><li><code>web_src/*</code> – React components, dashboard rendering.</li></ul>
-<p>No circular imports were observed; the call graph is a shallow hierarchy (CLI → server → run → component). The widest blast radius is the component dispatcher because it contacts external services.</p>
+<p>Execution starts at <code>main</code> in <code>cmd/cli/main.go</code> (line 10). It creates a <code>CommandContext</code> and calls <code>Execute</code>.</p>
+<ul><li><code>Execute</code> (pkg/agents/agent_tools/actions/access.go) is the most‑called hub (276 callers). It parses user input, resolves the organization ID (<code>ResolveOrganizationID</code>), and emits results.</li><li><code>Setup</code> (pkg/components/addmemory/add_memory.go) is invoked by 210 callers and prepares memory‑backed tools.</li><li><code>Run</code> (pkg/cli/core/command.go) drives the command loop and delegates to <code>Execute</code>.</li></ul>
+<p>The only outbound operation from the repo is <code>Execute → ResolveEnvironment</code>, which calls <code>secrets.GetIntegrationKeys</code> (crypto). File activity: <code>main → Execute</code> reads files via <code>os.ReadFile</code>. Database writes occur in <code>pkg/authorization/service.go</code> when checking permissions.</p>
+<p>Key files with the widest blast radius:</p>
+<ul><li><code>pkg/agents/agent_tools/actions/access.go</code> – 14 functions, 4 types, 101 callees, 66 callers.</li><li><code>pkg/components/addmemory/add_memory.go</code> – 20 functions, 26 callees, 105 callers.</li><li><code>pkg/authorization/service.go</code> – 53 functions, 8 callees, 19 callers.</li></ul>
+<p>A cycle exists between <code>Execute</code> and <code>ResolveEnvironment</code>, making any change to the permission model ripple through the entire orchestrator.</p>
 <h3 id="how-to-use-it">How To Use It</h3>
+<p><strong>Setup</strong></p>
 <pre data-lang="bash"><code># Clone the repo
 git clone https://github.com/moses-y/superplane
 cd superplane
 
-# Build the Go binaries (Makefile defines `make build`)
-make build          # produces ./bin/superplane-cli and ./bin/superplane-server
+# Install Go dependencies
+go mod download
 
-# Start a dev database (Docker Compose file provided)
-docker-compose -f docker-compose.dev.yml up -d db
-
-# Run the server (environment vars from .env.example)
-cp .env.example .env
-make run-server     # equivalent to: ./bin/superplane-server
-
-# In another terminal, start the UI build
-cd web_src &amp;&amp; npm ci &amp;&amp; npm run dev   # serves React SPA on localhost:3000</code></pre>
-<p>The server listens on <code>:8080</code> by default; the UI proxies to this endpoint. CLI commands are documented in <code>cmd/cli/main.go</code> (run <code>./bin/superplane-cli --help</code>).</p>
+# Build the CLI
+make build   # Makefile target exists</code></pre>
+<p><strong>Configuration</strong> Copy <code>.env.example</code> to <code>.env</code> and set required keys (e.g., <code>GITHUB_TOKEN</code>, <code>OPENAI_API_KEY</code>).</p>
+<p><strong>Running</strong></p>
+<pre data-lang="bash"><code># Start the CLI
+go run cmd/cli/main.go run &lt;issue-id&gt;</code></pre>
+<p>The CLI will parse the issue, run the relevant agent action, and push a PR back to the repository.</p>
+<p><em>If you prefer Docker:</em></p>
+<pre data-lang="bash"><code>docker build -t superplane .
+docker run -e GITHUB_TOKEN=... -e OPENAI_API_KEY=... superplane run &lt;issue-id&gt;</code></pre>
 <h3 id="real-world-use">Real‑World Use</h3>
-<p>A team can wire a PR‑preview app by defining a canvas (<code>apps/preview/canvas.yaml</code>) that triggers on a GitHub webhook, calls the <code>aws-ec2-create-instance</code> component, runs integration tests, and posts the preview URL back to the PR via the <code>slack-post-message</code> component. The UI automatically shows the run status and provides an “Approve” button for manual gating.</p>
+<p>A team uses SuperPlane to auto‑fix unit tests:</p>
+<pre data-lang="bash"><code>go run cmd/cli/main.go run ISSUE-123</code></pre>
+<p>The orchestrator invokes the <code>access</code> tool, which calls the Anthropic model to suggest changes, validates the PR, and merges it if confidence is above a threshold.</p>
 <h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<ul><li><strong>Medium – No CI/CD pipeline</strong> – No <code>.github/workflows</code> or other CI config; automated testing is not gated.</li><li><strong>Low – Secret‑related migrations</strong> – Migration files under <code>db/migrations/</code> reference “secrets” tables (<code>20250602182837_add-secrets.*</code>). Ensure no production secrets are hard‑coded.</li><li><strong>Low – Test coverage</strong> – 1917 test files exist, but no coverage reports are generated in the repo; consider adding <code>go test -cover</code> integration.</li><li><strong>Low – Documentation density</strong> – 102 markdown files present, but the top‑level README lacks explicit build/run instructions; the Makefile provides the missing commands.</li></ul>
+<ul><li><strong>High</strong> – No CI workflow for builds or tests (repo has 5566 files).</li><li><strong>High</strong> – No deploy gate for Dockerfile artifacts.</li><li><strong>Medium</strong> – Dependabot/renovate not configured.</li><li><strong>Medium</strong> – Container base image not pinned by digest.</li><li><strong>Low</strong> – Missing <code>.editorconfig</code>, <code>.gitattributes</code>, formatter config.</li></ul>
+<p>The repo contains tests (<code>test/</code>), a Dockerfile, and a license, but lacks automated build and deployment validation.</p>
 <h3 id="the-bottom-line">The Bottom Line</h3>
-<p><code>SuperPlane</code> supplies a cohesive Go‑backed orchestration engine with a React UI, suitable for teams that want deterministic, version‑controlled workflow automation and are comfortable managing a Postgres DB and Docker environment. It lacks an out‑of‑the‑box CI pipeline and could improve its onboarding docs, but the core architecture is clear and extensible for custom integrations. Target users are engineering ops groups building complex, multi‑system pipelines that require auditability and human approval steps.</p>
+<p>SuperPlane offers a robust, Go‑centric control plane that ties agent actions to GitHub workflows. Its modular design allows teams to plug in new tools, but the lack of CI and image pinning introduces risk. It is best suited for teams willing to add their own pipeline around the provided CLI and Docker image.</p>
             </div>
 
             
@@ -126,18 +130,18 @@ cd web_src &amp;&amp; npm ci &amp;&amp; npm run dev   # serves React SPA on loca
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">5<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">6,923<span> files</span></div>
+                        <div class="an-score">10,445<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Go</span><i style="width:100%"></i><b>2805</b></li><li><span>TypeScript</span><i style="width:63%"></i><b>1774</b></li><li><span>TSX</span><i style="width:35%"></i><b>980</b></li><li><span>JSON</span><i style="width:22%"></i><b>604</b></li><li><span>SQL</span><i style="width:13%"></i><b>367</b></li><li><span>Markdown</span><i style="width:2%"></i><b>65</b></li>
+                            <li><span>Go</span><i style="width:100%"></i><b>3962</b></li><li><span>TypeScript</span><i style="width:65%"></i><b>2556</b></li><li><span>TSX</span><i style="width:48%"></i><b>1906</b></li><li><span>SQL</span><i style="width:18%"></i><b>707</b></li><li><span>JSON</span><i style="width:15%"></i><b>604</b></li><li><span>Shell</span><i style="width:3%"></i><b>125</b></li>
                         </ul>
-                        <p class="an-fw"><span>React</span><span>Express</span><span>Rails</span><span>Docker</span></p>
+                        <p class="an-fw"><span>React</span><span>Express</span><span>Docker</span><span>Kubernetes</span></p>
                     </div>
                 </div>
 
@@ -156,7 +160,7 @@ cd web_src &amp;&amp; npm ci &amp;&amp; npm run dev   # serves React SPA on loca
                 <div class="an-block">
                     <span class="an-lab">Findings</span>
                     <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li><li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>db/migrations/20250602182837_add-secrets.down.sql, db/migrations/20250602182837_add-secrets.up.sql, db/migrations/20250721193920_add-domain-type-and-id-to-secrets.down.sql</code></span></li>
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>db/migrations/20250602182837_add-secrets.down.sql, db/migrations/20250602182837_add-secrets.up.sql, db/migrations/20250721193920_add-domain-type-and-id-to-secrets.down.sql</code></span></li>
                     </ul>
                 </div>
 
