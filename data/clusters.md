@@ -20,18 +20,18 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 7 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited members is 67.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited members is 68. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **agent-orchestrator** | Web & Interfaces | TypeScript | B 79.7 | 315 |
 | cezar | Web & Interfaces | TypeScript | B 78.8 | 1915 |
-| paseo | Web & Interfaces | TypeScript | B- 72.4 | 1647 |
+| paseo | Web & Interfaces | TypeScript | B- 73 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | B- 70 | 1730 |
 | mco | AI & Data | Python | C+ 66.7 | 568 |
 | orca | Web & Interfaces | TypeScript | C 61.6 | 6335 |
 | parallel-code | Web & Interfaces | TypeScript | C- 57.7 | 254 |
-| Maestro | Web & Interfaces | TypeScript | C- 54.6 | 1456 |
+| Maestro | Web & Interfaces | TypeScript | C- 56.6 | 1456 |
 
 ### c002 - 6 repositories
 
@@ -104,13 +104,13 @@ Keeper: **obsidian-mind** (B+, 80.6). Mean grade across the 4 audited members is
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **winpodx** (C, 62.3). Mean grade across the 3 audited members is 58.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **winpodx** (C, 62.3). Mean grade across the 3 audited members is 57.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **winpodx** | AI & Data | Python | C 62.3 | 502 |
 | winboat | Web & Interfaces | TypeScript | C- 57.8 | 121 |
-| winapps | Systems & Infra | Shell | C- 55.2 | 245 |
+| winapps | Systems & Infra | Shell | C- 53.2 | 245 |
 
 ### c015 - 3 repositories
 
