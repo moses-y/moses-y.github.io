@@ -65,11 +65,11 @@ Keeper: **hyprnote** (C, 63.6). Mean grade across the 4 audited members is 55.3.
 
 Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **FluidVoice** (C, 63.1). Mean grade across the 4 audited members is 56.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 62). Mean grade across the 4 audited members is 56.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FluidVoice** | Mobile | Swift | C 63.1 | 186 |
+| **FluidVoice** | Mobile | Swift | C 62 | 186 |
 | VoiceInk | Mobile | Swift | C- 57.4 | 231 |
 | pindrop | Mobile | Swift | C- 54.5 | 569 |
 | lipflow | AI & Data | Python | C- 50.8 | 87 |
@@ -128,11 +128,11 @@ Keeper: **free-my-tv** (C, 61.3). Mean grade across the 3 audited members is 56.
 
 Crosses a domain boundary: 1 AI & Data, 1 Mobile. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mlx-audio** (B-, 71.2). Mean grade across the 2 audited members is 70.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mlx-audio** (B-, 71.1). Mean grade across the 2 audited members is 70.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **mlx-audio** | AI & Data | Python | B- 71.2 | 574 |
+| **mlx-audio** | AI & Data | Python | B- 71.1 | 574 |
 | mlx-audio-swift | Mobile | Swift | C+ 69.7 | 97 |
 
 ### c027 - 2 repositories
@@ -161,12 +161,12 @@ Keeper: **gpu-hot** (C, 62.9). Mean grade across the 2 audited members is 53.2. 
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is 68.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is 68.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **ai-job-search** | Agent Skills & Plugins | Python | B+ 82.3 | 212 |
-| career-ops | Web & Interfaces | JavaScript | C- 54.2 | 99 |
+| career-ops | Web & Interfaces | JavaScript | C- 55 | 99 |
 
 ### c034 - 2 repositories
 
@@ -277,11 +277,11 @@ Keeper: **BeautySmart** (C+, 66.2). Mean grade across the 3 audited members is 5
 
 All 3 in Web & Interfaces.
 
-Keeper: **n8n** (C+, 66.7). Mean grade across the 3 audited members is 61.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **n8n** (B-, 70.1). Mean grade across the 3 audited members is 62.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **n8n** | Web & Interfaces | TypeScript | C+ 66.7 | 17556 |
+| **n8n** | Web & Interfaces | TypeScript | B- 70.1 | 17556 |
 | n8n-as-code | Web & Interfaces | TypeScript | C- 59.6 | 357 |
 | VibeWorkflowPlatform | Web & Interfaces | TypeScript | C- 59.1 | 2203 |
 
@@ -424,11 +424,11 @@ Keeper: **client-python** (B, 78.1). Mean grade across the 2 audited members is 
 
 All 2 in Web & Interfaces.
 
-Keeper: **pluely** (C, 60.5). Mean grade across the 2 audited members is 50. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **pluely** (C-, 59.4). Mean grade across the 2 audited members is 49.4. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **pluely** | Web & Interfaces | TypeScript | C 60.5 | 224 |
+| **pluely** | Web & Interfaces | TypeScript | C- 59.4 | 224 |
 | natively-cluely-ai-assistant | Web & Interfaces | TypeScript | F 39.4 | 182 |
 
 ### c028 - 2 repositories
@@ -532,4 +532,4 @@ Keeper: **decimen-optical-transfer** (C+, 69). Mean grade across the 2 audited m
 
 ---
 
-Generated from data/clusters.json built 2026-11-17. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-18. Regenerate with `node src/stages/build-relations.js`.
