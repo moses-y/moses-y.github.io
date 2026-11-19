@@ -37,7 +37,7 @@ Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited member
 
 Crosses a domain boundary: 3 Agent Skills & Plugins, 3 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **openskills** (B+, 81.9). Mean grade across the 5 audited members is 74.5. 1 of 6 (17%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **openskills** (B+, 81.9). Mean grade across the 5 audited members is 70.8. 1 of 6 (17%) have not been audited, so a better keeper may be hiding among them.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ Keeper: **openskills** (B+, 81.9). Mean grade across the 5 audited members is 74
 | mercury-agent-skills | Web & Interfaces | JavaScript | B 75.3 | 151 |
 | skills | Web & Interfaces | TypeScript | B- 73.6 | 67 |
 | brooklyn-skills | Agent Skills & Plugins | JavaScript | B- 71.1 | 24 |
-| agent-skills | Agent Skills & Plugins | JavaScript | B- 70.5 | 56 |
+| agent-skills | Agent Skills & Plugins | JavaScript | C- 52.1 | 56 |
 | Remotion-skills | Agent Skills & Plugins | TypeScript | not audited | 267 |
 
 ### c003 - 4 repositories
@@ -253,13 +253,13 @@ Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 66.
 
 All 3 in Web & Interfaces.
 
-Keeper: **continue** (C+, 67.9). Mean grade across the 3 audited members is 61.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **continue** (C+, 67.9). Mean grade across the 3 audited members is 61.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 67.9 | 3058 |
 | oh-my-openagent | Web & Interfaces | TypeScript | C 60.6 | 6746 |
-| opencode | Web & Interfaces | TypeScript | C- 55.1 | 2755 |
+| opencode | Web & Interfaces | TypeScript | C- 57 | 2755 |
 
 ### c009 - 3 repositories
 
@@ -301,12 +301,12 @@ Keeper: **FinRL** (C+, 65). Mean grade across the 3 audited members is 52.7. Eve
 
 All 3 in Web & Interfaces.
 
-Keeper: **OpenHands** (B-, 71.6). Mean grade across the 3 audited members is 58.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenHands** (B-, 71.6). Mean grade across the 3 audited members is 57.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **OpenHands** | Web & Interfaces | TypeScript | B- 71.6 | 2658 |
-| Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C 61 | 1548 |
+| Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C 60.2 | 1548 |
 | learn-anything.xyz | Web & Interfaces | TypeScript | D 41.8 | 209 |
 
 ### c014 - 3 repositories
@@ -325,34 +325,34 @@ Keeper: **OpenSandbox** (B-, 71.6). Mean grade across the 2 audited members is 7
 
 All 2 in AI & Data.
 
-Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 50.9). Mean grade across the 2 audited members is 49.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** (C-, 50.7). Mean grade across the 2 audited members is 49. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 50.9 | 2 |
+| **YOLOv8_Segmentation_DeepSORT_TRACKING_SpeedEstimation** | AI & Data | Jupyter Notebook | C- 50.7 | 2 |
 | ObjectCountingYOLOv8DeepSORT | AI & Data | Jupyter Notebook | D 47.4 | 2 |
 
 ### c017 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **maplibre-gl-lidar** (B-, 73.2). Mean grade across the 2 audited members is 70.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **maplibre-gl-lidar** (B-, 73.2). Mean grade across the 2 audited members is 71.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **maplibre-gl-lidar** | Web & Interfaces | TypeScript | B- 73.2 | 69 |
-| maplibre-gl-usgs-lidar | Web & Interfaces | TypeScript | C+ 68.5 | 44 |
+| maplibre-gl-usgs-lidar | Web & Interfaces | TypeScript | C+ 69.3 | 44 |
 
 ### c018 - 2 repositories
 
 All 2 in Web & Interfaces.
 
-Keeper: **Manta** (B+, 81.8). Mean grade across the 2 audited members is 73.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Manta** (B+, 81.8). Mean grade across the 2 audited members is 71.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **Manta** | Web & Interfaces | JSX | B+ 81.8 | 374 |
-| invoice-builder | Web & Interfaces | TypeScript | C+ 65.8 | 509 |
+| invoice-builder | Web & Interfaces | TypeScript | C 61.7 | 509 |
 
 ### c019 - 2 repositories
 
@@ -532,4 +532,4 @@ Keeper: **decimen-optical-transfer** (C+, 69). Mean grade across the 2 audited m
 
 ---
 
-Generated from data/clusters.json built 2026-11-18. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-19. Regenerate with `node src/stages/build-relations.js`.
