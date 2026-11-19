@@ -37,11 +37,11 @@ Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited member
 
 Crosses a domain boundary: 3 Agent Skills & Plugins, 3 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **openskills** (B+, 81.9). Mean grade across the 5 audited members is 70.8. 1 of 6 (17%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **openskills** (B+, 81.8). Mean grade across the 5 audited members is 70.8. 1 of 6 (17%) have not been audited, so a better keeper may be hiding among them.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **openskills** | Web & Interfaces | TypeScript | B+ 81.9 | 94 |
+| **openskills** | Web & Interfaces | TypeScript | B+ 81.8 | 94 |
 | mercury-agent-skills | Web & Interfaces | JavaScript | B 75.3 | 151 |
 | skills | Web & Interfaces | TypeScript | B- 73.6 | 67 |
 | brooklyn-skills | Agent Skills & Plugins | JavaScript | B- 71.1 | 24 |
@@ -369,12 +369,12 @@ Keeper: **AgenticTrading** (C-, 56.3). Mean grade across the 2 audited members i
 
 All 2 in Web & Interfaces.
 
-Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 63.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 64. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **altersend** | Web & Interfaces | TypeScript | C+ 69.9 | 1029 |
-| alt-sendme | Web & Interfaces | TypeScript | C- 56.7 | 116 |
+| alt-sendme | Web & Interfaces | TypeScript | C- 58.1 | 116 |
 
 ### c021 - 2 repositories
 
