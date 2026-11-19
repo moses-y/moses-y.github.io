@@ -52,11 +52,11 @@ Keeper: **openskills** (B+, 81.8). Mean grade across the 5 audited members is 70
 
 Crosses a domain boundary: 2 Systems & Infra, 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **hyprnote** (C, 63.6). Mean grade across the 4 audited members is 55.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **hyprnote** (C, 64.6). Mean grade across the 4 audited members is 55.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **hyprnote** | Systems & Infra | Rust | C 63.6 | 3671 |
+| **hyprnote** | Systems & Infra | Rust | C 64.6 | 3671 |
 | stenoai | AI & Data | Python | C- 58.4 | 62 |
 | murmure | Web & Interfaces | TypeScript | C- 52.3 | 435 |
 | meetily | Systems & Infra | Rust | D 46.7 | 509 |
@@ -294,7 +294,7 @@ Keeper: **FinRL** (C+, 65). Mean grade across the 3 audited members is 52.7. Eve
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FinRL** | AI & Data | Jupyter Notebook | C+ 65 | 195 |
-| tensortrade | AI & Data | Python | C- 53.3 | 153 |
+| tensortrade | AI & Data | Python | C- 53.2 | 153 |
 | TradeMaster | AI & Data | Python | F 39.9 | 776 |
 
 ### c012 - 3 repositories
@@ -358,12 +358,12 @@ Keeper: **Manta** (B+, 81.8). Mean grade across the 2 audited members is 71.8. E
 
 All 2 in AI & Data.
 
-Keeper: **AgenticTrading** (C-, 56.3). Mean grade across the 2 audited members is 55.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **TradingAgents** (C-, 56.6). Mean grade across the 2 audited members is 56.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **AgenticTrading** | AI & Data | Python | C- 56.3 | 539 |
-| TradingAgents | AI & Data | Python | C- 55.1 | 73 |
+| **TradingAgents** | AI & Data | Python | C- 56.6 | 73 |
+| AgenticTrading | AI & Data | Python | C- 56.3 | 539 |
 
 ### c020 - 2 repositories
 
@@ -380,34 +380,34 @@ Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 64.
 
 All 2 in AI & Data.
 
-Keeper: **livecc** (D, 45.9). Mean grade across the 2 audited members is 43.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **livecc** (D, 45.8). Mean grade across the 2 audited members is 43.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **livecc** | AI & Data | Python | D 45.9 | 95 |
+| **livecc** | AI & Data | Python | D 45.8 | 95 |
 | VideoAgent | AI & Data | Python | D 40.8 | 853 |
 
 ### c022 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **graph_maker** (C, 61.9). Mean grade across the 2 audited members is 60.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **graph_maker** (C, 61.9). Mean grade across the 2 audited members is 58.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **graph_maker** | AI & Data | Jupyter Notebook | C 61.9 | 16 |
-| knowledge_graph | AI & Data | Jupyter Notebook | C- 58.3 | 42 |
+| knowledge_graph | AI & Data | Jupyter Notebook | C- 55.9 | 42 |
 
 ### c023 - 2 repositories
 
 All 2 in AI & Data.
 
-Keeper: **awesome-ai-apps** (D, 49.5). Mean grade across the 2 audited members is 49.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **awesome-llm-apps** (C-, 51.1). Mean grade across the 2 audited members is 50.3. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **awesome-ai-apps** | AI & Data | Python | D 49.5 | 666 |
-| awesome-llm-apps | AI & Data | Python | D 49.3 | 1073 |
+| **awesome-llm-apps** | AI & Data | Python | C- 51.1 | 1073 |
+| awesome-ai-apps | AI & Data | Python | D 49.5 | 666 |
 
 ### c025 - 2 repositories
 
