@@ -37,13 +37,13 @@ Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited member
 
 Crosses a domain boundary: 3 Agent Skills & Plugins, 3 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **openskills** (B+, 81.8). Mean grade across the 5 audited members is 70.8. 1 of 6 (17%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **openskills** (B+, 81.8). Mean grade across the 5 audited members is 71.8. 1 of 6 (17%) have not been audited, so a better keeper may be hiding among them.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **openskills** | Web & Interfaces | TypeScript | B+ 81.8 | 94 |
+| skills | Web & Interfaces | TypeScript | B 78.5 | 67 |
 | mercury-agent-skills | Web & Interfaces | JavaScript | B 75.3 | 151 |
-| skills | Web & Interfaces | TypeScript | B- 73.6 | 67 |
 | brooklyn-skills | Agent Skills & Plugins | JavaScript | B- 71.1 | 24 |
 | agent-skills | Agent Skills & Plugins | JavaScript | C- 52.1 | 56 |
 | Remotion-skills | Agent Skills & Plugins | TypeScript | not audited | 267 |
@@ -128,12 +128,12 @@ Keeper: **free-my-tv** (C, 61.3). Mean grade across the 3 audited members is 56.
 
 Crosses a domain boundary: 1 AI & Data, 1 Mobile. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **mlx-audio** (B-, 71.1). Mean grade across the 2 audited members is 70.4. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **mlx-audio** (B-, 71.1). Mean grade across the 2 audited members is 70.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **mlx-audio** | AI & Data | Python | B- 71.1 | 574 |
-| mlx-audio-swift | Mobile | Swift | C+ 69.7 | 97 |
+| mlx-audio-swift | Mobile | Swift | B- 70.3 | 97 |
 
 ### c027 - 2 repositories
 
@@ -402,12 +402,12 @@ Keeper: **graph_maker** (C, 61.9). Mean grade across the 2 audited members is 58
 
 All 2 in AI & Data.
 
-Keeper: **awesome-llm-apps** (C-, 51.1). Mean grade across the 2 audited members is 50.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **awesome-llm-apps** (C-, 51.1). Mean grade across the 2 audited members is 49. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **awesome-llm-apps** | AI & Data | Python | C- 51.1 | 1073 |
-| awesome-ai-apps | AI & Data | Python | D 49.5 | 666 |
+| awesome-ai-apps | AI & Data | Python | D 46.9 | 666 |
 
 ### c025 - 2 repositories
 
