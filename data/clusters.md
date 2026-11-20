@@ -194,12 +194,12 @@ Keeper: **agentskills** (B-, 71.4). Mean grade across the 2 audited members is 7
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **flashvad** (B+, 80.2). Mean grade across the 2 audited members is 66.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **flashvad** (B+, 80.2). Mean grade across the 2 audited members is 70.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **flashvad** | AI & Data | Python | B+ 80.2 | 166 |
-| ten-vad | Systems & Infra | C | C- 53.2 | 147 |
+| ten-vad | Systems & Infra | C | C 61.2 | 147 |
 
 ### c042 - 2 repositories
 
@@ -523,12 +523,12 @@ Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 6
 
 All 2 in Web & Interfaces.
 
-Keeper: **decimen-optical-transfer** (C+, 69). Mean grade across the 2 audited members is 66.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **qr-data-transfer** (C, 63.6). Mean grade across the 2 audited members is 62.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **decimen-optical-transfer** | Web & Interfaces | TypeScript | C+ 69 | 19 |
-| qr-data-transfer | Web & Interfaces | TypeScript | C 63.6 | 44 |
+| **qr-data-transfer** | Web & Interfaces | TypeScript | C 63.6 | 44 |
+| decimen-optical-transfer | Web & Interfaces | TypeScript | C 62 | 19 |
 
 ---
 
