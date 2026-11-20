@@ -52,13 +52,13 @@ Keeper: **openskills** (B+, 81.8). Mean grade across the 5 audited members is 71
 
 Crosses a domain boundary: 2 Systems & Infra, 1 AI & Data, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **hyprnote** (C, 64.6). Mean grade across the 4 audited members is 55.5. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **hyprnote** (C, 64.6). Mean grade across the 4 audited members is 55.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **hyprnote** | Systems & Infra | Rust | C 64.6 | 3671 |
 | stenoai | AI & Data | Python | C- 58.4 | 62 |
-| murmure | Web & Interfaces | TypeScript | C- 52.3 | 435 |
+| murmure | Web & Interfaces | TypeScript | C- 53.6 | 435 |
 | meetily | Systems & Infra | Rust | D 46.7 | 509 |
 
 ### c004 - 4 repositories
@@ -139,12 +139,12 @@ Keeper: **mlx-audio** (B-, 71.1). Mean grade across the 2 audited members is 70.
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **android-sms-gateway** (C, 60.3). Mean grade across the 2 audited members is 52.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **android-sms-gateway** (C, 60.3). Mean grade across the 2 audited members is 54.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **android-sms-gateway** | Mobile | Kotlin | C 60.3 | 335 |
-| httpsms | Systems & Infra | Go | D 45.2 | 430 |
+| httpsms | Systems & Infra | Go | D 49 | 430 |
 
 ### c031 - 2 repositories
 
@@ -532,4 +532,4 @@ Keeper: **decimen-optical-transfer** (C+, 69). Mean grade across the 2 audited m
 
 ---
 
-Generated from data/clusters.json built 2026-11-19. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-20. Regenerate with `node src/stages/build-relations.js`.
