@@ -97,7 +97,7 @@ Keeper: **obsidian-mind** (B+, 80.6). Mean grade across the 4 audited members is
 | --- | --- | --- | --- | --- |
 | **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.6 | 187 |
 | open-second-brain | Web & Interfaces | TypeScript | B 79.9 | 2597 |
-| MegaMemory | Web & Interfaces | TypeScript | B 78.8 | 44 |
+| MegaMemory | Web & Interfaces | TypeScript | B 78.6 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | C+ 68.8 | 208 |
 
 ### c013 - 3 repositories
@@ -512,12 +512,12 @@ Keeper: **tiny-tts** (C-, 50.7). Mean grade across the 1 audited members is 50.7
 
 All 2 in AI & Data.
 
-Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 61.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 63.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **VoiceStudio** | AI & Data | Python | C+ 66.8 | 2062 |
-| voicebox | AI & Data | Python | C- 56.5 | 677 |
+| voicebox | AI & Data | Python | C 60.6 | 677 |
 
 ### c041 - 2 repositories
 
