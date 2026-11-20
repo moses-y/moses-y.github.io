@@ -20,7 +20,7 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 7 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited members is 68. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited members is 68.6. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
@@ -29,8 +29,8 @@ Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited member
 | paseo | Web & Interfaces | TypeScript | B- 73 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | B- 70 | 1730 |
 | mco | AI & Data | Python | C+ 66.7 | 568 |
+| parallel-code | Web & Interfaces | TypeScript | C 62.6 | 254 |
 | orca | Web & Interfaces | TypeScript | C 61.6 | 6335 |
-| parallel-code | Web & Interfaces | TypeScript | C- 57.7 | 254 |
 | Maestro | Web & Interfaces | TypeScript | C- 56.6 | 1456 |
 
 ### c002 - 6 repositories
@@ -435,12 +435,12 @@ Keeper: **pluely** (C-, 59.4). Mean grade across the 2 audited members is 49.4. 
 
 All 2 in Web & Interfaces.
 
-Keeper: **FileSync** (C, 62.5). Mean grade across the 2 audited members is 61.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FileSync** (C, 62.5). Mean grade across the 2 audited members is 60. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FileSync** | Web & Interfaces | JavaScript | C 62.5 | 44 |
-| OpenDrop | Web & Interfaces | JavaScript | C- 59.7 | 12 |
+| OpenDrop | Web & Interfaces | JavaScript | C- 57.6 | 12 |
 
 ### c029 - 2 repositories
 
