@@ -161,11 +161,11 @@ Keeper: **gpu-hot** (C, 62.9). Mean grade across the 2 audited members is 53.2. 
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **ai-job-search** (B+, 82.3). Mean grade across the 2 audited members is 68.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **ai-job-search** (A-, 86.9). Mean grade across the 2 audited members is 71. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **ai-job-search** | Agent Skills & Plugins | Python | B+ 82.3 | 212 |
+| **ai-job-search** | Agent Skills & Plugins | Python | A- 86.9 | 212 |
 | career-ops | Web & Interfaces | JavaScript | C- 55 | 99 |
 
 ### c034 - 2 repositories
@@ -194,11 +194,11 @@ Keeper: **agentskills** (B-, 71.4). Mean grade across the 2 audited members is 7
 
 Crosses a domain boundary: 1 AI & Data, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **flashvad** (B+, 80.2). Mean grade across the 2 audited members is 70.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **flashvad** (B+, 80.7). Mean grade across the 2 audited members is 71. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **flashvad** | AI & Data | Python | B+ 80.2 | 166 |
+| **flashvad** | AI & Data | Python | B+ 80.7 | 166 |
 | ten-vad | Systems & Infra | C | C 61.2 | 147 |
 
 ### c042 - 2 repositories
@@ -216,11 +216,11 @@ Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 69
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **AIUsage** (C+, 69.2). Mean grade across the 2 audited members is 66.1. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AIUsage** (C+, 66.4). Mean grade across the 2 audited members is 64.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **AIUsage** | Mobile | Swift | C+ 69.2 | 459 |
+| **AIUsage** | Mobile | Swift | C+ 66.4 | 459 |
 | quotio | Systems & Infra | Rust | C 63 | 277 |
 
 ### c044 - 2 repositories
