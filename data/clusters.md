@@ -253,12 +253,12 @@ Keeper: **forgetful** (B-, 71.5). Mean grade across the 4 audited members is 66.
 
 All 3 in Web & Interfaces.
 
-Keeper: **continue** (C+, 67.9). Mean grade across the 3 audited members is 61.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **continue** (C+, 67.9). Mean grade across the 3 audited members is 61.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **continue** | Web & Interfaces | TypeScript | C+ 67.9 | 3058 |
-| oh-my-openagent | Web & Interfaces | TypeScript | C 60.6 | 6746 |
+| oh-my-openagent | Web & Interfaces | TypeScript | C 60.8 | 6746 |
 | opencode | Web & Interfaces | TypeScript | C- 57 | 2755 |
 
 ### c009 - 3 repositories
@@ -301,13 +301,13 @@ Keeper: **FinRL** (C+, 65). Mean grade across the 3 audited members is 52.7. Eve
 
 All 3 in Web & Interfaces.
 
-Keeper: **OpenHands** (B-, 71.6). Mean grade across the 3 audited members is 57.9. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **OpenHands** (B-, 71.6). Mean grade across the 3 audited members is 57.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **OpenHands** | Web & Interfaces | TypeScript | B- 71.6 | 2658 |
 | Personal_AI_Infrastructure | Web & Interfaces | TypeScript | C 60.2 | 1548 |
-| learn-anything.xyz | Web & Interfaces | TypeScript | D 41.8 | 209 |
+| learn-anything.xyz | Web & Interfaces | TypeScript | D 41.6 | 209 |
 
 ### c014 - 3 repositories
 
@@ -380,12 +380,12 @@ Keeper: **altersend** (C+, 69.9). Mean grade across the 2 audited members is 64.
 
 All 2 in AI & Data.
 
-Keeper: **livecc** (D, 45.8). Mean grade across the 2 audited members is 43.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **livecc** (D, 45.8). Mean grade across the 2 audited members is 43.2. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **livecc** | AI & Data | Python | D 45.8 | 95 |
-| VideoAgent | AI & Data | Python | D 40.8 | 853 |
+| VideoAgent | AI & Data | Python | D 40.6 | 853 |
 
 ### c022 - 2 repositories
 
@@ -523,13 +523,13 @@ Keeper: **VoiceStudio** (C+, 66.8). Mean grade across the 2 audited members is 6
 
 All 2 in Web & Interfaces.
 
-Keeper: **qr-data-transfer** (C, 63.6). Mean grade across the 2 audited members is 62.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **qr-data-transfer** (C, 63.5). Mean grade across the 2 audited members is 62.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **qr-data-transfer** | Web & Interfaces | TypeScript | C 63.6 | 44 |
+| **qr-data-transfer** | Web & Interfaces | TypeScript | C 63.5 | 44 |
 | decimen-optical-transfer | Web & Interfaces | TypeScript | C 62 | 19 |
 
 ---
 
-Generated from data/clusters.json built 2026-11-20. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-21. Regenerate with `node src/stages/build-relations.js`.
