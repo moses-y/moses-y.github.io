@@ -435,11 +435,11 @@ Keeper: **pluely** (C-, 59.4). Mean grade across the 2 audited members is 49.4. 
 
 All 2 in Web & Interfaces.
 
-Keeper: **FileSync** (C, 62.5). Mean grade across the 2 audited members is 60. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FileSync** (C+, 65.3). Mean grade across the 2 audited members is 61.5. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **FileSync** | Web & Interfaces | JavaScript | C 62.5 | 44 |
+| **FileSync** | Web & Interfaces | JavaScript | C+ 65.3 | 44 |
 | OpenDrop | Web & Interfaces | JavaScript | C- 57.6 | 12 |
 
 ### c029 - 2 repositories
