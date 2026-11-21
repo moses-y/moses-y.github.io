@@ -91,12 +91,12 @@ Keeper: **google-maps-scraper** (C, 63.2). Mean grade across the 4 audited membe
 
 Crosses a domain boundary: 3 Web & Interfaces, 1 Agent Skills & Plugins. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **obsidian-mind** (B+, 80.6). Mean grade across the 4 audited members is 77. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **open-second-brain** (B+, 84). Mean grade across the 4 audited members is 78. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **obsidian-mind** | Agent Skills & Plugins | TypeScript | B+ 80.6 | 187 |
-| open-second-brain | Web & Interfaces | TypeScript | B 79.9 | 2597 |
+| **open-second-brain** | Web & Interfaces | TypeScript | B+ 84 | 2597 |
+| obsidian-mind | Agent Skills & Plugins | TypeScript | B+ 80.6 | 187 |
 | MegaMemory | Web & Interfaces | TypeScript | B 78.6 | 44 |
 | agentmemory | Web & Interfaces | TypeScript | C+ 68.8 | 208 |
 
@@ -313,12 +313,12 @@ Keeper: **OpenHands** (B-, 71.6). Mean grade across the 3 audited members is 57.
 
 All 3 in Systems & Infra.
 
-Keeper: **OpenSandbox** (B-, 71.6). Mean grade across the 2 audited members is 70.1. 1 of 3 (33%) have not been audited, so a better keeper may be hiding among them.
+Keeper: **CubeSandbox** (C+, 68.6). Mean grade across the 2 audited members is 68.4. 1 of 3 (33%) have not been audited, so a better keeper may be hiding among them.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **OpenSandbox** | Systems & Infra | Go | B- 71.6 | 2144 |
-| CubeSandbox | Systems & Infra | Go | C+ 68.6 | 1702 |
+| **CubeSandbox** | Systems & Infra | Go | C+ 68.6 | 1702 |
+| OpenSandbox | Systems & Infra | Go | C+ 68.2 | 2144 |
 | substrate | Systems & Infra | Go | not audited | 14038 |
 
 ### c016 - 2 repositories
@@ -468,12 +468,12 @@ Keeper: **cadquery** (B-, 72.1). Mean grade across the 2 audited members is 71.6
 
 All 2 in Systems & Infra.
 
-Keeper: **rust-genai** (C+, 68.2). Mean grade across the 2 audited members is 66.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **rust-genai** (C+, 68.2). Mean grade across the 2 audited members is 68.1. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **rust-genai** | Systems & Infra | Rust | C+ 68.2 | 187 |
-| aisix | Systems & Infra | Rust | C+ 65.4 | 526 |
+| aisix | Systems & Infra | Rust | C+ 67.9 | 526 |
 
 ### c036 - 2 repositories
 
