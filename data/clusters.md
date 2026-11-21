@@ -347,11 +347,11 @@ Keeper: **maplibre-gl-lidar** (B-, 73.2). Mean grade across the 2 audited member
 
 All 2 in Web & Interfaces.
 
-Keeper: **Manta** (B+, 81.8). Mean grade across the 2 audited members is 71.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **Manta** (B+, 81.6). Mean grade across the 2 audited members is 71.7. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **Manta** | Web & Interfaces | JSX | B+ 81.8 | 374 |
+| **Manta** | Web & Interfaces | JSX | B+ 81.6 | 374 |
 | invoice-builder | Web & Interfaces | TypeScript | C 61.7 | 509 |
 
 ### c019 - 2 repositories
