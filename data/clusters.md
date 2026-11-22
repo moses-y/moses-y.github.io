@@ -205,23 +205,23 @@ Keeper: **flashvad** (B+, 80.7). Mean grade across the 2 audited members is 71. 
 
 Crosses a domain boundary: 1 Agent Skills & Plugins, 1 Web & Interfaces. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 69.8. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **no-ai-slop** (B-, 74.5). Mean grade across the 2 audited members is 71.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **no-ai-slop** | Agent Skills & Plugins | Python | B- 74.5 | 13 |
-| avoid-ai-writing | Web & Interfaces | JavaScript | C+ 65.2 | 50 |
+| avoid-ai-writing | Web & Interfaces | JavaScript | C+ 69.2 | 50 |
 
 ### c043 - 2 repositories
 
 Crosses a domain boundary: 1 Mobile, 1 Systems & Infra. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **AIUsage** (C+, 66.4). Mean grade across the 2 audited members is 64.7. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **AIUsage** (C+, 66.4). Mean grade across the 2 audited members is 66. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **AIUsage** | Mobile | Swift | C+ 66.4 | 459 |
-| quotio | Systems & Infra | Rust | C 63 | 277 |
+| quotio | Systems & Infra | Rust | C+ 65.6 | 277 |
 
 ### c044 - 2 repositories
 
@@ -532,4 +532,4 @@ Keeper: **qr-data-transfer** (C, 63.5). Mean grade across the 2 audited members 
 
 ---
 
-Generated from data/clusters.json built 2026-11-21. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-22. Regenerate with `node src/stages/build-relations.js`.
