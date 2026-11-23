@@ -20,12 +20,12 @@ Each group names a keeper: the highest-graded member, breaking ties on stars and
 
 Crosses a domain boundary: 7 Web & Interfaces, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **agent-orchestrator** (B, 79.7). Mean grade across the 8 audited members is 68.6. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **cezar** (B, 79.8). Mean grade across the 8 audited members is 68.8. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **agent-orchestrator** | Web & Interfaces | TypeScript | B 79.7 | 315 |
-| cezar | Web & Interfaces | TypeScript | B 78.8 | 1915 |
+| **cezar** | Web & Interfaces | TypeScript | B 79.8 | 1915 |
+| agent-orchestrator | Web & Interfaces | TypeScript | B 79.7 | 315 |
 | paseo | Web & Interfaces | TypeScript | B- 73 | 1647 |
 | manaflow | Web & Interfaces | TypeScript | B- 70 | 1730 |
 | mco | AI & Data | Python | C+ 66.7 | 568 |
@@ -65,14 +65,14 @@ Keeper: **hyprnote** (C, 64.6). Mean grade across the 4 audited members is 55.8.
 
 Crosses a domain boundary: 3 Mobile, 1 AI & Data. That is the interesting case - the same shape of problem solved in two different parts of the estate.
 
-Keeper: **FluidVoice** (C, 62). Mean grade across the 4 audited members is 56.2. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **FluidVoice** (C, 62). Mean grade across the 4 audited members is 54.9. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **FluidVoice** | Mobile | Swift | C 62 | 186 |
 | VoiceInk | Mobile | Swift | C- 57.4 | 231 |
 | pindrop | Mobile | Swift | C- 54.5 | 569 |
-| lipflow | AI & Data | Python | C- 50.8 | 87 |
+| lipflow | AI & Data | Python | D 45.5 | 87 |
 
 ### c005 - 4 repositories
 
@@ -232,7 +232,7 @@ Keeper: **free-for-dev** (C+, 68.1). Mean grade across the 2 audited members is 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
 | **free-for-dev** | Web & Interfaces | HTML | C+ 68.1 | 10 |
-| free-for-devs | Systems & Infra |  | C 62.6 | 3 |
+| free-for-devs | Systems & Infra |  | C 62.4 | 3 |
 
 ## Groups inside a single domain
 
@@ -501,11 +501,11 @@ Keeper: **atomic-mail-agentic** (B-, 71). Mean grade across the 2 audited member
 
 All 2 in Systems & Infra.
 
-Keeper: **monocode** (C+, 66.4). Mean grade across the 2 audited members is 64.3. Every member is audited, so the choice of keeper rests on evidence.
+Keeper: **monocode** (C+, 65.7). Mean grade across the 2 audited members is 64. Every member is audited, so the choice of keeper rests on evidence.
 
 | repository | domain | language | grade | files |
 | --- | --- | --- | --- | --- |
-| **monocode** | Systems & Infra | Rust | C+ 66.4 | 1090 |
+| **monocode** | Systems & Infra | Rust | C+ 65.7 | 1090 |
 | jcode | Systems & Infra | Rust | C 62.2 | 1352 |
 
 ### c039 - 2 repositories
@@ -543,4 +543,4 @@ Keeper: **qr-data-transfer** (C, 63.5). Mean grade across the 2 audited members 
 
 ---
 
-Generated from data/clusters.json built 2026-11-22. Regenerate with `node src/stages/build-relations.js`.
+Generated from data/clusters.json built 2026-11-23. Regenerate with `node src/stages/build-relations.js`.

@@ -9,7 +9,7 @@
     <!-- Open Graph -->
     <meta property="og:title" content="nautilus trader - Moses Yebei">
     <meta property="og:description" content="A high-performance algorithmic trading platform and event-driven backtester">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/nautilus_trader.html">
 
@@ -17,7 +17,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="nautilus trader">
     <meta name="twitter:description" content="A high-performance algorithmic trading platform and event-driven backtester">
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&amp;h=400&amp;fit=crop&amp;q=80">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/nautilus_trader.html">
 
@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>November 12, 2026</span>
-                    <span>4 min read</span>
+                    <span>2 min read</span>
                     <span class="post-language">Rust</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,49 +79,9 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 id="the-problem">The Problem</h3>
-<p>Quantitative traders need a single code‑base that can back‑test strategies on historic market data <strong>and</strong> run them live without rewriting logic. Existing stacks force separate back‑tester and execution engines, leading to drift between simulation and production results.</p>
-<h3 id="what-this-does">What This Does</h3>
-<p><code>nautilus_trader</code> delivers a Rust‑centric, event‑driven engine with a Python front‑end. Core trading logic lives in the <code>crates/</code> workspace (≈1 560 Rust source files) while the <code>python/</code> package supplies a thin, idiomatic API for strategy authors.</p>
-<p>Key entry points are in <code>crates/adapters/architect_ax</code>:</p>
-<ul><li><code>crates/adapters/architect_ax/bin/http_public.rs</code> – <code>main</code> starts the HTTP server that exposes the public API.</li><li><code>crates/adapters/architect_ax/src/data.rs</code> – <code>start</code> boots the internal data pipelines.</li></ul>
-<p>Adapters for major venues (Binance, Bybit, BitMEX, etc.) live under <code>crates/adapters/…</code> and implement SBE codecs (e.g. <code>exchange_info_response_codec.rs</code>) that marshal binary messages to Rust structs.</p>
-<h3 id="how-it-is-wired">How It Is Wired</h3>
-<ol><li><strong>Process start</strong> – <code>main</code> in <code>http_public.rs</code> (line 32) is the only top‑level entry point. It creates an <code>AxEnvironment</code> via <code>from_env</code>, which reads secrets (<code>Secrets::from_env()</code>) – the sole outbound <strong>cryptographic</strong> operation.</li></ol>
-<ol><li><strong>Environment bootstrap</strong> – <code>from_env</code> pulls configuration from <code>.env.example</code> (API keys, URLs). The environment is then passed to the HTTP client (<code>crates/adapters/architect_ax/src/http/client.rs</code>), which owns the only network‑calling code (e.g., <code>base_url</code>, <code>cancel_all_requests</code>).</li></ol>
-<ol><li><strong>Message flow</strong> – Incoming HTTP requests are dispatched to handlers in <code>crates/adapters/architect_ax/src/websocket/…</code>. The most‑used functions across the codebase are: <em> <code>from_str</code> – 259 call sites </em> <code>get_buf</code>, <code>get_buf_mut</code>, <code>set_limit</code> – each &gt;200 call sites (used by every SBE codec)</li></ol>
-<p>These buffer utilities form a <strong>hub</strong>: any change to their signature ripples through &gt;600 functions, so they carry the widest blast radius.</p>
-<ol><li><strong>Adapter codecs</strong> – The Binance SBE codecs (e.g., <code>exchange_info_response_codec.rs</code>, <code>new_order_full_response_codec.rs</code>) each define <code>wrap</code>, <code>encoded_length</code>, <code>get_buf_mut</code>, etc. They are called from 5–36 other files and collectively account for &gt;1 200 function definitions.</li></ol>
-<ol><li><strong>External effects</strong> – Apart from the initial secret load, the only outbound calls are: <em> HTTP client requests (network) </em> File reads/writes (e.g., loading test JSON via <code>load_test_json</code>) – 2 functions * Cryptographic secret handling – 7 functions</li></ol>
-<p>No database access is visible in the static graph; persistence is likely delegated to external services not compiled into the repo.</p>
-<ol><li><strong>Cycle / hub analysis</strong> – The call graph shows dense inter‑connections around the buffer utilities and SBE codec wrappers, but no obvious cycles. The concentration around <code>from_str</code> and buffer helpers suggests any refactor there will require extensive test coverage.</li></ol>
-<h3 id="how-to-use-it">How To Use It</h3>
-<pre data-lang="bash"><code># Clone the repo
-git clone https://github.com/moses-y/nautilus_trader
-cd nautilus_trader
-
-# Build the Rust workspace (requires Rust 1.92)
-cargo build --release
-
-# Optional: run the Docker environment (DockerfileUbuntu + compose)
-docker compose -f .docker/docker-compose.yml up --build
-
-# Set required env vars (copy template)
-cp .env.example .env
-# edit .env with API keys, URLs, etc.
-
-# Start the HTTP server (the documented entry point)
-cargo run --bin http_public --manifest-path crates/adapters/architect_ax/Cargo.toml</code></pre>
-<p>The Python package can be installed from the <code>python/</code> directory with <code>pip install .</code> after the Rust wheels are built (see <code>github/actions/publish-wheels</code> workflow for the exact build steps).</p>
-<h3 id="real-world-use">Real‑World Use</h3>
-<p>A quant writes a strategy in Python, imports <code>nautilus_trader</code>, and registers callbacks with the HTTP API. The same code can be executed against a historical data feed by pointing the <code>AxEnvironment</code> to a file‑based data source, then switched to live trading by swapping the environment to use the Binance adapter. No code changes are required between back‑test and live runs.</p>
-<h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<ul><li><strong>Medium – Enable Dependabot</strong> – 38 manifests lack an automated update bot (<code>.github/dependabot.yml</code> missing).</li><li><strong>Medium – Dependency vulnerability gate</strong> – No scan in CI; add <code>dependency-review-action</code> or <code>osv-scanner</code>.</li><li><strong>Medium – Large test assets</strong> – <code>tests/integration_tests/adapters/betfair/resources/responses/betting_list_market_catalogue.json</code> (41 MB) should be moved to Git LFS or external storage.</li><li><strong>Low – Workflow timeouts</strong> – <code>.github/workflows/build-docs.yml</code> and three others lack <code>timeout-minutes</code>, risking stalled runs.</li></ul>
-<p>All other hygiene checks (tests, CI, Dockerfile, license, lockfile) are present.</p>
-<h3 id="the-bottom-line">The Bottom Line</h3>
-<p><code>nautilus_trader</code> offers a solid, high‑performance Rust engine with a Python façade, suitable for teams that need tight parity between simulation and production. The codebase is well‑structured but hinges on a few core utilities (<code>from_str</code>, buffer helpers) that are hot spots for change. Addressing the medium‑severity health items (dependency automation, large binaries) will improve maintainability for production deployments. Ideal for quant teams comfortable with Rust‑Python interop and looking for an open‑source, event‑driven trading stack.</p>
+            <div class="post-content" id="post-content">
+                
+                <p>nautilus trader is a Rust project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with Rust or interested in clean, maintainable code architecture.</p>
             </div>
 
             
@@ -131,18 +91,18 @@ cargo run --bin http_public --manifest-path crates/adapters/architect_ax/Cargo.t
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">7<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="ok"><span aria-hidden="true">&#10003;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="no"><span aria-hidden="true">&#10007;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">3,864<span> files</span></div>
+                        <div class="an-score">5,745<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>Rust</span><i style="width:100%"></i><b>1561</b></li><li><span>Python</span><i style="width:69%"></i><b>1072</b></li><li><span>JSON</span><i style="width:31%"></i><b>489</b></li><li><span>Markdown</span><i style="width:10%"></i><b>163</b></li><li><span>TOML</span><i style="width:4%"></i><b>57</b></li><li><span>Shell</span><i style="width:3%"></i><b>44</b></li>
+                            <li><span>Rust</span><i style="width:100%"></i><b>3133</b></li><li><span>JSON</span><i style="width:38%"></i><b>1180</b></li><li><span>Python</span><i style="width:14%"></i><b>447</b></li><li><span>Markdown</span><i style="width:11%"></i><b>358</b></li><li><span>Shell</span><i style="width:5%"></i><b>172</b></li><li><span>TOML</span><i style="width:2%"></i><b>74</b></li>
                         </ul>
-                        <p class="an-fw"><span>Docker</span><span>Transformers</span><span>pandas</span></p>
+                        <p class="an-fw"><span>Express</span><span>Docker</span><span>pandas</span></p>
                     </div>
                 </div>
 
@@ -153,6 +113,12 @@ cargo run --bin http_public --manifest-path crates/adapters/architect_ax/Cargo.t
                 
 
                 
+                <div class="an-block">
+                    <span class="an-lab">Findings</span>
+                    <ul class="an-findings">
+                        <li><span class="an-sev sev-low">Low</span><span>Secret-shaped paths present; the code-health audit confirms or clears them <code>crates/adapters/polymarket/test_data/http_api_credentials.json, crates/persistence/test_data/gcs_authorized_user_credentials.json</code></span></li>
+                    </ul>
+                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1136288505">Open in Code Graph &rarr;</a>
