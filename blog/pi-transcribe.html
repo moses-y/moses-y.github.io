@@ -9,7 +9,7 @@
     <!-- Open Graph -->
     <meta property="og:title" content="pi transcribe - Moses Yebei">
     <meta property="og:description" content="transcription in pi">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://moses-y.github.io/blog/pi-transcribe.html">
 
@@ -17,7 +17,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="pi transcribe">
     <meta name="twitter:description" content="transcription in pi">
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&amp;h=400&amp;fit=crop&amp;q=80">
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&amp;h=400&amp;fit=crop&amp;q=80">
 
     <link rel="canonical" href="https://moses-y.github.io/blog/pi-transcribe.html">
 
@@ -60,7 +60,7 @@
             <div class="post-header">
                 <div class="post-meta">
                     <span>November 12, 2026</span>
-                    <span>4 min read</span>
+                    <span>2 min read</span>
                     <span class="post-language">TypeScript</span>
                     <span class="post-type">fork</span>
                 </div>
@@ -79,38 +79,9 @@
                 <span class="listen-progress" id="listen-progress" aria-live="polite"></span>
             </div>
 
-            <div class="post-content numbered" id="post-content">
-                <nav class="post-toc" aria-label="Sections"><span class="post-toc-lab">Sections</span><a href="#the-problem">The Problem</a><a href="#what-this-does">What This Does</a><a href="#how-it-is-wired">How It Is Wired</a><a href="#how-to-use-it">How To Use It</a><a href="#real-world-use">Real‑World Use</a><a href="#code-health-issues">Code Health &amp; Issues</a><a href="#the-bottom-line">The Bottom Line</a></nav>
-                <h3 id="the-problem">The Problem</h3>
-<p>Desktop‑style dictation on the Raspberry Pi is limited to cloud services or heavyweight desktop apps. Users who need a fast, offline, keyboard‑driven transcription tool must set up a full‑stack solution, which adds latency and complexity.</p>
-<h3 id="what-this-does">What This Does</h3>
-<p><code>pi-transcribe</code> provides a Pi‑native extension that captures audio, runs a local speech‑to‑text model, and injects the result into the Pi editor. The core logic lives in <code>src/</code>:</p>
-<ul><li><strong><code>src/index.ts</code></strong> – registers the terminal shortcut, parses the <code>/transcribe</code> command, and orchestrates settings, model selection and the capture lifecycle.</li><li><strong><code>src/audio.ts</code></strong> – wraps the microphone API, converts raw frames, and exposes <code>start</code>/<code>stop</code> used by the shortcut handler.</li><li><strong><code>src/catalog.generated.ts</code></strong> – a 2 868‑line generated list of available models and languages (the current high‑risk “oversized file”).</li></ul>
-<p>Configuration lives in <code>src/settings.ts</code> and the UI for choosing models, microphones and Chinese‑output options is split across <code>src/settings-menu.ts</code>, <code>src/model-picker.ts</code> and <code>src/shortcuts.ts</code>.</p>
-<h3 id="how-it-is-wired">How It Is Wired</h3>
-<p>Execution begins when the user presses the registered shortcut (default <strong>Ctrl‑Alt‑Z</strong>). The shortcut handler (defined in <code>src/index.ts</code> → <code>toggleCapture</code>) calls <code>ensureSettings</code> → <code>configureFirstRun</code> → <code>configureModel</code>. Those functions read/write the JSON settings file via <code>src/settings.ts</code> (<code>readSettings</code>, <code>writeSettings</code>).</p>
-<p>If a capture is not active, <code>toggleCapture</code> creates a <code>CapturedAudio</code> instance (<code>new CapturedAudio()</code> in <code>src/audio.ts</code>) and calls its <code>start</code> method. <code>start</code> registers a frame‑read loop that eventually invokes <code>handleInput</code> → <code>refresh</code> (13 calls) and updates the on‑screen level meter (<code>src/visualizer.ts</code>).</p>
-<p>When the user stops recording, <code>stopAndTranscribe</code> (also in <code>src/index.ts</code>) calls <code>showTranscribeStatus</code>, which constructs a <code>TranscriptionBackend</code> (<code>src/transcription.ts</code>). The backend&#39;s <code>transcribe</code> method selects the appropriate model from <code>src/catalog.ts</code> (via <code>canonicalLanguage</code>, <code>modelSupportsLanguage</code>) and streams audio to the model. The result is inserted at the editor cursor by the Pi extension runtime (outside this repo).</p>
-<p>Key functions with the widest blast radius:</p>
-<ul><li><code>ensureSettings</code> – reaches 30 functions, called from two places.</li><li><code>toggleCapture</code> – reaches 47 functions, called from one place.</li><li><code>canonicalLanguage</code> – called from 7 distinct locations, central to language resolution.</li></ul>
-<p>The most connected modules are <code>src/settings</code> (6 inbound, 2 outbound imports) and <code>src/catalog</code> (5 inbound, 1 outbound). No circular dependencies were detected, which simplifies isolated changes.</p>
-<h3 id="how-to-use-it">How To Use It</h3>
-<pre data-lang="bash"><code># Clone the repo
-git clone https://github.com/moses-y/pi-transcribe
-cd pi-transcribe
-
-# Install dependencies (npm is the package manager)
-npm install --ignore-scripts
-
-# Register the extension with Pi (replace with your Pi install path)
-pi -e /absolute/path/to/pi-transcribe</code></pre>
-<p>The extension automatically creates <code>~/.config/pi-transcribe/settings.json</code> on first run. No additional environment variables are required. To change the shortcut or default model, edit <code>src/settings.ts</code> or use the <code>/transcribe</code> command inside Pi as documented in the README.</p>
-<h3 id="real-world-use">Real‑World Use</h3>
-<p>A developer working on a Pi‑based kiosk can add the extension, press <strong>Ctrl‑Alt‑Z</strong>, dictate a log entry, and have it appear instantly in the editor without leaving the device or exposing audio to external services. The flow is entirely local: microphone → <code>src/audio.ts</code> → model selected from <code>catalog.generated.ts</code> → transcription → editor insertion.</p>
-<h3 id="code-health-issues">Code Health &amp; Issues</h3>
-<ul><li><strong>High – No test suite</strong> – 16 source files, zero test files.</li><li><strong>High – No CI pipeline</strong> – No <code>.github/workflows</code> or similar; builds are never automatically verified.</li><li><strong>Medium – No Dependabot</strong> – Only <code>package.json</code>/<code>package-lock.json</code> present; no automated dependency updates.</li><li><strong>High – Oversized generated file</strong> – <code>src/catalog.generated.ts</code> (2 868 lines) is a maintenance hotspot; consider splitting by language or model.</li><li><strong>Medium – Duplicated logic</strong> – Repeated 6‑line blocks in <code>src/model-picker.ts</code> and <code>src/shortcuts.ts</code>; extract to a shared helper.</li></ul>
-<h3 id="the-bottom-line">The Bottom Line</h3>
-<p><code>pi-transcribe</code> delivers a functional offline dictation experience for the Pi, with a clear shortcut‑driven workflow and a modest codebase. However, the lack of tests, CI and automated dependency management makes the project risky for production use. Engineers should prioritize adding a test harness, CI pipeline, and refactoring the large generated catalog before extending the code.</p>
+            <div class="post-content" id="post-content">
+                
+                <p>pi transcribe is a TypeScript project that demonstrates thoughtful software design. While exploring the codebase, I found patterns and implementations that could accelerate similar projects. Worth investigating if you&#39;re working with TypeScript or interested in clean, maintainable code architecture.</p>
             </div>
 
             
@@ -120,16 +91,16 @@ pi -e /absolute/path/to/pi-transcribe</code></pre>
                 <div class="analysis-grid">
                     <div class="an-card">
                         <span class="an-lab">Deployment readiness</span>
-                        <div class="an-score">4<span>/7</span></div>
+                        <div class="an-score">6<span>/7</span></div>
                         <ul class="an-checks">
-                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="no"><span aria-hidden="true">&#10007;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="no"><span aria-hidden="true">&#10007;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
+                            <li class="no"><span aria-hidden="true">&#10007;</span>Container image</li><li class="ok"><span aria-hidden="true">&#10003;</span>CI pipeline</li><li class="ok"><span aria-hidden="true">&#10003;</span>Lockfile committed</li><li class="ok"><span aria-hidden="true">&#10003;</span>Test suite</li><li class="ok"><span aria-hidden="true">&#10003;</span>README</li><li class="ok"><span aria-hidden="true">&#10003;</span>License</li><li class="ok"><span aria-hidden="true">&#10003;</span>No committed secrets</li>
                         </ul>
                     </div>
                     <div class="an-card">
                         <span class="an-lab">Composition</span>
-                        <div class="an-score">23<span> files</span></div>
+                        <div class="an-score">92<span> files</span></div>
                         <ul class="an-bars">
-                            <li><span>TypeScript</span><i style="width:100%"></i><b>13</b></li><li><span>JSON</span><i style="width:31%"></i><b>4</b></li><li><span>Markdown</span><i style="width:8%"></i><b>1</b></li>
+                            <li><span>TypeScript</span><i style="width:100%"></i><b>76</b></li><li><span>JSON</span><i style="width:7%"></i><b>5</b></li><li><span>Markdown</span><i style="width:4%"></i><b>3</b></li><li><span>YAML</span><i style="width:3%"></i><b>2</b></li>
                         </ul>
                         <p class="an-fw"><span>React</span></p>
                     </div>
@@ -175,12 +146,6 @@ pi -e /absolute/path/to/pi-transcribe</code></pre>
                 
 
                 
-                <div class="an-block">
-                    <span class="an-lab">Findings</span>
-                    <ul class="an-findings">
-                        <li><span class="an-sev sev-medium">Medium</span><span>No test files detected - untested code paths <code>repository-wide</code></span></li><li><span class="an-sev sev-medium">Medium</span><span>No CI/CD pipeline detected - no automated build/test gate <code>.github/ or CI config</code></span></li>
-                    </ul>
-                </div>
 
                 <p class="an-links">
                     <a href="../code-brain.html?repo=1334926529">Open in Code Graph &rarr;</a>
