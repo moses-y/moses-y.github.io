@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-11-28T04:27:06.707Z",
+  "lastUpdated": "2026-11-28T07:00:27.488Z",
   "generatedWith": "NVIDIA API (mistralai/mistral-nemotron, openai/gpt-oss-20b, deepseek-ai/deepseek-v4-pro-0813)",
   "totalRepos": 1725,
   "progress": {
@@ -16,27 +16,27 @@
   },
   "taxonomy": {
     "domains": {
+      "AI & Data": 562,
       "Systems & Infra": 391,
       "Web & Interfaces": 577,
       "Agent Skills & Plugins": 70,
-      "AI & Data": 562,
       "Mobile": 59,
       "Knowledge & Content": 65,
       "Other": 1
     },
     "languages": {
+      "Python": 547,
+      "Rust": 129,
       "Shell": 39,
       "TypeScript": 389,
       "JavaScript": 112,
-      "Rust": 128,
       "HTML": 37,
-      "Python": 547,
       "C++": 31,
       "Objective-C": 3,
       "Swift": 34,
       "Elixir": 3,
       "Go": 118,
-      "Java": 20,
+      "Java": 19,
       "Jupyter Notebook": 28,
       "Emacs Lisp": 2,
       "Ruby": 5,
@@ -79,22 +79,22 @@
       "Nix": 1
     },
     "kinds": {
-      "Codebase": 190,
+      "Service / API": 207,
       "Web app": 841,
+      "Codebase": 190,
       "Mobile app": 116,
       "Docs / content": 68,
       "Library / SDK": 85,
       "CLI tool": 151,
-      "Service / API": 207,
       "Notebook / research": 19,
       "Unknown": 48
     },
     "capabilities": {
-      "Full-Stack Web": 964,
-      "Backend & APIs": 586,
       "Deep Learning": 193,
       "LLM & Agents": 259,
       "MLOps": 672,
+      "Backend & APIs": 587,
+      "Full-Stack Web": 964,
       "Computer Vision": 43,
       "Cloud & Infra": 130,
       "RAG & Vector Search": 99,
@@ -42143,19 +42143,19 @@
       "summary": "## The Problem\n\nBuilding applications on top of GitHub Copilot Agent requires speaking JSON-RPC to the Copilot CLI and managing its process lifecycle. Doing this from scratch in each language means duplicating protocol handling, session state management, and tool-calling logic. This SDK standardizes that integration across four languages so teams don't reimplement the same client against an unstable, technical-preview protocol.\n\n## What This Does\n\n`copilot-sdk` provides language-specific client libraries for Node.js/TypeScript (`nodejs/`), Python (`python/`), Go (`go/`), and .NET (`dotnet/`). Each SDK wraps the Copilot CLI's JSON-RPC server, handling session creation, message streaming, tool invocation, permission requests, and MCP server/agent configuration. All four share a common protocol version (`sdk-protocol-version.json`).\n\nThe repo also contains a shared test harness (`test/harness/`) with a replaying proxy that captures and replays CAPI traffic, plus 60+ YAML snapshots (`test/snapshots/`) that pin protocol behavior across all SDKs. Code generation scripts in `nodejs/scripts/` produce the session event types and protocol version constants for each language.\n\n## How It Is Wired\n\nExecution starts in each SDK's client class—`nodejs/src/client.ts`, `python/copilot/client.py`, `go/client.go`, `dotnet/src/Client.cs`. The client spawns or connects to the Copilot CLI process and communicates over JSON-RPC. The `client` module is the hub: `nodejs/src/index.ts` has 9 modules importing it (highest in the graph), and the `session` modules route all conversation state through it.\n\nA typical flow: application calls `session.send()` → the session serializes the request → `client` sends JSON-RPC over stdio or TCP → the CLI processes it and streams events back. The `session` module (`nodejs/src/session.ts`, `python/copilot/session.py`, etc.) handles event callbacks, streaming deltas, and session resume. The test harness (`test/harness/replayingCapiProxy.ts`, 770 lines) sits between tests and the real CLI, recording and replaying traffic so tests run without a live Copilot instance.\n\nThe import graph shows no circular dependencies across 83 analyzed files. The main change-risk concentration is `nodejs/src/index.ts` (9 importers) and the test context modules (`nodejs/test/e2e/harness/sdkTestContext`, `python/e2e/testharness/__init__`)—changing their APIs ripples through every test file in that language.\n\n## How To Use It\n\n**Setup**: Install the Copilot CLI per the README, then install your language's SDK:\n```bash\n# Node.js\nnpm install @github/copilot-sdk\n\n# Python\npip install github-copilot-sdk\n\n# Go\ngo get github.com/github/copilot-sdk/go\n\n# .NET\ndotnet add package GitHub.Copilot.SDK\n```\n\n**Running it**: The Node.js entry point is `nodejs/src/index.ts`; the Python equivalent is `python/copilot/__init__.py`. The basic example lives at `nodejs/examples/basic-example.ts`. Each SDK auto-manages the CLI process—no manual server setup required. Configuration is done programmatically (API keys, MCP servers, custom agents) via session creation options, not environment files.\n\n## Real-World Use\n\nA customer-support bot that needs to answer questions using internal documentation. The application creates a Copilot session with an MCP server pointing at the docs index, registers a custom tool to look up ticket history, and streams responses back to the user. The permission handler intercepts any shell-command requests the model makes and routes them through an approval workflow.\n\n## Code Health & Issues\n\nStatic analysis found 34 issues: 3 high, 30 medium, 1 low.\n\n- **High – Duplicated code blocks**: 22 repeated 6-line blocks across 12 files, notably `dotnet/src/Generated/SessionEvents.cs`, `nodejs/scripts/generate-csharp-session-types.ts`, `dotnet/src/SdkProtocolVersion.cs`, and `nodejs/scripts/update-protocol-version.ts`. The code-generation scripts and their generated outputs share logic that should be DRYed.\n- **High – Deep nesting**: `nodejs/src/session.ts`, `go/e2e/session_test.go`, and `nodejs/src/client.ts` reach indentation depth 8; control flow is hard to follow. Flatten with early returns.\n- **Medium – Oversized files**: `test/harness/replayingCapiProxy.ts` (770 lines), `nodejs/src/client.ts`, and `python/copilot/client.py` carry too much responsibility.\n- **Medium – Broad exception handling**: `python/copilot/session.py` and `python/copilot/client.py` use bare `except` clauses that swallow errors indiscriminately.\n- **Medium – High branching density**: `dotnet/src/Client.cs` and `dotnet/src/Session.cs` have 184 branch points over 576 lines.\n- **Low – TODO markers**: 3 unresolved in `dotnet/test/SessionTests.cs`.\n\nSDLC observations: tests and CI are present (GitHub Actions), license is MIT, no committed secrets detected. The `test/snapshots/` YAML files act as a protocol contract—valuable but they will need regeneration whenever the CLI protocol changes.\n\n## The Bottom Line\n\nThis is a well-structured, multi-language SDK with strong test coverage and a clean module graph. The main liabilities are the code-generation duplication and the deep nesting in core session logic. Teams building on Copilot Agent should use it rather than rolling their own JSON-RPC client, but should expect breaking changes while it's in technical preview.",
       "av": 2,
       "url": "https://github.com/moses-y/copilot-sdk",
-      "language": "Java",
+      "language": "Rust",
       "stars": 0,
       "forks": 0,
       "topics": [],
       "parent": {
         "name": "microsoft/copilot-sdk",
         "url": "https://github.com/microsoft/copilot-sdk",
-        "stars": 10679
+        "stars": 10721
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&h=400&fit=crop&q=80",
       "forkedAt": "January 16, 2026",
-      "updatedAt": "November 16, 2026",
+      "updatedAt": "November 28, 2026",
       "readTime": 4,
       "knowledgeGraph": {
         "totalFiles": 193,
@@ -42401,6 +42401,12 @@
           "name": "Full-Stack Web",
           "via": [
             "React"
+          ]
+        },
+        {
+          "name": "Backend & APIs",
+          "via": [
+            "Rust"
           ]
         }
       ],
@@ -45819,7 +45825,7 @@
       "parent": {
         "name": "nautechsystems/nautilus_trader",
         "url": "https://github.com/nautechsystems/nautilus_trader",
-        "stars": 31870
+        "stars": 31872
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -45827,7 +45833,7 @@
       "updatedAt": "November 12, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 5785,
+        "totalFiles": 5789,
         "directories": {
           ".cargo": 4,
           "(root)": 42,
@@ -45838,7 +45844,7 @@
           ".pre-commit-hooks": 47,
           ".supply-chain": 5,
           "assets": 7,
-          "crates": 4566,
+          "crates": 4570,
           "docs": 308,
           "examples": 128,
           "patches": 44,
@@ -45854,8 +45860,8 @@
           "Shell": 170,
           "Docker": 3,
           "Python": 452,
-          "JSON": 1187,
-          "Rust": 3159,
+          "JSON": 1188,
+          "Rust": 3162,
           "CSS": 1,
           "SQL": 4
         },
@@ -46522,6 +46528,7 @@
           "crates/adapters/blockchain/test_data/pancakeswap_v3_swap_rpc.json",
           "crates/adapters/blockchain/test_data/uniswap_v3_set_fee_protocol_hypersync.json",
           "crates/adapters/blockchain/test_data/uniswap_v3_set_fee_protocol_rpc.json",
+          "crates/adapters/blockchain/tests/integration/exit_code.rs",
           "crates/adapters/blockchain/tests/integration/main.rs",
           "crates/adapters/blockchain/tests/integration/python.rs",
           "crates/adapters/blockchain/tests/integration/rpc_reconnection.rs",
@@ -47062,6 +47069,7 @@
           "crates/adapters/interactive_brokers/test_data/README.md",
           "crates/adapters/interactive_brokers/test_data/instrument_cache_chrono.json",
           "crates/adapters/interactive_brokers/test_data/order_report_responses.json",
+          "crates/adapters/interactive_brokers/test_data/position_snapshot_responses.json",
           "crates/adapters/interactive_brokers/tests/integration/main.rs",
           "crates/adapters/interactive_brokers/tests/integration/python.rs",
           "crates/adapters/kalshi/examples/node_data_tester.rs",
@@ -47674,7 +47682,6 @@
           "crates/backtest/tests/integration/option_chain_data_client.rs",
           "crates/backtest/tests/integration/spread_execution.rs",
           "crates/cli/tests/integration/catalog_migration.rs",
-          "crates/cli/tests/integration/exit_code.rs",
           "crates/cli/tests/integration/logging.rs",
           "crates/cli/tests/integration/main.rs",
           "crates/common/proptest-regressions/throttler.txt",
@@ -47785,6 +47792,7 @@
           "crates/live/tests/integration/node/external_msgbus.rs",
           "crates/live/tests/integration/node/lifecycle.rs",
           "crates/live/tests/integration/node/routing.rs",
+          "crates/live/tests/integration/node/serial_tests/lifecycle.rs",
           "crates/live/tests/integration/node/serial_tests/reconciliation_bench.rs",
           "crates/live/tests/integration/node/serial_tests/report_acceptance.rs",
           "crates/live/tests/integration/node/serial_tests/startup.rs",
@@ -48866,9 +48874,9 @@
           ".txt": 25,
           ".py": 452,
           ".bash": 87,
-          ".json": 1187,
+          ".json": 1188,
           ".png": 63,
-          ".rs": 3159,
+          ".rs": 3162,
           ".jsonl": 3,
           ".bz2": 5,
           ".sbe": 11,
@@ -48890,10 +48898,10 @@
         "subProjects": [
           {
             "name": "crates",
-            "files": 4566,
+            "files": 4570,
             "notebooks": 0,
-            "code": 3115,
-            "data": 1186,
+            "code": 3118,
+            "data": 1187,
             "docs": 123
           },
           {
@@ -277120,7 +277128,7 @@
       "parent": {
         "name": "open-jarvis/OpenJarvis",
         "url": "https://github.com/open-jarvis/OpenJarvis",
-        "stars": 19181
+        "stars": 19193
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
@@ -359230,7 +359238,7 @@
       "updatedAt": "November 12, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 13515,
+        "totalFiles": 13526,
         "directories": {
           "(root)": 26,
           ".devcontainer": 1,
@@ -359239,7 +359247,7 @@
           "client": 282,
           "cmd": 16,
           "contrib": 44,
-          "daemon": 2185,
+          "daemon": 2196,
           "dockerversion": 3,
           "docs": 39,
           "errdefs": 4,
@@ -359259,7 +359267,7 @@
           "JSON": 59,
           "Markdown": 563,
           "JavaScript": 1,
-          "Go": 10874,
+          "Go": 10885,
           "TOML": 16,
           "Shell": 51,
           "C/C++ Header": 5,
@@ -359742,6 +359750,7 @@
           "daemon/containerd/fake_service_test.go",
           "daemon/containerd/identitycache/bbolt_test.go",
           "daemon/containerd/image_attestations.go",
+          "daemon/containerd/image_changes_test.go",
           "daemon/containerd/image_delete_test.go",
           "daemon/containerd/image_identity_test.go",
           "daemon/containerd/image_import_test.go",
@@ -359753,6 +359762,7 @@
           "daemon/containerd/image_pull_test.go",
           "daemon/containerd/image_push_test.go",
           "daemon/containerd/image_save_test.go",
+          "daemon/containerd/image_snapshot_test.go",
           "daemon/containerd/image_test.go",
           "daemon/containerd/imagespec.go",
           "daemon/containerd/platform_matchers_test.go",
@@ -360763,6 +360773,7 @@
           "daemon/server/router/system/disk_usage_test.go",
           "daemon/server/router/volume/volume_routes_test.go",
           "daemon/server/server_test.go",
+          "daemon/snapshotter/mount_test.go",
           "daemon/stats_unix_test.go",
           "daemon/stats_windows_test.go",
           "daemon/testdata/keyfile",
@@ -362346,7 +362357,7 @@
           ".js": 1,
           ".simple": 1,
           ".windows": 1,
-          ".go": 10874,
+          ".go": 10885,
           ".yaml": 69,
           ".mod": 7,
           ".sum": 9,
@@ -362426,9 +362437,9 @@
           },
           {
             "name": "daemon",
-            "files": 2185,
+            "files": 2196,
             "notebooks": 0,
-            "code": 1458,
+            "code": 1469,
             "data": 6,
             "docs": 20
           },
@@ -554474,12 +554485,12 @@
       "parent": {
         "name": "HKUDS/VideoAgent",
         "url": "https://github.com/HKUDS/VideoAgent",
-        "stars": 1769
+        "stars": 2171
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&h=400&fit=crop&q=80",
       "forkedAt": "August 2, 2026",
-      "updatedAt": "August 2, 2026",
+      "updatedAt": "November 28, 2026",
       "readTime": 5,
       "knowledgeGraph": {
         "totalFiles": 853,
@@ -715619,7 +715630,7 @@
       "parent": {
         "name": "infiniflow/ragflow",
         "url": "https://github.com/infiniflow/ragflow",
-        "stars": 94841
+        "stars": 94846
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -715627,7 +715638,7 @@
       "updatedAt": "November 12, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 6706,
+        "totalFiles": 6718,
         "directories": {
           ".agents": 4,
           "(root)": 31,
@@ -715640,18 +715651,18 @@
           "docker": 24,
           "docs": 142,
           "example": 9,
-          "internal": 3907,
+          "internal": 3910,
           "scripts": 3,
           "sdk": 22,
           "test": 159,
           "tools": 60,
-          "web": 2180
+          "web": 2189
         },
         "languages": {
           "Markdown": 160,
           "YAML": 31,
           "Shell": 33,
-          "Go": 3617,
+          "Go": 3620,
           "JSON": 292,
           "Python": 167,
           "HTML": 6,
@@ -715662,8 +715673,8 @@
           "C++": 36,
           "C": 11,
           "JavaScript": 13,
-          "TypeScript": 732,
-          "TSX": 1086,
+          "TypeScript": 735,
+          "TSX": 1092,
           "LESS": 38,
           "CSS": 5
         },
@@ -715901,6 +715912,7 @@
           "web/src/pages/document-viewer/index.tsx",
           "web/src/pages/files/create-folder-dialog/index.tsx",
           "web/src/pages/files/index.tsx",
+          "web/src/pages/files/sidebar/index.tsx",
           "web/src/pages/home/index.tsx",
           "web/src/pages/login-next/index.tsx",
           "web/src/pages/memories/constants/index.tsx",
@@ -716326,7 +716338,6 @@
           "internal/cli/http_client_test.go",
           "internal/cli/response_test.go",
           "internal/cli/truncate_str_test.go",
-          "internal/cli/user_command_office_test.go",
           "internal/cli/user_command_test.go",
           "internal/cli/user_parser_test.go",
           "internal/common/agent_event_test.go",
@@ -717953,6 +717964,7 @@
           "internal/service/nlp/reranker_scoring_test.go",
           "internal/service/nlp/reranker_similarity_test.go",
           "internal/service/nlp/retrieval_embedding_test.go",
+          "internal/service/nlp/retrieval_failover_test.go",
           "internal/service/nlp/retrieval_integration_test.go",
           "internal/service/nlp/retrieval_prune_test.go",
           "internal/service/nlp/retrieval_rerank_integration_test.go",
@@ -718427,6 +718439,7 @@
           "web/src/pages/agent/form/specstream-extract-form/index.tsx",
           "web/src/pages/agent/form/specstream-form/index.tsx",
           "web/src/pages/agent/form/title-chunker-form/media-context.test.ts",
+          "web/src/pages/agent/form/title-chunker-form/token-cap.test.ts",
           "web/src/pages/agent/form/tool-form/anysearch-discover-form/index.test.tsx",
           "web/src/pages/agent/form/tool-form/anysearch-extract-form/index.test.tsx",
           "web/src/pages/agent/form/tool-form/anysearch-search-form/index.test.tsx",
@@ -718512,6 +718525,10 @@
           "web/src/pages/dataset/testing/testing-form.tsx",
           "web/src/pages/dataset/testing/testing-result.tsx",
           "web/src/pages/datasets/dataset-card.test.tsx",
+          "web/src/pages/files/files-table.test.tsx",
+          "web/src/pages/files/layout.test.tsx",
+          "web/src/pages/files/sidebar/index.test.tsx",
+          "web/src/pages/files/use-navigate-to-folder.test.ts",
           "web/src/pages/login-next/index.test.tsx",
           "web/src/pages/memories/hooks.test.tsx",
           "web/src/pages/memory/index.test.tsx",
@@ -719093,7 +719110,7 @@
           ".md": 160,
           ".yml": 15,
           ".sh": 33,
-          ".go": 3617,
+          ".go": 3620,
           ".yaml": 16,
           ".json": 292,
           ".pem": 2,
@@ -719131,9 +719148,9 @@
           ".ps1": 1,
           ".development": 1,
           ".production": 1,
-          ".ts": 732,
+          ".ts": 735,
           ".cjs": 2,
-          ".tsx": 1086,
+          ".tsx": 1092,
           ".webp": 1,
           ".woff2": 38,
           ".less": 38,
@@ -742149,7 +742166,7 @@
       "parent": {
         "name": "kvcache-ai/ktransformers",
         "url": "https://github.com/kvcache-ai/ktransformers",
-        "stars": 19710
+        "stars": 19709
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -872738,7 +872755,7 @@
       "parent": {
         "name": "jingyaogong/minimind",
         "url": "https://github.com/jingyaogong/minimind",
-        "stars": 72272
+        "stars": 72315
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
@@ -872875,7 +872892,7 @@
       "parent": {
         "name": "erkamyaman/rust-anything",
         "url": "https://github.com/erkamyaman/rust-anything",
-        "stars": 10843
+        "stars": 10886
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
@@ -872883,45 +872900,46 @@
       "updatedAt": "November 19, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 3302,
+        "totalFiles": 3427,
         "directories": {
           ".agents": 1,
           ".claude-plugin": 1,
-          "(root)": 19,
+          "(root)": 20,
           ".githooks": 1,
           ".github": 11,
           "demo": 2011,
-          "directory": 4,
-          "docs": 74,
+          "directory": 14,
+          "docs": 127,
+          "evals": 37,
           "npm": 2,
-          "plugin": 6,
+          "plugin": 16,
           "scripts": 12,
-          "skills": 2,
+          "skills": 12,
           "src": 91,
-          "tests": 196,
-          "website": 871
+          "tests": 197,
+          "website": 874
         },
         "languages": {
-          "JSON": 142,
-          "YAML": 11,
-          "Markdown": 822,
+          "JSON": 143,
+          "YAML": 15,
+          "Markdown": 865,
           "TOML": 578,
-          "Rust": 532,
+          "Rust": 533,
           "C/C++ Header": 16,
           "C": 15,
-          "Go": 8,
+          "Go": 11,
           "Java": 25,
-          "Shell": 7,
-          "Python": 17,
+          "Shell": 10,
+          "Python": 21,
           "Ruby": 12,
-          "TypeScript": 72,
+          "TypeScript": 76,
           "C#": 8,
           "JavaScript": 11,
           "HTML": 11,
           "PHP": 15,
           "Kotlin": 2,
           "Vue": 1,
-          "TSX": 64,
+          "TSX": 65,
           "CSS": 3
         },
         "frameworks": [
@@ -872998,6 +873016,10 @@
           "demo/x18n-core/schema-rs/src/lib.rs",
           "demo/x18n-core/text-rs/src/lib.rs",
           "demo/x18n-search/src/lib.rs",
+          "evals/go-textkit/original/cmd/textkit/main.go",
+          "evals/probes/go/main.go",
+          "evals/py-textkit/original/cli.py",
+          "evals/ts-textkit/original/cli.ts",
           "src/lib.rs",
           "src/main.rs",
           "tests/fixtures/c/src/main.c",
@@ -873077,6 +873099,8 @@
           "demo/x18n-core/schema-rs/Cargo.toml",
           "demo/x18n-core/text-rs/Cargo.toml",
           "demo/x18n-search/Cargo.toml",
+          "evals/go-textkit/original/go.mod",
+          "evals/ts-textkit/original/package.json",
           "npm/rust-anything/package.json",
           "tests/fixtures/aliases/package.json",
           "tests/fixtures/aliases/tsconfig.json",
@@ -873175,6 +873199,8 @@
           "demo/x18n-core/schema-rs/Cargo.toml",
           "demo/x18n-core/text-rs/Cargo.toml",
           "demo/x18n-search/Cargo.toml",
+          "evals/go-textkit/original/go.mod",
+          "evals/ts-textkit/original/package.json",
           "npm/rust-anything/package.json",
           "tests/fixtures/aliases/package.json",
           "tests/fixtures/async/package.json",
@@ -873241,6 +873267,7 @@
           "tests/diff_missing_folder.rs",
           "tests/doctor.rs",
           "tests/effects.rs",
+          "tests/end_state.rs",
           "tests/error_resolution.rs",
           "tests/fixtures/aliases/package.json",
           "tests/fixtures/aliases/src/greet.ts",
@@ -873551,6 +873578,58 @@
           "docs/assets/gif/terminal.html",
           "docs/assets/hero.html",
           "docs/assets/hero.png",
+          "docs/assets/how-it-works-dark.svg",
+          "docs/assets/how-it-works-light.svg",
+          "docs/assets/how-it-works/ar-dark.svg",
+          "docs/assets/how-it-works/ar-light.svg",
+          "docs/assets/how-it-works/az-dark.svg",
+          "docs/assets/how-it-works/az-light.svg",
+          "docs/assets/how-it-works/de-dark.svg",
+          "docs/assets/how-it-works/de-light.svg",
+          "docs/assets/how-it-works/es-dark.svg",
+          "docs/assets/how-it-works/es-light.svg",
+          "docs/assets/how-it-works/fa-dark.svg",
+          "docs/assets/how-it-works/fa-light.svg",
+          "docs/assets/how-it-works/fr-dark.svg",
+          "docs/assets/how-it-works/fr-light.svg",
+          "docs/assets/how-it-works/hi-dark.svg",
+          "docs/assets/how-it-works/hi-light.svg",
+          "docs/assets/how-it-works/id-dark.svg",
+          "docs/assets/how-it-works/id-light.svg",
+          "docs/assets/how-it-works/it-dark.svg",
+          "docs/assets/how-it-works/it-light.svg",
+          "docs/assets/how-it-works/ja-dark.svg",
+          "docs/assets/how-it-works/ja-light.svg",
+          "docs/assets/how-it-works/kk-dark.svg",
+          "docs/assets/how-it-works/kk-light.svg",
+          "docs/assets/how-it-works/ko-dark.svg",
+          "docs/assets/how-it-works/ko-light.svg",
+          "docs/assets/how-it-works/ky-dark.svg",
+          "docs/assets/how-it-works/ky-light.svg",
+          "docs/assets/how-it-works/pt-dark.svg",
+          "docs/assets/how-it-works/pt-light.svg",
+          "docs/assets/how-it-works/ru-dark.svg",
+          "docs/assets/how-it-works/ru-light.svg",
+          "docs/assets/how-it-works/th-dark.svg",
+          "docs/assets/how-it-works/th-light.svg",
+          "docs/assets/how-it-works/tk-dark.svg",
+          "docs/assets/how-it-works/tk-light.svg",
+          "docs/assets/how-it-works/tr-dark.svg",
+          "docs/assets/how-it-works/tr-light.svg",
+          "docs/assets/how-it-works/tt-dark.svg",
+          "docs/assets/how-it-works/tt-light.svg",
+          "docs/assets/how-it-works/ug-dark.svg",
+          "docs/assets/how-it-works/ug-light.svg",
+          "docs/assets/how-it-works/uk-dark.svg",
+          "docs/assets/how-it-works/uk-light.svg",
+          "docs/assets/how-it-works/uz-dark.svg",
+          "docs/assets/how-it-works/uz-light.svg",
+          "docs/assets/how-it-works/vi-dark.svg",
+          "docs/assets/how-it-works/vi-light.svg",
+          "docs/assets/how-it-works/zh-dark.svg",
+          "docs/assets/how-it-works/zh-light.svg",
+          "docs/assets/how-it-works/zh-tw-dark.svg",
+          "docs/assets/how-it-works/zh-tw-light.svg",
           "docs/assets/icon.svg",
           "docs/assets/install.gif",
           "docs/assets/json-server.gif",
@@ -873570,6 +873649,7 @@
           "docs/assets/sponsors/sponsors-light.svg",
           "docs/assets/terminal.gif",
           "docs/design/whole-app-port.md",
+          "docs/evals.md",
           "docs/examples.md",
           "docs/examples/x18n.md",
           "docs/faq.md",
@@ -874319,27 +874399,27 @@
           "website/public/langs/LICENSE"
         ],
         "fileTypes": {
-          ".json": 142,
-          ".yaml": 2,
-          ".yml": 9,
-          ".md": 822,
+          ".json": 143,
+          ".yaml": 5,
+          ".yml": 10,
+          ".md": 865,
           ".lock": 60,
           ".toml": 578,
-          ".rs": 532,
-          ".jsonl": 65,
+          ".rs": 533,
+          ".jsonl": 71,
           ".cjs": 27,
           ".h": 16,
           ".c": 15,
           ".txt": 24,
-          ".mod": 7,
-          ".go": 8,
+          ".mod": 8,
+          ".go": 11,
           ".java": 25,
-          ".sh": 7,
-          ".py": 17,
+          ".sh": 10,
+          ".py": 21,
           ".rb": 12,
-          ".ts": 72,
+          ".ts": 76,
           ".cs": 8,
-          ".mjs": 60,
+          ".mjs": 61,
           ".js": 11,
           ".body": 514,
           ".html": 11,
@@ -874347,7 +874427,7 @@
           ".tsv": 1,
           ".so": 1,
           ".png": 14,
-          ".svg": 51,
+          ".svg": 103,
           ".gif": 6,
           ".pkl": 1,
           ".csproj": 6,
@@ -874357,7 +874437,7 @@
           ".vue": 1,
           ".psm1": 1,
           ".gemspec": 1,
-          ".tsx": 64,
+          ".tsx": 65,
           ".css": 3,
           ".ico": 1
         },
@@ -874372,11 +874452,19 @@
           },
           {
             "name": "website",
-            "files": 871,
+            "files": 874,
             "notebooks": 0,
-            "code": 99,
+            "code": 102,
             "data": 30,
             "docs": 682
+          },
+          {
+            "name": "evals",
+            "files": 37,
+            "notebooks": 0,
+            "code": 9,
+            "data": 1,
+            "docs": 12
           },
           {
             "name": "npm",
@@ -874387,7 +874475,7 @@
             "docs": 0
           }
         ],
-        "isCollection": false,
+        "isCollection": true,
         "issues": [
           {
             "severity": "Low",
@@ -874447,7 +874535,7 @@
       "parent": {
         "name": "FrigadeHQ/yogurt",
         "url": "https://github.com/FrigadeHQ/yogurt",
-        "stars": 3767
+        "stars": 3776
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -874455,14 +874543,14 @@
       "updatedAt": "November 21, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 1077,
+        "totalFiles": 1079,
         "directories": {
           ".github": 12,
           "(root)": 10,
           "app": 927,
           "catalog": 2,
           "docs": 6,
-          "ios": 106,
+          "ios": 108,
           "packages": 13,
           "patches": 1
         },
@@ -874475,7 +874563,7 @@
           "TOML": 12,
           "Python": 3,
           "Rust": 30,
-          "Swift": 90,
+          "Swift": 92,
           "JSON": 49,
           "HTML": 2,
           "TSX": 85,
@@ -874929,6 +875017,7 @@
           "ios/YogurtKit/Tests/YogurtKitTests/CPaceTests.swift",
           "ios/YogurtKit/Tests/YogurtKitTests/CalmStatusTests.swift",
           "ios/YogurtKit/Tests/YogurtKitTests/ChunkerTests.swift",
+          "ios/YogurtKit/Tests/YogurtKitTests/CitedMomentTests.swift",
           "ios/YogurtKit/Tests/YogurtKitTests/FakeDesktop.swift",
           "ios/YogurtKit/Tests/YogurtKitTests/Helpers.swift",
           "ios/YogurtKit/Tests/YogurtKitTests/InteropTests.swift",
@@ -875005,7 +875094,7 @@
           ".py": 3,
           ".rs": 30,
           ".mjs": 15,
-          ".swift": 90,
+          ".swift": 92,
           ".ps1": 1,
           ".json": 49,
           ".html": 2,
@@ -875090,7 +875179,7 @@
       "parent": {
         "name": "context-dot-dev/enrichable",
         "url": "https://github.com/context-dot-dev/enrichable",
-        "stars": 312
+        "stars": 313
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
@@ -875384,7 +875473,7 @@
       "parent": {
         "name": "awslabs/codekb",
         "url": "https://github.com/awslabs/codekb",
-        "stars": 299
+        "stars": 301
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=800&h=400&fit=crop&q=80",
@@ -875721,7 +875810,7 @@
       "parent": {
         "name": "video-db/call.md",
         "url": "https://github.com/video-db/call.md",
-        "stars": 2692
+        "stars": 2694
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -875883,38 +875972,39 @@
       "updatedAt": "November 23, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 1044,
+        "totalFiles": 1089,
         "directories": {
           ".agents": 1,
           ".claude": 43,
-          "(root)": 15,
+          "(root)": 16,
           ".github": 4,
           ".yomiyasu-words": 1,
           "cmd": 23,
-          "docs": 262,
+          "docs": 265,
           "image": 14,
           "init": 18,
-          "internal": 320,
-          "model": 21,
+          "internal": 338,
+          "model": 24,
           "package": 122,
           "process": 20,
           "schema": 30,
-          "tests": 114,
-          "tray": 36
+          "tests": 115,
+          "tray": 55
         },
         "languages": {
-          "JSON": 57,
-          "Markdown": 331,
-          "Shell": 122,
-          "Go": 334,
+          "JSON": 59,
+          "Markdown": 334,
+          "Shell": 123,
+          "Go": 353,
           "YAML": 37,
           "TOML": 2,
-          "JavaScript": 16,
-          "TypeScript": 25,
+          "JavaScript": 15,
+          "TypeScript": 32,
           "Python": 2,
           "SQL": 1,
+          "HTML": 1,
           "CSS": 1,
-          "HTML": 1
+          "TSX": 5
         },
         "frameworks": [
           "React",
@@ -875956,8 +876046,7 @@
           "package/host/kanban-board/main.js",
           "package/host/streamdeck/andon.lamp.sdPlugin/app.js",
           "package/host/waiting/main.js",
-          "tray/public/app.js",
-          "tray/public/index.html"
+          "tray/web/index.html"
         ],
         "configFiles": [
           "go.mod",
@@ -875966,7 +876055,9 @@
           "model/package.json",
           "package/host/streamdeck/andon.lamp.sdPlugin/package.json",
           "tray/package.json",
-          "tray/tsconfig.json"
+          "tray/tsconfig.json",
+          "tray/vite.config.ts",
+          "tray/web/tsconfig.json"
         ],
         "dependencies": [
           "go.mod",
@@ -875993,6 +876084,7 @@
           "docs/decisions/2026-11-14-ci-shell-tests-once-and-settings-cleanup.md",
           "docs/decisions/2026-11-20-adr-0034-prevention-before-tests.md",
           "docs/process/retrospective.md",
+          "image_test.go",
           "internal/board/board_test.go",
           "internal/boot/boot_test.go",
           "internal/boot/codex_test.go",
@@ -876009,6 +876101,7 @@
           "internal/cli/flags_test.go",
           "internal/cli/project_test.go",
           "internal/contract/contract_test.go",
+          "internal/contract/impact_test.go",
           "internal/contract/runs_test.go",
           "internal/contract/schema_test.go",
           "internal/contract/writers_test.go",
@@ -876019,6 +876112,7 @@
           "internal/digest/digest_test.go",
           "internal/digest/main_test.go",
           "internal/digest/redone_test.go",
+          "internal/digest/send_shape_test.go",
           "internal/digest/slack_test.go",
           "internal/dispatcher/abandoned_test.go",
           "internal/dispatcher/answered_test.go",
@@ -876064,12 +876158,14 @@
           "internal/dispatcher/tries_test.go",
           "internal/dispatcher/wait_test.go",
           "internal/flock/flock_test.go",
+          "internal/gate/behind_test.go",
           "internal/gate/comment_test.go",
           "internal/gate/decide_test.go",
           "internal/gate/deliverable_test.go",
           "internal/gate/early_test.go",
           "internal/gate/mark_test.go",
           "internal/gate/question_test.go",
+          "internal/gate/restack_test.go",
           "internal/gate/review_test.go",
           "internal/gate/stacked_test.go",
           "internal/gate/stalebase_test.go",
@@ -876109,6 +876205,7 @@
           "internal/ledger/review_test.go",
           "internal/ledger/stacked_test.go",
           "internal/ledger/worked_test.go",
+          "internal/measure/behind_test.go",
           "internal/measure/breakdown_test.go",
           "internal/measure/knowledge_test.go",
           "internal/measure/measure_test.go",
@@ -876127,6 +876224,7 @@
           "internal/process/process_test.go",
           "internal/publish/publish_test.go",
           "internal/retro/apply_test.go",
+          "internal/retro/behind_test.go",
           "internal/retro/export_test.go",
           "internal/retro/fault_test.go",
           "internal/retro/fresh_test.go",
@@ -876152,6 +876250,12 @@
           "internal/tools/toolstest/toolstest.go",
           "internal/trace/breakdown_test.go",
           "internal/trace/trace_test.go",
+          "internal/tray/deploy_test.go",
+          "internal/tray/html_test.go",
+          "internal/tray/remote_test.go",
+          "internal/tray/serve_test.go",
+          "internal/tray/tray_test.go",
+          "internal/tray/traytest/traytest.go",
           "internal/triage/fault_test.go",
           "internal/triage/gap_test.go",
           "internal/triage/hold_test.go",
@@ -876260,6 +876364,7 @@
           "tests/package/42-checks-wait-hc-flags.sh",
           "tests/package/43-deliverable-report.sh",
           "tests/package/44-merge-request-holds.sh",
+          "tests/package/45-tray-reports.sh",
           "tests/process.sh",
           "tests/process/docs/process/sample-intake.md",
           "tests/process/docs/process/sample-item.md",
@@ -876281,7 +876386,10 @@
           "tests/verify-andon.sh",
           "tests/words-selftest.sh",
           "tests/words.sh",
+          "tray/browser/embed.spec.ts",
+          "tray/browser/formats.spec.ts",
           "tray/browser/sandbox.spec.ts",
+          "tray/browser/screens.spec.ts",
           "tray/test/env.d.ts",
           "tray/test/helpers.ts",
           "tray/test/list.test.ts",
@@ -876365,6 +876473,7 @@
           "docs/adr/0065-owner-waits-never-stop-launch.md",
           "docs/adr/0066-deliverable-report.md",
           "docs/adr/0067-stacked-start.md",
+          "docs/adr/0068-reserve-then-update.md",
           "docs/adr/README.md",
           "docs/assets/logo/README.md",
           "docs/assets/logo/andon-mark-dark.svg",
@@ -876533,6 +876642,8 @@
           "docs/decisions/2026-11-26-adr-0066-deliverable-report.md",
           "docs/decisions/2026-11-27-adr-0064-tray.md",
           "docs/decisions/2026-11-27-adr-0067-stacked-start.md",
+          "docs/decisions/2026-11-27-adr-0068-reserve-then-update.md",
+          "docs/decisions/2026-11-27-tray-old-content-one-day.md",
           "docs/design.md",
           "docs/dispatcher.md",
           "docs/image.md",
@@ -876581,14 +876692,14 @@
           "tray/README.md"
         ],
         "fileTypes": {
-          ".json": 57,
-          ".md": 331,
-          ".sh": 122,
-          ".go": 334,
+          ".json": 59,
+          ".md": 334,
+          ".sh": 123,
+          ".go": 353,
           ".yml": 5,
           ".txt": 5,
-          ".svg": 27,
-          ".png": 3,
+          ".svg": 28,
+          ".png": 6,
           ".mod": 1,
           ".sum": 1,
           ".yaml": 32,
@@ -876597,27 +876708,29 @@
           ".diff": 4,
           ".files": 4,
           ".toml": 2,
-          ".tla": 12,
+          ".tla": 15,
           ".cfg": 1,
-          ".mjs": 10,
+          ".mjs": 11,
           ".rules": 1,
-          ".js": 16,
-          ".ts": 25,
+          ".js": 15,
+          ".ts": 32,
           ".mts": 1,
           ".py": 2,
           ".allow": 1,
           ".lock": 1,
           ".sql": 1,
+          ".webmanifest": 1,
+          ".html": 1,
           ".css": 1,
-          ".html": 1
+          ".tsx": 5
         },
         "subProjects": [
           {
             "name": "tray",
-            "files": 36,
+            "files": 55,
             "notebooks": 0,
-            "code": 26,
-            "data": 3,
+            "code": 37,
+            "data": 5,
             "docs": 1
           },
           {
@@ -876692,7 +876805,7 @@
       "parent": {
         "name": "os6/nospeaker",
         "url": "https://github.com/os6/nospeaker",
-        "stars": 1994
+        "stars": 1997
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
@@ -876775,7 +876888,7 @@
       "parent": {
         "name": "google-gemini/gemini-api-cli",
         "url": "https://github.com/google-gemini/gemini-api-cli",
-        "stars": 4237
+        "stars": 4251
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -877124,7 +877237,7 @@
       "parent": {
         "name": "rivet-dev/open-orange",
         "url": "https://github.com/rivet-dev/open-orange",
-        "stars": 890
+        "stars": 891
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=400&fit=crop&q=80",
@@ -878187,17 +878300,17 @@
       "updatedAt": "November 25, 2026",
       "readTime": 2,
       "knowledgeGraph": {
-        "totalFiles": 181,
+        "totalFiles": 196,
         "directories": {
           ".github": 1,
           "(root)": 5,
           "docs": 25,
-          "home": 22,
+          "home": 23,
           "hosts": 7,
           "lib": 2,
           "modules": 12,
           "overlays": 1,
-          "pkgs": 94,
+          "pkgs": 108,
           "scripts": 5,
           "secrets": 1,
           "tests": 5,
@@ -878206,23 +878319,30 @@
         "languages": {
           "YAML": 3,
           "Markdown": 20,
-          "Python": 23,
-          "JSON": 13,
+          "Python": 24,
+          "JSON": 14,
           "C": 4,
           "Shell": 3,
           "JavaScript": 2,
-          "TOML": 1
+          "TOML": 2,
+          "Rust": 7
         },
         "frameworks": [
           "Django"
         ],
-        "packageManager": null,
+        "packageManager": "cargo",
         "hasDocker": false,
         "hasCI": true,
         "ciPlatform": "GitHub Actions",
-        "entryPoints": [],
-        "configFiles": [],
-        "dependencies": [],
+        "entryPoints": [
+          "pkgs/oura-daemon/src/lib.rs"
+        ],
+        "configFiles": [
+          "pkgs/oura-daemon/Cargo.toml"
+        ],
+        "dependencies": [
+          "pkgs/oura-daemon/Cargo.toml"
+        ],
         "testFiles": [
           "pkgs/test-orb-pending.py",
           "tests/aurora-sep.nix",
@@ -878266,24 +878386,25 @@
           ".md": 20,
           ".png": 4,
           ".mp4": 1,
-          ".lock": 1,
-          ".nix": 72,
-          ".py": 23,
-          ".qml": 23,
-          ".json": 13,
+          ".lock": 2,
+          ".nix": 74,
+          ".py": 24,
+          ".qml": 25,
+          ".json": 14,
           ".c": 4,
           ".patch": 5,
           ".sh": 3,
           ".js": 2,
-          ".toml": 1
+          ".toml": 2,
+          ".rs": 7
         },
         "subProjects": [
           {
             "name": "pkgs",
-            "files": 94,
+            "files": 108,
             "notebooks": 0,
-            "code": 26,
-            "data": 13,
+            "code": 34,
+            "data": 14,
             "docs": 0
           },
           {
@@ -878309,14 +878430,15 @@
           "hasCI": true,
           "hasLicense": true,
           "hasReadme": true,
-          "hasLockfile": false,
+          "hasLockfile": true,
           "committedSecrets": 1
         }
       },
       "domain": "Systems & Infra",
       "kind": "Service / API",
       "kindEvidence": [
-        "server framework detected"
+        "server framework detected",
+        "cargo project"
       ],
       "kindConfidence": 0.7,
       "capabilities": [
@@ -878343,7 +878465,7 @@
       "parent": {
         "name": "Moh4696/inkworks-skill",
         "url": "https://github.com/Moh4696/inkworks-skill",
-        "stars": 543
+        "stars": 547
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
@@ -886116,7 +886238,7 @@
       "parent": {
         "name": "NVIDIA/kumo-engine",
         "url": "https://github.com/NVIDIA/kumo-engine",
-        "stars": 351
+        "stars": 369
       },
       "type": "fork",
       "image": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop&q=80",
